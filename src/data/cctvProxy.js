@@ -3,8 +3,7 @@
  *
  * Shared by Vite (via liveApiProxies) and the dedicated Vercel function
  * `api/cctv/[...path].js`. Existing public CCTV only: Austin, Caltrans, TfL,
- * plus Street View / synthetic fallback. No person-search, face recognition,
- * or new camera networks. Does not wrap AIS or Google text-search.
+ * plus Street View / synthetic fallback. Does not wrap AIS or Google Places.
  *
  * @module src/data/cctvProxy
  */

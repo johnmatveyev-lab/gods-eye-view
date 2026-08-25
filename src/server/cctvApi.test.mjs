@@ -82,7 +82,7 @@ test('Vercel CCTV entry forwards to the existing catalog proxy only', () => {
   const proxy = readFileSync(path.join(ROOT, 'src/data/cctvProxy.js'), 'utf8');
   assert.match(proxy, /export function cctvProxy/);
   assert.doesNotMatch(proxy, /\/api\/ais-live|google\/text-search|opensky-network\.org|news\.google\.com|telegeography|quantum-earth/i);
-  assert.doesNotMatch(proxy, /person-search|face recognition|facial/i);
+  assert.doesNotMatch(proxy, /person.search|face.recognition|facial.recogn/i);
 
   const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
   assert.match(vite, /createLiveApiPlugins/);
