@@ -42,12 +42,6 @@ export const DATA_CREDITS = [
       '(community API; courtesy)',
   },
   {
-    key: 'aisstream',
-    html:
-      'Live vessels (AIS): ' +
-      '<a href="https://aisstream.io" target="_blank" rel="noopener">AISStream.io</a>',
-  },
-  {
     key: 'celestrak',
     html:
       'Satellites (TLEs): CelesTrak ' +
@@ -175,10 +169,18 @@ export const DATA_CREDITS = [
  * Conditional credits — registered via `registerDynamicCredit` only when the
  * corresponding capability actually activates (deliberately NOT part of
  * DATA_CREDITS, which is always-on). TomTom terms require attribution when
- * their flow data is displayed; keyless installs never show it, so the
- * credit only appears once live traffic-flow mode activates.
+ * their flow data is displayed; AISStream is courtesy-credited only after a
+ * live snapshot actually lands. Keyless or hosted-empty installs never show
+ * either credit.
  * @type {{ key: string, html: string }}
  */
+export const AISSTREAM_CREDIT = {
+  key: 'aisstream',
+  html:
+    'Live vessels (AIS): ' +
+    '<a href="https://aisstream.io" target="_blank" rel="noopener">AISStream.io</a>',
+};
+
 export const TOMTOM_CREDIT = {
   key: 'tomtom',
   html:

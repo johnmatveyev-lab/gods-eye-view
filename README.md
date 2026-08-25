@@ -98,6 +98,8 @@ If you charge US or EU customers, consider enabling [Stripe Tax](https://docs.st
 
 Cesium ion imagery must not be mixed with Google Photorealistic 3D Tiles. Use one globe imagery stack at a time.
 
+Hosted Vercel has no live AIS; Docker and `vite preview` still do when `AISSTREAM_API_KEY` is set.
+
 ---
 
 ## Responsible use
