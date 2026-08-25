@@ -33,6 +33,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added an Undo last annotation control next to Clear on the globe chrome.
+  It calls `removeLast()` so one wrong pin or area comes off without wiping
+  the board. Undo does not bump the clear() generation or abort in-flight
+  annotate. Disabled when the board is empty. Clear still empties all. No
+  new `/api`, GeoJSON export, or voice/LLM change.
 - Added a two-click Measure mode on the globe: two terrain picks draw a
   geodesic line and show the distance in the current `km | nm | mi` units.
   Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked

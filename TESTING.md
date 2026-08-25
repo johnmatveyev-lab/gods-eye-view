@@ -70,8 +70,10 @@ settled and not applicable because no Google 3D tileset is active.
   - `window.__gevAnnotations.tour()` — self-running narrated SF tour (camera + marks in sequence)
   - `window.__gevAnnotations.demo()` — lays the SF set down at once
   - `window.__gevAnnotations.clear()` — erase all marks
+  - `window.__gevAnnotations.removeLast()` — drop the last mark only
   - `window.__gevAnnotations.count()` — how many marks are live
   - **Clear annotations** (top-center globe chrome) — same erase, no mic. Disabled when the board is empty.
+  - **Undo last annotation** (next to Clear) — drops only the last mark. Disabled when the board is empty. Does not cancel an in-flight annotate.
 
 ---
 

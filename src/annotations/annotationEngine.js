@@ -509,7 +509,7 @@ export function createAnnotationEngine({
    * recentred anchor) and re-route it through the renderer (a ring moves an area from the
    * screen-space callout to the world-space drape). The mark never disappears here: on a
    * failed / aborted / superseded resolution it simply stays an honest point (marks are
-   * only ever removed by an explicit clear — the no-auto-clear invariant).
+   * only ever removed by an explicit clear or undo — the no-auto-clear invariant).
    */
   function startOutlineUpgrade(anno, resolveOutline, myGen, controller) {
     if (anno._outlineTask) return; // one upgrade per mark at a time
@@ -779,6 +779,22 @@ export function createAnnotationEngine({
     emitChange();
   }
 
+  /**
+   * Drop the most recently added live mark. Does not bump the clear()
+   * generation and does not abort in-flight annotate — a resolve already
+   * underway still lands. Empty board is a no-op.
+   */
+  function removeLast() {
+    if (!annotations.size) return;
+    let last = null;
+    for (const anno of annotations.values()) last = anno;
+    renderer.remove(last);
+    annotations.delete(last.id);
+    renderer.sync(annotations);
+    syncAnnotationHold();
+    emitChange();
+  }
+
   /** Begin a graceful fade-out of everything, then remove. */
   function fadeOutAll() {
     const now = performance.now();
@@ -879,6 +895,7 @@ export function createAnnotationEngine({
   const engine = {
     annotate,
     clear,
+    removeLast,
     fadeOutAll,
     count: () => annotations.size,
     list: () => Array.from(annotations.values()),
