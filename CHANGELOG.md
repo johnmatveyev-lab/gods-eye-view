@@ -20,6 +20,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a panic **All off** control on the existing Clear Layers chrome.
+  It disables every live data layer and keeps the globe, credits, and
+  camera. `meridian.lastView` is not cleared. The next enable is manual.
+  First-visit layer defaults still apply only on a fresh profile. Banned
+  layers stay off. No `/api`.
 - Added a city/provider filter on the CCTV panel list. It uses `city`,
   `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
   isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.

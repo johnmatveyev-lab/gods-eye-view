@@ -371,6 +371,27 @@ export function validateLayerStateRegistry(registry = LAYER_STATE_REGISTRY) {
 
 validateLayerStateRegistry();
 
+/**
+ * Whether this browser already has a durable layer profile.
+ * An explicit empty enabled set is still a profile — All off wrote it.
+ */
+export function hasStoredLayerProfile(storage) {
+  try {
+    return parseStoredLayerState(storage?.getItem?.(LAYER_STATE_STORAGE_KEY)) != null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * First-visit layer defaults (PLAN 89) apply only on a fresh profile.
+ * All off persists the empty enabled set, so a later boot must not
+ * re-apply those defaults.
+ */
+export function shouldApplyFirstVisitLayerDefault(storage) {
+  return !hasStoredLayerProfile(storage);
+}
+
 /** Produce the complete durable default state. */
 export function createDefaultLayerState() {
   return {
@@ -609,6 +630,8 @@ export class LayerStateCoordinator {
       this._source = 'legacy-share';
     }
     this._durableState = selected || createDefaultLayerState();
+    // First-visit defaults may run only when nothing was stored. All off
+    // writes an empty enabled set; that is a profile, not a fresh visit.
     this.shareLinkManager?.setLayerStateProvider?.(() => this.getDurableState());
     this.shareLinkManager?.onLayerStateChange?.();
     this._notifyDurableState();
