@@ -4,9 +4,10 @@
  * The catalog already tags every satellite with the CelesTrak group it was
  * ingested from (`CATALOG_GROUPS` in satellites.js), so classification is a
  * pure lookup: no extra fetch, no per-frame work. Weather is the one ingest
- * exception: CelesTrak's weather group mixes polar LEO with the GEO belt, so
- * satellites.js stamps `weather-leo` / `weather-geo` from mean motion before
- * this table is consulted. This module is the single source of truth for the
+ * exception: CelesTrak's weather group mixes polar LEO, Molniya Arctic weather,
+ * and the GEO belt, so satellites.js stamps `weather-leo` / `weather-geo`
+ * from mean motion and inclination before this table is consulted. This
+ * module is the single source of truth for the
  * class a satellite belongs to, the label shown on its card, and the point
  * color it renders in — the render path, the tracked card, and the row legend
  * all read the same table, so a palette edit can never leave one surface
@@ -88,7 +89,7 @@ const GROUP_CLASS = Object.freeze({
   geo: Object.freeze({ klass: 'geo', subtype: null }),
   // Bare `weather` is the picker/CelesTrak group, not an orbit class. Without a
   // satrec it must not claim the GEO belt — polar MetOp / NOAA / Suomi NPP
-  // live in the same CelesTrak file as GOES / Himawari.
+  // and Arktika-M live in the same CelesTrak file as GOES / Himawari.
   weather: Object.freeze({ klass: 'visual', subtype: 'WX' }),
   'weather-geo': Object.freeze({ klass: 'geo', subtype: 'WX' }),
   'weather-leo': Object.freeze({ klass: 'visual', subtype: 'WX' }),
@@ -97,16 +98,32 @@ const GROUP_CLASS = Object.freeze({
 
 /** TLE mean motion (rev/day) from satellite.js `satrec.no` (rad/min). */
 const MEAN_MOTION_REV_PER_DAY = 1440 / (2 * Math.PI);
+/** TLE inclination (deg) from satellite.js `satrec.inclo` (rad). */
+const RAD_TO_DEG = 180 / Math.PI;
 
 /**
- * Split a CelesTrak weather TLE into LEO vs GEO by mean motion. Polar weather
- * (~14 rev/day) is not the geostationary belt (~1 rev/day). n > 3 → LEO.
- * @param {{ no?: number }|null|undefined} satrec Parsed SGP4 record.
+ * Geostationary weather: ~1 rev/day over the equator. n ≤ 3 is not the belt —
+ * Arktika-M Molniya (n ≈ 2, i ≈ 63°, e ≈ 0.69) shares the CelesTrak weather
+ * file with GOES / Himawari. Polar WX is ~14 rev/day.
+ */
+const GEO_N_MIN = 0.9;
+const GEO_N_MAX = 1.1;
+const GEO_INC_MAX_DEG = 15;
+
+/**
+ * Split a CelesTrak weather TLE into belt vs not-belt. weather-geo only for
+ * near-1-rev/day equatorial orbits. Polar LEO (n > 3) and Molniya / HEO /
+ * Tundra stay weather-leo so the GEO chip does not keep them.
+ * @param {{ no?: number, inclo?: number }|null|undefined} satrec Parsed SGP4 record.
  * @returns {'weather-leo'|'weather-geo'} Ingest tag for GROUP_CLASS.
  */
 export function weatherOrbitTag(satrec) {
   const n = Number(satrec?.no) * MEAN_MOTION_REV_PER_DAY;
-  return n > 3 ? 'weather-leo' : 'weather-geo';
+  const incDeg = Math.abs(Number(satrec?.inclo) * RAD_TO_DEG);
+  if (n >= GEO_N_MIN && n <= GEO_N_MAX && incDeg < GEO_INC_MAX_DEG) {
+    return 'weather-geo';
+  }
+  return 'weather-leo';
 }
 
 /** Unknown groups fall back to the neutral bucket rather than vanishing. */
