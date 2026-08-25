@@ -20,6 +20,7 @@ import { isPickedWorldPosition } from '../data/scenePick.js';
 import { resolveRegionRingForQuery } from '../annotations/annotationResolver.js';
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import { TR3B_CLASS } from '../data/tr3bRegistry.js';
+import { detectionDensityControlRequest } from '../detectionDensityChrome.js';
 
 const ALLOWED_STYLES = new Set(['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow']);
 const PANEL_ALIASES = new Map([
@@ -877,10 +878,13 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'set_detection') {
+      const densityRequest = Number.isFinite(Number(args.densityPct))
+        ? detectionDensityControlRequest(args.densityPct)
+        : {};
       const result = styleManager.setDetection({
-        enabled: typeof args.enabled === 'boolean' ? args.enabled : undefined,
+        enabled: typeof args.enabled === 'boolean' ? args.enabled : densityRequest.enabled,
         mode: typeof args.mode === 'string' ? args.mode : undefined,
-        densityPct: Number.isFinite(Number(args.densityPct)) ? Number(args.densityPct) : undefined,
+        densityPct: Number.isFinite(Number(args.densityPct)) ? densityRequest.densityPct : undefined,
         allocationStrategy: typeof args.allocationStrategy === 'string' ? args.allocationStrategy : undefined,
       });
       return { action: 'set_detection', ...result };

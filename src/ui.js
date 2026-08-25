@@ -56,6 +56,12 @@ import {
   normalizeProfile,
   profileForDensity,
 } from './data/detectionPolicy.js';
+import {
+  detectionDensityChromeState,
+  detectionDensityControlRequest,
+  persistDetectionDensity,
+  readPersistedDetectionDensity,
+} from './detectionDensityChrome.js';
 import trafficLayer from './data/traffic.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
@@ -2533,9 +2539,7 @@ export class StyleManager {
           this._updateHudButtonState();
         }
         if (typeof detectionDensity === 'number' && this._detectionDensitySlider) {
-          const pct = canonicalizeDensity(detectionDensity);
-          this._detectionDensitySlider.value = String(pct);
-          this._detectionDensityValue.textContent = `${pct}%`;
+          this._paintDetectionDensityChrome(detectionDensity);
           this._applyDetectionDensityFromUi();
         }
         if (detectionAllocation) {
@@ -2641,6 +2645,7 @@ export class StyleManager {
     this._initHUDToggle();
     this._initModels3dToggle();
     this._applyGlobalPostDefaults();
+    this._restoreSessionDetectionDensity();
     this._initOrbit();
     this._initRecordingOverlay();
     this._startAnimationLoop();
@@ -3451,13 +3456,7 @@ export class StyleManager {
       this._detectionDensitySlider.addEventListener('input', () => {
         this.shareLinkManager?.claimRestoreLane?.('visual');
         this._detectionUserOverridden = true;
-        const pct = canonicalizeDensity(this._detectionDensitySlider.value);
-        this._detectionDensitySlider.value = String(pct);
-        if (this._detectionDensityValue) {
-          this._detectionDensityValue.textContent = `${pct}%`;
-        }
-        this._applyDetectionDensityFromUi();
-        this._syncShareState();
+        this.setDetection(detectionDensityControlRequest(this._detectionDensitySlider.value));
       });
     }
 
@@ -3548,16 +3547,30 @@ export class StyleManager {
   }
 
   /**
+   * Paints the five-stop density handle and Sparse/Balanced/Dense readout.
+   * @param {number} inputPct
+   * @returns {number} Canonical density stop.
+   */
+  _paintDetectionDensityChrome(inputPct) {
+    const { densityPct, label } = detectionDensityChromeState(inputPct);
+    if (this._detectionDensitySlider) {
+      this._detectionDensitySlider.value = String(densityPct);
+      this._detectionDensitySlider.setAttribute('aria-valuetext', label);
+    }
+    if (this._detectionDensityValue) this._detectionDensityValue.textContent = label;
+    return densityPct;
+  }
+
+  /**
    * Reads and canonicalizes the five-stop density control. The engine derives
-   * Sparse/Balanced/Dense from the same stop.
+   * Sparse/Balanced/Dense from the same stop. Density 0 hides the overlay.
    * @returns {void}
    */
   _applyDetectionDensityFromUi() {
     if (!this._detectionDensitySlider) return;
-    const pct = canonicalizeDensity(this._detectionDensitySlider.value);
-    this._detectionDensitySlider.value = String(pct);
-    if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${pct}%`;
+    const pct = this._paintDetectionDensityChrome(this._detectionDensitySlider.value);
     setDetectionTuning({ densityPct: pct });
+    if (pct === 0) setDetectionModeByLabel('OFF');
     this._updateDetectionButton(getDetectionMode());
   }
 
@@ -3600,8 +3613,7 @@ export class StyleManager {
 
   _syncDetectionUiFromEngine() {
     const tuning = getDetectionTuning();
-    if (this._detectionDensitySlider) this._detectionDensitySlider.value = String(tuning.densityPct);
-    if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${tuning.densityPct}%`;
+    this._paintDetectionDensityChrome(tuning.densityPct);
     this._setDetectionAllocation(tuning.allocationStrategy, { syncShare: false, persist: false });
     const fadeTuning = getKeyholeFadeTuning();
     if (this._detectionFadeSlider) this._detectionFadeSlider.value = String(Math.round(fadeTuning.fadeRatio * 100));
@@ -3733,9 +3745,7 @@ export class StyleManager {
   _applyDetectionPreset(det) {
     if (!det) return;
     if (typeof det.densityPct === 'number' && this._detectionDensitySlider) {
-      const pct = canonicalizeDensity(det.densityPct);
-      this._detectionDensitySlider.value = String(pct);
-      if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${pct}%`;
+      this._paintDetectionDensityChrome(det.densityPct);
       this._applyDetectionDensityFromUi();
     }
     if (det.mode) this._setDetectionMode(String(det.mode).toUpperCase());
@@ -3778,9 +3788,7 @@ export class StyleManager {
       this._setDetectionMode(defaults.detectionMode);
     }
     if (typeof defaults.detectionDensity === 'number' && this._detectionDensitySlider) {
-      const density = canonicalizeDensity(defaults.detectionDensity);
-      this._detectionDensitySlider.value = String(density);
-      this._detectionDensityValue.textContent = `${density}%`;
+      this._paintDetectionDensityChrome(defaults.detectionDensity);
       this._applyDetectionDensityFromUi();
     }
     this._setDetectionAllocation(
@@ -3797,6 +3805,24 @@ export class StyleManager {
     if (typeof defaults.celestialRing === 'boolean') {
       this.setCelestialRingEnabled(defaults.celestialRing, { syncShare: false, focus: false });
     }
+  }
+
+  /**
+   * Re-apply a leftover or session density the operator already chose.
+   * Share links still win; factory defaults stay unpersisted.
+   * @returns {void}
+   */
+  _restoreSessionDetectionDensity() {
+    if (this._initialShareState) return;
+    const stored = readPersistedDetectionDensity();
+    if (!Number.isFinite(stored) || !this._detectionDensitySlider) return;
+    this._paintDetectionDensityChrome(stored);
+    this._applyDetectionDensityFromUi();
+    if (stored > 0 && getDetectionMode() === 'OFF') {
+      setDetectionModeByLabel(profileForDensity(stored));
+      this._syncDetectionUiFromEngine();
+    }
+    this._detectionUserOverridden = true;
   }
 
   /**
@@ -7929,14 +7955,18 @@ export class StyleManager {
       setDetectionModeByLabel('OFF');
     } else if (requestedProfile) {
       setDetectionModeByLabel(requestedProfile);
-    } else if (enabled === true && getDetectionMode() === 'OFF') {
+    } else if (requestedDensity === 0) {
+      setDetectionModeByLabel('OFF');
+    } else if ((enabled === true || requestedDensity != null) && getDetectionMode() === 'OFF') {
       setDetectionModeByLabel(profileForDensity(
         requestedDensity ?? this._detectionDensitySlider?.value ?? 50,
       ));
     }
     this._syncDetectionUiFromEngine();
     this._syncShareState();
-    return { ok: true, ...this.getDetectionState() };
+    const next = this.getDetectionState();
+    if (Number.isFinite(next.densityPct)) persistDetectionDensity(next.densityPct);
+    return { ok: true, ...next };
   }
 
   /**
@@ -8697,9 +8727,7 @@ export class StyleManager {
 
     const detectionState = state.detection || {};
     if (typeof detectionState.density === 'number' && this._detectionDensitySlider) {
-      const pct = canonicalizeDensity(detectionState.density);
-      this._detectionDensitySlider.value = String(pct);
-      if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${pct}%`;
+      this._paintDetectionDensityChrome(detectionState.density);
       this._applyDetectionDensityFromUi();
     }
     if (detectionState.allocation) {
@@ -8814,9 +8842,7 @@ export class StyleManager {
       this._setDetectionMode(preset.detectionMode);
     }
     if (typeof preset.detectionDensity === 'number' && this._detectionDensitySlider) {
-      const density = canonicalizeDensity(preset.detectionDensity);
-      this._detectionDensitySlider.value = String(density);
-      this._detectionDensityValue.textContent = `${density}%`;
+      this._paintDetectionDensityChrome(preset.detectionDensity);
       this._applyDetectionDensityFromUi();
     }
     if (preset.detectionAllocation) {
