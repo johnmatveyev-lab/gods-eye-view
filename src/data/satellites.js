@@ -47,6 +47,14 @@ import {
   satellitePassesInclinationFilter,
   setSatInclination,
 } from './satelliteInclinationFilter.js';
+import {
+  DEFAULT_SAT_ECCENTRICITY,
+  getSatEccentricity,
+  resetSatEccentricityCache,
+  satelliteEccentricityChipModels,
+  satellitePassesEccentricityFilter,
+  setSatEccentricity,
+} from './satelliteEccentricityFilter.js';
 import { satelliteCatalogControls } from './satelliteCatalogControls.js';
 import {
   clearOverlaySource,
@@ -310,7 +318,14 @@ let _denseStatus = 'idle';
 let _denseError = null;
 /** Bumped on every bulk catalog mutation; keys the row-legend tally cache. */
 let _catalogRevision = 0;
-let _classTallyCache = { revision: -1, filter: null, period: null, inclination: null, counts: null };
+let _classTallyCache = {
+  revision: -1,
+  filter: null,
+  period: null,
+  inclination: null,
+  eccentricity: null,
+  counts: null,
+};
 /** @type {(() => void)|null} Manager callback: "this layer's row controls changed". */
 let _rowControlsListener = null;
 
@@ -333,12 +348,14 @@ function _classTally() {
   const filter = _params.satelliteClassFilter;
   const period = getSatPeriod();
   const inclination = getSatInclination();
+  const eccentricity = getSatEccentricity();
   if (
     _classTallyCache.counts
     && _classTallyCache.revision === _catalogRevision
     && _classTallyCache.filter === filter
     && _classTallyCache.period === period
     && _classTallyCache.inclination === inclination
+    && _classTallyCache.eccentricity === eccentricity
   ) {
     return _classTallyCache.counts;
   }
@@ -351,7 +368,7 @@ function _classTally() {
     entries.push({ group: sat.group, isIss: noradId === ISS_NORAD });
   }
   const counts = tallySatelliteClasses(entries);
-  _classTallyCache = { revision: _catalogRevision, filter, period, inclination, counts };
+  _classTallyCache = { revision: _catalogRevision, filter, period, inclination, eccentricity, counts };
   return counts;
 }
 
@@ -402,7 +419,23 @@ function _inclinationAllowsSatellite(noradId, sat = _catalog.get(noradId), track
 }
 
 /**
- * Class chips AND period chips AND inclination chips. Tracked stays even when a chip is off.
+ * Whether one catalog row may render under the current eccentricity chips.
+ * Missing / non-finite eccentricity stays. The tracked satellite always passes.
+ * @param {number} noradId
+ * @param {{satrec?: object}|null|undefined} [sat]
+ * @param {number|null} [trackedNorad]
+ * @returns {boolean}
+ */
+function _eccentricityAllowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _trackedNorad) {
+  return satellitePassesEccentricityFilter(sat, getSatEccentricity(), {
+    noradId,
+    trackedNorad,
+  });
+}
+
+/**
+ * Class chips AND period chips AND inclination chips AND eccentricity chips.
+ * Tracked stays even when a chip is off.
  * @param {number} noradId
  * @param {{group?: string, satrec?: object}|null|undefined} [sat]
  * @param {number|null} [trackedNorad]
@@ -411,16 +444,17 @@ function _inclinationAllowsSatellite(noradId, sat = _catalog.get(noradId), track
 function _allowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _trackedNorad) {
   return _classAllowsSatellite(noradId, sat, trackedNorad)
     && _periodAllowsSatellite(noradId, sat, trackedNorad)
-    && _inclinationAllowsSatellite(noradId, sat, trackedNorad);
+    && _inclinationAllowsSatellite(noradId, sat, trackedNorad)
+    && _eccentricityAllowsSatellite(noradId, sat, trackedNorad);
 }
 
-/** Untracked point show-flag for the current class / period / inclination chips. Tracked stays hidden. */
+/** Untracked point show-flag for the current class / period / inclination / eccentricity chips. Tracked stays hidden. */
 function _untrackedPointShouldShow(noradId) {
   if (noradId === _trackedNorad) return false;
   return _allowsSatellite(noradId);
 }
 
-/** Orbit ring show-flag: ORBITS on AND class / period / inclination chips allow this satellite. */
+/** Orbit ring show-flag: ORBITS on AND class / period / inclination / eccentricity chips allow this satellite. */
 function _orbitPathShouldShow(noradId) {
   return _params.showOrbits && _allowsSatellite(noradId);
 }
@@ -446,7 +480,7 @@ function _classFilterChips() {
   });
 }
 
-/** Re-apply class, period, and inclination chips to in-memory points and orbit rings. Never fetches CelesTrak. */
+/** Re-apply class, period, inclination, and eccentricity chips to in-memory points and orbit rings. Never fetches CelesTrak. */
 function _applyClassVisibility() {
   for (const [noradId, point] of _points) {
     if (!point) continue;
@@ -456,7 +490,14 @@ function _applyClassVisibility() {
     if (!path?.primitive) continue;
     path.primitive.show = _orbitPathShouldShow(noradId);
   }
-  _classTallyCache = { revision: -1, filter: null, period: null, inclination: null, counts: null };
+  _classTallyCache = {
+    revision: -1,
+    filter: null,
+    period: null,
+    inclination: null,
+    eccentricity: null,
+    counts: null,
+  };
   _syncIssOverlay();
   _notifyRowControls();
 }
@@ -1563,6 +1604,8 @@ export function _setDenseCatalogStateForTest({
   setSatPeriod(DEFAULT_SAT_PERIOD, { getItem: () => null, setItem() {} });
   resetSatInclinationCache();
   setSatInclination(DEFAULT_SAT_INCLINATION, { getItem: () => null, setItem() {} });
+  resetSatEccentricityCache();
+  setSatEccentricity(DEFAULT_SAT_ECCENTRICITY, { getItem: () => null, setItem() {} });
   _enabled = true;
   _applyClassVisibility();
 }
@@ -1594,6 +1637,8 @@ export function _clearDenseCatalogStateForTest() {
   setSatPeriod(DEFAULT_SAT_PERIOD, { getItem: () => null, setItem() {} });
   resetSatInclinationCache();
   setSatInclination(DEFAULT_SAT_INCLINATION, { getItem: () => null, setItem() {} });
+  resetSatEccentricityCache();
+  setSatEccentricity(DEFAULT_SAT_ECCENTRICITY, { getItem: () => null, setItem() {} });
   _cancelPendingTrackingRestore();
   _enabled = false;
 }
@@ -1652,6 +1697,7 @@ export function _satelliteVisualStateForTest() {
     satelliteClassFilter: _params.satelliteClassFilter,
     satPeriod: getSatPeriod(),
     satInclination: getSatInclination(),
+    satEccentricity: getSatEccentricity(),
     pointCollectionShow: _pointCollection ? Boolean(_pointCollection.show) : null,
     pointIds: [..._points.keys()],
     pointShows: Object.fromEntries(
@@ -2364,7 +2410,7 @@ const satellitesLayer = {
    * Runtime params (DataLayerManager.setLayerParams path).
    * catalog: 'core' (default, ~840 sats) | 'dense' (adds the Starlink shell
    * as points-only extras on a relaxed propagation budget).
-   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown, satInclination?: unknown }} [params]
+   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown, satInclination?: unknown, satEccentricity?: unknown }} [params]
    */
   setParams(params = {}, { origin = 'programmatic', storage } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -2434,6 +2480,13 @@ const satellitesLayer = {
         _applyClassVisibility();
       }
     }
+    if (Object.hasOwn(params, 'satEccentricity')) {
+      const previous = getSatEccentricity(storage);
+      const next = setSatEccentricity(params.satEccentricity, storage);
+      if (next !== previous) {
+        _applyClassVisibility();
+      }
+    }
     if (Object.hasOwn(params, 'selectedSatTrackingId')) {
       const requested = _normalizeTrackedNorad(params.selectedSatTrackingId);
       if (requested === _trackedNorad) {
@@ -2451,7 +2504,7 @@ const satellitesLayer = {
     return true;
   },
 
-  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string, satInclination: string }} Current runtime params. */
+  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string, satInclination: string, satEccentricity: string }} Current runtime params. */
   getParams() {
     return {
       catalog: _params.catalog,
@@ -2462,6 +2515,7 @@ const satellitesLayer = {
       satelliteClassFilter: _params.satelliteClassFilter,
       satPeriod: getSatPeriod(),
       satInclination: getSatInclination(),
+      satEccentricity: getSatEccentricity(),
     };
   },
 
@@ -2469,6 +2523,7 @@ const satellitesLayer = {
    * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
    * Dense catalog chips, PLAN 132 class chips, PLAN 164 period chips
    * (All | <100m | <128m), PLAN 169 inclination chips (Eq | Mid | Polar),
+   * PLAN 177 eccentricity chips (All | <0.01 | <0.05),
    * the Plan 65 Sats group picker, POINTS and ORBITS chips over the existing
    * `showPoints` / `showOrbits` params, a class legend, and the Next ISS
    * readout host (Plan 139).
@@ -2477,8 +2532,8 @@ const satellitesLayer = {
    * owns the write, so the Space Missions snapshot/restore path (which drives
    * the same `catalog` / `showPoints` / `showOrbits` params) stays the single
    * source of truth. Hiding dots must keep this row: otherwise POINTS could
-   * not turn back on, and Orbits / Core|Dense / class / period / inclination
-   * chips would vanish.
+   * not turn back on, and Orbits / Core|Dense / class / period / inclination /
+   * eccentricity chips would vanish.
    *
    * Dense reports the LOAD state, not the catalog param: the param flips
    * synchronously while the Starlink shell takes seconds to arrive and
@@ -2499,6 +2554,7 @@ const satellitesLayer = {
         ..._classFilterChips(),
         ...satellitePeriodChipModels(getSatPeriod()),
         ...satelliteInclinationChipModels(getSatInclination()),
+        ...satelliteEccentricityChipModels(getSatEccentricity()),
         {
           id: 'points',
           label: 'POINTS',
