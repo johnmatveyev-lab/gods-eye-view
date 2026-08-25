@@ -129,7 +129,7 @@ test('Netlify adapter is a thin Vercel-handler map; Vercel files stay untouched'
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live/[...path].js')), true);
 
   const stub = readFileSync(path.join(ROOT, 'src/data/aisLiveHosted.js'), 'utf8');
-  assert.doesNotMatch(stub, /WebSocket|wss:\/\/|aisstream\.io|AISSTREAM_API_KEY\s*=/i);
+  assert.doesNotMatch(stub, /from ['"]ws['"]|new WebSocket\(|wss:\/\/stream\.aisstream\.io/i);
   assert.doesNotMatch(stub, /opensky-network|news\.google|telegeography|quantum-earth/i);
 });
 

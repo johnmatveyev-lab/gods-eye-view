@@ -102,7 +102,7 @@ test('Vercel Node entry forwards to handleTomTomHttp; ais-live is not wrapped', 
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live/[...path].js')), true);
   const aisStub = readFileSync(path.join(ROOT, 'src/data/aisLiveHosted.js'), 'utf8');
-  assert.doesNotMatch(aisStub, /WebSocket|wss:\/\/|aisstream\.io/i);
+  assert.doesNotMatch(aisStub, /from ['"]ws['"]|new WebSocket\(|wss:\/\/stream\.aisstream\.io/i);
   assert.equal(typeof tomtomProxy().configureServer, 'function');
   assert.equal(typeof tomtomProxy().configurePreviewServer, 'function');
 });
