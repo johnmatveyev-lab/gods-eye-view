@@ -2233,6 +2233,15 @@ export class DataLayerManager {
           if (chip?.params) this.setLayerParams(layer.id, chip.params, { origin: 'user' });
         });
         controls.addEventListener('change', (event) => {
+          const satSelect = event.target?.closest?.('select.data-toggle-select');
+          if (satSelect && !satSelect.disabled) {
+            const spec = this._rowControlsFor(layer.id)?.selects
+              ?.find((entry) => entry.id === satSelect.dataset.selectId);
+            if (spec?.param) {
+              this.setLayerParams(layer.id, { [spec.param]: satSelect.value }, { origin: 'user' });
+            }
+            return;
+          }
           const select = event.target?.closest?.('.data-toggle-picker-select');
           if (!select || select.disabled) return;
           const module = this.layers.get(layer.id)?.module;
@@ -2255,7 +2264,7 @@ export class DataLayerManager {
    * misbehaving layer cannot blank the whole panel. Resolved from the registry
    * rather than the `getAll()` projection, which deliberately omits `module`.
    * @param {string} layerId Registered layer id.
-   * @returns {{ chips?: Array<object>, legend?: Array<object>, picker?: object }|null} Descriptor.
+   * @returns {{ chips?: Array<object>, legend?: Array<object>, selects?: Array<object>, picker?: object }|null} Descriptor.
    */
   _rowControlsFor(layerId) {
     const module = this.layers.get(layerId)?.module;
@@ -2286,9 +2295,11 @@ export class DataLayerManager {
     const declared = this._rowControlsFor(layer.id);
     const chips = layer.enabled ? (declared?.chips || []) : [];
     const legend = layer.enabled ? (declared?.legend || []) : [];
+    const selects = layer.enabled ? (declared?.selects || []) : [];
     const headingText = typeof declared?.heading === 'string' ? declared.heading.trim() : '';
     const picker = declared?.picker || null;
-    container.hidden = chips.length === 0 && legend.length === 0 && !headingText && !picker;
+    container.hidden = chips.length === 0 && legend.length === 0 && selects.length === 0
+      && !headingText && !picker;
     this._syncRowPicker(container, picker);
 
     let heading = container.querySelector?.('.data-toggle-heading');
@@ -2330,6 +2341,43 @@ export class DataLayerManager {
       button.setAttribute('aria-busy', chip.busy ? 'true' : 'false');
     }
     for (const node of stale.values()) node.remove();
+
+    const staleSelects = new Map();
+    for (const node of [...container.children]) {
+      if (node.dataset?.controlId) staleSelects.set(node.dataset.controlId, node);
+    }
+    for (const spec of selects) {
+      let wrap = staleSelects.get(spec.id);
+      staleSelects.delete(spec.id);
+      if (!wrap) {
+        wrap = document.createElement('label');
+        wrap.className = 'data-toggle-select-wrap';
+        wrap.dataset.controlId = spec.id;
+        const caption = document.createElement('span');
+        caption.className = 'data-toggle-select-label';
+        caption.textContent = spec.label;
+        const select = document.createElement('select');
+        select.className = 'data-toggle-select';
+        select.dataset.selectId = spec.id;
+        select.setAttribute('aria-label', spec.title || spec.label);
+        for (const option of spec.options || []) {
+          const node = document.createElement('option');
+          node.value = option.value;
+          node.textContent = option.label;
+          select.appendChild(node);
+        }
+        wrap.append(caption, select);
+        container.appendChild(wrap);
+      }
+      const select = wrap.querySelector?.('select')
+        || [...(wrap.children || [])].find((child) => String(child.tagName || '').toLowerCase() === 'select');
+      if (select) {
+        if (select.value !== spec.value) select.value = spec.value;
+        select.disabled = Boolean(spec.disabled);
+        select.title = spec.title || '';
+      }
+    }
+    for (const node of staleSelects.values()) node.remove();
 
     for (const item of legend) {
       const entry = document.createElement('span');
