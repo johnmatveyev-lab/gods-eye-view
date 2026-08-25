@@ -17,6 +17,7 @@ import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, 
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
+import { handleKeyboardPanKeyDown } from './keyboardPan.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -228,6 +229,12 @@ import {
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
 import {
+  handleCleanViewEscape,
+  isCleanView,
+  setCleanViewEnabled,
+  syncCleanViewButton,
+} from './cleanViewChrome.js';
+import {
   DATACENTER_LAYER_ID,
   bindDatacenterInViewList,
   datacenterFlyDestination,
@@ -341,6 +348,14 @@ import {
   peekModelsPreference,
   writeModelsPreference,
 } from './modelsPreference.js';
+import {
+  bindZoomToPointerWheel,
+  readZoomToPointerPreference,
+  setWheelZoomEventEnabled,
+  syncZoomToPointerButton,
+  writeZoomToPointerPreference,
+  zoomToPointerEnabled,
+} from './zoomToPointer.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
@@ -378,6 +393,11 @@ const DETECTION_ALLOCATION_STORAGE_KEY = 'gev:detection-allocation:v1';
 
 /** Best-effort localStorage for `meridian.models`. Access itself can throw. */
 function modelsPreferenceStore() {
+  try { return globalThis.localStorage ?? null; } catch { return null; }
+}
+
+/** Best-effort localStorage for `meridian.zoomToPointer`. Access itself can throw. */
+function zoomToPointerStore() {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 /** Z ladder: panels promote within [100, 139]; voice pill 150, toast 200, clean-view-exit 300. */
@@ -2487,9 +2507,11 @@ export class StyleManager {
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
+    this._cleanViewChromeBtn = document.getElementById('clean-view-chrome');
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
+    this._zoomToPointerBtn = document.getElementById('zoom-to-pointer-toggle');
     this._invertScrollBtn = document.getElementById('invert-scroll-toggle');
     this._removeInvertScrollZoom = installWheelZoomSign(
       this.viewer?.scene?.screenSpaceCameraController,
@@ -2925,6 +2947,7 @@ export class StyleManager {
     this._initNorthUpCompass();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initZoomToPointer();
     this._initTrailsToggle();
     this._initLiveSunToggle();
     this._initScaleBar();
@@ -3624,9 +3647,9 @@ export class StyleManager {
 
   /**
    * Wires up all primary UI event listeners: style buttons, keyboard shortcuts
-   * (1-8 style keys, H/O/V/F/D/C hotkeys, Escape), AI prompt input with
-   * debounce, bloom/sharpen/HUD toggles, detection density slider, and
-   * clean-view toggle.
+   * (1-8 style keys, WASD/arrow pan, H/O/V/F/D/C hotkeys, Escape), AI prompt
+   * input with debounce, bloom/sharpen/HUD toggles, detection density slider,
+   * and clean-view toggle.
    * @returns {void}
    */
   _initUI() {
@@ -3650,6 +3673,10 @@ export class StyleManager {
         || e.target === this._locationSearch;
       if (isFormControl && e.key !== 'Escape') return;
 
+      // WASD / arrows pan the globe. Must run before letter hotkeys so D
+      // does not also cycle detection. Ignores typing targets internally.
+      if (handleKeyboardPanKeyDown(e, this.viewer)) return;
+
       const keyMap = {
         '1': 'normal', '2': 'retro', '3': 'surveillance',
         '4': 'thermal', '5': 'anime', '6': 'noir',
@@ -3657,7 +3684,11 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
-        handleFullscreenEscape(e);
+        if (handleCleanViewEscape(e)) {
+          this.toggleCleanView(false);
+        } else {
+          handleFullscreenEscape(e);
+        }
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
           this._locationSearch.value = '';
@@ -3761,12 +3792,15 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.addEventListener('click', () => this.toggleCleanView());
     }
+    this._cleanViewChromeBtn?.addEventListener('click', () => this.toggleCleanView());
 
     this._reduceMotionBtn?.addEventListener('click', () => {
       setReduceMotionOverride(!isReduceMotionEnabled());
       this._syncReduceMotionButton();
     });
-
+    this._zoomToPointerBtn?.addEventListener('click', () => {
+      this._toggleZoomToPointer();
+    });
     this._gridBtn?.addEventListener('click', () => {
       const next = this._gridOverlay?.isEnabled() !== true;
       this._gridOverlay?.setEnabled(next);
@@ -6205,9 +6239,9 @@ export class StyleManager {
     this._radioPrevBtn?.addEventListener('click', () => cycleRadio(-1));
     this._radioNextBtn?.addEventListener('click', () => cycleRadio(1));
     this._radioPlayBtn?.addEventListener('click', () => void radioLayer.togglePlayback({ origin: 'user' }));
-    this._radioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
-    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
-    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
+    this._radioStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
+    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
+    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
     this._radioVolume?.addEventListener('input', () => {
       const value = Number(this._radioVolume.value);
       if (this._radioVolumeValue) this._radioVolumeValue.textContent = `${value}%`;
@@ -6632,9 +6666,19 @@ export class StyleManager {
       this._cockpitRadioPlayBtn.title = action;
     }
     const liveRadioAudio = ['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
-    if (this._radioStopBtn) this._radioStopBtn.disabled = !['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
-    if (this._contextRadioMiniStopBtn) this._contextRadioMiniStopBtn.disabled = !liveRadioAudio;
-    if (this._cockpitRadioStopBtn) this._cockpitRadioStopBtn.disabled = !liveRadioAudio;
+    const muteAvailable = interactive || liveRadioAudio;
+    if (this._radioStopBtn) {
+      this._radioStopBtn.disabled = !muteAvailable;
+      this._radioStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
+    if (this._contextRadioMiniStopBtn) {
+      this._contextRadioMiniStopBtn.disabled = !muteAvailable;
+      this._contextRadioMiniStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
+    if (this._cockpitRadioStopBtn) {
+      this._cockpitRadioStopBtn.disabled = !muteAvailable;
+      this._cockpitRadioStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
     if (this._radioVolume) this._radioVolume.disabled = !interactive;
     if (this._radioVolume && document.activeElement !== this._radioVolume) {
       this._radioVolume.value = String(Math.round(state.volume * 100));
@@ -8481,8 +8525,9 @@ export class StyleManager {
   toggleCleanView(forceEnabled) {
     const shouldEnable = typeof forceEnabled === 'boolean'
       ? forceEnabled
-      : !document.body.classList.contains('ui-clean-view');
-    document.body.classList.toggle('ui-clean-view', shouldEnable);
+      : !isCleanView();
+    setCleanViewEnabled(shouldEnable);
+    syncCleanViewButton(this._cleanViewChromeBtn, shouldEnable);
     if (this._cleanViewBtn) {
       this._cleanViewBtn.classList.toggle('active', shouldEnable);
     }
@@ -10378,6 +10423,37 @@ export class StyleManager {
   }
 
   /**
+   * DISPLAY-rail Zoom to pointer. Off (default) keeps Cesium center zoom.
+   * Persist as `meridian.zoomToPointer` = on|off.
+   * @returns {void}
+   */
+  _initZoomToPointer() {
+    const storage = zoomToPointerStore();
+    const enabled = zoomToPointerEnabled(readZoomToPointerPreference(storage));
+    syncZoomToPointerButton(this._zoomToPointerBtn, enabled);
+    this._unbindZoomToPointer = bindZoomToPointerWheel(this.viewer, {
+      storage,
+      wheelType: Cesium.CameraEventType?.WHEEL,
+      onZoom: () => governorRequestRender(),
+    });
+  }
+
+  _toggleZoomToPointer() {
+    const storage = zoomToPointerStore();
+    const next = writeZoomToPointerPreference(
+      storage,
+      zoomToPointerEnabled(readZoomToPointerPreference(storage)) ? 'off' : 'on',
+    );
+    const enabled = zoomToPointerEnabled(next);
+    syncZoomToPointerButton(this._zoomToPointerBtn, enabled);
+    setWheelZoomEventEnabled(
+      this.viewer?.scene?.screenSpaceCameraController,
+      !enabled,
+      Cesium.CameraEventType?.WHEEL,
+    );
+  }
+
+  /**
    * Mirror the persisted lat/lon graticule on the DISPLAY Grid toggle.
    * @returns {void}
    */
@@ -11230,6 +11306,8 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    this._unbindZoomToPointer?.();
+    this._unbindZoomToPointer = null;
     uninstallScaleBar();
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();

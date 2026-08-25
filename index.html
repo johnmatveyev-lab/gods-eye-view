@@ -122,6 +122,9 @@
     <button id="fullscreen-view" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
       <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
     </button>
+    <button id="clean-view-chrome" type="button" aria-label="Clean view" title="Clean view" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">visibility_off</span>
+    </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
@@ -648,6 +651,12 @@
           <button class="pp-mode-btn" id="power-low" data-power="low" role="radio" aria-checked="false">Low</button>
         </div>
       </div>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="zoom-to-pointer-toggle" type="button" title="Zoom toward the globe under the cursor" aria-pressed="false" aria-label="Zoom to pointer">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">center_focus_strong</span>
+        <span class="pp-label">Zoom to pointer</span>
+      </button>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="bloom-toggle" title="Bloom / Glow">
