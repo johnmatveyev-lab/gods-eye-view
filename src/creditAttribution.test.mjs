@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+import { DATA_CREDITS, pinRequiredCredits } from './data/dataCredits.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const css = fs.readFileSync(path.join(ROOT, 'style.css'), 'utf8');
@@ -591,4 +592,108 @@ test('the credit line is never suppressed to make room', () => {
     assert.doesNotMatch(block, /opacity\s*:\s*0(\D|$)/, 'the credit must never be faded out');
   }
   assert.match(css, /body\.ui-clean-view #cesium-credits,\s*\n\s*body\.recording-mode #cesium-credits \{[^}]*bottom: 36px;/);
+});
+
+const CLEAN_RECORDING_CREDIT = /body\.ui-clean-view #cesium-credits,\s*\n\s*body\.recording-mode #cesium-credits \{([^}]*)\}/g;
+
+function chromeFadeSelectorList(source, startNeedle) {
+  const start = source.indexOf(startNeedle);
+  assert.ok(start >= 0, `missing chrome fade rule starting ${startNeedle}`);
+  const brace = source.indexOf('{', start);
+  return source.slice(start, brace);
+}
+
+test('clean-view and recording pin #cesium-credits at opacity 1', () => {
+  const pins = [...css.matchAll(CLEAN_RECORDING_CREDIT)].map((match) => match[1]);
+  assert.ok(pins.length >= 1, 'clean-view/recording credit pin is missing');
+  for (const block of pins) {
+    assert.match(block, /opacity:\s*1/, 'clean-view/recording must pin opacity 1');
+    assert.doesNotMatch(block, /display\s*:\s*none/, 'the credit must never be display:none');
+    assert.doesNotMatch(block, /opacity\s*:\s*0(\D|$)/, 'the credit must never be faded out');
+  }
+  assert.doesNotMatch(
+    chromeFadeSelectorList(css, 'body.ui-clean-view #title-bar'),
+    /#cesium-credits/,
+    'clean-view chrome fade must not include the credit line',
+  );
+  assert.doesNotMatch(
+    chromeFadeSelectorList(css, 'body.recording-mode #title-bar'),
+    /#cesium-credits/,
+    'recording chrome fade must not include the credit line',
+  );
+});
+
+test('clean-view and recording JS fade Meridian chrome, not #cesium-credits', () => {
+  const cleanView = ui.slice(
+    ui.indexOf('toggleCleanView(forceEnabled)'),
+    ui.indexOf('setHudVisible(mode)'),
+  );
+  const recording = ui.slice(
+    ui.indexOf('setRecordingMode(enabled, options = {})'),
+    ui.indexOf('_updateSliderPanel(styleName'),
+  );
+  assert.match(cleanView, /pinRequiredCredits\(\)/);
+  assert.match(recording, /pinRequiredCredits\(\)/);
+  assert.match(ui, /import \{ pinRequiredCredits \} from '\.\/data\/dataCredits\.js';/);
+  assert.match(recording, /this\.hud\.setMode/);
+  assert.doesNotMatch(cleanView, /cesium-credits[\s\S]{0,80}(display\s*=\s*['"]none|opacity\s*=\s*['"]0)/);
+  assert.doesNotMatch(recording, /cesium-credits[\s\S]{0,80}(display\s*=\s*['"]none|opacity\s*=\s*['"]0)/);
+});
+
+test('clean-view still has the Google Maps text and Data attribution control', () => {
+  const expand = {
+    className: 'cesium-credit-expand-link',
+    textContent: 'Data attribution',
+    getAttribute(name) { return name === 'href' ? '#' : ''; },
+  };
+  const style = {
+    display: 'none',
+    opacity: '0',
+    visibility: 'hidden',
+    pointerEvents: 'none',
+    setProperty(prop, value) {
+      if (prop === 'opacity') this.opacity = value;
+      else if (prop === 'visibility') this.visibility = value;
+      else if (prop === 'pointer-events') this.pointerEvents = value;
+    },
+    removeProperty(prop) {
+      if (prop === 'display') this.display = '';
+    },
+  };
+  const credits = {
+    id: 'cesium-credits',
+    textContent: 'Google Maps Data attribution',
+    style,
+    querySelector(selector) {
+      return selector.includes('cesium-credit-expand-link') ? expand : null;
+    },
+  };
+  const root = {
+    getElementById(id) { return id === 'cesium-credits' ? credits : null; },
+  };
+
+  assert.equal(pinRequiredCredits(root), true);
+  assert.match(credits.textContent, /Google Maps/);
+  assert.equal(credits.querySelector('.cesium-credit-expand-link')?.textContent, 'Data attribution');
+  assert.notEqual(style.display, 'none');
+  assert.equal(style.opacity, '1');
+  assert.equal(style.visibility, 'visible');
+  assert.equal(style.pointerEvents, 'auto');
+});
+
+test('Data attribution still lists the existing per-layer credits', () => {
+  const joined = DATA_CREDITS.map((credit) => credit.html).join('\n');
+  const keys = DATA_CREDITS.map((credit) => credit.key);
+  for (const needle of ['adsb.lol', 'OpenStreetMap', 'FIRMS', 'CelesTrak', 'GDELT', 'Open-Meteo']) {
+    assert.match(joined, new RegExp(needle), `${needle} must stay in the Data attribution popover`);
+  }
+  assert.ok(keys.includes('adsblol'));
+  assert.ok(keys.includes('firms'));
+  assert.ok(keys.includes('celestrak'));
+  assert.ok(keys.includes('gdelt'));
+  assert.ok(keys.includes('open-meteo'));
+  assert.ok(!keys.includes('opensky'));
+  assert.ok(!keys.includes('google-news-rss'));
+  assert.ok(!keys.includes('telegeography'));
+  assert.doesNotMatch(joined, /OpenSky|Google News|TeleGeography|quantum-earth/i);
 });
