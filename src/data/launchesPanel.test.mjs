@@ -238,7 +238,7 @@ test('legal pins stay on Launch Library 2 and MIT credit', () => {
   assert.doesNotMatch(panel, /OpenSky|Google News|TeleGeography|quantum-earth/);
   assert.match(markup, /data-launch-id="ll2-starlink"/);
   assert.match(markup, /aria-pressed="true"/);
-  assert.match(markup, /STARLINK GROUP/);
+  assert.match(markup, /FALCON 9/);
   assert.doesNotMatch(markup, /DATE UNAVAILABLE/);
   assert.equal(LAUNCHES_PANEL_DATE_UNAVAILABLE, 'DATE UNAVAILABLE');
 });

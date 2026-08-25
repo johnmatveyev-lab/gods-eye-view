@@ -29,8 +29,9 @@ export const LAUNCHES_PANEL_DATE_UNAVAILABLE = 'DATE UNAVAILABLE';
 export function launchPadCoordinates(launch) {
   const pad = launch?.pad || {};
   const location = pad.location || {};
-  const coordinates = location.coordinates || '';
-  const [coordinateLon, coordinateLat] = String(coordinates).split(',').map(Number);
+  const parts = String(location.coordinates || '').split(',').map((part) => Number(String(part).trim()));
+  const coordinateLon = parts.length === 2 && Number.isFinite(parts[0]) ? parts[0] : null;
+  const coordinateLat = parts.length === 2 && Number.isFinite(parts[1]) ? parts[1] : null;
   const lat = Number.isFinite(Number(pad.latitude))
     ? Number(pad.latitude)
     : Number.isFinite(Number(launch?.lat))
