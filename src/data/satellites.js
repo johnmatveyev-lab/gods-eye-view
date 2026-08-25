@@ -207,6 +207,8 @@ function _pointStyleFor(noradId, group) {
 
 // Satellite catalog: { noradId → { name, satrec, group } }
 let _catalog = new Map();
+/** ISS satrec kept across catalog rebuilds so the pass readout survives a non-stations picker. */
+let _issSatrec = null;
 let _pointCollection = null;
 let _points = new Map();          // noradId → point primitive
 /** Stable lightweight records reused by the detection overlay between updates. */
@@ -1458,6 +1460,7 @@ export function _setDenseCatalogStateForTest({
     removeAll() {},
   };
   _catalog = new Map();
+  _issSatrec = null;
   _points = new Map();
   _detectionObjects = new Map();
   _orbitPaths = new Map();
@@ -1468,12 +1471,14 @@ export function _setDenseCatalogStateForTest({
   _denseError = null;
   _lastError = null;
   for (const sat of coreSats) {
+    const satrec = sat.satrec || { error: 0, satnum: String(sat.noradId) };
     _catalog.set(sat.noradId, {
       name: sat.name,
-      satrec: sat.satrec || { error: 0, satnum: String(sat.noradId) },
+      satrec,
       group: sat.group || 'stations',
     });
     _points.set(sat.noradId, sat.point || { id: sat.noradId });
+    if (Number(sat.noradId) === ISS_NORAD) _issSatrec = satrec;
   }
   _count = _points.size;
   _catalogRevision++;
@@ -1497,6 +1502,7 @@ export function _clearDenseCatalogStateForTest() {
   _viewer = null;
   _pointCollection = null;
   _catalog = new Map();
+  _issSatrec = null;
   _points = new Map();
   _denseIds = [];
   _denseLoadToken++;
@@ -1944,6 +1950,13 @@ const satellitesLayer = {
         if (issPath) issPath.primitive.show = _orbitPathShouldShow(ISS_NORAD);
 
         _syncIssOverlay();
+      }
+
+      const catalogIssSatrec = _catalog.get(ISS_NORAD)?.satrec;
+      if (catalogIssSatrec) {
+        _issSatrec = catalogIssSatrec;
+      } else if (groupDef.path !== 'stations' && !_issSatrec) {
+        await _fetchIssSatrecSidecar(updateSignal);
       }
 
       _count = _points.size;
@@ -2510,15 +2523,38 @@ function _installClickHandler(viewer) {
 }
 
 /**
+ * Keep NORAD 25544's satrec when the picker is not Stations. Weather/GEO/GPS
+ * catalogs do not include the ISS; the pass readout still needs this TLE.
+ * @param {AbortSignal} [signal]
+ */
+async function _fetchIssSatrecSidecar(signal) {
+  try {
+    const res = await fetch('/api/celestrak/stations', { signal });
+    if (!res.ok) return;
+    const entries = parseTLE(await res.text());
+    if (signal) signal.throwIfAborted();
+    for (const entry of entries) {
+      const satrec = twoline2satrec(entry.line1, entry.line2);
+      if (!satrec || satrec.error !== 0) continue;
+      if (Number(satrec.satnum) !== ISS_NORAD) continue;
+      _issSatrec = satrec;
+      return;
+    }
+  } catch (error) {
+    if (signal?.aborted || error?.name === 'AbortError') throw error;
+  }
+}
+
+/**
  * Next ISS pass for an observer. Requires the catalog to have loaded (the
  * satellites layer enabled at least once this session).
  * @returns {{status:'no-tle'}|{status:'none'}|{status:'ok', pass:{riseMs:number,setMs:number,maxElevDeg:number,maxElevMs:number,riseAzDeg:number}}}
  */
 export function getNextIssPass({ latDeg, lonDeg, minElevDeg = 10, fromMs = Date.now() }) {
-  const sat = _catalog.get(ISS_NORAD);
-  if (!sat || !sat.satrec) return { status: 'no-tle' };
+  const satrec = _catalog.get(ISS_NORAD)?.satrec || _issSatrec;
+  if (!satrec) return { status: 'no-tle' };
   const pass = findNextIssPass({
-    satrec: sat.satrec, latDeg, lonDeg, fromMs, minElevDeg,
+    satrec, latDeg, lonDeg, fromMs, minElevDeg,
   });
   return pass ? { status: 'ok', pass } : { status: 'none' };
 }

@@ -28,9 +28,11 @@ import {
 } from './issPassReadout.js';
 import satellitesLayer, {
   getNextIssPass,
+  _catalogGroupForTest,
   _clearDenseCatalogStateForTest,
   _setDenseCatalogStateForTest,
 } from './satellites.js';
+import { resetSatGroupCache, setSatGroup } from './satGroup.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const L1 = '1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927';
@@ -360,6 +362,112 @@ test('markup, wiring, and legal rails stay in the approved files', () => {
   assert.match(license, /MIT License/);
   assert.match(license, /MERIDIAN NOTICE/);
   assert.match(pkg, /"name": "meridian"/);
+});
+
+const ISS_TLE = ['ISS (ZARYA)', L1, L2].join('\n');
+const WEATHER_TLE = [
+  'NOAA 18',
+  '1 28654U 05018A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927',
+  '2 28654  51.6416 247.4627 0006703 130.5360 325.0288 15.72125391563537',
+].join('\n');
+const VIEWER = { scene: { primitives: { add: (p) => p, remove() {} } } };
+
+function memoryStorage(seed = {}) {
+  const map = new Map(Object.entries(seed));
+  return {
+    getItem(key) {
+      return map.has(key) ? map.get(key) : null;
+    },
+    setItem(key, value) {
+      map.set(key, String(value));
+    },
+  };
+}
+
+function mockCelestrak(bodies) {
+  const urls = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    urls.push(href);
+    const pathPart = href.split('/').pop();
+    const body = bodies[pathPart];
+    if (body === undefined) throw new Error(`unexpected catalog fetch ${href}`);
+    return { ok: true, text: async () => body };
+  };
+  return {
+    urls,
+    restore() {
+      globalThis.fetch = originalFetch;
+    },
+  };
+}
+
+test('Stations load computes a future ISS pass', async () => {
+  const fetchMock = mockCelestrak({ stations: ISS_TLE });
+  const storage = memoryStorage();
+  try {
+    resetSatGroupCache();
+    setSatGroup('stations', storage);
+    _setDenseCatalogStateForTest({});
+    await satellitesLayer.update(VIEWER);
+    const result = getNextIssPass({ ...AUSTIN, fromMs: FROM_MS });
+    assert.equal(result.status, 'ok');
+    assert.ok(result.pass.riseMs > FROM_MS);
+    assert.equal(_catalogGroupForTest(25544), 'stations');
+  } finally {
+    fetchMock.restore();
+    resetSatGroupCache();
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('Weather rebuild drops 25544 from the catalog but keeps the ISS pass', async () => {
+  const fetchMock = mockCelestrak({ stations: ISS_TLE, weather: WEATHER_TLE });
+  const storage = memoryStorage();
+  try {
+    resetSatGroupCache();
+    setSatGroup('stations', storage);
+    _setDenseCatalogStateForTest({});
+    await satellitesLayer.update(VIEWER);
+    assert.equal(getNextIssPass({ ...AUSTIN, fromMs: FROM_MS }).status, 'ok');
+
+    setSatGroup('weather', storage);
+    await satellitesLayer.update(VIEWER);
+    assert.equal(_catalogGroupForTest(25544), undefined, 'Weather bodies have no NORAD 25544');
+    assert.equal(_catalogGroupForTest(28654), 'weather');
+    const result = getNextIssPass({ ...AUSTIN, fromMs: FROM_MS });
+    assert.equal(result.status, 'ok', 'retained ISS satrec must still compute a pass');
+    assert.ok(result.pass.riseMs > FROM_MS);
+  } finally {
+    fetchMock.restore();
+    resetSatGroupCache();
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('persisted satGroup=weather sidecars stations once for NORAD 25544', async () => {
+  const fetchMock = mockCelestrak({ stations: ISS_TLE, weather: WEATHER_TLE });
+  const storage = memoryStorage({ 'meridian.satGroup': 'weather' });
+  try {
+    resetSatGroupCache();
+    setSatGroup('weather', storage);
+    _setDenseCatalogStateForTest({});
+    await satellitesLayer.update(VIEWER);
+    const stationFetches = fetchMock.urls.filter((url) => url === '/api/celestrak/stations');
+    const weatherFetches = fetchMock.urls.filter((url) => url === '/api/celestrak/weather');
+    assert.deepEqual(weatherFetches, ['/api/celestrak/weather']);
+    assert.deepEqual(stationFetches, ['/api/celestrak/stations'], 'one stations sidecar');
+    assert.equal(_catalogGroupForTest(25544), undefined, 'sidecar must not insert ISS into the Weather catalog');
+    assert.equal(_catalogGroupForTest(28654), 'weather');
+    const result = getNextIssPass({ ...AUSTIN, fromMs: FROM_MS });
+    assert.equal(result.status, 'ok');
+    assert.ok(result.pass.riseMs > FROM_MS);
+  } finally {
+    fetchMock.restore();
+    resetSatGroupCache();
+    _clearDenseCatalogStateForTest();
+  }
 });
 
 test('voice and HUD routes stay untouched', () => {
