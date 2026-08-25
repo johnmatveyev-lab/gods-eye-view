@@ -16,6 +16,7 @@ import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
+import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -40,6 +41,14 @@ import {
   readStoredHudVariant,
   writeStoredHudVariant,
 } from './hudCycle.js';
+import {
+  WX_STATE_EVENT,
+  WX_TOGGLE_EVENT,
+  bindWxToggle,
+  getWxEnabled,
+  syncWxToggleButtons,
+  weatherChromePresentation,
+} from './weatherChrome.js';
 import { ShareLinkManager } from './sharelink.js';
 import {
   cycleSensorLook,
@@ -59,6 +68,11 @@ import {
   subscribeReduceMotion,
 } from './reduceMotion.js';
 import {
+  bindInvertScrollToggle,
+  getInvertScroll,
+  installWheelZoomSign,
+} from './invertScroll.js';
+import {
   CelestialRing,
   getKeyholeFadeTuning,
   isCelestialRingStyleSupported,
@@ -66,6 +80,11 @@ import {
 } from './celestialRing.js';
 import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
 import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import {
+  hydrateTrailsEnabled,
+  setTrailsEnabled,
+} from './data/trailPreference.js';
+import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -97,6 +116,11 @@ import {
 import trafficLayer from './data/traffic.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
+import {
+  readTrackingState,
+  stopTrackingInPlace,
+  syncStopTrackingButton,
+} from './chrome/stopTracking.js';
 import { isTr3b, toggleTr3b } from './data/tr3bRegistry.js';
 import satellitesLayer from './data/satellites.js';
 import cctvLayer from './data/cctv.js';
@@ -106,6 +130,10 @@ import radioLayer, {
   radioTunerPointerPosition,
   radioTunerSlot,
 } from './data/radio.js';
+import {
+  applyRadioStationSearch,
+  renderRadioStationList,
+} from './data/radioStationSearch.js';
 import bikeshareLayer from './data/bikeshare.js';
 import aisLiveVesselsLayer from './data/aisLiveVessels.js';
 import militaryAwarenessLayer from './data/militaryAwareness.js';
@@ -184,6 +212,12 @@ import {
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
 import {
+  DATACENTER_LAYER_ID,
+  bindDatacenterInViewList,
+  datacenterFlyDestination,
+  viewFromCamera,
+} from './data/datacenterList.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -203,6 +237,13 @@ import {
   registerCctvFocusRequestListener,
   routeCctvFocusRequest,
 } from './cctvFocusRequest.js';
+import {
+  cycleFilteredCctvCamera,
+  filterCctvSources,
+  listCctvCityFilterOptions,
+  readCctvCityFilter,
+  writeCctvCityFilter,
+} from './data/cctvCityFilter.js';
 import {
   flyToWorldTarget,
   registerWorldFocusRequestListener,
@@ -233,6 +274,13 @@ import {
   getScopeTerminusOverride,
   clampScopeTerminusPct,
 } from './scopeMask.js';
+import {
+  applyLiveSunLighting,
+  LIVE_SUN_DEFAULT,
+  LIVE_SUN_STORAGE_KEY,
+  readLiveSunPreference,
+  writeLiveSunPreference,
+} from './liveSunLighting.js';
 import {
   fetchRegionalBrief,
   regionalDistanceM,
@@ -891,6 +939,15 @@ class CockpitViewController {
       syncClockToggleButtons(this.clockToggle, getClockMode());
     });
     this._paintChromeClock();
+    this._unbindWxToggle = bindWxToggle(this.hud, { stateEl: this.weatherState });
+    this._listenerRemovers.push(() => this._unbindWxToggle?.());
+    this._listen(window, WX_TOGGLE_EVENT, (event) => {
+      this.syncWeatherToggle(event?.detail?.enabled === true);
+    });
+    this._listen(window, WX_STATE_EVENT, (event) => {
+      this.syncWeatherToggle(event?.detail?.enabled === true);
+    });
+    this.syncWeatherToggle(getWxEnabled());
     this._listen(this.entry, 'click', () => {
       this.onEnterRequest();
     });
@@ -902,16 +959,6 @@ class CockpitViewController {
     this._listen(this.contextPrevious, 'click', () => this.navigateContext(-1, { origin: 'user' }));
     this._listen(this.contextNext, 'click', () => this.navigateContext(1, { origin: 'user' }));
     this._listen(this.contextToggle, 'click', () => this.setContextCollapsed(!this.contextCollapsed));
-    this._listen(this.weatherToggle, 'click', () => {
-      const enabled = this.weatherToggle.getAttribute('aria-pressed') !== 'true';
-      this.syncWeatherToggle(enabled);
-      window.dispatchEvent(new CustomEvent('gev:cockpit-weather-toggle', {
-        detail: { enabled },
-      }));
-    });
-    this._listen(window, 'gev:cockpit-weather-state', (event) => {
-      this.syncWeatherToggle(event?.detail?.enabled !== false);
-    });
     this._listen(this.signalToggle, 'click', () => this.setSignalCollapsed(
       !this.signalCollapsed,
       { user: true },
@@ -953,15 +1000,14 @@ class CockpitViewController {
   }
 
   syncWeatherToggle(enabled) {
-    if (!this.weatherToggle) return;
     const active = !!enabled;
-    this.weatherToggle.setAttribute('aria-pressed', String(active));
-    this.weatherToggle.setAttribute(
-      'aria-label',
-      `${active ? 'Disable' : 'Enable'} cockpit weather effects`,
-    );
-    this.weatherToggle.title = `${active ? 'Disable' : 'Enable'} cockpit weather effects`;
-    if (this.weatherState) this.weatherState.textContent = active ? 'ON' : 'OFF';
+    syncWxToggleButtons(this.hud, active, this.weatherState);
+    if (!this.weatherToggle) return;
+    const presentation = weatherChromePresentation(active);
+    this.weatherToggle.setAttribute('aria-pressed', presentation.pressed);
+    this.weatherToggle.setAttribute('aria-label', presentation.ariaLabel);
+    this.weatherToggle.title = presentation.title;
+    if (this.weatherState) this.weatherState.textContent = presentation.stateText;
   }
 
   readAircraftInfo() {
@@ -2300,6 +2346,8 @@ export class StyleManager {
     this._radioTunerCameraRemove = null;
     this._refreshRadioTunerBand = null;
     this._cctvState = null;
+    this._cctvCityFilterValue = readCctvCityFilter(globalThis.localStorage);
+    this._cctvCityFilterSignature = '';
     this._cctvSummaryTypingTimer = null;
     this._lastCctvSummaryText = '';
     // Auto-expand guard: last active camera id seen while the layer was
@@ -2391,6 +2439,8 @@ export class StyleManager {
     } catch { /* storage can be unavailable in privacy/test contexts */ }
     this._detectionAllocationPreference = normalizeAllocationStrategy(storedDetectionAllocation);
     this._celestialBtn = document.getElementById('celestial-toggle');
+    this._liveSunBtn = document.getElementById('live-sun-toggle');
+    this._liveSunEnabled = false;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2400,6 +2450,13 @@ export class StyleManager {
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
+    this._invertScrollBtn = document.getElementById('invert-scroll-toggle');
+    this._removeInvertScrollZoom = installWheelZoomSign(
+      this.viewer?.scene?.screenSpaceCameraController,
+      () => getInvertScroll(),
+      Cesium.CameraEventType.WHEEL,
+    );
+    this._unbindInvertScroll = bindInvertScrollToggle(this._invertScrollBtn);
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -2437,6 +2494,9 @@ export class StyleManager {
     this._radioLayerState = document.getElementById('radio-layer-state');
     this._radioEnableBtn = document.getElementById('radio-enable-btn');
     this._radioFilter = document.getElementById('radio-filter');
+    this._radioStationSearch = document.getElementById('radio-station-search');
+    this._radioStationSearchCount = document.getElementById('radio-station-search-count');
+    this._radioStationList = document.getElementById('radio-station-list');
     this._radioStationName = document.getElementById('radio-station-name');
     this._radioStationMeta = document.getElementById('radio-station-meta');
     this._radioStationTags = document.getElementById('radio-station-tags');
@@ -2485,6 +2545,7 @@ export class StyleManager {
     this._cctvPrevBtn = document.getElementById('cctv-prev-btn');
     this._cctvNextBtn = document.getElementById('cctv-next-btn');
     this._cctvSelect = document.getElementById('cctv-camera-select');
+    this._cctvCityFilter = document.getElementById('cctv-city-filter');
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
     this._cctvCoverageBtn = document.getElementById('cctv-coverage-btn');
     this._cctvAutoHopBtn = document.getElementById('cctv-auto-hop-btn');
@@ -2502,6 +2563,7 @@ export class StyleManager {
     this._cctvMeta = document.getElementById('cctv-meta');
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
+    this._northUpCompassBtn = document.getElementById('north-up-compass');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
     this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
@@ -2510,6 +2572,7 @@ export class StyleManager {
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
     this._homeViewBtn = document.getElementById('home-view');
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
+    this._stopTrackingBtn = document.getElementById('stop-tracking');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -2751,6 +2814,10 @@ export class StyleManager {
     // button and the armed layer in agreement.
     this._models3dEnabled = true;
     this._models3dMode = 'proximity'; // 'proximity' (nearest in view) | 'all' (every in-view plane)
+    this._trailsBtn = document.getElementById('trails-toggle');
+    // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
+    // existing tracked-target trail renderer without stopping track.
+    this._trailsEnabled = true;
 
     // The shared world-overlay host must own its one postRender lane before
     // detection and tracked-readout initialize. It stays transparent until a
@@ -2768,6 +2835,10 @@ export class StyleManager {
       showToast: (text) => this._showToast(text),
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
+    });
+    initCameraCoords({
+      viewer,
+      showToast: (text) => this._showToast(text),
     });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
@@ -2787,11 +2858,16 @@ export class StyleManager {
     this._initShareButton();
     this._initCopyViewLinkButton();
     this._initFullscreenButton();
+    this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
+    this._initStopTrackingButton();
     this._initResetGlobeButton();
+    this._initNorthUpCompass();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initTrailsToggle();
+    this._initLiveSunToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -2911,6 +2987,7 @@ export class StyleManager {
     );
     this._navigationOwnerChangedRemover = viewer.trackedEntityChanged.addEventListener((entity) => {
       if (entity && !this._disposed) this._stampNavigation({ cancelPendingSelection: false });
+      this._syncStopTrackingButton();
     });
     // Vessel/installation focus flies without ever assigning a tracked entity,
     // so it cannot reach the listener above. It announces instead.
@@ -3506,7 +3583,7 @@ export class StyleManager {
     // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
-      // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f') otherwise fire while a
+      // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
       // <select> dropdown (e.g. HUD layout) is focused and its native
       // type-ahead is in use, or while typing in a text field (M9).
       const isFormControl = e.target?.matches?.('select, input, textarea')
@@ -3559,6 +3636,9 @@ export class StyleManager {
       }
       if (e.key.toLowerCase() === 'c') {
         this._toggleCctvEnabled();
+      }
+      if (e.key.toLowerCase() === 'n') {
+        this.setNorthUp();
       }
     };
     document.addEventListener('keydown', this._globalKeydownHandler);
@@ -3672,6 +3752,47 @@ export class StyleManager {
     }
   }
 
+  _initLiveSunToggle() {
+    this._liveSunBtn?.addEventListener('click', () => {
+      this.setLiveSunEnabled(!this._liveSunEnabled);
+    });
+    let stored = LIVE_SUN_DEFAULT;
+    try {
+      stored = readLiveSunPreference(window.localStorage);
+    } catch {
+      stored = LIVE_SUN_DEFAULT;
+    }
+    this.setLiveSunEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Turn live sun lighting on or off. On follows the Cesium clock; off is the
+   * well-lit globe already used when `enableLighting` is false.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, liveSun: boolean}}
+   */
+  setLiveSunEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._liveSunEnabled = next;
+    applyLiveSunLighting(this.viewer, next, {
+      now: Cesium.JulianDate.now(),
+      clockStep: Cesium.ClockStep.SYSTEM_CLOCK,
+    });
+    this._liveSunBtn?.classList.toggle('active', next);
+    this._liveSunBtn?.setAttribute('aria-pressed', String(next));
+    if (this._liveSunBtn) {
+      this._liveSunBtn.title = next
+        ? 'Live sun on — terminator follows real time'
+        : 'Live sun off — fixed well-lit day';
+    }
+    if (persist) {
+      try { writeLiveSunPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    governorRequestRender('live-sun');
+    return { ok: true, liveSun: next };
+  }
+
   /**
    * Renders the validated map stack chip row from the matching controller
    * entries. Cesium ion/Bing chips remain keyboard-focusable but unavailable,
@@ -3707,6 +3828,7 @@ export class StyleManager {
     if (state?.activeId === before && stackId !== before && state?.lastError) {
       this._showToast(state.lastError);
     }
+    this.setLiveSunEnabled(this._liveSunEnabled, { persist: false });
     if (syncShare) this._syncShareState();
   }
 
@@ -4613,6 +4735,9 @@ export class StyleManager {
       this._dataManagerUnsubscribe = this._dataManager.subscribe((change) => {
         if (String(change?.type || '').startsWith('visibility')) {
           this._handleContextLayerChange(change);
+          if (change?.layerId === DATACENTER_LAYER_ID) {
+            this._datacenterInViewList?.refresh();
+          }
         }
         if (this._installationsListOpen && change?.layerId === 'military-installations') {
           this._syncInstallationsViewportList();
@@ -4752,8 +4877,14 @@ export class StyleManager {
       });
     }
     if (!this._awarenessSelectedHandler) {
-      this._awarenessSelectedHandler = (event) => this._persistAwarenessSelection(event, false);
-      this._awarenessClearedHandler = (event) => this._persistAwarenessSelection(event, true);
+      this._awarenessSelectedHandler = (event) => {
+        this._persistAwarenessSelection(event, false);
+        this._syncStopTrackingButton();
+      };
+      this._awarenessClearedHandler = (event) => {
+        this._persistAwarenessSelection(event, true);
+        this._syncStopTrackingButton();
+      };
       window.addEventListener('gev:awareness-subject-selected', this._awarenessSelectedHandler);
       window.addEventListener('gev:awareness-subject-cleared', this._awarenessClearedHandler);
     }
@@ -5949,6 +6080,28 @@ export class StyleManager {
       }
       this._radioTunerBandPinnedForNavigation = false;
       this._radioTunerPool = [];
+      this._radioDirectoryListSignature = '';
+      refreshTunerBand({ force: true });
+    });
+    this._radioStationSearch?.addEventListener('input', () => {
+      const presentation = radioLayer.getUIState();
+      if (!presentation.presentationActive) {
+        this._radioStationSearch.value = presentation.stationSearch || '';
+        return;
+      }
+      if (this._radioTunerDragging) finishTuner(false);
+      if (!radioLayer.setStationSearch(this._radioStationSearch.value)) {
+        this._radioStationSearch.value = radioLayer.getUIState().stationSearch || '';
+        return;
+      }
+      this._radioTunerBandPinnedForNavigation = false;
+      this._radioTunerPool = [];
+      applyRadioStationSearch(
+        this._radioStationList,
+        this._radioStationSearch.value,
+        radioLayer.getDirectoryStations(),
+      );
+      this._syncRadioStationSearchCount();
       refreshTunerBand({ force: true });
     });
     this._radioPrevBtn?.addEventListener('click', () => cycleRadio(-1));
@@ -6174,6 +6327,46 @@ export class StyleManager {
     this._contextRadioToggleBtn.title = `${action} compact Radio controls`;
   }
 
+  /** Keep the current Radio Browser list and search field in sync. */
+  _syncRadioStationList(state, interactive) {
+    const directory = radioLayer.getDirectoryStations?.() || [];
+    const query = state?.stationSearch || '';
+    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
+    if (this._radioStationSearch && document.activeElement !== this._radioStationSearch) {
+      this._radioStationSearch.value = query;
+    }
+    if (this._radioStationSearch) {
+      this._radioStationSearch.disabled = !interactive || !state?.stationCount;
+    }
+    if (signature !== this._radioDirectoryListSignature) {
+      renderRadioStationList(this._radioStationList, directory, {
+        selectedId: state?.selected?.id || null,
+        onSelect: (stationId) => {
+          if (this._radioTunerDragging) return;
+          radioLayer.selectStation(stationId, { autoplay: false, origin: 'user' });
+        },
+      });
+      this._radioDirectoryListSignature = signature;
+    }
+    applyRadioStationSearch(this._radioStationList, query, directory);
+    if (this._radioStationList) {
+      this._radioStationList.hidden = !interactive || !directory.length;
+    }
+    this._syncRadioStationSearchCount(directory);
+  }
+
+  /** Show how many current-list stations remain after search. */
+  _syncRadioStationSearchCount(directory = radioLayer.getDirectoryStations?.() || []) {
+    if (!this._radioStationSearchCount) return;
+    const visible = this._radioStationList
+      ? [...this._radioStationList.children].filter((row) => !row.hidden).length
+      : directory.length;
+    const total = directory.length;
+    this._radioStationSearchCount.textContent = total
+      ? `${visible}/${total}`
+      : '';
+  }
+
   /** Render Radio state without making playback or Context decisions. */
   _renderRadioState(state) {
     if (!state || !this._radioPanel) return;
@@ -6266,6 +6459,7 @@ export class StyleManager {
       this._radioFilter.style.color = activeCategory?.color || '';
       this._radioFilter.disabled = !interactive || !state.stationCount;
     }
+    this._syncRadioStationList(state, interactive);
 
     const tunerAvailable = interactive && state.filteredCount > 0;
     if (this._radioTuner) this._radioTuner.hidden = !tunerAvailable;
@@ -6451,10 +6645,18 @@ export class StyleManager {
       );
     });
 
+    this._cctvCityFilter?.addEventListener('change', () => {
+      this._cctvCityFilterValue = writeCctvCityFilter(
+        globalThis.localStorage,
+        this._cctvCityFilter.value,
+      );
+      this._renderCctvState(this._cctvState);
+    });
+
     this._cctvPrevBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(-1),
+        () => cycleFilteredCctvCamera(this._visibleCctvCameras(), this._activeCctvCameraId(), -1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
     });
@@ -6462,7 +6664,7 @@ export class StyleManager {
     this._cctvNextBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(1),
+        () => cycleFilteredCctvCamera(this._visibleCctvCameras(), this._activeCctvCameraId(), 1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
     });
@@ -6547,6 +6749,14 @@ export class StyleManager {
    */
   _activeCctvCameraId() {
     return this._cctvState?.activeCameraId || this._cctvSelect?.value || '';
+  }
+
+  /**
+   * Camera rows visible in the panel list for the persisted city/provider filter.
+   * @returns {Array<object>}
+   */
+  _visibleCctvCameras() {
+    return filterCctvSources(this._cctvState?.cameras || [], this._cctvCityFilterValue);
   }
 
   /**
@@ -6861,19 +7071,42 @@ export class StyleManager {
       this._cctvEnableBtn.textContent = enabled ? 'CCTV ON' : 'CCTV OFF';
     }
 
+    const cityOptions = listCctvCityFilterOptions(cameras);
+    if (cameras.length && this._cctvCityFilterValue
+      && !cityOptions.some((option) => option.key === this._cctvCityFilterValue)) {
+      this._cctvCityFilterValue = '';
+    }
+    const visibleCameras = filterCctvSources(cameras, this._cctvCityFilterValue);
+    if (this._cctvCityFilter) {
+      const citySignature = cityOptions.map((option) => `${option.key}:${option.count}`).join('|');
+      if (citySignature !== this._cctvCityFilterSignature) {
+        const nodes = [{ key: '', label: 'All sources', count: cameras.length }, ...cityOptions]
+          .map((option) => {
+            const node = document.createElement('option');
+            node.value = option.key;
+            node.textContent = option.key ? `${option.label} (${option.count})` : option.label;
+            return node;
+          });
+        this._cctvCityFilter.replaceChildren(...nodes);
+        this._cctvCityFilterSignature = citySignature;
+      }
+      this._cctvCityFilter.value = this._cctvCityFilterValue;
+      this._cctvCityFilter.disabled = cameras.length === 0;
+    }
+
     if (this._cctvSelect) {
-      const shouldRebuild = this._cctvSelect.options.length !== cameras.length
-        || cameras.some((cam, idx) => this._cctvSelect.options[idx]?.value !== cam.id);
+      const shouldRebuild = this._cctvSelect.options.length !== visibleCameras.length
+        || visibleCameras.some((cam, idx) => this._cctvSelect.options[idx]?.value !== cam.id);
       if (shouldRebuild) {
         this._cctvSelect.innerHTML = '';
-        for (const camera of cameras) {
+        for (const camera of visibleCameras) {
           const option = document.createElement('option');
           option.value = camera.id;
           option.textContent = `${camera.city} · ${camera.name}`;
           this._cctvSelect.appendChild(option);
         }
       }
-      this._cctvSelect.disabled = !enabled || cameras.length === 0;
+      this._cctvSelect.disabled = !enabled || visibleCameras.length === 0;
       if (activeId && Array.from(this._cctvSelect.options).some((opt) => opt.value === activeId)) {
         this._cctvSelect.value = activeId;
       } else if (!activeId) {
@@ -6881,9 +7114,12 @@ export class StyleManager {
       }
     }
 
-    for (const btn of [this._cctvNearestBtn, this._cctvPrevBtn, this._cctvNextBtn]) {
+    if (this._cctvNearestBtn) {
+      this._cctvNearestBtn.disabled = !enabled || cameras.length === 0;
+    }
+    for (const btn of [this._cctvPrevBtn, this._cctvNextBtn]) {
       if (!btn) continue;
-      btn.disabled = !enabled || cameras.length === 0;
+      btn.disabled = !enabled || visibleCameras.length === 0;
     }
     if (this._cctvFocusBtn) {
       this._cctvFocusBtn.disabled = !enabled || cameras.length === 0 || !activeId;
@@ -6967,6 +7203,7 @@ export class StyleManager {
 
     this._syncCctvSourceBadge(activeCamera, enabled);
     this._typeCctvSummary(state?.summary || 'Enable CCTV to start camera-linked intelligence summaries.');
+    this._syncCctvPanelViewport();
   }
 
   /**
@@ -10078,12 +10315,61 @@ export class StyleManager {
     flyToHomeView(this.viewer);
   }
 
+  /** Show Stop tracking only while a contact owns the follow camera. */
+  _syncStopTrackingButton() {
+    syncStopTrackingButton(this._stopTrackingBtn, readTrackingState({
+      viewer: this.viewer,
+      cockpitTrackedEntity: this.cockpitView?.trackedEntity,
+      getFlightInfo: () => flightsLayer.getTrackedInfo?.(),
+      getMilitaryInfo: () => militaryFlightsLayer.getTrackedInfo?.(),
+      getSatelliteInfo: () => satellitesLayer.getTrackedInfo?.(),
+    }));
+  }
+
+  /** Wire camera chrome that releases tracking without flying Home. */
+  _initStopTrackingButton() {
+    if (!this._stopTrackingBtn) return;
+    this._stopTrackingHandler = () => {
+      stopTrackingInPlace({
+        releaseFollow: () => this._releaseFollowCamera({ trackingOrigin: 'user' }),
+        camera: this.viewer?.camera,
+      });
+      this._syncStopTrackingButton();
+    };
+    this._stopTrackingBtn.addEventListener('click', this._stopTrackingHandler);
+    this._syncStopTrackingButton();
+  }
+
   /** Wire the persistent reset control to the same route used by voice. */
   _initResetGlobeButton() {
     this._globeResetHandler = () => { this.resetToGlobeView(); };
     for (const button of [this._resetGlobeBtn, this._cockpitResetGlobeBtn]) {
       button?.addEventListener('click', this._globeResetHandler);
     }
+  }
+
+  /** Wire the north-up compass and keep its needle aligned with camera heading. */
+  _initNorthUpCompass() {
+    if (!this._northUpCompassBtn) return;
+    this._northUpHandler = () => { this.setNorthUp(); };
+    this._northUpCompassBtn.addEventListener('click', this._northUpHandler);
+    this._removeCompassHeading = this.viewer.camera.changed.addEventListener(() => {
+      this._syncCompassNeedle();
+    });
+    this._removeCompassMoveEnd = this.viewer.camera.moveEnd?.addEventListener?.(() => {
+      this._syncCompassNeedle();
+    }) || null;
+    this._syncCompassNeedle();
+  }
+
+  /** Rotate the compass needle so N tracks the current heading. */
+  _syncCompassNeedle() {
+    if (!this._northUpCompassBtn) return;
+    const heading = this.viewer?.camera?.heading;
+    this._northUpCompassBtn.style.setProperty(
+      '--north-up-heading',
+      `${compassNeedleDeg(heading)}deg`,
+    );
   }
 
   /** Wire the top-center action that clears only manager-owned data layers. */
@@ -10230,6 +10516,26 @@ export class StyleManager {
     return resetPromise;
   }
 
+  /**
+   * Set heading 0 (north-up) without the Home / Reset Globe pose.
+   * Keeps the current ground target, range, and tilt when a pick exists;
+   * otherwise keeps camera lat/lon/height/pitch.
+   */
+  setNorthUp() {
+    if (this.cockpitView?.active) return false;
+    this._stampNavigation();
+    interruptCameraMotion('north-up');
+    this._stopOrbit();
+    this.viewer.camera.cancelFlight();
+    const target = this.viewer.trackedEntity
+      ? null
+      : resolveNorthUpTarget(this.viewer);
+    const applied = applyNorthUp(this.viewer.camera, target);
+    this.viewer.scene?.requestRender?.();
+    this._syncCompassNeedle();
+    return applied;
+  }
+
   // ── Share Button ─────────────────────────────
 
   /**
@@ -10248,6 +10554,48 @@ export class StyleManager {
     this._copyViewLinkBtn?.addEventListener('click', async () => {
       const success = await this.shareLinkManager.copyViewLink();
       this._showToast(success ? 'Link copied' : 'Copy failed');
+    });
+  }
+
+  /**
+   * In-view OSM datacenter list. Reads the existing layer payload and flies
+   * with the same stem-click destination. Installations stay on their own list.
+   */
+  _initDatacenterInViewList() {
+    const root = document.getElementById('datacenter-in-view');
+    const items = document.getElementById('datacenter-in-view-items');
+    const count = document.getElementById('datacenter-in-view-count');
+    this._datacenterInViewList = bindDatacenterInViewList({
+      root,
+      items,
+      count,
+      getEnabled: () => Boolean(this._dataManager?.isEnabled(DATACENTER_LAYER_ID)),
+      getRecords: () => {
+        const module = this._dataManager?.layers?.get(DATACENTER_LAYER_ID)?.module;
+        if (typeof module?.getListPayload !== 'function') return [];
+        return module.getListPayload() || [];
+      },
+      getView: () => viewFromCamera(this.viewer?.camera, Cesium.Math),
+      flyTo: (site) => {
+        const module = this._dataManager?.layers?.get(DATACENTER_LAYER_ID)?.module;
+        if (typeof module?.flyToRecord === 'function') {
+          return module.flyToRecord(this.viewer, site.id);
+        }
+        const destination = datacenterFlyDestination(site);
+        if (!destination || !this.viewer?.camera) return false;
+        this.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(
+            destination.longitude,
+            destination.latitude,
+            destination.height,
+          ),
+          duration: destination.duration,
+        });
+        return true;
+      },
+    });
+    this._datacenterListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
+      this._datacenterInViewList?.refresh();
     });
   }
 
@@ -10390,6 +10738,25 @@ export class StyleManager {
     // tech reported was an unpressed-looking control over an armed layer.
     // Mirrors #scope-toggle, which has always carried aria-pressed.
     this._models3dBtn?.setAttribute('aria-pressed', String(this._models3dEnabled));
+  }
+
+  /**
+   * Wires the DISPLAY-rail Trails toggle to the existing trail renderer.
+   * Off hides drawing (body + already-drawn path) and persists `meridian.trails`.
+   * Stop tracking still clears the target; this control does not.
+   */
+  _initTrailsToggle() {
+    this._trailsEnabled = hydrateTrailsEnabled();
+    this._trailsBtn?.addEventListener('click', () => {
+      this._trailsEnabled = setTrailsEnabled(!this._trailsEnabled);
+      this._syncTrailsButtonState();
+    });
+    this._syncTrailsButtonState();
+  }
+
+  _syncTrailsButtonState() {
+    this._trailsBtn?.classList.toggle('active', this._trailsEnabled);
+    this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
   }
 
   _initHUDToggle() {
@@ -10657,6 +11024,10 @@ export class StyleManager {
       this.viewer?.canvas?.removeEventListener('wheel', this._initialShareGestureHandler);
       this._initialShareGestureHandler = null;
     }
+    this._datacenterListMoveEndRemove?.();
+    this._datacenterListMoveEndRemove = null;
+    this._datacenterInViewList?.destroy();
+    this._datacenterInViewList = null;
     this.shareLinkManager?.destroy();
     if (this._awarenessSelectedHandler) {
       window.removeEventListener('gev:awareness-subject-selected', this._awarenessSelectedHandler);
@@ -10725,6 +11096,18 @@ export class StyleManager {
       this._cockpitResetGlobeBtn?.removeEventListener('click', this._globeResetHandler);
       this._globeResetHandler = null;
     }
+    if (this._stopTrackingBtn && this._stopTrackingHandler) {
+      this._stopTrackingBtn.removeEventListener('click', this._stopTrackingHandler);
+      this._stopTrackingHandler = null;
+    }
+    if (this._northUpHandler) {
+      this._northUpCompassBtn?.removeEventListener('click', this._northUpHandler);
+      this._northUpHandler = null;
+    }
+    this._removeCompassHeading?.();
+    this._removeCompassHeading = null;
+    this._removeCompassMoveEnd?.();
+    this._removeCompassMoveEnd = null;
     if (this._clearSelectedLayersBtn && this._clearSelectedLayersHandler) {
       this._clearSelectedLayersBtn.removeEventListener('click', this._clearSelectedLayersHandler);
       this._clearSelectedLayersHandler = null;
@@ -10746,6 +11129,10 @@ export class StyleManager {
     this._stopLoadingFeedbackTicker();
     this._reduceMotionUnsubscribe?.();
     this._reduceMotionUnsubscribe = null;
+    this._unbindInvertScroll?.();
+    this._unbindInvertScroll = null;
+    this._removeInvertScrollZoom?.();
+    this._removeInvertScrollZoom = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
@@ -10824,6 +11211,7 @@ export class StyleManager {
       this._radioSelectedHandler = null;
     }
     destroySelectedContactIdent();
+    destroyCameraCoords();
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();

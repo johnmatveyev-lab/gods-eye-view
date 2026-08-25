@@ -13,7 +13,7 @@ Include repro steps and impact. We'll acknowledge, investigate, and credit you (
 
 ## How secrets are handled
 
-The golden rule: **secret-bearing API keys stay on the server side.** The dev/preview server (Vite middleware in `vite.config.js`) brokers requests that need private credentials, so the browser never receives those long-lived secrets. Google Maps and Cesium ion are the two deliberate client-side exceptions described below.
+The golden rule: **secret-bearing API keys stay on the server side.** Vite middleware and Vercel Node functions (`/api/realtime/token`, `/api/openai/hud-summary`, `/api/billing/*`) broker requests that need private credentials, so the browser never receives those long-lived secrets. Google Maps and Cesium ion are the two deliberate client-side exceptions described below.
 
 | Key | Where it lives | How the browser uses it |
 |-----|----------------|--------------------------|
