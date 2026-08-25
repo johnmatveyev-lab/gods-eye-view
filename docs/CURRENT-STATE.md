@@ -2,6 +2,17 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — launch probability floor (plan 178)** (`src/data/launchProbabilityFilter.js`,
+> `#space-mission-roster`). Exclusive **All | 50+ | 80+** chips next to
+> Webcast only, default **All**. Filters already-normalized `probability`
+> on the in-memory 30-day roster (LL2 `probability`: finite 0–100, else
+> null). **50+** hides finite &lt; 50. **80+** hides finite &lt; 80.
+> Missing / non-finite / null stay. Selected mission stays. AND with
+> status, provider, orbit, site, 7d|30d, rocket, and webcast. Re-applies
+> from the cached LL2 payload — no extra `/api/launches` fetch. Persists
+> `meridian.launchProbability`. Hidden when the launches layer is off.
+> Client-only; no `/api`.
+
 > **2026-08-25 — satellite eccentricity chips (plan 177)** (`src/data/satelliteEccentricityFilter.js`).
 > Exclusive **All | <0.01 | <0.05** chips on the Satellites DATA LAYERS row,
 > next to inclination chips. Default **All** is the current catalog. Filters

@@ -954,6 +954,69 @@ test('keeps webcastLive from webcast_live or a non-empty vid_urls list', () => {
   assert.equal(empty[0].webcastLive, false);
 });
 
+test('keeps finite 0–100 probability from Launch Library 2 probability', () => {
+  const high = normalizeRocketLaunches({ results: [{
+    id: 'high',
+    name: 'High Flight',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+    probability: 80,
+  }] }, NOW);
+  assert.equal(high[0].probability, 80);
+
+  const unknown = normalizeRocketLaunches({ results: [{
+    id: 'unknown',
+    name: 'Unknown Flight',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+    probability: -1,
+  }] }, NOW);
+  assert.equal(unknown[0].probability, null);
+
+  const missing = normalizeRocketLaunches({ results: [{
+    id: 'missing',
+    name: 'Silent Flight',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+  }] }, NOW);
+  assert.equal(missing[0].probability, null);
+});
+
+test('80+ roster hides low-probability missions and ANDs status, provider, rocket, and webcast', () => {
+  const rows = [
+    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: true, probability: 90, launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'low', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: true, probability: 20, launchTime: '2026-07-19T00:00:00Z' },
+    { id: 'ula', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Atlas V', webcastLive: true, probability: 95, launchTime: '2026-07-18T00:00:00Z' },
+    { id: 'no-stream', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: false, probability: 88, launchTime: '2026-07-17T00:00:00Z' },
+    { id: 'unknown', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: true, probability: null, launchTime: '2026-07-16T00:00:00Z' },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+  }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Atlas V': false,
+  }, ['Atlas V', 'Falcon 9']);
+  const off = missionRosterEntries(rows, { probabilityFilter: 'all', nowMs: NOW.getTime() });
+  assert.deepEqual(off.map((entry) => entry.launch.id).sort(), ['keep', 'low', 'no-stream', 'ula', 'unknown']);
+  const entries = missionRosterEntries(rows, {
+    statusFilter: { go: true },
+    providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
+    webcastOnly: true,
+    probabilityFilter: '80',
+    nowMs: NOW.getTime(),
+  });
+  assert.deepEqual(entries.map((entry) => entry.launch.id).sort(), ['keep', 'unknown']);
+  const selected = missionRosterEntries(rows, {
+    probabilityFilter: '80',
+    selectedLaunchId: 'low',
+    nowMs: NOW.getTime(),
+  });
+  assert.ok(selected.some((entry) => entry.launch.id === 'low'));
+});
+
 test('Webcast only roster hides no-stream missions and ANDs status, provider, and rocket', () => {
   const rows = [
     { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: true, launchTime: '2026-07-20T00:00:00Z' },

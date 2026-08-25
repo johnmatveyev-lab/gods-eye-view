@@ -89,6 +89,16 @@ import {
   setLaunchWebcastOnly,
   subscribeLaunchWebcastOnly,
 } from './launchWebcastFilter.js';
+import {
+  DEFAULT_LAUNCH_PROBABILITY_FILTER,
+  getLaunchProbabilityFilter,
+  hydrateLaunchProbabilityFilter,
+  launchPassesProbabilityFilter,
+  launchProbabilityFromPayload,
+  LAUNCH_PROBABILITY_CHIP_IDS,
+  setLaunchProbabilityFilter,
+  subscribeLaunchProbabilityFilter,
+} from './launchProbabilityFilter.js';
 
 export { compactLaunchSiteName, compactRocketName };
 
@@ -179,6 +189,7 @@ let _siteFilterUnsubscribe = null;
 let _rocketFilterUnsubscribe = null;
 let _timeWindowUnsubscribe = null;
 let _webcastFilterUnsubscribe = null;
+let _probabilityFilterUnsubscribe = null;
 
 const REPLAY_ASCENT_FALLBACK_SEC = 12;
 const REPLAY_ASCENT_MIN_SEC = 8;
@@ -830,10 +841,11 @@ export function missionDataCompleteness(launch = {}) {
 }
 
 /**
- * Status, provider, rocket, orbit, site, time-window, and webcast-only
- * chips AND together. A selected mission stays visible even when any of
- * its chips is off. Pad-site markers use this same predicate.
- * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, rocketName?: unknown, launchSite?: unknown, launchTime?: unknown, webcastLive?: unknown}|null|undefined} launch
+ * Status, provider, rocket, orbit, site, time-window, webcast-only, and
+ * probability-floor chips AND together. A selected mission stays visible
+ * even when any of its chips is off. Pad-site markers use this same
+ * predicate.
+ * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, rocketName?: unknown, launchSite?: unknown, launchTime?: unknown, webcastLive?: unknown, probability?: unknown}|null|undefined} launch
  * @param {{
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
@@ -842,6 +854,7 @@ export function missionDataCompleteness(launch = {}) {
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
  *   webcastOnly?: unknown,
+ *   probabilityFilter?: unknown,
  *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
@@ -857,6 +870,7 @@ export function launchPassesMissionFilters(launch, options = {}) {
   const siteFilter = options.siteFilter ?? DEFAULT_LAUNCH_SITE_FILTER;
   const timeWindow = options.timeWindow ?? DEFAULT_LAUNCH_TIME_WINDOW;
   const webcastOnly = options.webcastOnly ?? DEFAULT_LAUNCH_WEBCAST_ONLY;
+  const probabilityFilter = options.probabilityFilter ?? DEFAULT_LAUNCH_PROBABILITY_FILTER;
   const nowMs = options.nowMs ?? Date.now();
   return launchPassesStatusFilter(launch, statusFilter, null)
     && launchPassesProviderFilter(launch, providerFilter, null)
@@ -864,7 +878,8 @@ export function launchPassesMissionFilters(launch, options = {}) {
     && launchPassesOrbitFilter(launch, orbitFilter, null)
     && launchPassesSiteFilter(launch, siteFilter, null)
     && launchPassesTimeWindow(launch, timeWindow, null, nowMs)
-    && launchPassesWebcastFilter(launch, webcastOnly, null);
+    && launchPassesWebcastFilter(launch, webcastOnly, null)
+    && launchPassesProbabilityFilter(launch, probabilityFilter, null);
 }
 
 /**
@@ -879,6 +894,7 @@ export function launchPassesMissionFilters(launch, options = {}) {
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
  *   webcastOnly?: unknown,
+ *   probabilityFilter?: unknown,
  *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
@@ -896,6 +912,7 @@ export function missionRosterEntries(launches, options = {}) {
       siteFilter: options.siteFilter,
       timeWindow: options.timeWindow,
       webcastOnly: options.webcastOnly,
+      probabilityFilter: options.probabilityFilter,
       nowMs: options.nowMs,
       selectedLaunchId,
     }))
@@ -911,9 +928,9 @@ export function missionRosterEntries(launches, options = {}) {
 
 /**
  * PREV/NEXT and the N/M index walk the chip-filtered roster (status AND
- * provider AND rocket AND orbit AND site AND time window AND webcast).
- * The selected-id visibility exception is excluded so navigation cannot
- * leave that AND set.
+ * provider AND rocket AND orbit AND site AND time window AND webcast AND
+ * probability). The selected-id visibility exception is excluded so
+ * navigation cannot leave that AND set.
  * @param {Array<object>} launches Normalized launch records.
  * @param {string|null|undefined} selectedLaunchId
  * @param {{
@@ -924,6 +941,7 @@ export function missionRosterEntries(launches, options = {}) {
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
  *   webcastOnly?: unknown,
+ *   probabilityFilter?: unknown,
  *   nowMs?: number,
  * }} [options]
  * @returns {{
@@ -943,6 +961,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
     siteFilter: options.siteFilter,
     timeWindow: options.timeWindow,
     webcastOnly: options.webcastOnly,
+    probabilityFilter: options.probabilityFilter,
     nowMs: options.nowMs,
     selectedLaunchId: null,
   });
@@ -971,6 +990,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
  *   webcastOnly?: unknown,
+ *   probabilityFilter?: unknown,
  *   nowMs?: number,
  * }} [options]
  * @returns {{launch: object, index: number}|null}
@@ -2618,6 +2638,20 @@ function syncLaunchWebcastChip() {
   }
 }
 
+function syncLaunchProbabilityChips() {
+  if (!_missionRoster) return;
+  const host = _missionRoster.querySelector('[data-mission-probability-chips]');
+  if (host) host.hidden = !_enabled;
+  const selected = getLaunchProbabilityFilter();
+  for (const chip of _missionRoster.querySelectorAll('[data-mission-probability-chip]')) {
+    const id = chip.dataset?.missionProbabilityChip
+      || chip.getAttribute?.('data-mission-probability-chip');
+    const active = id === selected;
+    chip.classList?.toggle?.('active', active);
+    chip.setAttribute?.('aria-pressed', String(active));
+  }
+}
+
 function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
   return {
     statusFilter: getLaunchStatusFilter(),
@@ -2627,6 +2661,7 @@ function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
     siteFilter: getLaunchSiteFilter(),
     timeWindow: getLaunchTimeWindow(),
     webcastOnly: getLaunchWebcastOnly(),
+    probabilityFilter: getLaunchProbabilityFilter(),
     selectedLaunchId,
   };
 }
@@ -2665,6 +2700,7 @@ function applyLaunchFilterPresentation() {
   syncLaunchOrbitChips();
   syncLaunchTimeWindowChips();
   syncLaunchWebcastChip();
+  syncLaunchProbabilityChips();
   renderMissionPanel();
 }
 
@@ -2892,6 +2928,13 @@ function createMissionPanel() {
       const webcastChip = target?.closest('[data-mission-webcast-chip]');
       if (webcastChip) {
         setLaunchWebcastOnly(!getLaunchWebcastOnly());
+        return;
+      }
+      const probabilityChip = target?.closest('[data-mission-probability-chip]');
+      if (probabilityChip) {
+        const id = probabilityChip.dataset.missionProbabilityChip
+          || probabilityChip.getAttribute('data-mission-probability-chip');
+        if (LAUNCH_PROBABILITY_CHIP_IDS.includes(id)) setLaunchProbabilityFilter(id);
         return;
       }
       const statusChip = target?.closest('[data-mission-status-chip]');
@@ -3255,6 +3298,7 @@ export function normalizeRocketLaunches(payload, now = new Date()) {
         : [],
       orbit: launch.mission?.orbit || launch.orbit || null,
       webcastLive: launchWebcastLiveFromPayload(launch),
+      probability: launchProbabilityFromPayload(launch),
       source: 'Launch Library 2',
       inWindow: Number.isFinite(date) && date >= cutoff && date <= now.getTime(),
     };
@@ -3860,6 +3904,7 @@ const rocketLaunchesLayer = {
     hydrateLaunchSiteFilter();
     hydrateLaunchTimeWindow();
     hydrateLaunchWebcastOnly();
+    hydrateLaunchProbabilityFilter();
     if (!_statusFilterUnsubscribe) {
       _statusFilterUnsubscribe = subscribeLaunchStatusFilter(applyLaunchFilterPresentation);
     }
@@ -3880,6 +3925,9 @@ const rocketLaunchesLayer = {
     }
     if (!_webcastFilterUnsubscribe) {
       _webcastFilterUnsubscribe = subscribeLaunchWebcastOnly(applyLaunchFilterPresentation);
+    }
+    if (!_probabilityFilterUnsubscribe) {
+      _probabilityFilterUnsubscribe = subscribeLaunchProbabilityFilter(applyLaunchFilterPresentation);
     }
     createMissionPanel();
     createReplayVehicleOverlay();
@@ -3965,6 +4013,7 @@ const rocketLaunchesLayer = {
     await restoreSatelliteDependency();
     syncLaunchRocketChips();
     syncLaunchWebcastChip();
+    syncLaunchProbabilityChips();
     renderMissionPanel();
   },
 
@@ -4043,6 +4092,8 @@ const rocketLaunchesLayer = {
     _timeWindowUnsubscribe = null;
     _webcastFilterUnsubscribe?.();
     _webcastFilterUnsubscribe = null;
+    _probabilityFilterUnsubscribe?.();
+    _probabilityFilterUnsubscribe = null;
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },
