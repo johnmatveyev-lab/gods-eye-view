@@ -39,6 +39,14 @@ import {
   satellitePeriodChipModels,
   setSatPeriod,
 } from './satellitePeriodFilter.js';
+import {
+  DEFAULT_SAT_INCLINATION,
+  getSatInclination,
+  resetSatInclinationCache,
+  satelliteInclinationChipModels,
+  satellitePassesInclinationFilter,
+  setSatInclination,
+} from './satelliteInclinationFilter.js';
 import { satelliteCatalogControls } from './satelliteCatalogControls.js';
 import {
   clearOverlaySource,
@@ -302,7 +310,7 @@ let _denseStatus = 'idle';
 let _denseError = null;
 /** Bumped on every bulk catalog mutation; keys the row-legend tally cache. */
 let _catalogRevision = 0;
-let _classTallyCache = { revision: -1, filter: null, period: null, counts: null };
+let _classTallyCache = { revision: -1, filter: null, period: null, inclination: null, counts: null };
 /** @type {(() => void)|null} Manager callback: "this layer's row controls changed". */
 let _rowControlsListener = null;
 
@@ -324,11 +332,13 @@ function _notifyRowControls() {
 function _classTally() {
   const filter = _params.satelliteClassFilter;
   const period = getSatPeriod();
+  const inclination = getSatInclination();
   if (
     _classTallyCache.counts
     && _classTallyCache.revision === _catalogRevision
     && _classTallyCache.filter === filter
     && _classTallyCache.period === period
+    && _classTallyCache.inclination === inclination
   ) {
     return _classTallyCache.counts;
   }
@@ -341,7 +351,7 @@ function _classTally() {
     entries.push({ group: sat.group, isIss: noradId === ISS_NORAD });
   }
   const counts = tallySatelliteClasses(entries);
-  _classTallyCache = { revision: _catalogRevision, filter, period, counts };
+  _classTallyCache = { revision: _catalogRevision, filter, period, inclination, counts };
   return counts;
 }
 
@@ -377,7 +387,22 @@ function _periodAllowsSatellite(noradId, sat = _catalog.get(noradId), trackedNor
 }
 
 /**
- * Class chips AND period chips. Tracked stays even when a chip is off.
+ * Whether one catalog row may render under the current inclination chips.
+ * Missing / non-finite inclination stays. The tracked satellite always passes.
+ * @param {number} noradId
+ * @param {{satrec?: object}|null|undefined} [sat]
+ * @param {number|null} [trackedNorad]
+ * @returns {boolean}
+ */
+function _inclinationAllowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _trackedNorad) {
+  return satellitePassesInclinationFilter(sat, getSatInclination(), {
+    noradId,
+    trackedNorad,
+  });
+}
+
+/**
+ * Class chips AND period chips AND inclination chips. Tracked stays even when a chip is off.
  * @param {number} noradId
  * @param {{group?: string, satrec?: object}|null|undefined} [sat]
  * @param {number|null} [trackedNorad]
@@ -385,16 +410,17 @@ function _periodAllowsSatellite(noradId, sat = _catalog.get(noradId), trackedNor
  */
 function _allowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _trackedNorad) {
   return _classAllowsSatellite(noradId, sat, trackedNorad)
-    && _periodAllowsSatellite(noradId, sat, trackedNorad);
+    && _periodAllowsSatellite(noradId, sat, trackedNorad)
+    && _inclinationAllowsSatellite(noradId, sat, trackedNorad);
 }
 
-/** Untracked point show-flag for the current class / period chips. Tracked stays hidden. */
+/** Untracked point show-flag for the current class / period / inclination chips. Tracked stays hidden. */
 function _untrackedPointShouldShow(noradId) {
   if (noradId === _trackedNorad) return false;
   return _allowsSatellite(noradId);
 }
 
-/** Orbit ring show-flag: ORBITS on AND class / period chips allow this satellite. */
+/** Orbit ring show-flag: ORBITS on AND class / period / inclination chips allow this satellite. */
 function _orbitPathShouldShow(noradId) {
   return _params.showOrbits && _allowsSatellite(noradId);
 }
@@ -420,7 +446,7 @@ function _classFilterChips() {
   });
 }
 
-/** Re-apply class and period chips to in-memory points and orbit rings. Never fetches CelesTrak. */
+/** Re-apply class, period, and inclination chips to in-memory points and orbit rings. Never fetches CelesTrak. */
 function _applyClassVisibility() {
   for (const [noradId, point] of _points) {
     if (!point) continue;
@@ -430,7 +456,7 @@ function _applyClassVisibility() {
     if (!path?.primitive) continue;
     path.primitive.show = _orbitPathShouldShow(noradId);
   }
-  _classTallyCache = { revision: -1, filter: null, period: null, counts: null };
+  _classTallyCache = { revision: -1, filter: null, period: null, inclination: null, counts: null };
   _syncIssOverlay();
   _notifyRowControls();
 }
@@ -1535,6 +1561,8 @@ export function _setDenseCatalogStateForTest({
   };
   resetSatPeriodCache();
   setSatPeriod(DEFAULT_SAT_PERIOD, { getItem: () => null, setItem() {} });
+  resetSatInclinationCache();
+  setSatInclination(DEFAULT_SAT_INCLINATION, { getItem: () => null, setItem() {} });
   _enabled = true;
   _applyClassVisibility();
 }
@@ -1564,6 +1592,8 @@ export function _clearDenseCatalogStateForTest() {
   };
   resetSatPeriodCache();
   setSatPeriod(DEFAULT_SAT_PERIOD, { getItem: () => null, setItem() {} });
+  resetSatInclinationCache();
+  setSatInclination(DEFAULT_SAT_INCLINATION, { getItem: () => null, setItem() {} });
   _cancelPendingTrackingRestore();
   _enabled = false;
 }
@@ -1621,6 +1651,7 @@ export function _satelliteVisualStateForTest() {
     showOrbits: _params.showOrbits,
     satelliteClassFilter: _params.satelliteClassFilter,
     satPeriod: getSatPeriod(),
+    satInclination: getSatInclination(),
     pointCollectionShow: _pointCollection ? Boolean(_pointCollection.show) : null,
     pointIds: [..._points.keys()],
     pointShows: Object.fromEntries(
@@ -2333,7 +2364,7 @@ const satellitesLayer = {
    * Runtime params (DataLayerManager.setLayerParams path).
    * catalog: 'core' (default, ~840 sats) | 'dense' (adds the Starlink shell
    * as points-only extras on a relaxed propagation budget).
-   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown }} [params]
+   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown, satInclination?: unknown }} [params]
    */
   setParams(params = {}, { origin = 'programmatic', storage } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -2396,6 +2427,13 @@ const satellitesLayer = {
         _applyClassVisibility();
       }
     }
+    if (Object.hasOwn(params, 'satInclination')) {
+      const previous = getSatInclination(storage);
+      const next = setSatInclination(params.satInclination, storage);
+      if (next !== previous) {
+        _applyClassVisibility();
+      }
+    }
     if (Object.hasOwn(params, 'selectedSatTrackingId')) {
       const requested = _normalizeTrackedNorad(params.selectedSatTrackingId);
       if (requested === _trackedNorad) {
@@ -2413,7 +2451,7 @@ const satellitesLayer = {
     return true;
   },
 
-  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string }} Current runtime params. */
+  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string, satInclination: string }} Current runtime params. */
   getParams() {
     return {
       catalog: _params.catalog,
@@ -2423,21 +2461,24 @@ const satellitesLayer = {
       selectedSatTrackingId: _trackedNorad,
       satelliteClassFilter: _params.satelliteClassFilter,
       satPeriod: getSatPeriod(),
+      satInclination: getSatInclination(),
     };
   },
 
   /**
    * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
    * Dense catalog chips, PLAN 132 class chips, PLAN 164 period chips
-   * (All | <100m | <128m), the Plan 65 Sats group picker, POINTS and ORBITS
-   * chips over the existing `showPoints` / `showOrbits` params, a class
-   * legend, and the Next ISS readout host (Plan 139).
+   * (All | <100m | <128m), PLAN 169 inclination chips (Eq | Mid | Polar),
+   * the Plan 65 Sats group picker, POINTS and ORBITS chips over the existing
+   * `showPoints` / `showOrbits` params, a class legend, and the Next ISS
+   * readout host (Plan 139).
    *
    * The chips are stateless — they declare the params to apply and the manager
    * owns the write, so the Space Missions snapshot/restore path (which drives
    * the same `catalog` / `showPoints` / `showOrbits` params) stays the single
    * source of truth. Hiding dots must keep this row: otherwise POINTS could
-   * not turn back on, and Orbits / Core|Dense / class / period chips would vanish.
+   * not turn back on, and Orbits / Core|Dense / class / period / inclination
+   * chips would vanish.
    *
    * Dense reports the LOAD state, not the catalog param: the param flips
    * synchronously while the Starlink shell takes seconds to arrive and
@@ -2457,6 +2498,7 @@ const satellitesLayer = {
         ...catalog.chips,
         ..._classFilterChips(),
         ...satellitePeriodChipModels(getSatPeriod()),
+        ...satelliteInclinationChipModels(getSatInclination()),
         {
           id: 'points',
           label: 'POINTS',
