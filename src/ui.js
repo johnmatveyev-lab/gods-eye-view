@@ -41,8 +41,9 @@ import {
   isCelestialRingStyleSupported,
   setKeyholeFadeTuning,
 } from './celestialRing.js';
-import { destroyTrackedReadout, initTrackedReadout } from './data/trackedReadout.js';
-import { destroyWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
+import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
+import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
   initDetection,
@@ -2644,6 +2645,12 @@ export class StyleManager {
       this._updateDetectionButton(modeLabel);
     });
     initTrackedReadout(viewer);
+    initSelectedContactIdent({
+      viewer,
+      showToast: (text) => this._showToast(text),
+      getPaintRect: getOverlayPaintRect,
+      getActiveTrackedId: getActiveTrackedReadoutId,
+    });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
 
@@ -10352,6 +10359,7 @@ export class StyleManager {
       document.removeEventListener('gev:radio-selected', this._radioSelectedHandler);
       this._radioSelectedHandler = null;
     }
+    destroySelectedContactIdent();
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();

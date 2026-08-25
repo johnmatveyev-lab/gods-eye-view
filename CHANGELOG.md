@@ -11,6 +11,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a copy control on the selected-contact card for the visible asset
+  ident (aircraft callsign, else registration/hex; vessel name or MMSI;
+  satellite name or NORAD). Clicking the ident or the copy control copies it
+  and toasts `Copied UAL123`. Hidden with no selection. Aircraft, vessels, and
+  satellites only — no person-search and no server route.
 - HUD and cockpit clocks can switch UTC | Local next to the existing time.
   Local uses the browser timezone. The choice persists as `meridian.clock`
   (`utc` default). Share URLs, units, compass, and Home are unchanged.
