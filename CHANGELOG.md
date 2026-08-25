@@ -30,6 +30,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Data Layers now list in-view OSM dams from the existing bundled
+  payload (cap 50). Clicking a row flies to those coords using the layer's
+  current stem-click camera. Empty or off yields an empty list. The
+  datacenter roster stays independent. No new Overpass fetch. © OpenStreetMap
+  credit is unchanged.
 - Flights layer has a client-side altitude band (All / Surface / &lt;10k /
   10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
   the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as

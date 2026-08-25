@@ -5414,6 +5414,82 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   border-radius: 999px;
 }
 
+/* Existing OSM dams payload — in-view list + fly-to. Independent of datacenters. */
+#dams-in-view.in-view-site-list {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#dams-in-view[hidden] {
+  display: none;
+}
+
+#dams-in-view .in-view-site-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#dams-in-view .in-view-site-list-header strong {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+#dams-in-view .in-view-site-list-header output {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+#dams-in-view .in-view-site-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#dams-in-view .in-view-site-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#dams-in-view .in-view-site-list-item:hover,
+#dams-in-view .in-view-site-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--text-primary);
+}
+
+#dams-in-view .in-view-site-list-empty {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 2px 6px;
+}
+
+#dams-in-view .in-view-site-list-credit {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+
 .data-toggle-row {
   padding: 8px 10px 6px;
   border-radius: 8px;
@@ -7840,6 +7916,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #fires-panel.collapsed .fires-list,
 #fires-panel.collapsed .fires-list-meta,
 #fires-panel.collapsed .fires-list-ack,
+#data-panel.collapsed #datacenter-in-view,
+#data-panel.collapsed #dams-in-view,
 #global-context-panel.collapsed #radio-panel,
 #global-context-panel.collapsed #military-awareness-panel,
 #global-context-panel.collapsed .global-context-actions,
