@@ -32,3 +32,22 @@ test('returns null when no pass clears an absurd threshold', () => {
   const pass = findNextIssPass({ satrec, ...AUSTIN, fromMs: FROM_MS, minElevDeg: 89.9, horizonHours: 2 });
   assert.equal(pass, null);
 });
+
+test('returns null for a zero-length horizon', () => {
+  const satrec = twoline2satrec(L1, L2);
+  const pass = findNextIssPass({
+    satrec, ...AUSTIN, fromMs: FROM_MS, minElevDeg: 10, horizonHours: 0,
+  });
+  assert.equal(pass, null);
+});
+
+test('southern-hemisphere observer still gets a structurally-consistent pass', () => {
+  const satrec = twoline2satrec(L1, L2);
+  const sydney = { latDeg: -33.8688, lonDeg: 151.2093 };
+  const pass = findNextIssPass({ satrec, ...sydney, fromMs: FROM_MS, minElevDeg: 10 });
+  assert.ok(pass, 'expected a pass within 24h at 34°S for a 51.6° inclination orbit');
+  assert.ok(pass.riseMs > FROM_MS);
+  assert.ok(pass.riseMs < pass.maxElevMs && pass.maxElevMs < pass.setMs);
+  assert.ok(pass.maxElevDeg >= 10);
+  assert.ok(pass.riseAzDeg >= 0 && pass.riseAzDeg < 360);
+});

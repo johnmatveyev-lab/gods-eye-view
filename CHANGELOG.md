@@ -45,6 +45,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites DATA LAYERS row now shows a **Next ISS** readout: rise time
+  (UTC | Local follows the existing clock toggle), peak elevation, and rise
+  azimuth from the already-loaded ISS satrec at the camera lat/lon. Recalc is
+  `moveEnd` only. No ISS / no 24h pass reads UNAVAILABLE. Hidden when the
+  satellites layer is off. Client-only; not an alert service; no new `/api`.
 - Radio has an English-only chip next to Favorites. Default off. When on,
   the already-fetched Radio Browser directory hides stations whose
   language is not `en` / `eng` / `english…` (same helper globe-view

@@ -180,7 +180,12 @@ import {
   syncStopTrackingButton,
 } from './chrome/stopTracking.js';
 import { isTr3b, toggleTr3b } from './data/tr3bRegistry.js';
-import satellitesLayer from './data/satellites.js';
+import satellitesLayer, { getNextIssPass } from './data/satellites.js';
+import {
+  destroyIssPassReadout,
+  initIssPassReadout,
+  syncIssPassReadout,
+} from './data/issPassReadout.js';
 import cctvLayer from './data/cctv.js';
 import { attachFirmsListPanel } from './data/firmsListPanel.js';
 import radioLayer, {
@@ -3183,6 +3188,11 @@ export class StyleManager {
       viewer,
       showToast: (text) => this._showToast(text),
     });
+    initIssPassReadout({
+      viewer,
+      getPass: getNextIssPass,
+      isVisible: () => this._issPassReadoutVisible(),
+    });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
 
@@ -5318,6 +5328,9 @@ export class StyleManager {
           this._syncEarthquakeDepthChips();
           this._syncEarthquakeTimeChips();
         }
+        if (change?.layerId === 'satellites') {
+          syncIssPassReadout({ recompute: true });
+        }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
         if (change?.layerId === 'flights' || change?.layerId === 'military') {
@@ -5508,6 +5521,13 @@ export class StyleManager {
         if (!this._initialShareState) this._applyStoredModelsPreference();
       });
     }
+    syncIssPassReadout({ recompute: true });
+  }
+
+  /** Satellites layer on and points shown — the Next ISS host lives on that row. */
+  _issPassReadoutVisible() {
+    if (this._dataManager?.isEnabled?.('satellites') !== true) return false;
+    return satellitesLayer.getParams?.()?.showPoints !== false;
   }
 
   _handleShareTrackingRestoreStatus(result) {
@@ -12731,6 +12751,7 @@ export class StyleManager {
     destroySelectedContactIdent();
     destroyShareViewQr();
     destroyCameraCoords();
+    destroyIssPassReadout();
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();

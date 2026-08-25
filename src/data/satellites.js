@@ -2,6 +2,7 @@ import * as Cesium from 'cesium';
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from 'satellite.js';
 import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, isSceneClickCaptured, resolvePickId } from './pickRegistry.js';
 import { findNextIssPass } from './issPass.js';
+import { ISS_PASS_READOUT_ID, ISS_PASS_READOUT_TITLE } from './issPassReadout.js';
 import {
   advanceSpriteFocus,
   clearFocusTarget,
@@ -2335,7 +2336,8 @@ const satellitesLayer = {
   /**
    * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
    * Dense catalog chips, PLAN 132 class chips, the Plan 65 Sats group picker,
-   * an ORBITS chip over the existing `showOrbits` param, plus a class legend.
+   * an ORBITS chip over the existing `showOrbits` param, a class legend, and
+   * the Next ISS readout host (Plan 139).
    *
    * The chips are stateless — they declare the params to apply and the manager
    * owns the write, so the Space Missions snapshot/restore path (which drives
@@ -2345,7 +2347,7 @@ const satellitesLayer = {
    * synchronously while the Starlink shell takes seconds to arrive and
    * frequently 502s, so ACTIVE means "dense points are on screen" and nothing
    * less. The legend tally is cached against the catalog revision.
-   * @returns {{ chips: Array<object>, legend: Array<object>, selects: Array<object> }} Row controls.
+   * @returns {{ chips: Array<object>, legend: Array<object>, selects: Array<object>, readout?: {id: string} }} Row controls.
    */
   getRowControls() {
     // A dependency owner (Space Missions) borrows this layer for TLE lookup
@@ -2386,6 +2388,10 @@ const satellitesLayer = {
         options: listSatGroups().map((group) => ({ value: group.id, label: group.label })),
       }],
       legend: satelliteClassLegend(_classTally()),
+      readout: {
+        id: ISS_PASS_READOUT_ID,
+        title: ISS_PASS_READOUT_TITLE,
+      },
     };
   },
 
@@ -2484,11 +2490,11 @@ function _installClickHandler(viewer) {
  * satellites layer enabled at least once this session).
  * @returns {{status:'no-tle'}|{status:'none'}|{status:'ok', pass:{riseMs:number,setMs:number,maxElevDeg:number,maxElevMs:number,riseAzDeg:number}}}
  */
-export function getNextIssPass({ latDeg, lonDeg, minElevDeg = 10 }) {
+export function getNextIssPass({ latDeg, lonDeg, minElevDeg = 10, fromMs = Date.now() }) {
   const sat = _catalog.get(ISS_NORAD);
   if (!sat || !sat.satrec) return { status: 'no-tle' };
   const pass = findNextIssPass({
-    satrec: sat.satrec, latDeg, lonDeg, fromMs: Date.now(), minElevDeg,
+    satrec: sat.satrec, latDeg, lonDeg, fromMs, minElevDeg,
   });
   return pass ? { status: 'ok', pass } : { status: 'none' };
 }
