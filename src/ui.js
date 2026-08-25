@@ -106,6 +106,10 @@ import radioLayer, {
   radioTunerPointerPosition,
   radioTunerSlot,
 } from './data/radio.js';
+import {
+  applyRadioStationSearch,
+  renderRadioStationList,
+} from './data/radioStationSearch.js';
 import bikeshareLayer from './data/bikeshare.js';
 import aisLiveVesselsLayer from './data/aisLiveVessels.js';
 import militaryAwarenessLayer from './data/militaryAwareness.js';
@@ -2440,6 +2444,9 @@ export class StyleManager {
     this._radioLayerState = document.getElementById('radio-layer-state');
     this._radioEnableBtn = document.getElementById('radio-enable-btn');
     this._radioFilter = document.getElementById('radio-filter');
+    this._radioStationSearch = document.getElementById('radio-station-search');
+    this._radioStationSearchCount = document.getElementById('radio-station-search-count');
+    this._radioStationList = document.getElementById('radio-station-list');
     this._radioStationName = document.getElementById('radio-station-name');
     this._radioStationMeta = document.getElementById('radio-station-meta');
     this._radioStationTags = document.getElementById('radio-station-tags');
@@ -5960,6 +5967,28 @@ export class StyleManager {
       }
       this._radioTunerBandPinnedForNavigation = false;
       this._radioTunerPool = [];
+      this._radioDirectoryListSignature = '';
+      refreshTunerBand({ force: true });
+    });
+    this._radioStationSearch?.addEventListener('input', () => {
+      const presentation = radioLayer.getUIState();
+      if (!presentation.presentationActive) {
+        this._radioStationSearch.value = presentation.stationSearch || '';
+        return;
+      }
+      if (this._radioTunerDragging) finishTuner(false);
+      if (!radioLayer.setStationSearch(this._radioStationSearch.value)) {
+        this._radioStationSearch.value = radioLayer.getUIState().stationSearch || '';
+        return;
+      }
+      this._radioTunerBandPinnedForNavigation = false;
+      this._radioTunerPool = [];
+      applyRadioStationSearch(
+        this._radioStationList,
+        this._radioStationSearch.value,
+        radioLayer.getDirectoryStations(),
+      );
+      this._syncRadioStationSearchCount();
       refreshTunerBand({ force: true });
     });
     this._radioPrevBtn?.addEventListener('click', () => cycleRadio(-1));
@@ -6185,6 +6214,46 @@ export class StyleManager {
     this._contextRadioToggleBtn.title = `${action} compact Radio controls`;
   }
 
+  /** Keep the current Radio Browser list and search field in sync. */
+  _syncRadioStationList(state, interactive) {
+    const directory = radioLayer.getDirectoryStations?.() || [];
+    const query = state?.stationSearch || '';
+    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
+    if (this._radioStationSearch && document.activeElement !== this._radioStationSearch) {
+      this._radioStationSearch.value = query;
+    }
+    if (this._radioStationSearch) {
+      this._radioStationSearch.disabled = !interactive || !state?.stationCount;
+    }
+    if (signature !== this._radioDirectoryListSignature) {
+      renderRadioStationList(this._radioStationList, directory, {
+        selectedId: state?.selected?.id || null,
+        onSelect: (stationId) => {
+          if (this._radioTunerDragging) return;
+          radioLayer.selectStation(stationId, { autoplay: false, origin: 'user' });
+        },
+      });
+      this._radioDirectoryListSignature = signature;
+    }
+    applyRadioStationSearch(this._radioStationList, query, directory);
+    if (this._radioStationList) {
+      this._radioStationList.hidden = !interactive || !directory.length;
+    }
+    this._syncRadioStationSearchCount(directory);
+  }
+
+  /** Show how many current-list stations remain after search. */
+  _syncRadioStationSearchCount(directory = radioLayer.getDirectoryStations?.() || []) {
+    if (!this._radioStationSearchCount) return;
+    const visible = this._radioStationList
+      ? [...this._radioStationList.children].filter((row) => !row.hidden).length
+      : directory.length;
+    const total = directory.length;
+    this._radioStationSearchCount.textContent = total
+      ? `${visible}/${total}`
+      : '';
+  }
+
   /** Render Radio state without making playback or Context decisions. */
   _renderRadioState(state) {
     if (!state || !this._radioPanel) return;
@@ -6277,6 +6346,7 @@ export class StyleManager {
       this._radioFilter.style.color = activeCategory?.color || '';
       this._radioFilter.disabled = !interactive || !state.stationCount;
     }
+    this._syncRadioStationList(state, interactive);
 
     const tunerAvailable = interactive && state.filteredCount > 0;
     if (this._radioTuner) this._radioTuner.hidden = !tunerAvailable;

@@ -32,6 +32,11 @@ import {
   projectEarthDiscToViewport,
 } from '../celestialRing.js';
 import { governorRequestRender } from '../renderGovernor.js';
+import {
+  filterRadioStationsBySearch,
+  normalizeRadioStationSearchQuery,
+  stationMatchesRadioSearch,
+} from './radioStationSearch.js';
 
 export {
   RADIO_CLIENT_ROUTES,
@@ -179,6 +184,7 @@ let _stationById = new Map();
 let _categories = [];
 let _renderById = new Map();
 let _filter = DEFAULT_RADIO_FILTER;
+let _stationSearch = '';
 let _selectedId = null;
 let _selectedEntity = null;
 let _selectionGeneration = 0;
@@ -1153,8 +1159,17 @@ function selectedPresentationStation() {
   return _cancelledTuningPresentationStation || selectedStation();
 }
 
-function visibleStations() {
+function directoryStations() {
   return filterRadioStations(_stations, _filter);
+}
+
+function visibleStations() {
+  return filterRadioStationsBySearch(directoryStations(), _stationSearch);
+}
+
+function stationMatchesCurrentDirectory(station) {
+  return stationMatchesRadioCategory(station, _filter)
+    && stationMatchesRadioSearch(station, _stationSearch);
 }
 
 function viewportRadioAnchor() {
@@ -1228,6 +1243,7 @@ export function getRadioUIState() {
     error: _error,
     updatedAt: _updatedAt,
     filter: _filter,
+    stationSearch: _stationSearch,
     categories: _categories,
     acceptedCatalogGeneration: _acceptedCatalogSnapshot.generation,
     presentationActive: radioPresentationAllowed(),
@@ -2169,7 +2185,7 @@ function publishRadioOverlayEntries() {
       .map((entity) => String(entity?.id || '').slice(RADIO_PREFIX.length))
       .filter((id) => {
         const station = _stationById.get(id);
-        return station && stationMatchesRadioCategory(station, _filter);
+        return station && stationMatchesCurrentDirectory(station);
       })
       .sort();
     if (stationIds.length < 3) continue;
@@ -2315,7 +2331,7 @@ export function cycleRadioStation(direction = 1, {
     ? stationIds
       .slice(0, RADIO_TUNER_DIRECTORY_LIMIT)
       .map((id) => _stationById.get(String(id)))
-      .filter((station) => station && stationMatchesRadioCategory(station, _filter))
+      .filter((station) => station && stationMatchesCurrentDirectory(station))
     : rankedVisibleStations();
   if (!ranked.length) return false;
   const current = ranked.findIndex((station) => station.id === _selectedId);
@@ -2372,7 +2388,7 @@ function updateRenderVisibility({ force = true } = {}) {
   const occluder = horizonOccluder(_viewer.camera);
   let visibilityChanged = false;
   for (const [id, record] of _renderById) {
-    const matches = stationMatchesRadioCategory(record.station, _filter);
+    const matches = stationMatchesCurrentDirectory(record.station);
     const visible = matches && occluder.isPointVisible(record.position);
     if (record.entity.show !== visible) visibilityChanged = true;
     record.entity.show = visible;
@@ -2387,6 +2403,34 @@ function updateRenderVisibility({ force = true } = {}) {
   // The horizon timer can commit AFTER the camera settles and the governor
   // parks the scene — a changed show flag needs one frame. (perf wave 2 fix)
   if (visibilityChanged) governorRequestRender('radio-horizon');
+}
+
+/** Narrow the current directory by name, country, or tag without fetching. */
+export function setRadioStationSearch(query) {
+  if (!radioPresentationAllowed()) return false;
+  const nextSearch = normalizeRadioStationSearchQuery(query);
+  const changed = nextSearch !== _stationSearch;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _stationSearch = nextSearch;
+  if (changed) {
+    resetRadioClusterOverlayIdentities();
+    updateRenderVisibility();
+    if (_dataSource?.clustering?.enabled) {
+      const clusterPoints = _dataSource.clustering.clusterPoints;
+      _dataSource.clustering.clusterPoints = !clusterPoints;
+      _dataSource.clustering.clusterPoints = clusterPoints;
+      _viewer?.scene?.requestRender?.();
+    }
+    scheduleRadioOverlayPublish();
+  }
+  emitState();
+  return true;
+}
+
+/** Return the category-filtered directory before the search field is applied. */
+export function getRadioDirectoryStations(limit = RADIO_TUNER_STATION_LIMIT) {
+  if (!radioPresentationAllowed() || !_stations.length) return [];
+  return buildRadioTunerBand(directoryStations(), selectedStation(), limit);
 }
 
 /** Change marker/list category without interrupting an active station. */
@@ -2814,6 +2858,7 @@ export const radioLayer = {
     _stationById.clear();
     _categories = Object.freeze([]);
     _filter = DEFAULT_RADIO_FILTER;
+    _stationSearch = '';
     _renderById.clear();
     resetRadioClusterOverlayIdentities();
     _lastHorizonCameraPosition = null;
@@ -2868,6 +2913,7 @@ export const radioLayer = {
     clusterIds: [..._overlayDiagnostics.clusterIds],
     clusterMemberships: _overlayDiagnostics.clusterMemberships.map((entry) => ({ ...entry })),
   }),
+  getDirectoryStations: getRadioDirectoryStations,
   getTunerStations: getRadioTunerStations,
   beginTuning: beginRadioTuning,
   setTuningStatic: setRadioTuningStatic,
@@ -2876,6 +2922,7 @@ export const radioLayer = {
   cancelTuning: cancelRadioTuning,
   endTuning: endRadioTuning,
   setFilter: setRadioFilter,
+  setStationSearch: setRadioStationSearch,
   selectStation: selectRadioStation,
   selectRequestedStation: selectRequestedRadioStation,
   cycleStation: cycleRadioStation,

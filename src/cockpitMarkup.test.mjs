@@ -271,7 +271,7 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(html, /data-cockpit-launcher="radio"[\s\S]*?id="cockpit-radio-toggle-btn"/);
   const cockpitRadio = html.match(/id="cockpit-radio-panel"[\s\S]*?<\/div>\s*<\/div>\s*<\/aside>/);
   assert.ok(cockpitRadio, 'Cockpit compact Radio controls are missing');
-  assert.doesNotMatch(cockpitRadio[0], /context-radio-details-btn|radio-filter|radio-tuner/);
+  assert.doesNotMatch(cockpitRadio[0], /context-radio-details-btn|radio-filter|radio-tuner|radio-station-search|radio-station-list/);
   assert.match(css, /\.cockpit-utility-controls[\s\S]*?top:\s*var\(--cockpit-utility-top/);
   assert.match(css, /\[data-cockpit-launcher="display"\]\s*\{\s*width:\s*var\(--left-collapsed-width, 176px\)/);
   assert.match(css, /--display-panel-expanded-width:\s*272px/);
