@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { pinRequiredCredits } from './data/dataCredits.js';
 import {
   DEFAULT_POWER_MODE,
   POWER_LOW,
@@ -114,45 +113,13 @@ test('Clean view + Low still keeps credits on', () => {
   assert.equal(viewer.creditContainer.hidden, false);
   assert.notEqual(viewer.creditContainer.style.display, 'none');
 
-  const expand = {
-    className: 'cesium-credit-expand-link',
-    textContent: 'Data attribution',
-    getAttribute(name) { return name === 'href' ? '#' : ''; },
-  };
-  const style = {
-    display: 'none',
-    opacity: '0',
-    visibility: 'hidden',
-    pointerEvents: 'none',
-    setProperty(prop, value) {
-      if (prop === 'opacity') this.opacity = value;
-      else if (prop === 'visibility') this.visibility = value;
-      else if (prop === 'pointer-events') this.pointerEvents = value;
-    },
-    removeProperty(prop) {
-      if (prop === 'display') this.display = '';
-    },
-  };
-  const credits = {
-    id: 'cesium-credits',
-    textContent: 'Google Maps Data attribution',
-    style,
-    querySelector(selector) {
-      return selector.includes('cesium-credit-expand-link') ? expand : null;
-    },
-  };
-  const root = {
-    getElementById(id) { return id === 'cesium-credits' ? credits : null; },
-  };
-  assert.equal(pinRequiredCredits(root), true);
-  assert.match(credits.textContent, /Google Maps/);
-  assert.notEqual(style.display, 'none');
-  assert.equal(style.opacity, '1');
-  assert.equal(style.visibility, 'visible');
-
   const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
   const powerSource = readFileSync(new URL('./powerMode.js', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
+  const powerUi = ui.slice(ui.indexOf('setPowerMode(mode)'), ui.indexOf('getContextModeState()'));
   assert.match(css, /body\.ui-clean-view #cesium-credits/);
+  assert.match(css, /body\.ui-clean-view #cesium-credits,\s*\n\s*body\.recording-mode #cesium-credits \{[^}]*opacity:\s*1/);
   assert.doesNotMatch(css, /power-low[\s\S]{0,120}#cesium-credits/);
   assert.doesNotMatch(powerSource, /cesium-credits|display:\s*none|visibility:\s*hidden/);
+  assert.doesNotMatch(powerUi, /cesium-credits|display:\s*none|visibility:\s*hidden/);
 });
