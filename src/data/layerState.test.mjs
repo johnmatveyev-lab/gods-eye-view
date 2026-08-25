@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 
 import { DataLayerManager } from './manager.js';
 import {
+  FIRST_VISIT_ENABLED_LAYER_IDS,
   LAYER_STATE_REGISTRY,
   LAYER_STATE_STORAGE_KEY,
   LayerStateCoordinator,
   REGISTERED_LAYER_IDS,
   SHARE_TRACKING_RESTORE_POLICIES,
   createDefaultLayerState,
+  createFirstVisitLayerState,
   decodeLayerStateParams,
   encodeLayerStateParams,
   isLayerSelectable,
@@ -344,18 +346,85 @@ test('compact URL omits absent-meaning option state and still resolves to it', (
   assert.deepEqual(roundTrip.options.satellites.selectedSatTrackingId, null);
 });
 
+test('a fresh profile enables only the first-visit default: civilian flights', async () => {
+  assert.deepEqual(FIRST_VISIT_ENABLED_LAYER_IDS, ['flights']);
+  assert.deepEqual(createFirstVisitLayerState().enabledLayerIds, ['flights']);
+
+  const manager = productionManager();
+  const storage = memoryStorage();
+  const share = shareSink();
+  const coordinator = new LayerStateCoordinator(manager, share, { storage });
+  await coordinator.start();
+
+  assert.equal(coordinator.source, 'defaults');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, ['flights']);
+  assert.equal(manager.isEnabled('flights'), true);
+  for (const id of REGISTERED_LAYER_IDS) {
+    if (id === 'flights') continue;
+    assert.equal(manager.isEnabled(id), false, `${id} stays off until the operator opts in`);
+  }
+  assert.deepEqual(storage.writes, [], 'first-visit default is not written as a user preference');
+  assert.deepEqual(share.provider().enabledLayerIds, ['flights']);
+  coordinator.destroy();
+});
+
+test('a share URL with fires on keeps fires and does not force the first-visit default', async () => {
+  const manager = productionManager();
+  const storage = memoryStorage();
+  const shareState = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage });
+  await coordinator.start({ shareLayerState: shareState });
+
+  assert.equal(coordinator.source, 'share');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, ['local-firms']);
+  assert.equal(manager.isEnabled('local-firms'), true);
+  assert.equal(manager.isEnabled('flights'), false);
+  assert.deepEqual(storage.writes, []);
+  coordinator.destroy();
+});
+
+test('a second visit with lastView keeps that layer set instead of the first-visit default', async () => {
+  const lastView = decodeLayerStateParams(new URLSearchParams('v=2&l=t.c.r'));
+  const manager = productionManager();
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage: memoryStorage() });
+  await coordinator.start({ shareLayerState: lastView });
+
+  assert.equal(coordinator.source, 'share');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, ['cctv', 'radio', 'traffic']);
+  assert.equal(manager.isEnabled('flights'), false);
+  assert.equal(manager.isEnabled('cctv'), true);
+  assert.equal(manager.isEnabled('radio'), true);
+  assert.equal(manager.isEnabled('traffic'), true);
+  coordinator.destroy();
+});
+
+test('saved local layer prefs win over the first-visit default', async () => {
+  const local = createDefaultLayerState();
+  local.enabledLayerIds = ['satellites', 'local-firms'];
+  const storage = memoryStorage(serializeStoredLayerState(local));
+  const manager = productionManager();
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage });
+  await coordinator.start();
+
+  assert.equal(coordinator.source, 'local');
+  assert.deepEqual(coordinator.getDurableState().enabledLayerIds, ['local-firms', 'satellites']);
+  assert.equal(manager.isEnabled('flights'), false);
+  assert.equal(manager.isEnabled('satellites'), true);
+  assert.equal(manager.isEnabled('local-firms'), true);
+  assert.deepEqual(storage.writes, []);
+  coordinator.destroy();
+});
+
 test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, and the rail agree', async () => {
   // Product invariant 2026-08-22: the DISPLAY-rail 3D toggle defaults ON with mode
   // `proximity`, because proximity is itself the budget — models materialize only
   // below the fleet altitude ceiling and only for the nearest MODEL_MAX in view,
   // so "on" costs nothing at globe scale and `all` stays a deliberate opt-in.
   //
-  // The reason this is one test rather than four is the early return in `start()`
-  // below: with no share payload and no stored state, restoration NEVER RUNS, so
-  // nothing pushes the codec default into the layers. Four independent
-  // initializers decide what a first-run operator actually sees, and changing any
-  // one alone ships a lit button over an unarmed layer, or an armed layer under a
-  // dark button. Pinning them together is what makes "state and UI agree" a fact.
+  // First-visit restore now enables civilian flights and pushes the durable 3D
+  // default into those layers. The four independent initializers still have to
+  // agree for the frame before restore settles — a lit button over an unarmed
+  // layer, or an armed layer under a dark button, is still a shipped defect.
   const defaults = createDefaultLayerState().options.flights;
   assert.equal(defaults.models3d, true, 'the durable default is 3D ON');
   assert.equal(defaults.models3dMode, 'proximity', 'and proximity, never all');
@@ -370,8 +439,10 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
   assert.equal(coordinator.source, 'defaults');
   assert.equal(coordinator.getDurableState().options.flights.models3d, true);
   assert.equal(coordinator.getDurableState().options.flights.models3dMode, 'proximity');
-  assert.deepEqual(paramsCalls, [],
-    'a fresh boot restores nothing — which is exactly why the module initializers below must match');
+  assert.equal(manager.isEnabled('flights'), true);
+  assert.ok(paramsCalls.length > 0, 'first-visit restore applies the durable 3D default');
+  assert.equal(paramsCalls.every((params) => params.models3d === true), true);
+  assert.equal(paramsCalls.every((params) => params.models3dMode === 'proximity'), true);
   coordinator.destroy();
 
   // The other three surfaces, read from source, because each is the literal a
