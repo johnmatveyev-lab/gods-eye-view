@@ -192,6 +192,9 @@ import {
   normalizeBrightnessFloor,
 } from './data/firmsBrightnessFloor.js';
 import {
+  normalizeBrightnessTi5Floor,
+} from './data/firmsBrightnessTi5Filter.js';
+import {
   firmsSensorFilterFlags,
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
@@ -2825,6 +2828,7 @@ export class StyleManager {
     this._firmsSensorChips = document.getElementById('fires-sensor-chips');
     this._firmsSatelliteChips = document.getElementById('fires-satellite-chips');
     this._firmsBrightnessChips = document.getElementById('fires-brightness-chips');
+    this._firmsBrightnessTi5Chips = document.getElementById('fires-brightness-ti5-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -3357,6 +3361,7 @@ export class StyleManager {
     this._initFirmsSensorChips();
     this._initFirmsSatelliteChips();
     this._initFirmsBrightnessChips();
+    this._initFirmsBrightnessTi5Chips();
     this._initInstallationClassChips();
     this._initInstallationFootprintChip();
     this._initAisTypeChips();
@@ -5492,6 +5497,7 @@ export class StyleManager {
           this._syncFirmsSensorChips();
           this._syncFirmsSatelliteChips();
           this._syncFirmsBrightnessChips();
+          this._syncFirmsBrightnessTi5Chips();
         }
         if (change?.layerId === 'ais-live-vessels') {
           this._syncAisTypeChips();
@@ -11845,6 +11851,32 @@ export class StyleManager {
       this._syncFirmsBrightnessChips();
     });
     this._syncFirmsBrightnessChips();
+  }
+
+  _syncFirmsBrightnessTi5Chips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsBrightnessTi5Chips) this._firmsBrightnessTi5Chips.hidden = !enabled;
+    const layer = this._dataManager?.layers?.get('local-firms')?.module;
+    const floor = normalizeBrightnessTi5Floor(layer?.getParams?.()?.brightnessTi5Floor);
+    const chips = this._firmsBrightnessTi5Chips?.querySelectorAll?.('[data-firms-brightness-ti5]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsBrightnessTi5 === floor;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsBrightnessTi5Chips() {
+    if (!this._firmsBrightnessTi5Chips) return;
+    this._firmsBrightnessTi5Chips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-brightness-ti5]');
+      if (!chip || !this._firmsBrightnessTi5Chips.contains(chip)) return;
+      const next = normalizeBrightnessTi5Floor(chip.dataset.firmsBrightnessTi5);
+      this._dataManager?.setLayerParams?.('local-firms', { brightnessTi5Floor: next }, { origin: 'user' });
+      this._syncFirmsBrightnessTi5Chips();
+    });
+    this._syncFirmsBrightnessTi5Chips();
   }
 
   _syncInstallationClassChips() {
