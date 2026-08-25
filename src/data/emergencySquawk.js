@@ -12,12 +12,22 @@
  * Watchlist remains a separate manual-ident filter.
  *
  * Highlight color is the existing annotation "red = alert" token.
+ *
+ * PLAN 166 visibility (`passesEmergenciesOnlyFilter`) reuses `isEmergencySquawk`
+ * so the chip does not invent a second matcher. Paint is unchanged.
  */
 
 export const EMERGENCY_SQUAWKS = Object.freeze(['7500', '7600', '7700']);
 
 /** Existing annotation alert red (`src/annotations/*` color token `red`). */
 export const EMERGENCY_HIGHLIGHT_CSS = '#ff6b6b';
+
+/** PLAN 166: hide the rest of the civil fleet. Default OFF keeps the current view. */
+export const EMERGENCIES_ONLY_DEFAULT = false;
+export const EMERGENCIES_ONLY_CHIP_ID = 'emergencies-only';
+export const EMERGENCIES_ONLY_CHIP_LABEL = 'Emergencies only';
+export const EMERGENCIES_ONLY_CHIP_TITLE =
+  'Hide contacts that are not public emergency squawk 7500/7600/7700. Not a verified emergency. Public squawk field only.';
 
 export const EMERGENCY_HIGHLIGHT_STORAGE_KEY = 'meridian.emergencyHighlight';
 export const EMERGENCY_HIGHLIGHT_DEFAULT = true;
@@ -56,6 +66,58 @@ export function normalizeSquawk(value) {
 export function isEmergencySquawk(value) {
   const squawk = normalizeSquawk(value);
   return squawk !== null && EMERGENCY_SQUAWKS.includes(squawk);
+}
+
+/**
+ * Whether Emergencies only allows this contact to draw.
+ * Off is a pass-through. On reuses `isEmergencySquawk` — no second matcher.
+ * Selected/tracked exemption lives on the layer AND gate, not here.
+ * @param {{squawk?: unknown, emergenciesOnly?: boolean}} [input]
+ * @returns {boolean}
+ */
+export function passesEmergenciesOnlyFilter({
+  squawk,
+  emergenciesOnly = EMERGENCIES_ONLY_DEFAULT,
+} = {}) {
+  if (emergenciesOnly !== true) return true;
+  return isEmergencySquawk(squawk);
+}
+
+/**
+ * Sibling AND hook used by `inFlightFilters.passesInFlightFilters`.
+ * Reads the current payload squawk and the layer flag; does not invent codes.
+ * @param {{squawk?: unknown, emergenciesOnly?: boolean}|null|undefined} contact
+ * @param {{emergenciesOnly?: boolean}} [options]
+ * @returns {boolean}
+ */
+export function passesEmergencySquawkFilter(contact, options = {}) {
+  return passesEmergenciesOnlyFilter({
+    squawk: contact?.squawk,
+    emergenciesOnly: options.emergenciesOnly === true || contact?.emergenciesOnly === true,
+  });
+}
+
+/**
+ * Normalize an untrusted stored or UI value. Only an explicit on is on;
+ * missing or corrupt values keep the product default OFF.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function normalizeEmergenciesOnly(value) {
+  if (value === true || value === 1 || value === '1' || value === 'true') return true;
+  return EMERGENCIES_ONLY_DEFAULT;
+}
+
+/** Layer-row chip for the civil flights Emergencies only toggle. */
+export function emergenciesOnlyChipModel(active = EMERGENCIES_ONLY_DEFAULT) {
+  const on = active === true;
+  return {
+    id: EMERGENCIES_ONLY_CHIP_ID,
+    label: EMERGENCIES_ONLY_CHIP_LABEL,
+    active: on,
+    title: EMERGENCIES_ONLY_CHIP_TITLE,
+    params: { emergenciesOnly: !on },
+  };
 }
 
 /**

@@ -290,6 +290,9 @@ const OPTION_GROUPS = Object.freeze({
     booleanOption('hideStale', 'g', false),
     // PLAN 95: hide parked/taxi contacts. Default OFF so current draw stays.
     booleanOption('airborneOnly', 'a', false),
+    // PLAN 166: hide non-emergency civil contacts. Default OFF so current draw
+    // stays. Token `q` is unused; `e` is models3d, `a` is airborne-only.
+    booleanOption('emergenciesOnly', 'q', false),
     trackingIdOption('selectedFlightsTrackingId', 't', null),
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
     nullableIntegerOption('speedMinKt', 's', null),
