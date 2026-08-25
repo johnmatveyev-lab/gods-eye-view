@@ -6104,14 +6104,16 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: .08em;
 }
 #space-mission-panel-host .space-mission-status-chips,
-#space-mission-panel-host .space-mission-provider-chips {
+#space-mission-panel-host .space-mission-provider-chips,
+#space-mission-panel-host .space-mission-orbit-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: 0 3px 2px;
 }
 #space-mission-panel-host .space-mission-status-chip,
-#space-mission-panel-host .space-mission-provider-chip {
+#space-mission-panel-host .space-mission-provider-chip,
+#space-mission-panel-host .space-mission-orbit-chip {
   padding: 2px 7px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 8px;
@@ -6125,12 +6127,15 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #space-mission-panel-host .space-mission-status-chip:hover,
 #space-mission-panel-host .space-mission-status-chip:focus-visible,
 #space-mission-panel-host .space-mission-provider-chip:hover,
-#space-mission-panel-host .space-mission-provider-chip:focus-visible {
+#space-mission-panel-host .space-mission-provider-chip:focus-visible,
+#space-mission-panel-host .space-mission-orbit-chip:hover,
+#space-mission-panel-host .space-mission-orbit-chip:focus-visible {
   color: #d7f7f7;
   border-color: rgba(34, 230, 230, .42);
 }
 #space-mission-panel-host .space-mission-status-chip.active,
-#space-mission-panel-host .space-mission-provider-chip.active {
+#space-mission-panel-host .space-mission-provider-chip.active,
+#space-mission-panel-host .space-mission-orbit-chip.active {
   color: #22e6e6;
   border-color: #22e6e6;
   background: rgba(34, 230, 230, .12);
