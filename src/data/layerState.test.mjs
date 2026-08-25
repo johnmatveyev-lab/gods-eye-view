@@ -63,7 +63,7 @@ function paramsForLayer(id) {
       calibration: { cameraId: 'secret-camera', values: { heading: 12 } },
     };
   }
-  if (id === 'local-firms') return { frpFloor: 'all' };
+  if (id === 'local-firms') return { frpFloor: 'all', confidenceFloor: 'all' };
   if (id === 'radio') {
     return {
       filter: 'all',
@@ -325,6 +325,34 @@ test('FIRMS FRP floor is a cheap local-firms enum that defaults to All', () => {
   const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
   assert.match(params.get('lo'), /w\.f\.5/);
   assert.equal(decodeLayerStateParams(params).options['local-firms'].frpFloor, '50');
+});
+
+test('FIRMS confidence floor is a cheap local-firms enum that defaults to All', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].confidenceFloor, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].confidenceFloor, 'all', 'existing w links stay All');
+  assert.equal(omitted.options['local-firms'].frpFloor, 'all');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { confidenceFloor: '0.5', frpFloor: '50' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.c\.5/);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  const decoded = decodeLayerStateParams(params).options['local-firms'];
+  assert.equal(decoded.confidenceFloor, '0.5');
+  assert.equal(decoded.frpFloor, '50');
+
+  const high = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { confidenceFloor: '0.8' } },
+  });
+  assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), high).get('lo'), /w\.c\.8/);
+  assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), high))
+    .options['local-firms'].confidenceFloor, '0.8');
 });
 
 test('Radio genre ids with spaces and ampersands round-trip through v2', () => {

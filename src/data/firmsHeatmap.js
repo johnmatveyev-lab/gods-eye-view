@@ -51,6 +51,14 @@ export const FIRMS_FRP_FLOOR_CHIPS = Object.freeze([
 ]);
 const FIRMS_FRP_FLOOR_MW = Object.freeze({ all: 0, 10: 10, 50: 50, 100: 100 });
 
+/** Operator confidence floor chips. `all` is the current unfiltered view. */
+export const FIRMS_CONFIDENCE_FLOOR_CHIPS = Object.freeze([
+  Object.freeze({ id: 'all', label: 'All', title: 'Show every FIRMS detection confidence' }),
+  Object.freeze({ id: '0.5', label: '0.5+', title: 'Hide detections below 0.5 confidence' }),
+  Object.freeze({ id: '0.8', label: '0.8+', title: 'Hide detections below 0.8 confidence' }),
+]);
+const FIRMS_CONFIDENCE_FLOOR = Object.freeze({ all: 0, '0.5': 0.5, '0.8': 0.8 });
+
 /**
  * Coerce a chip / layer-state value to a floor id. Unknown values stay All
  * so a stale share token cannot invent a new NASA query.
@@ -71,6 +79,24 @@ export function frpFloorThresholdMw(floor) {
 }
 
 /**
+ * Coerce a chip / layer-state value to a confidence floor id. Unknown values
+ * stay All so a stale share token cannot invent a new NASA query.
+ * @param {*} value
+ * @returns {'all'|'0.5'|'0.8'}
+ */
+export function normalizeConfidenceFloor(value) {
+  if (value === 0.5 || value === '0.5') return '0.5';
+  if (value === 0.8 || value === '0.8') return '0.8';
+  if (value === 'all' || value === 0 || value === '0') return 'all';
+  return 'all';
+}
+
+/** Numeric 0–1 threshold for a confidence floor id. All is 0. */
+export function confidenceFloorThreshold(floor) {
+  return FIRMS_CONFIDENCE_FLOOR[normalizeConfidenceFloor(floor)] ?? 0;
+}
+
+/**
  * Keep detections at or above the FRP floor. All returns a shallow copy.
  * @param {Array<Object>|null|undefined} fires
  * @param {'all'|'10'|'50'|'100'|number} floor
@@ -81,6 +107,35 @@ export function filterFiresByFrpFloor(fires, floor) {
   const minMw = frpFloorThresholdMw(floor);
   if (minMw <= 0) return fires.slice();
   return fires.filter((fire) => Number(fire?.frp) >= minMw);
+}
+
+/**
+ * Whether one detection clears the confidence floor. Missing / non-finite
+ * confidence stays visible so an unknown VIIRS/MODIS value is never dropped.
+ * @param {Object|null|undefined} fire
+ * @param {'all'|'0.5'|'0.8'|number} floor
+ * @returns {boolean}
+ */
+export function fireMeetsConfidenceFloor(fire, floor) {
+  const min = confidenceFloorThreshold(floor);
+  if (min <= 0) return true;
+  const raw = fire?.confidence;
+  if (raw == null || raw === '') return true;
+  const confidence = Number(raw);
+  if (!Number.isFinite(confidence)) return true;
+  return confidence >= min;
+}
+
+/**
+ * Keep detections at or above the confidence floor. All returns a shallow copy.
+ * @param {Array<Object>|null|undefined} fires
+ * @param {'all'|'0.5'|'0.8'|number} floor
+ * @returns {Array<Object>}
+ */
+export function filterFiresByConfidenceFloor(fires, floor) {
+  if (!Array.isArray(fires)) return [];
+  if (confidenceFloorThreshold(floor) <= 0) return fires.slice();
+  return fires.filter((fire) => fireMeetsConfidenceFloor(fire, floor));
 }
 
 /**
@@ -190,8 +245,9 @@ export function createFirmsHeatmapLayer({
   let _error = null;
   let _fires = [];
   let _firesByFrp = [];
-  /** Last-good fetch stays in `_fires`; `_firesByFrp` is the FRP-floor view. */
+  /** Last-good fetch stays in `_fires`; `_firesByFrp` is the floor-filtered view. */
   let _frpFloor = 'all';
+  let _confidenceFloor = 'all';
   let _rowControlsListener = null;
   let _count = 0;
   let _cellCount = 0;
@@ -318,6 +374,7 @@ export function createFirmsHeatmapLayer({
       _fires = [];
       _firesByFrp = [];
       _frpFloor = 'all';
+      _confidenceFloor = 'all';
       _rowControlsListener = null;
       _cellCacheByGrid.clear();
       _count = 0;
@@ -479,30 +536,46 @@ export function createFirmsHeatmapLayer({
     },
 
     /**
-     * FRP floor for the data-panel chips. Re-filters in-memory `_fires` —
-     * never hits /api/firms.
-     * @param {{ frpFloor?: string|number }} [params]
+     * FRP / confidence floors for the data-panel chips. Re-filters in-memory
+     * `_fires` — never hits /api/firms. The two floors AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
-      if (!Object.hasOwn(params, 'frpFloor')) return true;
-      return applyFrpFloor(params.frpFloor);
+      const hasFrp = Object.hasOwn(params, 'frpFloor');
+      const hasConf = Object.hasOwn(params, 'confidenceFloor');
+      if (!hasFrp && !hasConf) return true;
+      return applyVisibleFloors({
+        frpFloor: hasFrp ? params.frpFloor : undefined,
+        confidenceFloor: hasConf ? params.confidenceFloor : undefined,
+      });
     },
 
-    /** @returns {{ frpFloor: 'all'|'10'|'50'|'100' }} */
+    /** @returns {{ frpFloor: 'all'|'10'|'50'|'100', confidenceFloor: 'all'|'0.5'|'0.8' }} */
     getParams() {
-      return { frpFloor: _frpFloor };
+      return { frpFloor: _frpFloor, confidenceFloor: _confidenceFloor };
     },
 
     getRowControls() {
       return {
-        chips: FIRMS_FRP_FLOOR_CHIPS.map((chip) => ({
-          id: `frp-${chip.id}`,
-          label: chip.label,
-          title: chip.title,
-          active: _frpFloor === chip.id,
-          params: { frpFloor: chip.id },
-        })),
+        chips: [
+          ...FIRMS_FRP_FLOOR_CHIPS.map((chip) => ({
+            id: `frp-${chip.id}`,
+            label: chip.label,
+            title: chip.title,
+            active: _frpFloor === chip.id,
+            group: 'FRP',
+            params: { frpFloor: chip.id },
+          })),
+          ...FIRMS_CONFIDENCE_FLOOR_CHIPS.map((chip) => ({
+            id: `conf-${chip.id}`,
+            label: chip.label,
+            title: chip.title,
+            active: _confidenceFloor === chip.id,
+            group: 'Conf',
+            params: { confidenceFloor: chip.id },
+          })),
+        ],
       };
     },
 
@@ -575,9 +648,7 @@ export function createFirmsHeatmapLayer({
       // clearSelectedEntityContextForLayer and emits nothing at all, so an
       // eviction-aware readout never hears that its subject is gone.
       const match = findMatchingFire(previousSelection);
-      const reselected = match && (match.frp || 0) >= frpFloorThresholdMw(_frpFloor)
-        ? match
-        : null;
+      const reselected = match && fireMeetsVisibleFloors(match) ? match : null;
       if (!match && previousSelection) {
         // The selected detection is not in the new payload: it left the feed
         // rather than being deselected. Eviction-aware readouts hold their
@@ -609,23 +680,41 @@ export function createFirmsHeatmapLayer({
 
   /** Rebuild the FRP-sorted visible index from last-good `_fires`. */
   function applyVisibleIndex() {
-    const visible = filterFiresByFrpFloor(_fires, _frpFloor);
+    const visible = filterFiresByConfidenceFloor(
+      filterFiresByFrpFloor(_fires, _frpFloor),
+      _confidenceFloor,
+    );
     _firesByFrp = visible.sort((a, b) => b.frp - a.frp);
     _count = visible.length;
   }
 
+  /** True when the detection clears both operator floors. */
+  function fireMeetsVisibleFloors(fire) {
+    const minMw = frpFloorThresholdMw(_frpFloor);
+    if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
+    return fireMeetsConfidenceFloor(fire, _confidenceFloor);
+  }
+
   /**
-   * Change the FRP floor and re-render from memory. Never fetches.
-   * @param {*} nextFloor
+   * Change FRP and/or confidence floors and re-render from memory. Never fetches.
+   * @param {{ frpFloor?: *, confidenceFloor?: * }} next
    * @returns {boolean}
    */
-  function applyFrpFloor(nextFloor) {
-    const floor = normalizeFrpFloor(nextFloor);
-    const changed = floor !== _frpFloor;
-    _frpFloor = floor;
+  function applyVisibleFloors(next = {}) {
+    let changed = false;
+    if (next.frpFloor !== undefined) {
+      const floor = normalizeFrpFloor(next.frpFloor);
+      if (floor !== _frpFloor) changed = true;
+      _frpFloor = floor;
+    }
+    if (next.confidenceFloor !== undefined) {
+      const floor = normalizeConfidenceFloor(next.confidenceFloor);
+      if (floor !== _confidenceFloor) changed = true;
+      _confidenceFloor = floor;
+    }
     applyVisibleIndex();
     _cellCacheByGrid.clear();
-    if (_selectedFire && (_selectedFire.frp || 0) < frpFloorThresholdMw(_frpFloor)) {
+    if (_selectedFire && !fireMeetsVisibleFloors(_selectedFire)) {
       clearFireSelection();
     }
     if (_enabled && _dataSource && _viewer) renderCurrentLod(true);
