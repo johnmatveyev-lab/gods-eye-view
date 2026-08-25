@@ -370,7 +370,9 @@ import {
   cycleFilteredCctvCamera,
   listCctvCityFilterOptions,
   readCctvCityFilter,
+  readCctvHideNoFeed,
   writeCctvCityFilter,
+  writeCctvHideNoFeed,
 } from './data/cctvCityFilter.js';
 import {
   filterVisibleCctvSources,
@@ -2581,6 +2583,7 @@ export class StyleManager {
     this._refreshRadioTunerBand = null;
     this._cctvState = null;
     this._cctvCityFilterValue = readCctvCityFilter(globalThis.localStorage);
+    this._cctvHideNoFeed = readCctvHideNoFeed(globalThis.localStorage);
     this._cctvCityFilterSignature = '';
     this._cctvHideUnhealthy = readCctvHideUnhealthy(globalThis.localStorage);
     this._cctvSummaryTypingTimer = null;
@@ -2815,6 +2818,7 @@ export class StyleManager {
     this._cctvNextBtn = document.getElementById('cctv-next-btn');
     this._cctvSelect = document.getElementById('cctv-camera-select');
     this._cctvCityFilter = document.getElementById('cctv-city-filter');
+    this._cctvHideNoFeedBtn = document.getElementById('cctv-hide-no-feed-btn');
     this._cctvHideUnhealthyBtn = document.getElementById('cctv-hide-unhealthy-btn');
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
     this._cctvCoverageBtn = document.getElementById('cctv-coverage-btn');
@@ -7366,6 +7370,17 @@ export class StyleManager {
       this._renderCctvState(this._cctvState);
     });
 
+    this._cctvHideNoFeedBtn?.addEventListener('click', () => {
+      this._cctvHideNoFeed = writeCctvHideNoFeed(
+        globalThis.localStorage,
+        !this._cctvHideNoFeed,
+      );
+      this._dataManager?.setLayerParams('cctv', {
+        hideNoFeed: this._cctvHideNoFeed,
+      }, { origin: 'user' });
+      this._renderCctvState(this._cctvState);
+    });
+
     this._cctvHideUnhealthyBtn?.addEventListener('click', () => {
       this._cctvHideUnhealthy = writeCctvHideUnhealthy(
         globalThis.localStorage,
@@ -7772,6 +7787,9 @@ export class StyleManager {
    */
   _renderCctvState(state) {
     this._cctvState = state || null;
+    if (typeof state?.hideNoFeed === 'boolean') {
+      this._cctvHideNoFeed = state.hideNoFeed;
+    }
     const cameras = state?.cameras || [];
     const enabled = !!state?.enabled && !!this._dataManager?.isEnabled('cctv');
     const activeId = state?.activeCameraId || '';
@@ -7812,6 +7830,10 @@ export class StyleManager {
       feedType: this._cctvFeedTypeFilter || '',
       selectedId: activeId,
     });
+    if (this._cctvHideNoFeedBtn) {
+      this._cctvHideNoFeedBtn.classList.toggle('active', this._cctvHideNoFeed);
+      this._cctvHideNoFeedBtn.setAttribute('aria-pressed', String(this._cctvHideNoFeed));
+    }
     if (this._cctvHideUnhealthyBtn) {
       this._cctvHideUnhealthyBtn.classList.toggle('active', this._cctvHideUnhealthy);
       this._cctvHideUnhealthyBtn.setAttribute('aria-pressed', this._cctvHideUnhealthy ? 'true' : 'false');

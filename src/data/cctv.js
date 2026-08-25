@@ -105,6 +105,11 @@ import {
   sourceMatchesHealthFilter,
   writeCctvHideUnhealthy,
 } from './cctvHealthFilter.js';
+import {
+  readCctvHideNoFeed,
+  sourceMatchesHideNoFeed,
+  writeCctvHideNoFeed,
+} from './cctvCityFilter.js';
 
 // ---------------------------------------------------------------------------
 // API endpoints
@@ -290,6 +295,7 @@ let _activeCameraId = null;
 let _coverageMode = 'on'; // 'off' | 'on' (wireframes) | 'viewshed' (color-coded volumes)
 let _showProjection = true;
 let _autoHop = false;
+let _hideNoFeed = false;
 // An explicit empty-space deselect keeps AUTO HOP configured but prevents its
 // timer from silently choosing a replacement. A later explicit activation or
 // AUTO HOP toggle-on releases the hold.
@@ -2656,7 +2662,7 @@ function buildCoverageVisibleSet(activeRecord) {
   // invent an arbitrary catalog-order cohort.
   if (!activeRecord) return new Set();
 
-  const ranked = _records.map((record) => {
+  const ranked = _records.filter(catalogRecordVisible).map((record) => {
     if (record === activeRecord) {
       return { record, distKm: -1 };
     }
@@ -2714,6 +2720,31 @@ function rebuildViewshedVolume(record, isActive) {
   record.viewshedActiveTint = !!isActive;
 }
 
+function catalogRecordVisible(record) {
+  return sourceMatchesHideNoFeed(record?.camera, _hideNoFeed, {
+    selectedId: _activeCameraId,
+  });
+}
+
+/**
+ * Re-applies icon / card / coverage visibility from the in-memory catalog.
+ * Does not fetch /api/cctv/sources or /api/cctv/frame.
+ */
+function applyCatalogVisibility() {
+  for (const record of _records) {
+    if (!record?.billboard) continue;
+    record.billboard.show = catalogRecordVisible(record);
+  }
+  refreshHorizonCulling();
+  refreshCoverageStyles();
+  refreshAmbientCards();
+}
+
+/** Test seam: hide-no-feed reapplies the cached catalog without a sources fetch. */
+export function applyCctvCatalogVisibility() {
+  applyCatalogVisibility();
+}
+
 /**
  * Updates visual styles (colors, widths, visibility) for all camera billboards,
  * coverage polylines, viewshed volumes, and projection entities based on which
@@ -2752,8 +2783,9 @@ function refreshHorizonCulling() {
   for (const record of _records) {
     const bb = record.billboard;
     if (!bb) continue;
-    const visible = occluder.isPointVisible(bb.position)
-      && cameraPassesHealthVisibility(record.camera.id);
+    const visible = catalogRecordVisible(record)
+      && cameraPassesHealthVisibility(record.camera.id)
+      && occluder.isPointVisible(bb.position);
     if (bb.show !== visible) bb.show = visible;
   }
 }
@@ -2808,7 +2840,7 @@ function refreshAmbientCards() {
   const screenById = new Map();
   for (const record of _records) {
     const id = record.camera.id;
-    if (id === activeId || !record.position) continue;
+    if (id === activeId || !record.position || !catalogRecordVisible(record)) continue;
     if (!cameraPassesHealthVisibility(id)) continue;
     let inView = false;
     let sx = NaN;
@@ -3461,6 +3493,7 @@ function getPublicCameraState(record, activeId = null) {
     // Panel-only trust signal (design §3b, amended by LOCKED §9.2/§9.3): no
     // in-world rendering reads this, no score-based quality math backs it.
     calBadge: deriveCalBadge(camera),
+    feedConfigured: camera.feedConfigured === true,
     poseSource: camera.poseSource || null,
     basePose: camera.basePose ? { ...camera.basePose } : null,
     frameUrl: frameUrlFor(camera, refreshMs),
@@ -3484,6 +3517,7 @@ function uiState() {
     showProjection: _showProjection,
     calibrationMode: _calibrationMode,
     autoHop: _autoHop,
+    hideNoFeed: _hideNoFeed,
     autoHopSuspended: _autoHopSuspended,
     autoHopSec: _autoHopSec,
     count: _count,
@@ -3772,11 +3806,7 @@ export function setActiveCamera(cameraId) {
   rearmGroundResolution(record);
   updateRecordGeometry(record);
   record.activationDone = true;
-  refreshCoverageStyles();
-  // The newly active camera leaves the ambient ring (its monitor plane takes
-  // over); the freed slot re-fills on this same pass.
-  refreshAmbientCards();
-  refreshHorizonCulling();
+  applyCatalogVisibility();
   // ADJUST mode follows the active camera.
   _gizmo?.refresh();
   notifyListeners();
@@ -3798,9 +3828,7 @@ export function deactivateActiveCamera() {
   clearProbeClampOnDeactivation(record, (previous) => {
     applyFrustumGeometry(previous, groundAltFor(previous));
   });
-  refreshCoverageStyles();
-  refreshAmbientCards();
-  refreshHorizonCulling();
+  applyCatalogVisibility();
   _gizmo?.refresh();
   notifyListeners();
   return true;
@@ -4044,6 +4072,7 @@ export function _setCctvCoverageStateForTest({
   enabled = true,
   coverageMode = 'on',
   showProjection = false,
+  hideNoFeed = false,
 } = {}) {
   _viewer = viewer;
   _records = Array.isArray(records) ? records : [];
@@ -4060,6 +4089,7 @@ export function _setCctvCoverageStateForTest({
   _enabled = !!enabled;
   _coverageMode = normalizeCoverageMode(coverageMode, 'on');
   _showProjection = !!showProjection;
+  if (typeof hideNoFeed === 'boolean') _hideNoFeed = hideNoFeed;
 }
 
 /**
@@ -4235,6 +4265,11 @@ const cctvLayer = {
     _lastHopAt = 0;
     _lastViewContext = '';
     _calibrationById = loadCalibrationStore();
+    try {
+      _hideNoFeed = readCctvHideNoFeed(globalThis.localStorage);
+    } catch {
+      _hideNoFeed = false;
+    }
 
     _billboards = new Cesium.BillboardCollection();
     _viewer.scene.primitives.add(_billboards);
@@ -4696,6 +4731,15 @@ const cctvLayer = {
         _gizmo?.setEnabled(false);
       }
     }
+    if (typeof params.hideNoFeed === 'boolean' && params.hideNoFeed !== _hideNoFeed) {
+      _hideNoFeed = params.hideNoFeed;
+      try {
+        writeCctvHideNoFeed(globalThis.localStorage, _hideNoFeed);
+      } catch {
+        // Fail open: the in-memory catalog still applies.
+      }
+      applyCatalogVisibility();
+    }
     if (params.focusSelected && _activeCameraId) {
       focusCamera(_activeCameraId, Number(params.focusDurationSec) || 1.8);
     }
@@ -4724,6 +4768,7 @@ const cctvLayer = {
       showProjection: _showProjection,
       calibrationMode: _calibrationMode,
       autoHop: _autoHop,
+      hideNoFeed: _hideNoFeed,
       autoHopSec: _autoHopSec,
       hideUnhealthy: _hideUnhealthy,
       selectedCameraId: active?.camera.id || null,

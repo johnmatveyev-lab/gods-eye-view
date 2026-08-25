@@ -63,6 +63,7 @@ import cctvLayer, {
   refreshCoverageStyles,
   setCctvCardPresentationOptions,
   setActiveCamera,
+  applyCctvCatalogVisibility,
 } from './cctv.js';
 import {
   CCTV_ACTIVATION_RESULT,
@@ -1332,5 +1333,60 @@ test('Hide unhealthy toggle reuses the in-memory health map and does not refetch
   } finally {
     globalThis.fetch = originalFetch;
     cctvLayer.setParams({ hideUnhealthy: false });
+  }
+});
+
+test('hide-no-feed catalog visibility skips unconfigured icons and coverage but keeps the selected camera', () => {
+  const seed = {
+    camera: { id: 'seed-cam', name: 'Seed', city: 'Austin', feedConfigured: false, lat: 30.26, lon: -97.74, headingDeg: 0, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  const live = {
+    camera: { id: 'live-cam', name: 'Live', city: 'Austin', feedConfigured: true, lat: 30.27, lon: -97.75, headingDeg: 10, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  try {
+    _setCctvCoverageStateForTest({
+      records: [seed, live],
+      activeCameraId: 'live-cam',
+      hideNoFeed: false,
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(cctvLayer.getParams().hideNoFeed, false);
+    assert.equal(seed.billboard.show, true, 'off matches the current catalog');
+    assert.equal(live.billboard.show, true);
+
+    _setCctvCoverageStateForTest({
+      records: [seed, live],
+      activeCameraId: 'live-cam',
+      hideNoFeed: true,
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(cctvLayer.getParams().hideNoFeed, true);
+    assert.equal(seed.billboard.show, false, 'unconfigured icon hides');
+    assert.equal(live.billboard.show, true, 'configured icon stays');
+    assert.equal(seed.coverageEntities[0].show, false, 'unconfigured coverage hides');
+
+    _setCctvCoverageStateForTest({
+      records: [seed, live],
+      activeCameraId: 'seed-cam',
+      hideNoFeed: true,
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    seed.billboard.show = false;
+    applyCctvCatalogVisibility();
+    assert.equal(seed.billboard.show, true, 'selected unconfigured camera stays');
+    assert.equal(live.billboard.show, true);
+  } finally {
+    _setCctvCoverageStateForTest({ enabled: false, hideNoFeed: false });
   }
 });

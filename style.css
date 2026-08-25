@@ -8069,10 +8069,15 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.45;
 }
 
+#cctv-hide-no-feed-btn {
+  flex: 0 0 auto;
+}
+
 #cctv-enable-btn.active,
 #cctv-coverage-btn.active,
 #cctv-auto-hop-btn.active,
-#cctv-projection-btn.active {
+#cctv-projection-btn.active,
+#cctv-hide-no-feed-btn.active {
   color: var(--accent);
   border-color: var(--accent);
   background: rgba(0, 212, 255, 0.14);

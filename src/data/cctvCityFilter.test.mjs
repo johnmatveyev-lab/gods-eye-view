@@ -5,14 +5,20 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import {
   CCTV_CITY_FILTER_STORAGE_KEY,
+  CCTV_HIDE_NO_FEED_DEFAULT,
+  CCTV_HIDE_NO_FEED_STORAGE_KEY,
   cctvSelectedFrameSrc,
   cycleFilteredCctvCamera,
   filterCctvSources,
   listCctvCityFilterOptions,
   normalizeCctvCityFilter,
+  normalizeCctvHideNoFeed,
   readCctvCityFilter,
+  readCctvHideNoFeed,
   sourceMatchesCityFilter,
+  sourceMatchesHideNoFeed,
   writeCctvCityFilter,
+  writeCctvHideNoFeed,
 } from './cctvCityFilter.js';
 import {
   CCTV_HIDE_UNHEALTHY_STORAGE_KEY,
@@ -64,6 +70,42 @@ const CATALOG = Object.freeze([
     cityId: 'london',
     provider: 'Transport for London',
     frameUrl: '/api/cctv/frame/tfl-00002.00865?label=Oxford%20Circus&city=London',
+  },
+]);
+
+/** Rows shaped like the in-memory CCTV catalog: seeds have feedConfigured false. */
+const FEED_CATALOG = Object.freeze([
+  {
+    id: 'seed-1',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'OSM Camera Grid',
+    feedConfigured: false,
+    frameUrl: '/api/cctv/frame/seed-1?label=Seed',
+  },
+  {
+    id: 'live-1',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'Austin Transportation & Public Works',
+    feedConfigured: true,
+    frameUrl: '/api/cctv/frame/live-1?label=Live',
+  },
+  {
+    id: 'nourl-1',
+    city: 'London',
+    cityId: 'london',
+    provider: 'Transport for London',
+    feedConfigured: false,
+    frameUrl: '/api/cctv/frame/nourl-1?label=NoUrl',
+  },
+  {
+    id: 'live-2',
+    city: 'London',
+    cityId: 'london',
+    provider: 'Transport for London',
+    feedConfigured: true,
+    frameUrl: '/api/cctv/frame/live-2?label=Oxford',
   },
 ]);
 
@@ -191,6 +233,128 @@ test('public camera state exposes cityId for the panel filter', () => {
   assert.match(publicState[0], /sourceStatus:\s*health\?\.status/);
   assert.match(publicState[0], /feedConfigured:\s*camera\.feedConfigured/);
   assert.match(publicState[0], /frameUrl:\s*frameUrlFor\(camera/);
+  assert.match(publicState[0], /feedConfigured:\s*camera\.feedConfigured === true/);
+});
+
+test('hide-no-feed off matches the current catalog', () => {
+  assert.equal(CCTV_HIDE_NO_FEED_DEFAULT, false);
+  assert.equal(normalizeCctvHideNoFeed(undefined), false);
+  assert.equal(sourceMatchesHideNoFeed(FEED_CATALOG[0], false), true);
+  assert.deepEqual(
+    filterCctvSources(CATALOG, '').map((source) => source.id),
+    CATALOG.map((source) => source.id),
+  );
+  assert.deepEqual(
+    filterCctvSources(FEED_CATALOG, '', { hideNoFeed: false }).map((source) => source.id),
+    FEED_CATALOG.map((source) => source.id),
+  );
+});
+
+test('hide-no-feed on hides seed/no-url cameras and keeps configured ones', () => {
+  assert.equal(sourceMatchesHideNoFeed(FEED_CATALOG[0], true), false);
+  assert.equal(sourceMatchesHideNoFeed(FEED_CATALOG[1], true), true);
+  assert.equal(sourceMatchesHideNoFeed({ id: 'missing-flag' }, true), true);
+  const hidden = filterCctvSources(FEED_CATALOG, '', { hideNoFeed: true });
+  assert.deepEqual(hidden.map((source) => source.id), ['live-1', 'live-2']);
+  assert.ok(hidden.every((source) => source.feedConfigured === true));
+});
+
+test('selected unconfigured camera stays when hide-no-feed is on', () => {
+  assert.equal(sourceMatchesHideNoFeed(FEED_CATALOG[0], true, { selectedId: 'seed-1' }), true);
+  const kept = filterCctvSources(FEED_CATALOG, '', {
+    hideNoFeed: true,
+    selectedId: 'nourl-1',
+  });
+  assert.deepEqual(kept.map((source) => source.id), ['live-1', 'nourl-1', 'live-2']);
+});
+
+test('hide-no-feed ANDs with the existing city/source filter', () => {
+  const austinHidden = filterCctvSources(FEED_CATALOG, 'austin', { hideNoFeed: true });
+  assert.deepEqual(austinHidden.map((source) => source.id), ['live-1']);
+  const londonHidden = filterCctvSources(FEED_CATALOG, 'london', {
+    hideNoFeed: true,
+    selectedId: 'seed-1',
+  });
+  assert.deepEqual(londonHidden.map((source) => source.id), ['live-2']);
+  const austinSelected = filterCctvSources(FEED_CATALOG, 'austin', {
+    hideNoFeed: true,
+    selectedId: 'seed-1',
+  });
+  assert.deepEqual(austinSelected.map((source) => source.id), ['seed-1', 'live-1']);
+});
+
+test('hide-no-feed persists with existing CCTV prefs and defaults off', () => {
+  const storage = memoryStorage();
+  assert.equal(readCctvHideNoFeed(storage), false);
+  assert.equal(writeCctvHideNoFeed(storage, true), true);
+  assert.equal(storage.getItem(CCTV_HIDE_NO_FEED_STORAGE_KEY), '1');
+  assert.equal(readCctvHideNoFeed(storage), true);
+  assert.equal(writeCctvHideNoFeed(storage, false), false);
+  assert.equal(readCctvHideNoFeed(storage), false);
+  writeCctvCityFilter(storage, 'austin');
+  assert.equal(storage.getItem(CCTV_CITY_FILTER_STORAGE_KEY), 'austin');
+  assert.equal(readCctvCityFilter(storage), 'austin');
+});
+
+test('CCTV panel has a Hide no feed toggle next to the city/source filter', () => {
+  const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const panel = html.match(/<div id="cctv-panel"[\s\S]*?<div id="scene-panel"/);
+  assert.ok(panel, 'cctv-panel markup is missing');
+  assert.match(panel[0], /id="cctv-hide-no-feed-btn"/);
+  assert.match(panel[0], /id="cctv-city-filter"/);
+  const cityAt = panel[0].indexOf('id="cctv-city-filter"');
+  const hideAt = panel[0].indexOf('id="cctv-hide-no-feed-btn"');
+  const cameraAt = panel[0].indexOf('id="cctv-camera-select"');
+  assert.ok(cityAt < hideAt && hideAt < cameraAt, 'toggle must sit next to city/source above the camera list');
+  assert.match(panel[0], /aria-pressed="false"/);
+  assert.match(panel[0], /Hide no feed/i);
+  assert.doesNotMatch(panel[0], /OpenSky/i);
+  assert.doesNotMatch(panel[0], /Google News/i);
+  assert.doesNotMatch(panel[0], /TeleGeography/i);
+});
+
+test('panel render ANDs hide-no-feed with the city filter and keeps the selected camera', () => {
+  const ui = readFileSync(path.join(ROOT, 'src/ui.js'), 'utf8');
+  assert.match(ui, /readCctvHideNoFeed/);
+  assert.match(ui, /writeCctvHideNoFeed/);
+  assert.match(ui, /_cctvHideNoFeed/);
+  const visible = ui.match(/_visibleCctvCameras\(\) \{[\s\S]*?\n  \}/);
+  assert.ok(visible, '_visibleCctvCameras is missing');
+  assert.match(visible[0], /filterCctvSources/);
+  assert.match(visible[0], /hideNoFeed/);
+  assert.match(visible[0], /selectedId/);
+  const renderer = ui.match(/_renderCctvState\(state\) \{[\s\S]*?\n  \}\n/);
+  assert.ok(renderer, '_renderCctvState is missing');
+  assert.match(renderer[0], /hideNoFeed:\s*this\._cctvHideNoFeed/);
+  assert.doesNotMatch(ui, /\/api\/cctv\/cities/);
+  assert.doesNotMatch(ui, /\/api\/cctv\/hide/);
+});
+
+function extractNamedFunction(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `${name} is missing`);
+  return source.slice(start, start + 2200);
+}
+
+test('catalog visibility re-applies from memory and does not refetch sources', () => {
+  const source = readFileSync(path.join(ROOT, 'src/data/cctv.js'), 'utf8');
+  assert.match(source, /from '\.\/cctvCityFilter\.js'/);
+  assert.match(source, /sourceMatchesHideNoFeed/);
+  assert.match(source, /_hideNoFeed/);
+  const apply = extractNamedFunction(source, 'applyCatalogVisibility');
+  assert.doesNotMatch(apply, /loadCameraSources/);
+  assert.doesNotMatch(apply, /SOURCE_ENDPOINT|FRAME_ENDPOINT/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/sources/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/frame/);
+  assert.match(apply, /refreshHorizonCulling/);
+  assert.match(apply, /refreshCoverageStyles/);
+  assert.match(apply, /refreshAmbientCards/);
+  assert.match(extractNamedFunction(source, 'refreshHorizonCulling'), /catalogRecordVisible/);
+  assert.match(extractNamedFunction(source, 'refreshAmbientCards'), /catalogRecordVisible/);
+  assert.match(extractNamedFunction(source, 'buildCoverageVisibleSet'), /catalogRecordVisible/);
+  assert.match(source, /typeof params\.hideNoFeed === 'boolean'/);
+  assert.match(source, /applyCatalogVisibility\(\)/);
+  assert.doesNotMatch(source, /\/api\/cctv\/hide/);
 });
 
 const HEALTH_CATALOG = Object.freeze([

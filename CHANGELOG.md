@@ -86,6 +86,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   fetch. Missing or non-finite confidence stays visible. The floor ANDs
   with the existing FRP chips. The choice persists on `local-firms`
   (`w.c.*`). Same VIIRS proxy, quota, and TTL. Not an alert service.
+- CCTV panel has a client-only **Hide no feed** toggle next to the city/source
+  filter. Off (default) keeps the current catalog. On skips cameras with
+  `feedConfigured === false` before icons, cards, and coverage, ANDs with the
+  city filter, and keeps a selected unconfigured camera. Re-applies from the
+  in-memory catalog — no extra `/api/cctv/sources` or `/frame` fetch. Persists
+  as `meridian.cctvHideNoFeed`. Same hosted CCTV catalog. Not an alert service.
 - Earthquake depth chips — Shallow | Intermediate | Deep — sit next to the
   existing magnitude floor. Default all on, same buckets as the disc colors
   (shallow <70 km, intermediate 70–300, deep ≥300). Chip changes re-filter
