@@ -3298,51 +3298,58 @@ function _startTrail(icao24) {
 }
 
 /**
- * Fire-and-forget OpenSky /tracks backfill (PRD F1). On success, splices
- * waypoints strictly older than the oldest seeded fix AHEAD of the locally
+ * Fire-and-forget adsb.lol readsb trace backfill (PRD F1). Trace points are
+ * spliced strictly older than the oldest seeded fix AHEAD of the locally
  * accumulated fine segment, capped at TRAIL_MAX_POINTS (newest kept). Any
- * failure (404/429/timeout/malformed) silently keeps the local-only trail.
+ * failure (404/410/timeout/malformed) silently keeps the local-only trail.
+ * OpenSky /tracks is not contacted — that route stays 410 on this host.
  * @param {string} icao24 - ICAO 24-bit transponder address being tracked.
  * @param {number} token - Backfill token captured at request time.
  * @param {number} oldestFixEpochSec - Epoch seconds of the oldest seeded fix.
  * @returns {Promise<void>}
  */
 async function _backfillTrail(icao24, token, oldestFixEpochSec) {
-  let path = null;
+  let baseEpochSec = null;
+  let trace = null;
   try {
-    const response = await fetch('/api/opensky-track?icao24=' + encodeURIComponent(icao24), {
+    const response = await fetch('/api/adsblol/trace?hex=' + encodeURIComponent(icao24), {
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return;
     const data = await response.json();
-    path = Array.isArray(data?.path) ? data.path : null;
+    baseEpochSec = Number(data?.timestamp);
+    trace = Array.isArray(data?.trace) ? data.trace : null;
   } catch {
     return; // silent fallback to the accumulated trail
   }
-  if (!path || token !== _trailBackfillToken || icao24 !== _trackedIcao) return;
+  if (!trace || !Number.isFinite(baseEpochSec)) return;
+  if (token !== _trailBackfillToken || icao24 !== _trackedIcao) return;
 
-  // OpenSky track waypoints: [time, latitude, longitude, baro_altitude, true_track, on_ground]
-  // Height-datum fix (Task 6): /tracks only ever reports barometric/MSL altitude
-  // (no per-waypoint geo_altitude in this endpoint), so waypoint render height is
-  // the documented visual FALLBACK baroM + geoidHeight(waypointLat, waypointLon)
-  // — geometrically approximate, not exact, same honesty caveat as the live
-  // baro-fallback branch of pickRenderAltitudeM.
+  // Height-datum fix (Task 6, same readsb parse as militaryFlights.js): a
+  // readsb trace point's altitude is barometric feet (same datum as the live
+  // alt_baro, NOT geometric), so a trail waypoint's render height is the same
+  // documented visual FALLBACK the live path uses — baroM + geoidHeight(lat,lon)
+  // — geometrically approximate, not exact.
   await ensureGeoidReady();
+
+  // readsb trace points: [secondsAfterTimestamp, lat, lon, alt_ft|'ground'|null, gs_kt, track, flags, ...]
   const parsed = [];
-  for (const waypoint of path) {
-    if (!Array.isArray(waypoint)) continue;
-    const [time, lat, lon, baroAlt] = waypoint;
+  for (const point of trace) {
+    if (!Array.isArray(point)) continue;
+    const t = baseEpochSec + Number(point[0]);
+    const lat = Number(point[1]);
+    const lon = Number(point[2]);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-    if (!Number.isFinite(time) || time >= oldestFixEpochSec) continue;
-    parsed.push({ lat, lon, baroAlt });
+    if (!Number.isFinite(t) || t >= oldestFixEpochSec) continue;
+    parsed.push({ lat, lon, altFt: point[3] });
   }
   if (!parsed.length) return;
 
   // Field-test fix (WAKE01 trail-underground, 2026-07-06 — mirror of
-  // militaryFlights.js): resolve the coarse ellipsoidal ground along the track
-  // and floor every waypoint at it so low baro segments never dive below the
-  // mesh; a no-baro waypoint (predominantly taxi/ground segments in /tracks)
-  // sits ON the surface when the floor is known.
+  // militaryFlights.js): resolve the coarse ellipsoidal ground along the
+  // readsb trace and floor every waypoint at it so low baro segments never
+  // dive below the mesh; a no-baro waypoint (predominantly taxi/ground
+  // segments) sits ON the surface when the floor is known.
   // Round-2 fix: the
   // resolve is BOUNDED (≤1.2 s), not a blocking await — a cold Re:Earth
   // lookup across a long path could stall the paint for seconds-to-timeout.
@@ -3355,8 +3362,10 @@ async function _backfillTrail(icao24, token, oldestFixEpochSec) {
 
   const older = [];
   let lastAltM = null; // carry-forward for no-baro points whose cell isn't warm yet
-  for (const { lat, lon, baroAlt } of parsed) {
-    const baroM = Number.isFinite(baroAlt) ? baroAlt + geoidHeight(lat, lon) : null;
+  for (const { lat, lon, altFt } of parsed) {
+    const baroM = (altFt === 'ground' || altFt == null || !Number.isFinite(Number(altFt)))
+      ? null
+      : Number(altFt) * 0.3048 + geoidHeight(lat, lon);
     let altM = floorAltitudeM(baroM, cachedGroundFloor(lat, lon));
     // No baro + unresolved floor: hold the previous waypoint's altitude
     // (continuity — never a dive/spike to a made-up height). Leading points
