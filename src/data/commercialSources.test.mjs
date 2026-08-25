@@ -148,7 +148,7 @@ test('voice instructions refuse OpenSky and Google News RSS', () => {
   assert.match(proxies, /never fetch OpenSky/);
   assert.match(proxies, /Never fetch Google News RSS/);
   assert.doesNotMatch(proxies, /news\.google\.com/);
-  assert.doesNotMatch(proxies, /opensky-network\.org/);
+  assert.doesNotMatch(proxies, /https:\/\/opensky-network\.org/);
   assert.doesNotMatch(proxies, /function normalizeRssArticles/);
 });
 

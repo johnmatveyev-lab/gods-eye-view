@@ -206,8 +206,8 @@ function fail(detail) { return { status: FAIL, detail }; }
 
 // ── finding 4: attribution coverage fails closed ──────────────────────────
 test('flights attribution expects adsb.lol, not OpenSky', () => {
-  assert.match(CREDIT_EXPECTATIONS.flights, /adsb\.lol/i);
-  assert.doesNotMatch(String(CREDIT_EXPECTATIONS.flights), /OpenSky/i);
+  assert.match(CREDIT_EXPECTATIONS.flights.source, /adsb\\.lol/);
+  assert.doesNotMatch(CREDIT_EXPECTATIONS.flights.source, /OpenSky/i);
 });
 
 test('every layer the matrix can enable has an attribution expectation', () => {
