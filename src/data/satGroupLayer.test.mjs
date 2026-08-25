@@ -84,7 +84,7 @@ test('switching group fetches the new TLE set and updates the layer', async () =
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.ok(urls.some((url) => url === '/api/celestrak/weather'));
     assert.equal(urls.some((url) => url.includes('/api/celestrak/active')), false);
-    assert.equal(_catalogGroupForTest(28654), 'weather');
+    assert.equal(_catalogGroupForTest(28654), 'weather-leo');
     assert.equal(_catalogGroupForTest(33333), undefined, 'previous TLE set must be replaced');
     assert.equal(satellitesLayer.getStats().count, 1);
   } finally {

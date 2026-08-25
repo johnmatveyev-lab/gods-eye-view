@@ -435,7 +435,7 @@ test('Weather rebuild drops 25544 from the catalog but keeps the ISS pass', asyn
     setSatGroup('weather', storage);
     await satellitesLayer.update(VIEWER);
     assert.equal(_catalogGroupForTest(25544), undefined, 'Weather bodies have no NORAD 25544');
-    assert.equal(_catalogGroupForTest(28654), 'weather');
+    assert.equal(_catalogGroupForTest(28654), 'weather-leo');
     const result = getNextIssPass({ ...AUSTIN, fromMs: FROM_MS });
     assert.equal(result.status, 'ok', 'retained ISS satrec must still compute a pass');
     assert.ok(result.pass.riseMs > FROM_MS);
@@ -459,7 +459,7 @@ test('persisted satGroup=weather sidecars stations once for NORAD 25544', async 
     assert.deepEqual(weatherFetches, ['/api/celestrak/weather']);
     assert.deepEqual(stationFetches, ['/api/celestrak/stations'], 'one stations sidecar');
     assert.equal(_catalogGroupForTest(25544), undefined, 'sidecar must not insert ISS into the Weather catalog');
-    assert.equal(_catalogGroupForTest(28654), 'weather');
+    assert.equal(_catalogGroupForTest(28654), 'weather-leo');
     const result = getNextIssPass({ ...AUSTIN, fromMs: FROM_MS });
     assert.equal(result.status, 'ok');
     assert.ok(result.pass.riseMs > FROM_MS);
