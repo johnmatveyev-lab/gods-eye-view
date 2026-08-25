@@ -12,6 +12,7 @@ import {
   clampBloomIntensity,
   decodeBloomIntensity,
 } from './bloom.js';
+import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
@@ -138,6 +139,7 @@ import {
   shareCacheNeedsHeal,
   shareableDetectionState,
 } from './contactsDetectionPolicy.js';
+import { pinRequiredCredits } from './data/dataCredits.js';
 import { formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
@@ -767,6 +769,7 @@ class CockpitViewController {
     this.localCondition = document.getElementById('cockpit-local-condition');
     this.localCloud = document.getElementById('cockpit-local-cloud');
     this.localPrecipitation = document.getElementById('cockpit-local-precipitation');
+    this.weatherCredit = document.querySelector('.cockpit-weather-credit');
     this.signalCollapsed = false;
     this.signalUserCollapsed = false;
     this.signalItems = [];
@@ -1811,6 +1814,7 @@ class CockpitViewController {
     if (status === 'unavailable') this.newsList?.replaceChildren();
     if (this.localPlace && status === 'loading') this.localPlace.textContent = 'RESOLVING REGION';
     if (this.localPlace && status === 'unavailable') this.localPlace.textContent = 'REGION UNAVAILABLE';
+    this.updateWeatherCredit(null);
     this.updateLocalPosition(info);
   }
 
@@ -1844,6 +1848,7 @@ class CockpitViewController {
     if (this.localPlace) this.localPlace.textContent = placeLabel.toUpperCase();
     this.updateLocalPosition(info);
     const weather = payload?.weather;
+    this.updateWeatherCredit(weather);
     if (this.localTemperature) {
       this.localTemperature.textContent = Number.isFinite(weather?.temperatureC)
         ? `${Math.round(weather.temperatureC)}°C` : '—';
@@ -1869,6 +1874,13 @@ class CockpitViewController {
       this.briefSource.textContent = `${String(payload?.newsSource || 'REGIONAL NEWS').toUpperCase()} · LOCATION QUERY`;
     }
     this.scheduleContextLayout();
+  }
+
+  /** Open-Meteo credit is required only while weather values are on screen. */
+  updateWeatherCredit(weather) {
+    if (!this.weatherCredit) return;
+    const shown = Boolean(weather && Number.isFinite(weather.temperatureC));
+    this.weatherCredit.hidden = !shown;
   }
 
   renderCockpitSignals() {
@@ -2377,6 +2389,7 @@ export class StyleManager {
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
+    this._homeViewBtn = document.getElementById('home-view');
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
@@ -2647,6 +2660,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initClearSelectedLayersButton();
+    this._initHomeViewButton();
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -3349,7 +3363,7 @@ export class StyleManager {
       btn.addEventListener('click', () => this.setStyle(btn.dataset.style));
     });
 
-    // Keyboard shortcuts: 1-7, H, Escape
+    // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f') otherwise fire while a
@@ -3373,10 +3387,22 @@ export class StyleManager {
         }
       }
       if (e.key.toLowerCase() === 'h') {
+        // h = HUD toggle — Home view uses the Home key, not H
         this.shareLinkManager?.claimRestoreLane?.('visual');
         this.hud.toggle();
         this._updateHudButtonState();
         this._syncShareState();
+      }
+      if (e.key === 'Home') {
+        if (
+          e.target === this._radioTunerSlider
+          || e.target === this._globalContextFlightsBtn
+          || e.target === this._globalContextMissionsBtn
+        ) {
+          return;
+        }
+        e.preventDefault();
+        this.goHome();
       }
       if (e.key.toLowerCase() === 'o') this._toggleOrbit();
       if (e.key.toLowerCase() === 'v') this.toggleCleanView();
@@ -7784,6 +7810,7 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.classList.toggle('active', shouldEnable);
     }
+    pinRequiredCredits();
     this._scheduleLeftPanelLayout();
   }
 
@@ -8867,6 +8894,7 @@ export class StyleManager {
     this._recordingConfig = { hidePanels, hudMode, safeFrame };
 
     document.body.classList.toggle('recording-mode', this._recordingMode && hidePanels);
+    pinRequiredCredits();
 
     if (this._safeFrameOverlay) {
       this._safeFrameOverlay.classList.remove('ratio-9-16', 'ratio-16-9');
@@ -9617,6 +9645,25 @@ export class StyleManager {
       this.orbitController.stop();
       this._orbitIndicator.classList.remove('active');
     }
+  }
+
+  /** Wire the Home control that flies to the settled first-load camera. */
+  _initHomeViewButton() {
+    this._homeViewBtn?.addEventListener('click', () => this.goHome());
+  }
+
+  /**
+   * Fly to the default first-load camera. Does not delete lastView;
+   * moveEnd overwrites the slot after the flight.
+   */
+  goHome() {
+    this._stopOrbit();
+    if (this.viewer) {
+      this.viewer.trackedEntity = undefined;
+      this.viewer.camera?.cancelFlight?.();
+      this.viewer.camera?.lookAtTransform?.(Cesium.Matrix4.IDENTITY);
+    }
+    flyToHomeView(this.viewer);
   }
 
   /** Wire the persistent reset control to the same route used by voice. */

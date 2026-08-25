@@ -205,3 +205,23 @@ test('unknown live /api path is a handler 404, not a missing function', async ()
   assert.equal(status, 404);
   assert.equal(json.error, 'Not found');
 });
+
+test('hosted Vercel does not wrap AISStream; /api/ais-live is an honest 404', async () => {
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
+  const previous = process.env.AISSTREAM_API_KEY;
+  process.env.AISSTREAM_API_KEY = 'must-not-open-a-hosted-socket';
+  try {
+    const snapshot = await dispatch(liveApiHandler, { url: '/api/ais-live' });
+    assert.equal(snapshot.status, 404);
+    assert.equal(snapshot.json.error, 'Not found');
+    assert.notEqual(snapshot.json.status, 'missing-key');
+    assert.doesNotMatch(JSON.stringify(snapshot.json), /AISStream|aisstream/i);
+
+    const track = await dispatch(liveApiHandler, { url: '/api/ais-live/track?mmsi=353136000' });
+    assert.equal(track.status, 404);
+    assert.doesNotMatch(JSON.stringify(track.json), /AISStream|aisstream/i);
+  } finally {
+    if (previous === undefined) delete process.env.AISSTREAM_API_KEY;
+    else process.env.AISSTREAM_API_KEY = previous;
+  }
+});

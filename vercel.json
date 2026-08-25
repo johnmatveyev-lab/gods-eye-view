@@ -25,6 +25,12 @@
     "api/stripe/webhook.js": {
       "maxDuration": 15
     },
+    "api/adsbdb/[...path].js": {
+      "maxDuration": 15
+    },
+    "api/launches.js": {
+      "maxDuration": 30
+    },
     "api/firms/index.js": {
       "maxDuration": 60
     },
@@ -44,6 +50,12 @@
       "maxDuration": 20
     },
     "api/weather-effects.js": {
+      "maxDuration": 15
+    },
+    "api/regional-brief.js": {
+      "maxDuration": 15
+    },
+    "api/google/nearby-places.js": {
       "maxDuration": 15
     }
   }

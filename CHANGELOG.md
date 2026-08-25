@@ -5,12 +5,28 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Changed
+
+- Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
+
 ### Added
 
 - HUD and cockpit clocks can switch UTC | Local next to the existing time.
   Local uses the browser timezone. The choice persists as `meridian.clock`
   (`utc` default). Share URLs, units, compass, and Home are unchanged.
-
+- Hosted `/api/google/nearby-places` on Vercel via `api/google/nearby-places.js`,
+  forwarding the same GET handler extracted to `src/google/nearbyPlaces.js`.
+  Reuses `GOOGLE_MAPS_API_KEY` and optional `GEV_RATELIMIT_GOOGLE_PER_MIN`.
+  Place labels only — the Google key never appears in JSON.
+- Added a hosted `/api/adsbdb` enrichment proxy (`api/adsbdb/[...path].js`)
+  that forwards route and aircraft lookups to `api.adsbdb.com` only, with a
+  24h in-memory cache, 404 negative-cache, last-good on error, and optional
+  `/tmp` persist. Dev/preview still use the Vite plugin. OpenSky is not used.
+- Hosted cockpit regional brief now shares one Node handler between Vite and
+  Vercel (`api/regional-brief.js`). GET and POST return 200 JSON with place
+  and/or weather and/or GDELT news — never a platform `NOT_FOUND`. Google News
+  RSS stays off. The Local Info page shows the linked Open-Meteo credit only
+  when weather values are on screen.
 - Hosted `/api/route` on Vercel via `api/route.js`, forwarding the same GET
   handler extracted to `src/data/osrmRoute.js`. Public FOSSGIS OSRM only
   (foot/car/bike, 2–12 coords, span guard, rate limiter). Failures are
@@ -18,6 +34,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Hidden tabs and offline windows pause flight/layer poll timers and the HUD
+  summary. Returning visible and online runs one refresh, then resumes
+  intervals. An active voice session keeps running. Offline shows
+  "Offline — showing last data". AIS is not wrapped. No service worker.
+
+### Changed
+
+- Hosted ships stay an honest empty state: a platform/function 404 or 503 from
+  `/api/ais-live` stops the poll loop, the layer reads unavailable/empty, and
+  the AISStream.io credit appears only after a live snapshot lands. Docker and
+  `vite preview` still serve the BYOK Node snapshot.
 - Pro accounts can save, restore, and delete up to 10 camera/style/layer
   views in `localStorage` (`meridian.savedViews.<clerkUserId>`). Share-link
   encode/decode is reused. Free and anonymous stay hidden and write nothing.

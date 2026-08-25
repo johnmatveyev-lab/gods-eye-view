@@ -1,5 +1,10 @@
 import { createLiveApiPlugins } from './liveApiProxies.js';
 
+/** Hosted Vercel is not a long-lived Node host; do not wrap AISStream. */
+export function createHostedLiveApiPlugins() {
+  return createLiveApiPlugins().filter((plugin) => plugin.name !== 'ais-live-proxy');
+}
+
 export const config = {
   api: {
     bodyParser: false,
@@ -39,7 +44,7 @@ export function createConnectStack(plugins) {
   return layers;
 }
 
-export function createVercelLiveApiHandler(pluginsFactory = createLiveApiPlugins) {
+export function createVercelLiveApiHandler(pluginsFactory = createHostedLiveApiPlugins) {
   let layers = null;
   return async function handler(req, res) {
     ensureRawBody(req);

@@ -34,10 +34,11 @@ import {
 import { firmsProxy } from '../data/firms.js';
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import {
-  normalizeRegionalArticles,
-  normalizeRegionalPlace,
-  normalizeRegionalWeather,
-} from '../data/regionalBrief.js';
+  handleRegionalBrief,
+  regionalBriefHasAnySource,
+  requiredFiniteQueryNumber,
+  validRegionalPoint,
+} from '../data/regionalBriefHandler.js';
 import { adsbLolMilPlugin } from '../data/adsblolMil.js';
 import { createAisStreamAdapter, isRecognizedAisEnvelope } from '../data/aisStreamAdapter.js';
 import {
@@ -56,11 +57,20 @@ import {
   validTerrainResult,
 } from '../data/terrainHeightsProxy.js';
 import { gbfsProxy } from '../data/gbfs.js';
+import { adsbdbProxy } from '../data/adsbdb.js';
 import { handleOsrmRouteHttp } from '../data/osrmRoute.js';
 import { weatherEffectsProxy } from '../data/weatherEffects.js';
 import { celestrakProxy } from '../data/celestrak.js';
+import {
+  LL2_CACHE_TTL_MS,
+  launchLibraryRequestHeaders,
+  rocketLaunchesProxy,
+} from '../data/launches.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from '../voice/voiceCost.js';
 import { trackBackfillProxies } from '../data/trackBackfill.js';
+import { approximateDistanceM, handleNearbyPlacesHttp } from '../google/nearbyPlaces.js';
+
+export { LL2_CACHE_TTL_MS, launchLibraryRequestHeaders };
 
 export { CCTV_FRAME_FETCH_TIMEOUT_MS, fetchCctvImageFromUpstream, cctvProxy };
 
@@ -71,6 +81,7 @@ const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // Civilian flights: adsb.lol only (OpenSky is disabled in this commercial fork)
 // ---------------------------------------------------------------------------
 export { COMMERCIAL_FLIGHT_SOURCE, OPENSKY_ENABLED, adsbLolFallbackAnchor };
+export { regionalBriefHasAnySource, requiredFiniteQueryNumber, validRegionalPoint };
 /** Hard off — cockpit headlines use GDELT only. */
 export const GOOGLE_NEWS_RSS_ENABLED = false;
 // ---------------------------------------------------------------------------
@@ -378,7 +389,7 @@ function openAiRateLimiter() {
   if (_openAiRateLimiter === undefined) _openAiRateLimiter = makeOptInRateLimiter(process.env.GEV_RATELIMIT_OPENAI_PER_MIN);
   return _openAiRateLimiter;
 }
-/** Google cost endpoint (nearby-places). Null = unlimited (default). */
+/** Google cost endpoint (text-search; nearby-places has its own limiter). Null = unlimited. */
 function googleRateLimiter() {
   if (_googleRateLimiter === undefined) _googleRateLimiter = makeOptInRateLimiter(process.env.GEV_RATELIMIT_GOOGLE_PER_MIN);
   return _googleRateLimiter;
@@ -1259,129 +1270,7 @@ const _aisStreamTracks = new Map();
 /** @type {Map<string,{lat:number,lon:number,epochSec:number}>} mmsi -> first fix awaiting second (lazy buffer allocation) */
 const _aisStreamTrackPending = new Map();
 
-export const LL2_CACHE_TTL_MS = 15 * 60_000;
-
-/** Build LL2 request headers without exposing its optional token client-side. */
-export function launchLibraryRequestHeaders(token = process.env.LL2_API_TOKEN) {
-  const normalized = String(token || '').trim();
-  return {
-    Accept: 'application/json',
-    ...(normalized ? { Authorization: `Token ${normalized}` } : {}),
-  };
-}
-
-/** Proxy the public Launch Library 2 recent-launch feed server-side. */
-function rocketLaunchesProxy() {
-  const ttlMs = LL2_CACHE_TTL_MS;
-  const maxResponseBytes = 12 * 1024 * 1024;
-  const maxDiskCacheBytes = 24 * 1024 * 1024;
-  const cachePath = path.join(process.cwd(), '.gev-cache', 'launch-library-2-v2.3.json');
-  let cache = null;
-  let diskLoaded = false;
-  const inFlight = new Map();
-
-  async function loadDiskCache() {
-    if (diskLoaded) return;
-    diskLoaded = true;
-    try {
-      const stat = await fsp.stat(cachePath);
-      if (stat.size > maxDiskCacheBytes) throw new Error('cache file too large');
-      const parsed = JSON.parse(await fsp.readFile(cachePath, 'utf8'));
-      if (Number.isFinite(parsed?.at) && typeof parsed?.body === 'string') {
-        const body = JSON.parse(parsed.body);
-        if (Array.isArray(body?.results)) cache = parsed;
-      }
-    } catch { /* first run or invalid cache */ }
-  }
-
-  async function saveDiskCache(entry) {
-    try {
-      await fsp.mkdir(path.dirname(cachePath), { recursive: true });
-      await fsp.writeFile(cachePath, JSON.stringify(entry), 'utf8');
-    } catch (error) {
-      console.warn(`[launch-library-proxy] cache write failed: ${error?.message || error}`);
-    }
-  }
-
-  function send(res, status, body, cacheState) {
-    res.writeHead(status, {
-      'Content-Type': 'application/json',
-      'Cache-Control': status === 200 ? 'public, max-age=900' : 'no-store',
-      'X-GEV-Cache': cacheState,
-    });
-    res.end(body);
-  }
-
-  async function refreshUpstream() {
-    const end = new Date();
-    const start = new Date(end.getTime() - 30 * 86400000);
-    const url = new URL('https://ll.thespacedevs.com/2.3.0/launches/');
-    url.searchParams.set('net__gte', start.toISOString());
-    url.searchParams.set('net__lte', end.toISOString());
-    url.searchParams.set('limit', '100');
-    url.searchParams.set('mode', 'detailed');
-    const upstream = await fetch(url, {
-      signal: AbortSignal.timeout(20000),
-      headers: launchLibraryRequestHeaders(),
-    });
-    const body = await readResponseTextCapped(upstream, maxResponseBytes);
-    if (!upstream.ok) {
-      const error = new Error(`upstream HTTP ${upstream.status}`);
-      error.upstreamStatus = upstream.status;
-      error.upstreamBody = body;
-      throw error;
-    }
-    const parsed = JSON.parse(body);
-    if (!Array.isArray(parsed?.results)) throw new Error('malformed upstream response');
-    const fresh = { at: Date.now(), body };
-    cache = fresh;
-    void saveDiskCache(fresh);
-    return fresh;
-  }
-
-  function install(middlewares) {
-    middlewares.use('/api/launches', async (req, res) => {
-      if (req.method !== 'GET') {
-        send(res, 405, JSON.stringify({ error: 'Method Not Allowed' }), 'NONE');
-        return;
-      }
-      await loadDiskCache();
-      const now = Date.now();
-      if (cache && now - cache.at < ttlMs) {
-        send(res, 200, cache.body, 'HIT');
-        return;
-      }
-      const stale = cache;
-      const request = coalesceProxyRequest(inFlight, 'recent-launches', refreshUpstream);
-      try {
-        const fresh = await request.promise;
-        send(res, 200, fresh.body, request.shared ? 'INFLIGHT' : 'MISS');
-      } catch (error) {
-        if (stale) {
-          if (!request.shared) console.warn(`[launch-library-proxy] refresh failed (${error?.message || error}) — serving stale cache`);
-          send(res, 200, stale.body, 'STALE-ERROR');
-          return;
-        }
-        send(
-          res,
-          Number.isInteger(error?.upstreamStatus) ? error.upstreamStatus : 502,
-          error?.upstreamBody || JSON.stringify({ error: 'Launch Library 2 unavailable' }),
-          'NONE',
-        );
-      }
-    });
-  }
-
-  return {
-    name: 'rocket-launches-proxy',
-    configureServer(server) {
-      install(server.middlewares);
-    },
-    configurePreviewServer(server) {
-      install(server.middlewares);
-    },
-  };
-}
+/** Launch Library 2 recent-launch proxy lives in src/data/launches.js. */
 
 /**
  * TomTom traffic-flow vector-tile proxy with a daily budget governor.
@@ -1766,126 +1655,8 @@ function terrainHeightsProxy() {
   };
 }
 
-/**
- * adsbdb.com enrichment proxy: callsign → route (airline + origin/destination
- * airports) and hex → aircraft type/registration. Free community API — cached
- * aggressively: ONE upstream request per new key ever (404s negative-cached),
- * persisted to disk so restarts don't re-hammer it. Adapted from skylight
- * (MIT) server/src/enrich/routes.ts.
- */
-function adsbdbProxy() {
-  const TTL_MS = 24 * 3600_000;
-  const CACHE_PATH = path.join(process.cwd(), '.gev-cache', 'adsbdb.json');
-  let cache = { routes: {}, aircraft: {} };
-  let dirty = false;
-  let loaded = false;
-  const inflight = new Map();
-
-  async function loadOnce() {
-    if (loaded) return;
-    loaded = true;
-    try {
-      const parsed = JSON.parse(await fsp.readFile(CACHE_PATH, 'utf8'));
-      cache = { routes: parsed.routes ?? {}, aircraft: parsed.aircraft ?? {} };
-    } catch { /* first run */ }
-    setInterval(async () => {
-      if (!dirty) return;
-      dirty = false;
-      try {
-        await fsp.mkdir(path.dirname(CACHE_PATH), { recursive: true });
-        await fsp.writeFile(CACHE_PATH, JSON.stringify(cache), 'utf8');
-      } catch { dirty = true; } // retry next tick
-    }, 15_000).unref?.();
-  }
-
-  const fresh = (e) => e && Date.now() - e.at < TTL_MS;
-
-  function parseRoute(json) {
-    const fr = json?.response?.flightroute;
-    if (!fr?.origin || !fr?.destination) return null;
-    const airport = (a) => ({
-      code: a.iata_code || a.icao_code || '',
-      name: a.municipality || a.name || '',
-      lat: Number.isFinite(a.latitude) ? a.latitude : null,
-      lon: Number.isFinite(a.longitude) ? a.longitude : null,
-    });
-    return { airline: fr.airline?.name || null, origin: airport(fr.origin), destination: airport(fr.destination) };
-  }
-
-  function parseAircraft(json) {
-    const a = json?.response?.aircraft;
-    if (!a) return null;
-    return {
-      typeCode: a.icao_type || null, // ICAO designator, e.g. "B738" — feeds classifyAircraft
-      typeName: a.manufacturer && a.type ? `${a.manufacturer} ${a.type}` : (a.type || null),
-      registration: a.registration || null,
-    };
-  }
-
-  function lookup(kind, key) {
-    const store = kind === 'route' ? cache.routes : cache.aircraft;
-    if (fresh(store[key])) return Promise.resolve(store[key].data);
-    const ik = `${kind}:${key}`;
-    if (!inflight.has(ik)) {
-      inflight.set(ik, (async () => {
-        try {
-          const url = kind === 'route'
-            ? `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(key)}`
-            : `https://api.adsbdb.com/v0/aircraft/${encodeURIComponent(key)}`;
-          const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-          if (res.ok) {
-            const data = kind === 'route' ? parseRoute(await res.json()) : parseAircraft(await res.json());
-            store[key] = { at: Date.now(), data }; // data may be null — negative cache
-            dirty = true;
-            return data;
-          }
-          if (res.status === 404) {
-            store[key] = { at: Date.now(), data: null }; // known-missing — cache the miss
-            dirty = true;
-          }
-          // other statuses: leave uncached so we retry later
-          return fresh(store[key]) ? store[key].data : null;
-        } catch {
-          return fresh(store[key]) ? store[key].data : null; // network error → stale if any
-        } finally {
-          inflight.delete(ik);
-        }
-      })());
-    }
-    return inflight.get(ik);
-  }
-
-  return {
-    name: 'adsbdb-proxy',
-    configureServer(server) {
-      server.middlewares.use('/api/adsbdb', async (req, res) => {
-        await loadOnce();
-        const send = (status, obj) => {
-          res.writeHead(status, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(obj));
-        };
-        try {
-          const [, kind, rawKey] = String(req.url || '').split('?')[0].split('/');
-          if (kind === 'route') {
-            const cs = String(rawKey || '').toUpperCase();
-            if (!/^[A-Z0-9]{2,8}$/.test(cs)) return send(400, { error: 'invalid callsign' });
-            const data = await lookup('route', cs);
-            return send(200, data ? { found: true, ...data } : { found: false });
-          }
-          if (kind === 'type') {
-            const hex = String(rawKey || '').toLowerCase();
-            if (!/^[0-9a-f]{6}$/.test(hex)) return send(400, { error: 'invalid hex' });
-            const data = await lookup('aircraft', hex);
-            return send(200, data ? { found: true, ...data } : { found: false });
-          }
-          return send(404, { error: 'unknown endpoint' });
-        } catch (err) {
-          return send(500, { error: String(err?.message || err) });
-        }
-      });
-    },
-  };
-}
+// adsbdb enrichment lives in src/data/adsbdb.js. The Vite plugin forwards
+// /api/adsbdb to that shared handler (24h Map, 8s timeout, 404 negative-cache).
 
 /**
  * Detect whether an Overpass API response body indicates rate-limiting.
@@ -2622,113 +2393,7 @@ function readRequestBody(req, maxBytes = 1024 * 1024) {
 function googlePlacesContextProxy() {
   function install(middlewares) {
     middlewares.use('/api/google/nearby-places', async (req, res) => {
-      if (req.method !== 'GET') {
-        res.statusCode = 405;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed', places: [] }));
-        return;
-      }
-
-      // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
-      // Inlined (not the shared helper) so the 429 body keeps this endpoint's
-      // `places: []` contract that the client expects on every error response.
-      const _grl = googleRateLimiter();
-      if (_grl && !_grl(clientKey(req))) {
-        res.statusCode = 429;
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Retry-After', '5');
-        res.end(JSON.stringify({ error: 'Rate limit exceeded', places: [] }));
-        return;
-      }
-
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) {
-        res.statusCode = 503;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'GOOGLE_MAPS_API_KEY is not set', places: [] }));
-        return;
-      }
-
-      const requestUrl = new URL(req.url || '', 'http://localhost');
-      const latitude = Number(requestUrl.searchParams.get('lat'));
-      const longitude = Number(requestUrl.searchParams.get('lon'));
-      const radiusM = Math.max(25, Math.min(5000, Number(requestUrl.searchParams.get('radiusM')) || 250));
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Valid lat and lon are required', places: [] }));
-        return;
-      }
-
-      try {
-        const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask': [
-              'places.id',
-              'places.displayName',
-              'places.formattedAddress',
-              'places.shortFormattedAddress',
-              'places.location',
-              'places.primaryType',
-              'places.primaryTypeDisplayName',
-              'places.types',
-            ].join(','),
-          },
-          body: JSON.stringify({
-            maxResultCount: 20,
-            rankPreference: 'DISTANCE',
-            locationRestriction: {
-              circle: {
-                center: { latitude, longitude },
-                radius: radiusM,
-              },
-            },
-          }),
-        });
-        const data = await response.json().catch(() => ({}));
-        const seenPlaces = new Set();
-        const places = Array.isArray(data.places) ? data.places
-          .map((place) => {
-            const placeLatitude = place.location?.latitude ?? null;
-            const placeLongitude = place.location?.longitude ?? null;
-            const types = Array.isArray(place.types) ? place.types.slice(0, 8) : [];
-            return {
-              id: place.id || null,
-              name: place.displayName?.text || null,
-              address: place.shortFormattedAddress || place.formattedAddress || null,
-              latitude: placeLatitude,
-              longitude: placeLongitude,
-              distanceM: approximateDistanceM(latitude, longitude, placeLatitude, placeLongitude),
-              primaryType: place.primaryTypeDisplayName?.text || place.primaryType || null,
-              types,
-              contextPriority: placeContextPriority(types),
-            };
-          })
-          .filter((place) => {
-            const key = `${place.name}:${place.address || ''}`.toLowerCase();
-            if (!place.name || seenPlaces.has(key)) return false;
-            seenPlaces.add(key);
-            return true;
-          })
-          .sort((a, b) => b.contextPriority - a.contextPriority || a.distanceM - b.distanceM)
-          .map(({ contextPriority, ...place }) => place)
-          .slice(0, 20) : [];
-
-        res.statusCode = response.ok ? 200 : response.status;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'private, max-age=300');
-        res.end(JSON.stringify({
-          places,
-          error: response.ok ? null : data.error?.message || 'Google Places request failed',
-        }));
-      } catch (error) {
-        res.statusCode = 502;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: error?.message || 'Google Places request failed', places: [] }));
-      }
+      await handleNearbyPlacesHttp(req, res);
     });
 
     // Text Search: resolve a named landmark/POI to a real coordinate, biased to
@@ -2744,8 +2409,8 @@ function googlePlacesContextProxy() {
       }
 
       // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
-      // Inlined (like nearby-places) so the 429 body keeps the `places: []`
-      // contract the client expects on every error response.
+      // Inlined (nearby-places lives in src/google/nearbyPlaces.js) so the 429
+      // body keeps the `places: []` contract the client expects on errors.
       const _grl = googleRateLimiter();
       if (_grl && !_grl(clientKey(req))) {
         res.statusCode = 429;
@@ -2857,26 +2522,6 @@ function googlePlacesContextProxy() {
       install(server.middlewares);
     },
   };
-}
-
-function placeContextPriority(types) {
-  const typeSet = new Set(types);
-  if (typeSet.has('historical_landmark') || typeSet.has('monument')) return 100;
-  if (typeSet.has('tourist_attraction') || typeSet.has('museum')) return 90;
-  if (typeSet.has('premise') || typeSet.has('street_address')) return 75;
-  if (typeSet.has('point_of_interest')) return 60;
-  if (typeSet.has('public_bathroom')) return 10;
-  return 40;
-}
-
-function approximateDistanceM(latA, lonA, latB, lonB) {
-  if (![latA, lonA, latB, lonB].every(Number.isFinite)) return Number.MAX_SAFE_INTEGER;
-  const latitudeScale = 111320;
-  const longitudeScale = latitudeScale * Math.cos((latA * Math.PI) / 180);
-  return Math.round(Math.hypot(
-    (latB - latA) * latitudeScale,
-    (lonB - lonA) * longitudeScale
-  ));
 }
 
 const GEV_REALTIME_TOOLS = [
@@ -4242,268 +3887,16 @@ function militaryInstallationsProxy() {
 }
 
 // ---------------------------------------------------------------------------
-// Regional cockpit briefing proxy
+// Regional cockpit briefing — Vite/Vercel catch-all forward to the shared handler
 // ---------------------------------------------------------------------------
-const REGIONAL_BRIEF_CACHE_MS = 5 * 60_000;
-const REGIONAL_BRIEF_STALE_MS = 60 * 60_000;
-const REGIONAL_BRIEF_MAX_CACHE = 120;
-const REGIONAL_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
-const _regionalBriefCache = new Map();
-const _regionalBriefInFlight = new Map();
-const _regionalBriefRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 30, globalMax: 90 });
-const WEATHER_EFFECTS_MAX_RESPONSE_BYTES = 512 * 1024;
-let _nominatimQueue = Promise.resolve();
-let _nominatimLastRequestAt = 0;
-
-export function requiredFiniteQueryNumber(params, key) {
-  const value = params.get(key);
-  if (value === null || value.trim() === '') return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-export function validRegionalPoint(params) {
-  const latitude = requiredFiniteQueryNumber(params, 'latitude');
-  const longitude = requiredFiniteQueryNumber(params, 'longitude');
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
-  return { latitude, longitude };
-}
-
-function trimRegionalBriefCache() {
-  while (_regionalBriefCache.size > REGIONAL_BRIEF_MAX_CACHE) {
-    const oldest = _regionalBriefCache.keys().next().value;
-    if (oldest === undefined) break;
-    _regionalBriefCache.delete(oldest);
-  }
-}
-
-async function fetchRegionalJson(url, {
-  headers = {},
-  timeoutMs = 9000,
-  maxBytes = REGIONAL_MAX_RESPONSE_BYTES,
-} = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers });
-    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
-    return readResponseJsonCapped(response, maxBytes);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function fetchRegionalText(url, {
-  headers = {},
-  timeoutMs = 9000,
-  maxBytes = REGIONAL_MAX_RESPONSE_BYTES,
-} = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers });
-    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
-    return readResponseTextCapped(response, maxBytes);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function decodeRssText(value) {
-  return String(value || '')
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function rssTag(block, tag) {
-  return decodeRssText(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i').exec(block)?.[1] || '');
-}
-
-function normalizeRssArticles(xml, limit = 5) {
-  const seen = new Set();
-  const articles = [];
-  for (const match of String(xml || '').matchAll(/<item>([\s\S]*?)<\/item>/gi)) {
-    const item = match[1];
-    const title = rssTag(item, 'title').slice(0, 180);
-    const url = rssTag(item, 'link');
-    let parsedUrl;
-    try { parsedUrl = new URL(url); } catch { continue; }
-    if (!title || !['http:', 'https:'].includes(parsedUrl.protocol)) continue;
-    const source = rssTag(item, 'source');
-    const signature = `${title.toLowerCase()}|${source.toLowerCase() || parsedUrl.hostname}`;
-    if (seen.has(signature)) continue;
-    seen.add(signature);
-    const rawDate = rssTag(item, 'pubDate');
-    articles.push({
-      title,
-      url: parsedUrl.href,
-      domain: source || parsedUrl.hostname.replace(/^www\./, ''),
-      publishedAt: Number.isNaN(Date.parse(rawDate)) ? null : new Date(rawDate).toISOString(),
-      sourceCountry: null,
-    });
-    if (articles.length >= limit) break;
-  }
-  return articles;
-}
-
-function fetchRegionalPlace(point) {
-  const task = _nominatimQueue.then(async () => {
-    const waitMs = Math.max(0, 1100 - (Date.now() - _nominatimLastRequestAt));
-    if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    _nominatimLastRequestAt = Date.now();
-    const params = new URLSearchParams({
-      format: 'jsonv2',
-      lat: point.latitude.toFixed(5),
-      lon: point.longitude.toFixed(5),
-      zoom: '10',
-      addressdetails: '1',
-      'accept-language': 'en',
-    });
-    const payload = await fetchRegionalJson(`https://nominatim.openstreetmap.org/reverse?${params}`, {
-      headers: {
-        'User-Agent': 'Meridian/0.1 (+https://github.com/johnmatveyev-lab/gods-eye-view)',
-        Referer: 'https://github.com/johnmatveyev-lab/gods-eye-view',
-      },
-    });
-    return normalizeRegionalPlace(payload);
-  });
-  _nominatimQueue = task.catch(() => null);
-  return task;
-}
-
-async function fetchRegionalNews(place) {
-  const query = place?.locality || place?.region || place?.country;
-  if (!query) return { status: 'unavailable', query: null, articles: [], source: null };
-  const params = new URLSearchParams({
-    query: `"${String(query).replace(/["\\]/g, ' ').trim()}"`,
-    mode: 'artlist',
-    format: 'json',
-    maxrecords: '5',
-    sort: 'datedesc',
-    timespan: '48h',
-  });
-  try {
-    const payload = await fetchRegionalJson(`https://api.gdeltproject.org/api/v2/doc/doc?${params}`, {
-      headers: { 'User-Agent': 'Meridian/0.1' },
-      timeoutMs: 12_000,
-    });
-    const articles = normalizeRegionalArticles(payload, 5);
-    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT Project' };
-  } catch {
-    return { status: 'unavailable', query, articles: [], source: null };
-  }
-}
-
-async function fetchRegionalWeather(point) {
-  const params = new URLSearchParams({
-    latitude: point.latitude.toFixed(5),
-    longitude: point.longitude.toFixed(5),
-    current: 'temperature_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility',
-    timezone: 'UTC',
-  });
-  try {
-    const payload = await fetchRegionalJson(`https://api.open-meteo.com/v1/forecast?${params}`, {
-      maxBytes: WEATHER_EFFECTS_MAX_RESPONSE_BYTES,
-    });
-    return normalizeRegionalWeather(payload);
-  } catch {
-    return null;
-  }
-}
-
-/** True when at least one regional source produced usable data. */
-export function regionalBriefHasAnySource({ place, weather, news } = {}) {
-  return Boolean(place || weather || (news && news.status !== 'unavailable'));
-}
-
 function regionalBriefProxy() {
-  async function refresh(point, key) {
-    const [placeResult, weatherResult] = await Promise.allSettled([
-      fetchRegionalPlace(point),
-      fetchRegionalWeather(point),
-    ]);
-    const place = placeResult.status === 'fulfilled' ? placeResult.value : null;
-    const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
-    const news = await fetchRegionalNews(place);
-    if (!regionalBriefHasAnySource({ place, weather, news })) {
-      throw new Error('All regional briefing sources unavailable');
-    }
-    const payload = {
-      status: place && weather && news.status !== 'unavailable' ? 'ready' : 'partial',
-      retrievedAt: new Date().toISOString(),
-      coordinates: point,
-      place,
-      placeStatus: place ? 'ready' : 'unavailable',
-      weather,
-      weatherStatus: weather ? 'ready' : 'unavailable',
-      newsStatus: news.status,
-      newsQuery: news.query,
-      newsSource: news.source,
-      articles: news.articles,
-    };
-    _regionalBriefCache.set(key, { payload, cachedAt: Date.now() });
-    trimRegionalBriefCache();
-    return payload;
-  }
-
-  function install(middlewares) {
-    middlewares.use('/api/regional-brief', async (req, res) => {
-      if (req.method !== 'GET') {
-        res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
-        return;
-      }
-      if (!_regionalBriefRateLimiter(clientKey(req))) {
-        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '10' });
-        res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
-        return;
-      }
-      const url = new URL(req.url || '', 'http://localhost');
-      const point = validRegionalPoint(url.searchParams);
-      if (!point) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Valid latitude and longitude are required' }));
-        return;
-      }
-      const key = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
-      const now = Date.now();
-      const cached = _regionalBriefCache.get(key);
-      if (cached && now - cached.cachedAt <= REGIONAL_BRIEF_CACHE_MS) {
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', 'X-Regional-Brief': 'HIT' });
-        res.end(JSON.stringify({ ...cached.payload, status: 'cached' }));
-        return;
-      }
-      const request = coalesceProxyRequest(_regionalBriefInFlight, key, () => refresh(point, key));
-      try {
-        const payload = await request.promise;
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=60',
-          'X-Regional-Brief': request.shared ? 'INFLIGHT' : 'MISS',
-        });
-        res.end(JSON.stringify(payload));
-      } catch {
-        if (cached && now - cached.cachedAt <= REGIONAL_BRIEF_STALE_MS) {
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Regional-Brief': 'STALE' });
-          res.end(JSON.stringify({ ...cached.payload, status: 'stale' }));
-          return;
-        }
-        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ error: 'Regional briefing is temporarily unavailable' }));
-      }
-    });
-  }
-
   return {
     name: 'regional-brief-proxy',
     configureServer(server) {
-      install(server.middlewares);
+      server.middlewares.use('/api/regional-brief', handleRegionalBrief);
     },
     configurePreviewServer(server) {
-      install(server.middlewares);
+      server.middlewares.use('/api/regional-brief', handleRegionalBrief);
     },
   };
 }

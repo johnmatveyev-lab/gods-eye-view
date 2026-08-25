@@ -79,7 +79,7 @@ Setup:
 
 If Stripe keys are missing, the Upgrade button explains that Checkout is not configured instead of failing silently. Unit tests mock Stripe and Clerk — they do not need live keys.
 
-On Vercel the globe is a Vite static build. Hosted billing therefore lives in Node functions (`api/billing/[...path].js` and `api/stripe/webhook.js`) that forward to `handleBillingHttp`. Leave Clerk/Stripe unset on a preview and those routes still respond with `503`/`401` JSON — they must not be a Vercel platform 404. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
+On Vercel the globe is a Vite static build. Hosted billing therefore lives in Node functions (`api/billing/[...path].js` and `api/stripe/webhook.js`) that forward to `handleBillingHttp`. The cockpit regional brief is the same pattern: `api/regional-brief.js` forwards to `handleRegionalBrief` (GDELT + Open-Meteo + Nominatim; no Google News RSS). Leave Clerk/Stripe unset on a preview and billing routes still respond with `503`/`401` JSON — they must not be a Vercel platform 404. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
 
 Optional: `MERIDIAN_BILLING_STORE_PATH=.meridian-billing/accounts.json` persists plan + daily usage across process restarts (in-memory otherwise).
 
@@ -97,6 +97,8 @@ If you charge US or EU customers, consider enabling [Stripe Tax](https://docs.st
 | **OpenAI voice** | Realtime audio is usage-metered. The app shows a live session estimate and applies an in-app session cap; provider-side usage limits remain the billing backstop. |
 
 Cesium ion imagery must not be mixed with Google Photorealistic 3D Tiles. Use one globe imagery stack at a time.
+
+Hosted Vercel has no live AIS; Docker and `vite preview` still do when `AISSTREAM_API_KEY` is set.
 
 ---
 
