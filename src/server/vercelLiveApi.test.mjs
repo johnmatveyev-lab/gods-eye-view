@@ -92,6 +92,7 @@ test('Vercel live catch-all reuses Node proxies without a Next rewrite', () => {
   assert.ok(vercelJson.functions['api/[...path].js']);
   assert.ok(vercelJson.functions['api/billing/[...path].js']);
   assert.ok(vercelJson.functions['api/gbfs/[...target].js']);
+  assert.ok(vercelJson.functions['api/adsblol/mil.js']);
   assert.equal(Array.isArray(vercelJson.rewrites), false);
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
 });
@@ -160,6 +161,7 @@ test('GET /api/launches reaches the Launch Library handler', async () => {
 
 test('GET leftover /adsblol/mil and /terrain/heights reach existing handlers', async () => {
   assert.equal(restoreLiveApiPath('/adsblol/mil'), '/api/adsblol/mil');
+  assert.equal(existsSync(path.join(ROOT, 'api/adsblol/mil.js')), true);
   const terrain = await dispatch(liveApiHandler, { url: '/terrain/heights' });
   assert.equal(terrain.status, 400);
   assert.match(terrain.json.error, /invalid points/i);

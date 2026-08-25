@@ -709,6 +709,110 @@ test('Data Layers voice inventory hides the Context coordinator while current-vi
   assert.deepEqual(current.cockpit, { active: false, entryAllowed: true });
 });
 
+test('voice enable OpenSky is disabled, never fetches OpenSky, and leaves flights as adsb.lol', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const originalFetch = globalThis.fetch;
+  const fetched = [];
+  globalThis.fetch = async (url) => {
+    fetched.push(String(url));
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  const viewer = {
+    clock: { onTick: { addEventListener: () => () => {} } },
+    scene: { canvas: { addEventListener() {}, removeEventListener() {} } },
+    camera: { moveEnd: { addEventListener() {} } },
+  };
+  const enableCalls = [];
+  const dataManager = {
+    layers: new Map([['flights', {
+      module: { source: 'adsb.lol', enable() { enableCalls.push('flights'); } },
+    }]]),
+    isEnabled: () => false,
+    getLayerLifecycleState: () => ({ enabled: false, lifecycleState: 'disabled', uncertain: false }),
+    getAll: () => [{ id: 'flights', name: 'Live Flights', source: 'adsb.lol', stats: { count: 0 } }],
+    setEnabled: async (...args) => {
+      enableCalls.push(['setEnabled', ...args]);
+      return true;
+    },
+  };
+  const runner = createGevActionRunner({ viewer, styleManager: {}, dataManager });
+
+  try {
+    for (const layerId of ['OpenSky', 'opensky', 'open sky']) {
+      const result = await runner('set_layer_visibility', { layerId, enabled: true });
+      assert.equal(result.ok, false, `${layerId} must refuse`);
+      assert.equal(result.action, 'set_layer_visibility');
+      assert.match(result.error, /OpenSky is disabled/);
+    }
+    assert.deepEqual(enableCalls, []);
+    assert.equal(fetched.some((url) => /opensky-network\.org/i.test(url)), false);
+    assert.equal(dataManager.getAll()[0].source, 'adsb.lol');
+  } finally {
+    if (originalFetch === undefined) delete globalThis.fetch;
+    else globalThis.fetch = originalFetch;
+  }
+});
+
+test('voice refuses submarine cables with the commercial no-op speak and never fetches', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const originalFetch = globalThis.fetch;
+  let fetchCount = 0;
+  globalThis.fetch = async (url) => {
+    fetchCount += 1;
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  const viewer = {
+    clock: { onTick: { addEventListener: () => () => {} } },
+    scene: { canvas: { addEventListener() {}, removeEventListener() {} } },
+    camera: { moveEnd: { addEventListener() {} } },
+  };
+  const enableCalls = [];
+  const dataManager = {
+    layers: new Map([['telegeography-submarine-cables', {
+      module: {
+        enable() { enableCalls.push('enable'); },
+        getStats() { return { count: 0, entities: [] }; },
+      },
+    }]]),
+    isEnabled: () => false,
+    getLayerLifecycleState: () => ({ enabled: false, lifecycleState: 'disabled', uncertain: false }),
+    getAll: () => [{
+      id: 'telegeography-submarine-cables',
+      name: 'Submarine Cables',
+      stats: { count: 0 },
+    }],
+    setEnabled: async (...args) => {
+      enableCalls.push(['setEnabled', ...args]);
+      return true;
+    },
+    _setEnabledWithIntent: (...args) => {
+      enableCalls.push(['intent', ...args]);
+      return { intentEpoch: 1, promise: Promise.resolve(true) };
+    },
+  };
+  const runner = createGevActionRunner({ viewer, styleManager: {}, dataManager });
+
+  try {
+    for (const layerId of [
+      'submarine cables',
+      'undersea cables',
+      'telegeography-submarine-cables',
+    ]) {
+      const result = await runner('set_layer_visibility', { layerId, enabled: true });
+      assert.equal(result.ok, false, `${layerId} must refuse`);
+      assert.equal(result.action, 'set_layer_visibility');
+      assert.equal(result.layerId, 'telegeography-submarine-cables');
+      assert.match(result.error, /layer is a commercial no-op/);
+      assert.equal(result.enabled, false);
+    }
+    assert.deepEqual(enableCalls, []);
+    assert.equal(fetchCount, 0);
+  } finally {
+    if (originalFetch === undefined) delete globalThis.fetch;
+    else globalThis.fetch = originalFetch;
+  }
+});
+
 test('generic layer visibility forwards cancellation and reports semantic failure', async () => {
   globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
   const viewer = {
