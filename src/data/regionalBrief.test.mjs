@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cockpitHeadlineSourceLabel,
   normalizeRegionalArticles,
   normalizeRegionalPlace,
   normalizeRegionalWeather,
@@ -51,6 +52,13 @@ test('zone-naive Open-Meteo timestamps are pinned to UTC, zoned ones pass throug
   assert.equal(zoned.observedAt, '2026-08-16T22:15:00.000Z');
   const invalid = normalizeRegionalWeather({ current: { time: 'not-a-time', temperature_2m: 20 } });
   assert.equal(invalid.observedAt, null);
+});
+
+test('cockpit headline attribution stays on GDELT and rejects Google News RSS', () => {
+  assert.equal(cockpitHeadlineSourceLabel(null), 'GDELT Project');
+  assert.equal(cockpitHeadlineSourceLabel('GDELT Project'), 'GDELT Project');
+  assert.equal(cockpitHeadlineSourceLabel('Google News RSS'), 'GDELT Project');
+  assert.equal(cockpitHeadlineSourceLabel('https://news.google.com/rss'), 'GDELT Project');
 });
 
 test('regional distance handles nearby movement and missing positions', () => {

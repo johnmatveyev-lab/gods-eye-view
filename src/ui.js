@@ -168,6 +168,7 @@ import {
   clampScopeTerminusPct,
 } from './scopeMask.js';
 import {
+  cockpitHeadlineSourceLabel,
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -265,7 +266,7 @@ const COCKPIT_BRIEF_PAGES = [
     id: 'news',
     kicker: 'REGIONAL NEWS',
     subtitle: 'LATEST LOCATION-MATCHED REPORTING',
-    source: 'GOOGLE NEWS RSS · LOCATION QUERY · RECENT',
+    source: 'GDELT PROJECT · LOCATION QUERY · RECENT',
   },
   {
     id: 'local',
@@ -1845,7 +1846,7 @@ class CockpitViewController {
     }
     if (this.signalStream) this.signalStream.dataset.regionalStatus = payload?.status || 'partial';
     if (this.briefPageIndex === 1 && this.briefSource) {
-      this.briefSource.textContent = `${String(payload?.newsSource || 'REGIONAL NEWS').toUpperCase()} · LOCATION QUERY`;
+      this.briefSource.textContent = `${cockpitHeadlineSourceLabel(payload?.newsSource).toUpperCase()} · LOCATION QUERY`;
     }
     this.scheduleContextLayout();
   }

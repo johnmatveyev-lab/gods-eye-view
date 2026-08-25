@@ -4155,6 +4155,7 @@ function openAiRealtimeProxy() {
             'When a single user request contains MULTIPLE changes (e.g. "switch to operator layout, use balanced detection at density 50, and switch to Bing aerial"), call ALL the corresponding tools — multiple tool calls in sequence — before speaking. Never confirm a partial subset. If a later tool fails, say which parts succeeded and which failed.',
             'After receiving tool output, speak exactly one short confirmation. Do not repeat the confirmation.',
             'For "show/open/turn on" layer requests, enable the matching layer. For "hide/close/turn off", disable it.',
+            'Civilian flights are adsb.lol only. If the user says OpenSky, call set_layer_visibility with layerId flights — OpenSky is disabled and must never be treated as a separate source. Cockpit headlines are GDELT only; Google News RSS is disabled.',
             // INSTRUCTION-ONLY mapping for the two globe-scale named views.
             //
             // Both are BROADER than the first-run tiles on purpose. A person

@@ -215,6 +215,6 @@ While recording, call out anything in these areas — this is the feedback I mos
 - **Grey globe / slow tiles:** wait a few seconds after a camera flight; photoreal streams in.
 - **A voice mark didn't land:** the place may not geocode — try a more specific name
   (e.g. "Palace of Fine Arts, San Francisco").
-- **No planes:** OpenSky data may be momentarily sparse; scroll out or wait a poll cycle.
+- **No planes:** adsb.lol coverage may be momentarily sparse; scroll out or wait a poll cycle.
 - **No Meridian MIC button / voice errors:** `OPENAI_API_KEY` didn't load — use the console API for
   the annotation tests and skip the voice-only ones (§2).

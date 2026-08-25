@@ -121,6 +121,20 @@ export function regionalDistanceM(from, to) {
   return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+/**
+ * Cockpit news attribution. Google News RSS is disabled; GDELT is the only
+ * headline source this commercial build may name.
+ * @param {string|null|undefined} newsSource API-reported headline source.
+ * @returns {string} Operator-facing source label.
+ */
+export function cockpitHeadlineSourceLabel(newsSource) {
+  const raw = String(newsSource || 'GDELT Project').replace(/\s+/g, ' ').trim();
+  if (!raw || /google\s*news/i.test(raw) || /news\.google/i.test(raw)) {
+    return 'GDELT Project';
+  }
+  return raw;
+}
+
 /** Fetch a bounded regional brief through the same-origin dev/preview proxy. */
 export async function fetchRegionalBrief(latitude, longitude, { signal } = {}) {
   if (![latitude, longitude].every(Number.isFinite)) throw new Error('Valid coordinates are required');
