@@ -45,6 +45,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Radio has an English-only chip next to Favorites. Default off. When on,
+  the already-fetched Radio Browser directory hides stations whose
+  language is not `en` / `eng` / `english…` (same helper globe-view
+  ranking already uses). Category, search, bitrate, codec, and Favorites
+  still AND. A station already playing stays audible and selected even
+  when it is not English. The chip re-filters from cache — no extra
+  `/api/radio` fetch — and persists as `meridian.radioEnglishOnly`.
+  MIT credit and the Meridian name are unchanged.
 - Space Missions roster now has LEO | MEO | GEO | Polar | Other chips next
   to the existing status and provider chips. Classification uses the
   already-fetched Launch Library 2 `orbit.name` (GEO includes GTO /
