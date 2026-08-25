@@ -12,6 +12,7 @@ export const KEYBOARD_SHORTCUT_ENTRIES = SHORTCUT_OVERLAY_ROWS;
 
 const OVERLAY_ID = 'keyboard-shortcuts-overlay';
 const LIST_ID = 'keyboard-shortcuts-list';
+const TOGGLE_ID = 'keyboard-shortcuts-toggle';
 
 /**
  * Whether this event should toggle the shortcuts overlay.
@@ -68,7 +69,24 @@ export function setKeyboardShortcutsOverlayOpen(open, doc = globalThis.document)
   if (open) renderKeyboardShortcutsOverlay(doc);
   overlay.hidden = !open;
   overlay.setAttribute('aria-hidden', open ? 'false' : 'true');
+  doc?.getElementById?.(TOGGLE_ID)?.setAttribute?.('aria-expanded', open ? 'true' : 'false');
   return true;
+}
+
+/**
+ * Wire the chrome `?` button. The `?` key is handled in the global keydown.
+ * @param {Document|null} [doc]
+ * @returns {() => void}
+ */
+export function bindKeyboardShortcutsToggle(doc = globalThis.document) {
+  const button = doc?.getElementById?.(TOGGLE_ID);
+  if (!button?.addEventListener) return () => {};
+  const onClick = (event) => {
+    event.preventDefault();
+    toggleKeyboardShortcutsOverlay(doc);
+  };
+  button.addEventListener('click', onClick);
+  return () => button.removeEventListener('click', onClick);
 }
 
 /**

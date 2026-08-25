@@ -40,9 +40,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   existing `focusById` path. Empty bbox stays empty. No new `/api`, person
   search, or bbox-cap change. Measure mode is independent.
 - Keyboard users can yaw with **Q/E** and pitch with **R / Page Up / Page Down**.
-  WASD still pans. Lock tilt blocks the pitch keys. **F** still opens the
-  data panel (fullscreen stays the button + Escape). The shortcuts overlay
-  (`?`) lists these keys.
+  WASD still pans. Lock tilt (the DISPLAY control flag) blocks the pitch
+  keys. **F** still opens the data panel (fullscreen stays the button +
+  Escape). The shortcuts overlay (`?` and the chrome keyboard button) lists
+  these keys.
 - Added a DISPLAY-rail Lock tilt control. When on, user rotate changes
   heading only and pitch stays (keep horizon). Unlock restores free tumble.
   The choice persists as `meridian.lockTilt` and defaults off. Home and

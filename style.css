@@ -2860,6 +2860,13 @@ body.recording-mode #meridian-offline-chip {
   color: var(--accent);
 }
 
+.keyboard-shortcuts-note {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 #keyboard-shortcuts-list {
   display: grid;
   gap: 8px;
