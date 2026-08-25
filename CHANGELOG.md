@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites row has client-only **All | <100m | <128m** period chips next
+  to class chips. Default All matches the current catalog. The chips filter
+  already-fetched CelesTrak satrecs by `orbitalPeriodSeconds(satrec) / 60`
+  — the same mean-motion helper orbit rings already use. **<128m** hides
+  satellites whose period is 128 minutes or more (typical GEO). **<100m**
+  is tighter LEO (100 minutes or more). Missing or non-finite period stays
+  visible. The tracked satellite stays. Chip changes re-filter in memory
+  and AND with Core | Dense, class chips, POINTS, and ORBITS — no extra
+  `/api/celestrak` fetch and no new endpoint. Preference persists as
+  `meridian.satPeriod` and is not a share-link field. Catalog refresh keeps
+  the floor. Hidden when the Satellites layer is off. Distinct from Plan
+  132 class chips.
 - Radio operators can narrow the already-fetched Radio Browser roster by
   state/region (`CA`, Bavaria, Ontario) next to country/search. Empty keeps
   the current view. Case-insensitive exact or contains match on
