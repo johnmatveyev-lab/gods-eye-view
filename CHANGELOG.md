@@ -3,6 +3,14 @@
 This changelog records public product changes. For the authoritative description
 of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md).
 
+## [Unreleased] — 2026-08-25
+
+### Added
+
+- Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
+  Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
+  Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+
 ## [Unreleased] — 2026-08-24
 
 ### Added

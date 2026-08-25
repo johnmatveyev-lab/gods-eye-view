@@ -9161,3 +9161,194 @@ body.scene-playback-mode #first-run-launcher {
   /* Scrolling a tile into view must not animate either. */
   .first-run-choices { scroll-behavior: auto; }
 }
+
+/* ── Hosted account / billing ─────────────────── */
+#account-bar {
+  position: fixed;
+  top: 92px;
+  right: 36px;
+  z-index: 110;
+  min-width: 168px;
+  max-width: 240px;
+  padding: 12px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--panel-radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  pointer-events: auto;
+  text-align: right;
+}
+
+#account-bar .account-kicker,
+#account-plan {
+  font-family: var(--font-mono);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+#account-bar .account-kicker {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+
+#account-plan {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+#account-budget {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+#account-bar .account-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+#account-bar button {
+  pointer-events: auto;
+  padding: 6px 10px;
+  border: 1px solid var(--glass-border-hover);
+  border-radius: 8px;
+  background: var(--accent-dim);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+#account-user {
+  min-height: 32px;
+}
+
+#meridian-terms {
+  position: fixed;
+  bottom: 64px;
+  left: 36px;
+  z-index: 90;
+  max-width: min(42rem, calc(100vw - 72px));
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1.45;
+  letter-spacing: 0.02em;
+  color: rgba(232, 234, 237, 0.45);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: none;
+}
+
+#billing-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: grid;
+  place-items: center;
+  background: rgba(6, 8, 12, 0.62);
+}
+
+#billing-modal[hidden] {
+  display: none;
+}
+
+.billing-modal-card {
+  width: min(28rem, calc(100vw - 2rem));
+  padding: 22px 22px 18px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--panel-radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(20px);
+}
+
+.billing-modal-card h2 {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.billing-modal-card p {
+  margin: 12px 0 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.billing-modal-close {
+  float: right;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 22px;
+  cursor: pointer;
+}
+
+.billing-modal-primary,
+#billing-exhausted button {
+  padding: 8px 12px;
+  border: 1px solid var(--glass-border-hover);
+  border-radius: 8px;
+  background: var(--accent-dim);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+#billing-exhausted {
+  position: fixed;
+  right: 36px;
+  bottom: 120px;
+  z-index: 120;
+  max-width: 280px;
+}
+
+#billing-exhausted[hidden] {
+  display: none;
+}
+
+.billing-exhausted-card {
+  padding: 14px 16px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--panel-radius);
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+}
+
+.billing-exhausted-card strong {
+  display: block;
+  margin-bottom: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.billing-exhausted-card p {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+body.ui-clean-view #account-bar,
+body.ui-clean-view #billing-modal,
+body.ui-clean-view #billing-exhausted,
+body.recording-mode #account-bar,
+body.recording-mode #billing-modal,
+body.recording-mode #billing-exhausted,
+body.cockpit-mode #account-bar,
+body.cockpit-mode #billing-exhausted {
+  display: none !important;
+}

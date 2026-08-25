@@ -11,12 +11,15 @@ RUN npm ci
 
 COPY . .
 
-# Bake client-exposed keys at build time (Google Maps / Cesium ion).
-# Server-only secrets (OpenAI, AISStream, FIRMS, TomTom, …) are injected at runtime.
+# Bake client-exposed keys at build time (Google Maps / Cesium ion / Clerk pk).
+# Server-only secrets (OpenAI, Stripe, Clerk secret, AISStream, FIRMS, TomTom, …)
+# are injected at runtime.
 ARG GOOGLE_MAPS_API_KEY=
 ARG CESIUM_ION_TOKEN=
+ARG CLERK_PUBLISHABLE_KEY=
 ENV GOOGLE_MAPS_API_KEY=$GOOGLE_MAPS_API_KEY \
     CESIUM_ION_TOKEN=$CESIUM_ION_TOKEN \
+    CLERK_PUBLISHABLE_KEY=$CLERK_PUBLISHABLE_KEY \
     OPENSKY_AUTH_MODE=anon \
     HOST=0.0.0.0 \
     PORT=4173

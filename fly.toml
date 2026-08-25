@@ -1,5 +1,8 @@
 # fly.toml — Meridian
 # Deploy: fly launch --copy-config --yes && fly secrets set GOOGLE_MAPS_API_KEY=... && fly deploy
+# Hosted billing secrets (runtime): CLERK_SECRET_KEY, STRIPE_SECRET_KEY,
+# STRIPE_PRICE_PRO, STRIPE_WEBHOOK_SECRET, OPENAI_API_KEY.
+# Bake CLERK_PUBLISHABLE_KEY at build time (client-exposed, like Google Maps).
 
 app = "gods-eye-view"
 primary_region = "iad"
