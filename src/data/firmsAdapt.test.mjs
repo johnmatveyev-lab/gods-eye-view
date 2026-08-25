@@ -39,6 +39,7 @@ test('adapter maps a proxy record into the internal fire-record shape', () => {
   assert.equal(fire.frp, 0.53);
   assert.equal(fire.confidence, 0.6); // 'n' (nominal) → 0.6
   assert.equal(fire.brightness, 303.6);
+  assert.equal(fire.brightnessTi5, 290.73);
   assert.equal(fire.night, true); // daynight 'N'
   assert.equal(fire.daynight, 'N');
   assert.equal(fire.acqMs, Date.UTC(2026, 6, 16, 10, 6));
@@ -174,9 +175,10 @@ test('records with non-finite lat/lon are skipped; index stays sequential', () =
 });
 
 test('non-finite frp/brightness → 0; empty input → []', () => {
-  const [fire] = adaptFirmsRecords([proxyRecord({ frp: 'n/a', brightness: undefined })]);
+  const [fire] = adaptFirmsRecords([proxyRecord({ frp: 'n/a', brightness: undefined, brightnessTi5: undefined })]);
   assert.equal(fire.frp, 0);
   assert.equal(fire.brightness, 0);
+  assert.equal(fire.brightnessTi5, 0);
   assert.deepEqual(adaptFirmsRecords([]), []);
   assert.deepEqual(adaptFirmsRecords(null), []);
 });

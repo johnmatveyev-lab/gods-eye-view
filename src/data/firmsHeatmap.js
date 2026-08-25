@@ -35,6 +35,16 @@ import {
   normalizeBrightnessFloor,
 } from './firmsBrightnessFloor.js';
 import {
+  DEFAULT_FIRMS_BRIGHTNESS_TI5_FLOOR,
+  FIRMS_BRIGHTNESS_TI5_FLOOR_CHIPS,
+  filterFiresByBrightnessTi5Floor,
+  fireMeetsBrightnessTi5Floor,
+  firmsBrightnessTi5ChipModels,
+  normalizeBrightnessTi5Floor,
+  readFirmsBrightnessTi5Floor,
+  writeFirmsBrightnessTi5Floor,
+} from './firmsBrightnessTi5Filter.js';
+import {
   filterFiresByDayNight,
   fireMeetsDayNight,
   firmsDayNightChipModels,
@@ -158,6 +168,15 @@ export {
   fireMeetsBrightnessFloor,
   firmsBrightnessChipModels,
   normalizeBrightnessFloor,
+};
+
+export {
+  FIRMS_BRIGHTNESS_TI5_FLOOR_CHIPS,
+  DEFAULT_FIRMS_BRIGHTNESS_TI5_FLOOR,
+  filterFiresByBrightnessTi5Floor,
+  fireMeetsBrightnessTi5Floor,
+  firmsBrightnessTi5ChipModels,
+  normalizeBrightnessTi5Floor,
 };
 
 /**
@@ -318,6 +337,7 @@ export function createFirmsHeatmapLayer({
   let _frpFloor = 'all';
   let _confidenceFloor = 'all';
   let _brightnessFloor = DEFAULT_FIRMS_BRIGHTNESS_FLOOR;
+  let _brightnessTi5Floor = readFirmsBrightnessTi5Floor();
   let _showDay = true;
   let _showNight = true;
   let _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
@@ -451,6 +471,7 @@ export function createFirmsHeatmapLayer({
       _frpFloor = 'all';
       _confidenceFloor = 'all';
       _brightnessFloor = DEFAULT_FIRMS_BRIGHTNESS_FLOOR;
+      _brightnessTi5Floor = DEFAULT_FIRMS_BRIGHTNESS_TI5_FLOOR;
       _showDay = true;
       _showNight = true;
       _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
@@ -618,9 +639,9 @@ export function createFirmsHeatmapLayer({
 
     /**
      * FIRMS floors for the data-panel chips. Re-filters in-memory `_fires`
-     * — never hits /api/firms. Age, FRP, confidence, brightness, Day | Night,
-     * sensor, and satellite chips AND.
-     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, brightnessFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown, satelliteFilter?: unknown }} [params]
+     * — never hits /api/firms. Age, FRP, confidence, brightness, TI5
+     * brightness, Day | Night, sensor, and satellite chips AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, brightnessFloor?: string|number, brightnessTi5Floor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown, satelliteFilter?: unknown }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
@@ -628,18 +649,20 @@ export function createFirmsHeatmapLayer({
       const hasFrp = Object.hasOwn(params, 'frpFloor');
       const hasConf = Object.hasOwn(params, 'confidenceFloor');
       const hasBright = Object.hasOwn(params, 'brightnessFloor');
+      const hasBrightTi5 = Object.hasOwn(params, 'brightnessTi5Floor');
       const hasDay = Object.hasOwn(params, 'showDay');
       const hasNight = Object.hasOwn(params, 'showNight');
       const hasAge = Object.hasOwn(params, 'ageWindow');
       const hasSensors = Object.hasOwn(params, 'sensors');
       const hasSatellite = Object.hasOwn(params, 'satelliteFilter');
-      if (!hasFrp && !hasConf && !hasBright && !hasDay && !hasNight && !hasAge && !hasSensors && !hasSatellite) return true;
+      if (!hasFrp && !hasConf && !hasBright && !hasBrightTi5 && !hasDay && !hasNight && !hasAge && !hasSensors && !hasSatellite) return true;
       if (hasSensors && normalizeFirmsSensorFilter(params.sensors) == null) return false;
       if (hasSatellite && normalizeFirmsSatelliteFilter(params.satelliteFilter) == null) return false;
       return applyVisibleFloors({
         frpFloor: hasFrp ? params.frpFloor : undefined,
         confidenceFloor: hasConf ? params.confidenceFloor : undefined,
         brightnessFloor: hasBright ? params.brightnessFloor : undefined,
+        brightnessTi5Floor: hasBrightTi5 ? params.brightnessTi5Floor : undefined,
         showDay: hasDay ? params.showDay : undefined,
         showNight: hasNight ? params.showNight : undefined,
         ageWindow: hasAge ? params.ageWindow : undefined,
@@ -653,6 +676,7 @@ export function createFirmsHeatmapLayer({
      *   frpFloor: 'all'|'10'|'50'|'100',
      *   confidenceFloor: 'all'|'0.5'|'0.8',
      *   brightnessFloor: 'all'|'320'|'340',
+     *   brightnessTi5Floor: 'all'|'290'|'310',
      *   showDay: boolean,
      *   showNight: boolean,
      *   ageWindow: '6'|'12'|'24',
@@ -665,6 +689,7 @@ export function createFirmsHeatmapLayer({
         frpFloor: _frpFloor,
         confidenceFloor: _confidenceFloor,
         brightnessFloor: _brightnessFloor,
+        brightnessTi5Floor: _brightnessTi5Floor,
         showDay: _showDay,
         showNight: _showNight,
         ageWindow: _ageWindow,
@@ -695,6 +720,7 @@ export function createFirmsHeatmapLayer({
             params: { confidenceFloor: chip.id },
           })),
           ...firmsBrightnessChipModels(_brightnessFloor),
+          ...firmsBrightnessTi5ChipModels(_brightnessTi5Floor),
           ...firmsDayNightChipModels({ showDay: _showDay, showNight: _showNight }),
           ...FIRMS_AGE_WINDOW_CHIPS.map((chip) => ({
             id: `age-${chip.id}`,
@@ -814,12 +840,15 @@ export function createFirmsHeatmapLayer({
       filterFiresBySensor(
         filterFiresByAgeWindow(
           filterFiresByDayNight(
-            filterFiresByBrightnessFloor(
-              filterFiresByConfidenceFloor(
-                filterFiresByFrpFloor(_fires, _frpFloor),
-                _confidenceFloor,
+            filterFiresByBrightnessTi5Floor(
+              filterFiresByBrightnessFloor(
+                filterFiresByConfidenceFloor(
+                  filterFiresByFrpFloor(_fires, _frpFloor),
+                  _confidenceFloor,
+                ),
+                _brightnessFloor,
               ),
-              _brightnessFloor,
+              _brightnessTi5Floor,
             ),
             { showDay: _showDay, showNight: _showNight },
           ),
@@ -834,12 +863,13 @@ export function createFirmsHeatmapLayer({
     _count = visible.length;
   }
 
-  /** True when the detection clears FRP, confidence, brightness, Day | Night, age, sensor, and satellite. */
+  /** True when the detection clears FRP, confidence, brightness, TI5, Day | Night, age, sensor, and satellite. */
   function fireMeetsVisibleFloors(fire) {
     const minMw = frpFloorThresholdMw(_frpFloor);
     if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
     if (!fireMeetsConfidenceFloor(fire, _confidenceFloor)) return false;
     if (!fireMeetsBrightnessFloor(fire, _brightnessFloor)) return false;
+    if (!fireMeetsBrightnessTi5Floor(fire, _brightnessTi5Floor)) return false;
     if (!fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight })) return false;
     if (!fireMeetsAgeWindow(fire, _ageWindow, Date.now())) return false;
     if (!fireMatchesFirmsSensorFilter(fire, _sensors)) return false;
@@ -847,9 +877,9 @@ export function createFirmsHeatmapLayer({
   }
 
   /**
-   * Change FRP, confidence, brightness, Day | Night, age, sensor, and/or
-   * satellite and re-render from memory. Never fetches.
-   * @param {{ frpFloor?: *, confidenceFloor?: *, brightnessFloor?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: *, satelliteFilter?: * }} next
+   * Change FRP, confidence, brightness, TI5 brightness, Day | Night, age,
+   * sensor, and/or satellite and re-render from memory. Never fetches.
+   * @param {{ frpFloor?: *, confidenceFloor?: *, brightnessFloor?: *, brightnessTi5Floor?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: *, satelliteFilter?: * }} next
    * @returns {boolean}
    */
   function applyVisibleFloors(next = {}) {
@@ -868,6 +898,11 @@ export function createFirmsHeatmapLayer({
       const floor = normalizeBrightnessFloor(next.brightnessFloor);
       if (floor !== _brightnessFloor) changed = true;
       _brightnessFloor = floor;
+    }
+    if (next.brightnessTi5Floor !== undefined) {
+      const floor = writeFirmsBrightnessTi5Floor(next.brightnessTi5Floor);
+      if (floor !== _brightnessTi5Floor) changed = true;
+      _brightnessTi5Floor = floor;
     }
     if (next.showDay !== undefined) {
       const showDay = next.showDay !== false;

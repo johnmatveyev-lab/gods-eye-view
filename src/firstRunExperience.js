@@ -89,7 +89,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         toggle (`meridian.launchWebcastOnly`), launch
  *                         probability chips (`meridian.launchProbability`),
  *                         launch hide-unknown-site toggle
- *                         (`meridian.launchHideUnknownSite`).
+ *                         (`meridian.launchHideUnknownSite`), FIRMS TI5
+ *                         brightness chips (`meridian.firmsBrightnessTi5`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
