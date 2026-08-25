@@ -16,6 +16,18 @@
       "maxDuration": 30,
       "includeFiles": "config/**"
     },
+    "api/cctv/frame/[id].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
+    "api/cctv/stream/[id].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
+    "api/cctv/media/[id].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
     "api/celestrak/[...group].js": {
       "maxDuration": 20
     },
@@ -66,6 +78,12 @@
     },
     "api/terrain/heights.js": {
       "maxDuration": 30
+    },
+    "api/realtime/token.js": {
+      "maxDuration": 15
+    },
+    "api/openai/hud-summary.js": {
+      "maxDuration": 15
     }
   },
   "rewrites": [

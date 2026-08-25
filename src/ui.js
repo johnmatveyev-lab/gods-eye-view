@@ -66,6 +66,10 @@ import {
 } from './celestialRing.js';
 import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
 import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import {
+  hydrateTrailsEnabled,
+  setTrailsEnabled,
+} from './data/trailPreference.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -106,6 +110,10 @@ import radioLayer, {
   radioTunerPointerPosition,
   radioTunerSlot,
 } from './data/radio.js';
+import {
+  applyRadioStationSearch,
+  renderRadioStationList,
+} from './data/radioStationSearch.js';
 import bikeshareLayer from './data/bikeshare.js';
 import aisLiveVesselsLayer from './data/aisLiveVessels.js';
 import militaryAwarenessLayer from './data/militaryAwareness.js';
@@ -227,6 +235,13 @@ import {
   getScopeTerminusOverride,
   clampScopeTerminusPct,
 } from './scopeMask.js';
+import {
+  applyLiveSunLighting,
+  LIVE_SUN_DEFAULT,
+  LIVE_SUN_STORAGE_KEY,
+  readLiveSunPreference,
+  writeLiveSunPreference,
+} from './liveSunLighting.js';
 import {
   fetchRegionalBrief,
   regionalDistanceM,
@@ -2392,6 +2407,8 @@ export class StyleManager {
     } catch { /* storage can be unavailable in privacy/test contexts */ }
     this._detectionAllocationPreference = normalizeAllocationStrategy(storedDetectionAllocation);
     this._celestialBtn = document.getElementById('celestial-toggle');
+    this._liveSunBtn = document.getElementById('live-sun-toggle');
+    this._liveSunEnabled = false;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2438,6 +2455,9 @@ export class StyleManager {
     this._radioLayerState = document.getElementById('radio-layer-state');
     this._radioEnableBtn = document.getElementById('radio-enable-btn');
     this._radioFilter = document.getElementById('radio-filter');
+    this._radioStationSearch = document.getElementById('radio-station-search');
+    this._radioStationSearchCount = document.getElementById('radio-station-search-count');
+    this._radioStationList = document.getElementById('radio-station-list');
     this._radioStationName = document.getElementById('radio-station-name');
     this._radioStationMeta = document.getElementById('radio-station-meta');
     this._radioStationTags = document.getElementById('radio-station-tags');
@@ -2749,6 +2769,10 @@ export class StyleManager {
     // button and the armed layer in agreement.
     this._models3dEnabled = true;
     this._models3dMode = 'proximity'; // 'proximity' (nearest in view) | 'all' (every in-view plane)
+    this._trailsBtn = document.getElementById('trails-toggle');
+    // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
+    // existing tracked-target trail renderer without stopping track.
+    this._trailsEnabled = true;
 
     // The shared world-overlay host must own its one postRender lane before
     // detection and tracked-readout initialize. It stays transparent until a
@@ -2790,6 +2814,8 @@ export class StyleManager {
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initTrailsToggle();
+    this._initLiveSunToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -3670,6 +3696,47 @@ export class StyleManager {
     }
   }
 
+  _initLiveSunToggle() {
+    this._liveSunBtn?.addEventListener('click', () => {
+      this.setLiveSunEnabled(!this._liveSunEnabled);
+    });
+    let stored = LIVE_SUN_DEFAULT;
+    try {
+      stored = readLiveSunPreference(window.localStorage);
+    } catch {
+      stored = LIVE_SUN_DEFAULT;
+    }
+    this.setLiveSunEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Turn live sun lighting on or off. On follows the Cesium clock; off is the
+   * well-lit globe already used when `enableLighting` is false.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, liveSun: boolean}}
+   */
+  setLiveSunEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._liveSunEnabled = next;
+    applyLiveSunLighting(this.viewer, next, {
+      now: Cesium.JulianDate.now(),
+      clockStep: Cesium.ClockStep.SYSTEM_CLOCK,
+    });
+    this._liveSunBtn?.classList.toggle('active', next);
+    this._liveSunBtn?.setAttribute('aria-pressed', String(next));
+    if (this._liveSunBtn) {
+      this._liveSunBtn.title = next
+        ? 'Live sun on — terminator follows real time'
+        : 'Live sun off — fixed well-lit day';
+    }
+    if (persist) {
+      try { writeLiveSunPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    governorRequestRender('live-sun');
+    return { ok: true, liveSun: next };
+  }
+
   /**
    * Renders the validated map stack chip row from the matching controller
    * entries. Cesium ion/Bing chips remain keyboard-focusable but unavailable,
@@ -3705,6 +3772,7 @@ export class StyleManager {
     if (state?.activeId === before && stackId !== before && state?.lastError) {
       this._showToast(state.lastError);
     }
+    this.setLiveSunEnabled(this._liveSunEnabled, { persist: false });
     if (syncShare) this._syncShareState();
   }
 
@@ -5915,6 +5983,28 @@ export class StyleManager {
       }
       this._radioTunerBandPinnedForNavigation = false;
       this._radioTunerPool = [];
+      this._radioDirectoryListSignature = '';
+      refreshTunerBand({ force: true });
+    });
+    this._radioStationSearch?.addEventListener('input', () => {
+      const presentation = radioLayer.getUIState();
+      if (!presentation.presentationActive) {
+        this._radioStationSearch.value = presentation.stationSearch || '';
+        return;
+      }
+      if (this._radioTunerDragging) finishTuner(false);
+      if (!radioLayer.setStationSearch(this._radioStationSearch.value)) {
+        this._radioStationSearch.value = radioLayer.getUIState().stationSearch || '';
+        return;
+      }
+      this._radioTunerBandPinnedForNavigation = false;
+      this._radioTunerPool = [];
+      applyRadioStationSearch(
+        this._radioStationList,
+        this._radioStationSearch.value,
+        radioLayer.getDirectoryStations(),
+      );
+      this._syncRadioStationSearchCount();
       refreshTunerBand({ force: true });
     });
     this._radioPrevBtn?.addEventListener('click', () => cycleRadio(-1));
@@ -6140,6 +6230,46 @@ export class StyleManager {
     this._contextRadioToggleBtn.title = `${action} compact Radio controls`;
   }
 
+  /** Keep the current Radio Browser list and search field in sync. */
+  _syncRadioStationList(state, interactive) {
+    const directory = radioLayer.getDirectoryStations?.() || [];
+    const query = state?.stationSearch || '';
+    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
+    if (this._radioStationSearch && document.activeElement !== this._radioStationSearch) {
+      this._radioStationSearch.value = query;
+    }
+    if (this._radioStationSearch) {
+      this._radioStationSearch.disabled = !interactive || !state?.stationCount;
+    }
+    if (signature !== this._radioDirectoryListSignature) {
+      renderRadioStationList(this._radioStationList, directory, {
+        selectedId: state?.selected?.id || null,
+        onSelect: (stationId) => {
+          if (this._radioTunerDragging) return;
+          radioLayer.selectStation(stationId, { autoplay: false, origin: 'user' });
+        },
+      });
+      this._radioDirectoryListSignature = signature;
+    }
+    applyRadioStationSearch(this._radioStationList, query, directory);
+    if (this._radioStationList) {
+      this._radioStationList.hidden = !interactive || !directory.length;
+    }
+    this._syncRadioStationSearchCount(directory);
+  }
+
+  /** Show how many current-list stations remain after search. */
+  _syncRadioStationSearchCount(directory = radioLayer.getDirectoryStations?.() || []) {
+    if (!this._radioStationSearchCount) return;
+    const visible = this._radioStationList
+      ? [...this._radioStationList.children].filter((row) => !row.hidden).length
+      : directory.length;
+    const total = directory.length;
+    this._radioStationSearchCount.textContent = total
+      ? `${visible}/${total}`
+      : '';
+  }
+
   /** Render Radio state without making playback or Context decisions. */
   _renderRadioState(state) {
     if (!state || !this._radioPanel) return;
@@ -6232,6 +6362,7 @@ export class StyleManager {
       this._radioFilter.style.color = activeCategory?.color || '';
       this._radioFilter.disabled = !interactive || !state.stationCount;
     }
+    this._syncRadioStationList(state, interactive);
 
     const tunerAvailable = interactive && state.filteredCount > 0;
     if (this._radioTuner) this._radioTuner.hidden = !tunerAvailable;
@@ -10356,6 +10487,25 @@ export class StyleManager {
     // tech reported was an unpressed-looking control over an armed layer.
     // Mirrors #scope-toggle, which has always carried aria-pressed.
     this._models3dBtn?.setAttribute('aria-pressed', String(this._models3dEnabled));
+  }
+
+  /**
+   * Wires the DISPLAY-rail Trails toggle to the existing trail renderer.
+   * Off hides drawing (body + already-drawn path) and persists `meridian.trails`.
+   * Stop tracking still clears the target; this control does not.
+   */
+  _initTrailsToggle() {
+    this._trailsEnabled = hydrateTrailsEnabled();
+    this._trailsBtn?.addEventListener('click', () => {
+      this._trailsEnabled = setTrailsEnabled(!this._trailsEnabled);
+      this._syncTrailsButtonState();
+    });
+    this._syncTrailsButtonState();
+  }
+
+  _syncTrailsButtonState() {
+    this._trailsBtn?.classList.toggle('active', this._trailsEnabled);
+    this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
   }
 
   _initHUDToggle() {

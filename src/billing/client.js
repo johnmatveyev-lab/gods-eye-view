@@ -12,6 +12,7 @@ import {
   saveCurrentView,
   shouldShowSavedViewsButton,
 } from './savedViews.js';
+import { applyVoiceMicChrome, voiceGateAction } from '../voice/gevRealtime.js';
 
 const HEARTBEAT_MS = 30_000;
 const HEARTBEAT_SECONDS = 30;
@@ -81,19 +82,22 @@ export async function initMeridianAccount() {
 export function attachVoiceGate(voiceController, account = window.__meridianAccount) {
   if (!voiceController?.ui?.button || !account) return;
   const button = voiceController.ui.button;
+  applyVoiceMicChrome(voiceController.ui, account.entitlement, account);
+  account.voiceController = voiceController;
   button.addEventListener('click', (event) => {
     const entitlement = account.entitlement;
-    if (!entitlement || entitlement.plan === PLANS.SELF_HOST) return;
-    if (entitlement.voice) return;
+    const action = voiceGateAction(entitlement, account);
+    applyVoiceMicChrome(voiceController.ui, entitlement, account);
+    if (action === 'start') return;
     event.preventDefault();
     event.stopImmediatePropagation();
     openModal(document.getElementById('billing-modal'), {
       title: 'Voice is a Pro feature',
-      body: entitlement.signedIn
+      body: entitlement?.signedIn
         ? `Upgrade to Pro ($${PRO_PRICE_USD}/mo) for hands-free voice on this host. The globe stays available on Free.`
         : 'Sign in for a capped Free demo, then upgrade to Pro for voice.',
-      primary: entitlement.signedIn ? 'Upgrade to Pro' : 'Sign in',
-    }, account, { primaryAction: entitlement.signedIn ? 'upgrade' : 'signin' });
+      primary: entitlement?.signedIn ? 'Upgrade to Pro' : 'Sign in',
+    }, account, { primaryAction: action });
   }, true);
 }
 
@@ -112,6 +116,9 @@ async function refreshAccount(root, account) {
     };
   }
   renderAccount(root, account);
+  if (account.voiceController) {
+    applyVoiceMicChrome(account.voiceController.ui, account.entitlement, account);
+  }
 }
 
 function renderSelfHost(root, account) {

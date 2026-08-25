@@ -22,6 +22,13 @@ import {
 import { queuePlatoons, locateAlongRoad } from './trafficQueue.js';
 import { registerDynamicCredit, TOMTOM_CREDIT } from './dataCredits.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import {
+  getTrafficSource,
+  setTrafficSource,
+  shouldRegisterTomTomCredit,
+  trafficSourceControls,
+  trafficUsesLiveTiles,
+} from './trafficSource.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -31,13 +38,17 @@ import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor
  * the camera viewport, spawns PointPrimitives that lerp along pre-computed
  * Cartesian3 waypoints. Camera-gated: only active below ~8 km altitude.
  *
- * Two modes (decided once per session via `/api/tomtom/status`):
- *  - `sim` (keyless default): white dots at hardcoded per-road-class speeds —
- *    the original simulation, byte-identical behavior.
- *  - `live`: TomTom flow tiles (`flowTiles.js`) are matched onto the same
- *    Overpass roads (`flowMatch.js`); matched roads color/slow/densify their
- *    dots by real congestion (`trafficFlowStyle.js`), closed roads spawn no
- *    dots, and unmatched roads keep the simulated white.
+ * Two sources, chosen with a Traffic: Live | Sim control:
+ *  - `sim` (keyless default, or an explicit Sim click): white dots at
+ *    hardcoded per-road-class speeds — the original simulation. No
+ *    `/api/tomtom/flow` tile requests.
+ *  - `live` (only when `/api/tomtom/status` reports `hasKey`): TomTom flow
+ *    tiles (`flowTiles.js`) are matched onto the same Overpass roads
+ *    (`flowMatch.js`); matched roads color/slow/densify their dots by real
+ *    congestion (`trafficFlowStyle.js`), closed roads spawn no dots, and
+ *    unmatched roads keep the simulated white. Hosted users can force Sim
+ *    when Live is over budget. TomTom attribution registers only after Live
+ *    actually paints a tile.
  *
  * Architecture overview:
  *  - Camera-change listener triggers debounced road fetching per viewport tile.
@@ -184,6 +195,8 @@ let _lastUpdate = null;
 let _loadGeneration = 0;
 /** @type {AbortController|null} Controller for the in-flight fetch, so it can be cancelled */
 let _activeFetchAbort = null;
+/** @type {AbortController|null} Dedicated abort for TomTom tile fetches (Sim must not cancel Overpass). */
+let _flowAbort = null;
 /** @type {number} User-adjustable density multiplier (clamped 0.2–2.5) */
 let _densityScale = 1.0;
 /** @type {number} User-adjustable speed multiplier (clamped 0.3–3.0) */
@@ -192,8 +205,14 @@ let _speedScale = 1.0;
 let _lastViewCenter = null;
 /** @type {number|null} camera.percentageChanged value before we overrode it, restored on disable */
 let _prevPercentageChanged = null;
-/** @type {boolean} Live TomTom flow mode — true iff /api/tomtom/status reports a key */
+/** @type {boolean} `/api/tomtom/status` reported a host key. Live stays disabled without it. */
+let _hasKey = false;
+/** @type {'live'|'sim'} User-facing source preference (Live is ignored when `!_hasKey`). */
+let _sourcePreference = getTrafficSource();
+/** @type {boolean} Effective Live paint — hasKey AND the user left Live selected. */
 let _liveMode = false;
+/** @type {Function|null} Manager callback when Live | Sim chips need a repaint. */
+let _rowControlsListener = null;
 /**
  * Short user-facing reason live flow is currently unavailable, or null while
  * healthy. Only ever set in live mode: keyless simulation is a designed
@@ -1164,6 +1183,65 @@ function cancelActiveFetch() {
     _activeFetchAbort.abort();
     _activeFetchAbort = null;
   }
+  cancelFlowFetch();
+}
+
+/** Abort in-flight TomTom tile requests without touching the Overpass controller. */
+function cancelFlowFetch() {
+  if (_flowAbort) {
+    _flowAbort.abort();
+    _flowAbort = null;
+  }
+}
+
+/** Shared abort signal for live tile fetches (warmup + apply). */
+function flowSignal() {
+  if (!_flowAbort) _flowAbort = new AbortController();
+  return _flowAbort.signal;
+}
+
+/** Recompute `_liveMode` from the host key and the Live | Sim preference. */
+function applyResolvedTrafficSource() {
+  _sourcePreference = getTrafficSource();
+  _liveMode = trafficUsesLiveTiles({ hasKey: _hasKey, source: _sourcePreference });
+}
+
+/** Drop attached TomTom flow so a Sim switch cannot keep live colors. */
+function stripRoadFlow() {
+  const strip = (roads) => {
+    if (!Array.isArray(roads)) return;
+    for (const road of roads) road.flow = null;
+  };
+  strip(_roads);
+  for (const cache of _tileCache.values()) {
+    strip(cache.major);
+    strip(cache.full);
+  }
+}
+
+/** After a Live | Sim click, stop tiles or start them, and refresh the paint. */
+function applyTrafficSourceVisuals() {
+  if (!_liveMode) {
+    cancelFlowFetch();
+    stripRoadFlow();
+    _flowError = null;
+    _flowCoveragePct = 0;
+    if (_roads?.length) {
+      renderRoadsForAltitude(_roads, _lastRenderAltitude || 0, 'Sim source');
+    } else {
+      removeHeatLines();
+    }
+    return;
+  }
+  if (_roads?.length && _lastBounds) {
+    applyFlowThenRender(
+      _roads,
+      _lastBounds,
+      _loadGeneration,
+      _lastRenderAltitude || 0,
+      'Live source',
+    );
+  }
 }
 
 /** Drop a background neighbor-ring prefetch without touching the painted tile. */
@@ -1286,11 +1364,12 @@ export function deriveTrafficFlowError(error) {
  *    the colors on screen are simulated. Never a stale "LIVE · N% cov".
  *
  * @param {Object} [input]
- * @param {boolean} [input.liveMode] - `/api/tomtom/status` reported a key.
+ * @param {boolean} [input.liveMode] - Effective Live paint (key + Live selected).
  * @param {boolean} [input.fetching] - A viewport load is in flight.
  * @param {string|null} [input.flowError] - `deriveTrafficFlowError` result, if any.
  * @param {number} [input.coveragePct] - Matched-road coverage, 0–100.
  * @param {boolean} [input.statusUnavailable] - The status probe itself failed.
+ * @param {boolean} [input.hasKey] - Host `/api/tomtom/status` reported a key.
  * @returns {{mode:'live'|'sim', error:string|null, loadingLabel:string}}
  */
 export function trafficFeedPresentation({
@@ -1299,10 +1378,11 @@ export function trafficFeedPresentation({
   flowError = null,
   coveragePct = 0,
   statusUnavailable = false,
+  hasKey = false,
 } = {}) {
-  // `mode` is the CONFIGURED source (live key present vs keyless), not this
-  // instant's health — health rides on `error`. The qa-traffic harness pins
-  // that meaning.
+  // `mode` is the CONFIGURED source (Live selected with a key vs Sim), not
+  // this instant's health — health rides on `error`. The qa-traffic harness
+  // pins that meaning.
   const mode = liveMode ? 'live' : 'sim';
   if (liveMode && flowError) {
     // One string for both fields. The manager's meta line renders `error` and
@@ -1329,15 +1409,17 @@ export function trafficFeedPresentation({
     error: null,
     loadingLabel: statusUnavailable
       ? 'SIMULATED — traffic service unreachable'
-      : 'SIMULATED — add TomTom key for live',
+      : hasKey
+        ? 'SIMULATED — using built-in traffic'
+        : 'SIMULATED — add TomTom key for live',
   };
 }
 
 /**
  * Check `/api/tomtom/status` once per session and cache the result.
- * Live mode iff the server holds a TomTom key; the TomTom attribution credit
- * registers the first time live mode activates. Keyless or unreachable →
- * simulation mode, exactly today's behavior.
+ * A key makes Live selectable; Sim stays the paint until Live is chosen
+ * (default preference is Live, so a keyed host still activates tiles).
+ * Attribution is not registered here — only after Live paints a tile.
  *
  * @returns {Promise<void>} Resolves when `_liveMode` is settled.
  */
@@ -1346,18 +1428,21 @@ function ensureFlowStatus() {
     _flowStatusPromise = fetch('/api/tomtom/status')
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .then((status) => {
-        _liveMode = Boolean(status?.hasKey);
+        _hasKey = Boolean(status?.hasKey);
         _flowStatusUnavailable = false;
-        if (_liveMode) {
-          console.log('[Data:Traffic] TomTom key present — live flow mode');
-          registerDynamicCredit(_viewer, TOMTOM_CREDIT);
+        applyResolvedTrafficSource();
+        if (_hasKey) {
+          console.log('[Data:Traffic] TomTom key present — Live available');
         }
+        _rowControlsListener?.();
       })
       .catch((e) => {
         // Simulating because we could not ask, which is NOT the same as
         // "server says no key" — getStats() distinguishes the two.
-        _liveMode = false;
+        _hasKey = false;
         _flowStatusUnavailable = true;
+        applyResolvedTrafficSource();
+        _rowControlsListener?.();
         console.warn('[Data:Traffic] TomTom status unreachable — simulated traffic:', e?.message || e);
       });
   }
@@ -1388,15 +1473,19 @@ async function applyFlowToRoads(roads, clamped, generation) {
   try {
     if (!_flowStatusPromise) return; // status check not started — sim mode
     await _flowStatusPromise;
-    if (!_liveMode || !_enabled) return;
+    if (!trafficUsesLiveTiles({ hasKey: _hasKey, source: _sourcePreference }) || !_enabled) return;
     if (generation !== _loadGeneration) return;
     if (!Array.isArray(roads) || roads.length === 0) return;
     try {
-      // Cached paths reach here without a live controller; the fetch paths
-      // reuse theirs so one cancel covers both roads and flow.
-      if (!_activeFetchAbort) _activeFetchAbort = new AbortController();
-      const segments = await fetchFlowForBounds(clamped, { signal: _activeFetchAbort.signal });
+      const segments = await fetchFlowForBounds(clamped, { signal: flowSignal() });
       if (generation !== _loadGeneration) return;
+      if (!trafficUsesLiveTiles({ hasKey: _hasKey, source: _sourcePreference })) return;
+      if (shouldRegisterTomTomCredit({
+        liveMode: true,
+        paintedTile: Array.isArray(segments) && segments.length > 0,
+      })) {
+        registerDynamicCredit(_viewer, TOMTOM_CREDIT);
+      }
       const { matches, matchedCount, candidateCount } = matchFlowToRoads(roads, segments);
       for (let i = 0; i < roads.length; i++) {
         roads[i].flow = matches[i];
@@ -2109,8 +2198,12 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
   // fetch — sequential fetches doubled first-paint latency (field-test
   // round 1). Failures are irrelevant; applyFlowToRoads settles the truth.
   ensureFlowStatus().then(() => {
-    if (_liveMode && _enabled && generation === _loadGeneration) {
-      fetchFlowForBounds(clamped, {}).catch(() => { /* warm-up only */ });
+    if (
+      trafficUsesLiveTiles({ hasKey: _hasKey, source: _sourcePreference })
+      && _enabled
+      && generation === _loadGeneration
+    ) {
+      fetchFlowForBounds(clamped, { signal: flowSignal() }).catch(() => { /* warm-up only */ });
     }
   });
 
@@ -2437,11 +2530,18 @@ const trafficLayer = {
         restyleDotsInPlace();
       }
     }
+    if (params.trafficSource === 'live' || params.trafficSource === 'sim') {
+      const wasLive = _liveMode;
+      setTrafficSource(params.trafficSource);
+      applyResolvedTrafficSource();
+      if (wasLive !== _liveMode) applyTrafficSourceVisuals();
+      _rowControlsListener?.();
+    }
   },
 
   /**
    * Return the current user-adjustable parameters.
-   * @returns {{densityScale:number, speedScale:number}}
+   * @returns {{densityScale:number, speedScale:number, trafficSource:'live'|'sim'}}
    */
   getParams() {
     return {
@@ -2450,7 +2550,29 @@ const trafficLayer = {
       uncoveredRoads: _uncoveredMode,
       jamViz: _jamViz,
       presetDots: _presetDots,
+      trafficSource: getTrafficSource(),
     };
+  },
+
+  /**
+   * Street Traffic Live | Sim chips. Live is disabled without a host key.
+   * @returns {{heading: string, chips: Array<object>}}
+   */
+  getRowControls() {
+    return trafficSourceControls({
+      hasKey: _hasKey,
+      source: _sourcePreference,
+      flowError: _flowError,
+    });
+  },
+
+  /**
+   * Install the manager's "row controls changed" callback so a late status
+   * probe or a Live | Sim click can repaint the chips.
+   * @param {(() => void)|null} listener
+   */
+  setRowControlsListener(listener) {
+    _rowControlsListener = typeof listener === 'function' ? listener : null;
   },
 
   /**
@@ -2520,8 +2642,9 @@ const trafficLayer = {
 
   /**
    * Return current layer statistics for UI status chips.
-   * `mode` is the CONFIGURED source — 'live' (a TomTom key is present) or
-   * 'sim' (keyless simulation, which the manager renders as a FALLBACK chip);
+   * `mode` is the CONFIGURED source — 'live' (a TomTom key is present and
+   * Live is selected) or 'sim' (keyless or an explicit Sim click, which the
+   * manager renders as a FALLBACK chip);
    * `error` carries this instant's health, so a live-configured layer whose
    * flow feed went down reads DEGRADED with the reason instead of a stale
    * LIVE coverage number. `flowCoveragePct` is matched roads / roads with any
@@ -2542,6 +2665,7 @@ const trafficLayer = {
       flowError: _flowError,
       coveragePct: _flowCoveragePct,
       statusUnavailable: _flowStatusUnavailable,
+      hasKey: _hasKey,
     });
     return {
       count: _count,
