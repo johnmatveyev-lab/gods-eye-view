@@ -72,6 +72,7 @@ function paramsForLayer(id) {
       showNight: true,
       ageWindow: '24',
       sensors: 'all',
+      satelliteFilter: 'all',
     };
   }
   if (id === 'military-installations') {
@@ -561,6 +562,27 @@ test('FIRMS sensor chips persist on local-firms and default all on', () => {
   const decoded = decodeLayerStateParams(params);
   assert.equal(decoded.options['local-firms'].frpFloor, '50');
   assert.equal(decoded.options['local-firms'].sensors, 'VO');
+});
+
+test('FIRMS satellite chips persist on local-firms and default all on', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].satelliteFilter, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].satelliteFilter, 'all', 'existing w links keep every satellite visible');
+  assert.equal(omitted.options['local-firms'].sensors, 'all');
+  assert.equal(omitted.options['local-firms'].frpFloor, 'all');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { frpFloor: '50', satelliteFilter: 'N20' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  assert.match(params.get('lo'), /w\.t\.n20/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['local-firms'].frpFloor, '50');
+  assert.equal(decoded.options['local-firms'].satelliteFilter, 'N20');
 });
 
 test('Radio genre ids with spaces and ampersands round-trip through v2', () => {

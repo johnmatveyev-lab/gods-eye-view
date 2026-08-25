@@ -17,6 +17,7 @@ import {
   normalizeFirmsSensorFilter,
   toggleFirmsSensor,
 } from './firmsSensorFilter.js';
+import { filterFiresBySatellite } from './firmsSatelliteFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -104,4 +105,9 @@ test('FRP 50+ still ANDs with sensor chips; night detections that pass both stay
   assert.equal(MIXED.find((fire) => fire.index === 2).night, true);
   assert.equal(MIXED.find((fire) => fire.index === 3).night, true);
   assert.equal(firmsSensorChipModels('all')[1].params.sensors, 'VO');
+  const andedSat = filterFiresBySatellite(
+    filterFiresBySensor(above50, 'VO'),
+    'all',
+  ).map((fire) => fire.index);
+  assert.deepEqual(andedSat, [0, 2, 3], 'satellite all-on does not change the FRP + sensor set');
 });

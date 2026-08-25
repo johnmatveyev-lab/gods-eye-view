@@ -13,6 +13,7 @@ import {
   fireMatchesFirmsSensorFilter,
   firmsSensorFamily,
 } from './firmsSensorFilter.js';
+import { filterFiresBySatellite } from './firmsSatelliteFilter.js';
 
 /** A proxy record as served by /api/firms (firmsCsv.js parser shape). */
 const proxyRecord = (overrides = {}) => ({
@@ -148,6 +149,16 @@ test('sensor chips: empty stays visible; non-empty unknown is Other', () => {
   assert.deepEqual(
     filterFiresBySensor(adapted, DEFAULT_FIRMS_SENSOR_FILTER).map((fire) => fire.sensor),
     ['VIIRS', 'MODIS', 'AVHRR', ''],
+  );
+  assert.deepEqual(
+    filterFiresBySatellite(filterFiresBySensor(adapted, 'VO'), 'all').map((fire) => fire.sensor),
+    ['VIIRS', 'AVHRR', ''],
+    'satellite all-on ANDs with sensor without changing the set',
+  );
+  assert.deepEqual(
+    filterFiresBySatellite(filterFiresBySensor(adapted, 'VO'), 'N20').map((fire) => fire.sensor),
+    [],
+    'N20 off hides the adapter-stored N20 detections that passed the sensor chips',
   );
 });
 

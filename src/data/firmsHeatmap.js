@@ -46,6 +46,13 @@ import {
   firmsSensorChipModels,
   normalizeFirmsSensorFilter,
 } from './firmsSensorFilter.js';
+import {
+  DEFAULT_FIRMS_SATELLITE_FILTER,
+  filterFiresBySatellite,
+  fireMatchesFirmsSatelliteFilter,
+  firmsSatelliteChipModels,
+  normalizeFirmsSatelliteFilter,
+} from './firmsSatelliteFilter.js';
 import { fireAnchorHeight, warmFireAnchorFloors } from './fireAnchors.js';
 import { horizonOccluder } from './iconOrientation.js';
 import {
@@ -183,17 +190,21 @@ export function filterFiresByConfidenceFloor(fires, floor) {
 }
 
 /**
- * AND the operator FRP floor with the sensor chips. Later FIRMS floors
- * (confidence / day-night / age) compose here the same way.
+ * AND the operator FRP floor with the sensor and satellite chips. Later
+ * FIRMS floors (confidence / day-night / age) compose here the same way.
  * @param {Array<object>|null|undefined} fires
- * @param {{frpFloor?: unknown, sensors?: unknown}} [options]
+ * @param {{frpFloor?: unknown, sensors?: unknown, satelliteFilter?: unknown}} [options]
  * @returns {Array<object>}
  */
 export function filterVisibleFires(fires, {
   frpFloor = 'all',
   sensors = DEFAULT_FIRMS_SENSOR_FILTER,
+  satelliteFilter = DEFAULT_FIRMS_SATELLITE_FILTER,
 } = {}) {
-  return filterFiresBySensor(filterFiresByFrpFloor(fires, frpFloor), sensors);
+  return filterFiresBySatellite(
+    filterFiresBySensor(filterFiresByFrpFloor(fires, frpFloor), sensors),
+    satelliteFilter,
+  );
 }
 
 /**
@@ -311,6 +322,7 @@ export function createFirmsHeatmapLayer({
   let _showNight = true;
   let _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
   let _sensors = DEFAULT_FIRMS_SENSOR_FILTER;
+  let _satelliteFilter = DEFAULT_FIRMS_SATELLITE_FILTER;
   let _rowControlsListener = null;
   let _count = 0;
   let _cellCount = 0;
@@ -443,6 +455,7 @@ export function createFirmsHeatmapLayer({
       _showNight = true;
       _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
       _sensors = DEFAULT_FIRMS_SENSOR_FILTER;
+      _satelliteFilter = DEFAULT_FIRMS_SATELLITE_FILTER;
       _rowControlsListener = null;
       _cellCacheByGrid.clear();
       _count = 0;
@@ -606,8 +619,8 @@ export function createFirmsHeatmapLayer({
     /**
      * FIRMS floors for the data-panel chips. Re-filters in-memory `_fires`
      * — never hits /api/firms. Age, FRP, confidence, brightness, Day | Night,
-     * and sensor chips AND.
-     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, brightnessFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown }} [params]
+     * sensor, and satellite chips AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, brightnessFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown, satelliteFilter?: unknown }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
@@ -619,8 +632,10 @@ export function createFirmsHeatmapLayer({
       const hasNight = Object.hasOwn(params, 'showNight');
       const hasAge = Object.hasOwn(params, 'ageWindow');
       const hasSensors = Object.hasOwn(params, 'sensors');
-      if (!hasFrp && !hasConf && !hasBright && !hasDay && !hasNight && !hasAge && !hasSensors) return true;
+      const hasSatellite = Object.hasOwn(params, 'satelliteFilter');
+      if (!hasFrp && !hasConf && !hasBright && !hasDay && !hasNight && !hasAge && !hasSensors && !hasSatellite) return true;
       if (hasSensors && normalizeFirmsSensorFilter(params.sensors) == null) return false;
+      if (hasSatellite && normalizeFirmsSatelliteFilter(params.satelliteFilter) == null) return false;
       return applyVisibleFloors({
         frpFloor: hasFrp ? params.frpFloor : undefined,
         confidenceFloor: hasConf ? params.confidenceFloor : undefined,
@@ -629,6 +644,7 @@ export function createFirmsHeatmapLayer({
         showNight: hasNight ? params.showNight : undefined,
         ageWindow: hasAge ? params.ageWindow : undefined,
         sensors: hasSensors ? params.sensors : undefined,
+        satelliteFilter: hasSatellite ? params.satelliteFilter : undefined,
       });
     },
 
@@ -641,6 +657,7 @@ export function createFirmsHeatmapLayer({
      *   showNight: boolean,
      *   ageWindow: '6'|'12'|'24',
      *   sensors: string,
+     *   satelliteFilter: string,
      * }}
      */
     getParams() {
@@ -652,6 +669,7 @@ export function createFirmsHeatmapLayer({
         showNight: _showNight,
         ageWindow: _ageWindow,
         sensors: _sensors,
+        satelliteFilter: _satelliteFilter,
       };
     },
 
@@ -667,6 +685,7 @@ export function createFirmsHeatmapLayer({
             params: { frpFloor: chip.id },
           })),
           ...firmsSensorChipModels(_sensors),
+          ...firmsSatelliteChipModels(_satelliteFilter, _fires),
           ...FIRMS_CONFIDENCE_FLOOR_CHIPS.map((chip) => ({
             id: `conf-${chip.id}`,
             label: chip.label,
@@ -767,6 +786,7 @@ export function createFirmsHeatmapLayer({
       }
       renderCurrentLod(true);
       if (reselected) selectFire(reselected);
+      _rowControlsListener?.();
     } catch (error) {
       console.warn(`[Data:${id}] FIRMS live load failed:`, error);
       _error = 'live feed unavailable';
@@ -790,28 +810,31 @@ export function createFirmsHeatmapLayer({
 
   /** Rebuild the operator-filtered FRP-sorted index from last-good `_fires`. */
   function applyVisibleIndex() {
-    const visible = filterFiresBySensor(
-      filterFiresByAgeWindow(
-        filterFiresByDayNight(
-          filterFiresByBrightnessFloor(
-            filterFiresByConfidenceFloor(
-              filterFiresByFrpFloor(_fires, _frpFloor),
-              _confidenceFloor,
+    const visible = filterFiresBySatellite(
+      filterFiresBySensor(
+        filterFiresByAgeWindow(
+          filterFiresByDayNight(
+            filterFiresByBrightnessFloor(
+              filterFiresByConfidenceFloor(
+                filterFiresByFrpFloor(_fires, _frpFloor),
+                _confidenceFloor,
+              ),
+              _brightnessFloor,
             ),
-            _brightnessFloor,
+            { showDay: _showDay, showNight: _showNight },
           ),
-          { showDay: _showDay, showNight: _showNight },
+          _ageWindow,
+          Date.now(),
         ),
-        _ageWindow,
-        Date.now(),
+        _sensors,
       ),
-      _sensors,
+      _satelliteFilter,
     );
     _firesByFrp = visible.sort((a, b) => b.frp - a.frp);
     _count = visible.length;
   }
 
-  /** True when the detection clears FRP, confidence, brightness, Day | Night, age, and sensor. */
+  /** True when the detection clears FRP, confidence, brightness, Day | Night, age, sensor, and satellite. */
   function fireMeetsVisibleFloors(fire) {
     const minMw = frpFloorThresholdMw(_frpFloor);
     if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
@@ -819,13 +842,14 @@ export function createFirmsHeatmapLayer({
     if (!fireMeetsBrightnessFloor(fire, _brightnessFloor)) return false;
     if (!fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight })) return false;
     if (!fireMeetsAgeWindow(fire, _ageWindow, Date.now())) return false;
-    return fireMatchesFirmsSensorFilter(fire, _sensors);
+    if (!fireMatchesFirmsSensorFilter(fire, _sensors)) return false;
+    return fireMatchesFirmsSatelliteFilter(fire, _satelliteFilter);
   }
 
   /**
-   * Change FRP, confidence, brightness, Day | Night, age, and/or sensor and
-   * re-render from memory. Never fetches.
-   * @param {{ frpFloor?: *, confidenceFloor?: *, brightnessFloor?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: * }} next
+   * Change FRP, confidence, brightness, Day | Night, age, sensor, and/or
+   * satellite and re-render from memory. Never fetches.
+   * @param {{ frpFloor?: *, confidenceFloor?: *, brightnessFloor?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: *, satelliteFilter?: * }} next
    * @returns {boolean}
    */
   function applyVisibleFloors(next = {}) {
@@ -865,6 +889,12 @@ export function createFirmsHeatmapLayer({
       if (sensors == null) return false;
       if (sensors !== _sensors) changed = true;
       _sensors = sensors;
+    }
+    if (next.satelliteFilter !== undefined) {
+      const satellites = normalizeFirmsSatelliteFilter(next.satelliteFilter);
+      if (satellites == null) return false;
+      if (satellites !== _satelliteFilter) changed = true;
+      _satelliteFilter = satellites;
     }
     applyVisibleIndex();
     _cellCacheByGrid.clear();
