@@ -191,6 +191,12 @@ import {
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
 import {
+  DATACENTER_LAYER_ID,
+  bindDatacenterInViewList,
+  datacenterFlyDestination,
+  viewFromCamera,
+} from './data/datacenterList.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -2818,6 +2824,7 @@ export class StyleManager {
     this._initShareButton();
     this._initCopyViewLinkButton();
     this._initFullscreenButton();
+    this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
     this._initStopTrackingButton();
@@ -4690,6 +4697,9 @@ export class StyleManager {
       this._dataManagerUnsubscribe = this._dataManager.subscribe((change) => {
         if (String(change?.type || '').startsWith('visibility')) {
           this._handleContextLayerChange(change);
+          if (change?.layerId === DATACENTER_LAYER_ID) {
+            this._datacenterInViewList?.refresh();
+          }
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -10433,6 +10443,48 @@ export class StyleManager {
     });
   }
 
+  /**
+   * In-view OSM datacenter list. Reads the existing layer payload and flies
+   * with the same stem-click destination. Installations stay on their own list.
+   */
+  _initDatacenterInViewList() {
+    const root = document.getElementById('datacenter-in-view');
+    const items = document.getElementById('datacenter-in-view-items');
+    const count = document.getElementById('datacenter-in-view-count');
+    this._datacenterInViewList = bindDatacenterInViewList({
+      root,
+      items,
+      count,
+      getEnabled: () => Boolean(this._dataManager?.isEnabled(DATACENTER_LAYER_ID)),
+      getRecords: () => {
+        const module = this._dataManager?.layers?.get(DATACENTER_LAYER_ID)?.module;
+        if (typeof module?.getListPayload !== 'function') return [];
+        return module.getListPayload() || [];
+      },
+      getView: () => viewFromCamera(this.viewer?.camera, Cesium.Math),
+      flyTo: (site) => {
+        const module = this._dataManager?.layers?.get(DATACENTER_LAYER_ID)?.module;
+        if (typeof module?.flyToRecord === 'function') {
+          return module.flyToRecord(this.viewer, site.id);
+        }
+        const destination = datacenterFlyDestination(site);
+        if (!destination || !this.viewer?.camera) return false;
+        this.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(
+            destination.longitude,
+            destination.latitude,
+            destination.height,
+          ),
+          duration: destination.duration,
+        });
+        return true;
+      },
+    });
+    this._datacenterListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
+      this._datacenterInViewList?.refresh();
+    });
+  }
+
   /** Wire fullscreen on the document root so #cesium-credits stays painted. */
   _initFullscreenButton() {
     hideFullscreenButtonIfUnsupported(this._fullscreenBtn);
@@ -10858,6 +10910,10 @@ export class StyleManager {
       this.viewer?.canvas?.removeEventListener('wheel', this._initialShareGestureHandler);
       this._initialShareGestureHandler = null;
     }
+    this._datacenterListMoveEndRemove?.();
+    this._datacenterListMoveEndRemove = null;
+    this._datacenterInViewList?.destroy();
+    this._datacenterInViewList = null;
     this.shareLinkManager?.destroy();
     if (this._awarenessSelectedHandler) {
       window.removeEventListener('gev:awareness-subject-selected', this._awarenessSelectedHandler);
