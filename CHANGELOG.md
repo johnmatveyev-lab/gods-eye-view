@@ -33,6 +33,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Emergency highlight paints contacts whose current public ADS-B squawk is
+  7500, 7600, or 7700 using the existing annotation alert-red token. DISPLAY
+  **Emergency** defaults on and persists as `meridian.emergencyHighlight`.
+  Off removes the special paint only; click still tracks. Altitude-band
+  visibility still hides out-of-band contacts even when the squawk is
+  emergency. Client-side current payload only — not an alert service and
+  not a verified emergency. No `/api`.
 - Double-click on empty globe terrain flies to the pick with the existing
   landmark helper (reasonable height and tilt). Double-click on a contact or
   contact card still tracks. Wheel zoom-to-pointer is unchanged. Optional

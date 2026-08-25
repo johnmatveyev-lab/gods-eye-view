@@ -532,6 +532,9 @@ test('no mission writes a preference the visitor did not choose by picking it', 
     'setAltitudeBand',
     'writeAltitudeBand',
     'hydrateAltitudeBand',
+    'setEmergencyHighlightEnabled',
+    'hydrateEmergencyHighlightEnabled',
+    '_initEmergencyHighlightToggle',
     'setFeather',
   ]) {
     assert.doesNotMatch(code, new RegExp(forbidden), `a mission must never touch ${forbidden}`);
