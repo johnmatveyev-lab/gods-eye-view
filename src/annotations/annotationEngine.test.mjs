@@ -668,3 +668,124 @@ test('duplicate-replacement: a throw AFTER partial renderer state leaves nothing
   assert.equal(retry.drawn, 1);
   assert.equal(live.size, 1, 'the recoloured mark redraws once, with no orphan underneath');
 });
+
+function pinResolver() {
+  return async ({ target, latitude, longitude }) => ({
+    lon: Number.isFinite(longitude) ? longitude : Number(String(target).length),
+    lat: Number.isFinite(latitude) ? latitude : Number(String(target).length),
+    height: 0,
+    label: target,
+    source: 'fake',
+  });
+}
+
+test('removeLast: two marks, undo keeps only the first', async (t) => {
+  installAnimationFrameStubs(t);
+  const removed = [];
+  const synced = [];
+  const renderer = {
+    add() {},
+    update() {},
+    remove(anno) { removed.push(anno.id); },
+    sync(map) { synced.push(map.size); },
+  };
+  const engine = createAnnotationEngine({ viewer: {}, renderer, resolveTarget: pinResolver() });
+  const counts = [];
+  engine.onChange((snap) => counts.push(snap.count));
+
+  await engine.annotate([{ type: 'pin', target: 'first', label: 'First', latitude: 1, longitude: 1 }]);
+  await engine.annotate([{ type: 'pin', target: 'second', label: 'Second', latitude: 2, longitude: 2 }]);
+  assert.equal(engine.count(), 2);
+  const [first, second] = engine.list();
+
+  engine.removeLast();
+
+  assert.equal(engine.count(), 1);
+  assert.equal(engine.list().length, 1);
+  assert.equal(engine.list()[0].id, first.id);
+  assert.equal(engine.list()[0].label, 'First');
+  assert.deepEqual(removed, [second.id]);
+  assert.equal(synced.at(-1), 1);
+  assert.equal(counts.at(-1), 1);
+});
+
+test('removeLast: empty board is a no-op', (t) => {
+  installAnimationFrameStubs(t);
+  const removed = [];
+  const renderer = {
+    add() {},
+    update() {},
+    remove(anno) { removed.push(anno.id); },
+    sync() {},
+  };
+  const engine = createAnnotationEngine({ viewer: {}, renderer, resolveTarget: pinResolver() });
+  const counts = [];
+  engine.onChange((snap) => counts.push(snap.count));
+
+  engine.removeLast();
+
+  assert.equal(engine.count(), 0);
+  assert.deepEqual(removed, []);
+  assert.deepEqual(counts, []);
+});
+
+test('removeLast: does not bump generation or abort in-flight annotate', async (t) => {
+  installAnimationFrameStubs(t);
+  const renderer = {
+    add() {},
+    update() {},
+    remove() {},
+    sync() {},
+  };
+  let releaseSlow;
+  const slow = new Promise((resolve) => { releaseSlow = resolve; });
+  const resolveTarget = async ({ target, signal }) => {
+    if (target === 'slow') {
+      await slow;
+      if (signal?.aborted) return null;
+      return { lon: 3, lat: 3, height: 0, label: 'Slow', source: 'fake' };
+    }
+    const n = target === 'first' ? 1 : 2;
+    return { lon: n, lat: n, height: 0, label: target, source: 'fake' };
+  };
+  const engine = createAnnotationEngine({ viewer: {}, renderer, resolveTarget });
+
+  await engine.annotate([{ type: 'pin', target: 'first', label: 'First' }]);
+  await engine.annotate([{ type: 'pin', target: 'second', label: 'Second' }]);
+  assert.equal(engine.count(), 2);
+
+  const pending = engine.annotate([{ type: 'pin', target: 'slow', label: 'Slow' }]);
+  engine.removeLast();
+  assert.equal(engine.count(), 1);
+  assert.equal(engine.list()[0].label, 'First');
+
+  releaseSlow();
+  const result = await pending;
+  assert.equal(result.aborted, undefined);
+  assert.equal(result.ok, true);
+  assert.equal(result.drawn, 1);
+  assert.equal(engine.count(), 2);
+  assert.deepEqual(engine.list().map((anno) => anno.label), ['First', 'Slow']);
+});
+
+test('clear still empties the board after undo', async (t) => {
+  installAnimationFrameStubs(t);
+  const renderer = {
+    add() {},
+    update() {},
+    remove() {},
+    sync() {},
+  };
+  const engine = createAnnotationEngine({ viewer: {}, renderer, resolveTarget: pinResolver() });
+
+  await engine.annotate([{ type: 'pin', target: 'first', label: 'First', latitude: 1, longitude: 1 }]);
+  await engine.annotate([{ type: 'pin', target: 'second', label: 'Second', latitude: 2, longitude: 2 }]);
+  engine.removeLast();
+  assert.equal(engine.count(), 1);
+
+  engine.clear();
+  assert.equal(engine.count(), 0);
+  assert.equal(engine.list().length, 0);
+  engine.removeLast();
+  assert.equal(engine.count(), 0);
+});
