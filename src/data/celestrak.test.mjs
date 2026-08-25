@@ -224,5 +224,5 @@ test('Vite forwards to the extracted plugin; no ais-live/google/voice wrap', () 
     assert.match(rule.destination, /^\/api\/tomtom\//);
   }
   const functionKeys = Object.keys(vercelJson.functions);
-  assert.equal(functionKeys.some((key) => /ais-live|google|voice|realtime/.test(key)), false);
+  assert.equal(functionKeys.some((key) => /ais-live|voice|realtime|text-search/.test(key)), false);
 });
