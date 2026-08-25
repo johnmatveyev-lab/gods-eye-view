@@ -38,7 +38,7 @@ const CLAIMED_NON_PAN_KEYS = Object.freeze(new Set(['?', 'f', 'h']));
 
 /**
  * True when the event target is a text field or other typing control.
- * Covers `#data-layer-filter` and `#radio-station-search`.
+ * Covers `#data-layer-filter`, `#radio-station-search`, and `#radio-country`.
  */
 export function isTypingTarget(target) {
   if (!target) return false;
