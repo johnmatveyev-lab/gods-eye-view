@@ -108,7 +108,7 @@ import {
   setKeepAboveEnabled,
 } from './cameraAboveGround.js';
 import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
-import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
+import { destroyWorldOverlay, getOverlayPaintRect, hitTestWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
   initDetection,
@@ -374,6 +374,11 @@ import {
   setCameraCrosshairEnabled,
   writeCrosshairPreference,
 } from './cameraCrosshair.js';
+import {
+  bindDoubleClickFly,
+  DOUBLE_CLICK_FLY_DEFAULT,
+  readDoubleClickFlyPreference,
+} from './doubleClickFly.js';
 import {
   fetchRegionalBrief,
   regionalDistanceM,
@@ -2573,6 +2578,8 @@ export class StyleManager {
     this._gridBtn = document.getElementById('grid-toggle');
     this._crosshairBtn = document.getElementById('crosshair-toggle');
     this._crosshairEnabled = CROSSHAIR_DEFAULT;
+    this._doubleClickFlyEnabled = DOUBLE_CLICK_FLY_DEFAULT;
+    this._removeDoubleClickFly = null;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -3038,6 +3045,7 @@ export class StyleManager {
     this._initLaunchesPanel();
     this._initStopTrackingButton();
     this._initDamsInViewList();
+    this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
@@ -10876,6 +10884,30 @@ export class StyleManager {
   }
 
   /**
+   * Double-click empty terrain flies to the pick. Contact cards and
+   * registered contact picks keep the existing track path.
+   */
+  _initDoubleClickFly() {
+    this._removeDoubleClickFly?.();
+    let stored = DOUBLE_CLICK_FLY_DEFAULT;
+    try {
+      stored = readDoubleClickFlyPreference(window.localStorage);
+    } catch {
+      stored = DOUBLE_CLICK_FLY_DEFAULT;
+    }
+    this._doubleClickFlyEnabled = stored;
+    this._removeDoubleClickFly = bindDoubleClickFly(this.viewer, {
+      getEnabled: () => this._doubleClickFlyEnabled !== false,
+      isCockpitActive: () => !!this.cockpitView?.active
+        || document.body.classList.contains('cockpit-mode'),
+      isMeasureActive: () => isMeasureActive(),
+      hitTestOverlay: (x, y) => hitTestWorldOverlay(x, y),
+      flyTo: (viewer, lat, lon, framing) => flyToLandmark(viewer, lat, lon, framing),
+      navigate: (run) => this._runExplicitNavigation('pick', run),
+    });
+  }
+
+  /**
    * Fly to the default first-load camera. Does not delete lastView;
    * moveEnd overwrites the slot after the flight.
    */
@@ -11769,6 +11801,8 @@ export class StyleManager {
     this._removeWorldRequestFocusListener?.();
     this._removeWorldRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
+    this._removeDoubleClickFly?.();
+    this._removeDoubleClickFly = null;
     this._navigationOwnerChangedRemover?.();
     this._navigationOwnerChangedRemover = null;
     this._removeNavigationAuthorityListener?.();
