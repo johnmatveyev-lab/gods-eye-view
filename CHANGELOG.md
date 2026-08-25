@@ -149,6 +149,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
   "Offline — showing last data". AIS is not wrapped. No service worker.
+- Radio volume is a 0–100 slider on the existing Radio Browser audio element.
+  The level persists as `meridian.radioVolume`. Mute sets 0 and unmute
+  restores the prior level. Disabling the Radio layer still stops audio.
+  Station search and play are unchanged. No new `/api` and no voice ducking.
 
 ### Changed
 
