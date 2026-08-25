@@ -12,10 +12,10 @@
 //     billboard↔model flapping for a camera orbiting the boundary, which no
 //     unit test would otherwise catch.
 //
-//  2. The WIRING in both flight layers — that the tracked contact takes its
-//     model with the fleet `models3d` toggle OFF (the whole point of the
-//     feature), that cockpit and TR-3B suppression survived the rewrite, and
-//     that deselecting drops the regime.
+//  2. The WIRING in both flight layers — PLAN 55: the Models on/off control
+//     (`models3d` / `meridian.models`) also gates the tracked hangar model, so
+//     close-in aircraft can stay on the 2D billboard fallback. Cockpit and
+//     TR-3B suppression still apply, and deselecting still drops the regime.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -28,6 +28,7 @@ import {
 import * as Cesium from 'cesium';
 import flightsLayer, {
   _setTrackedFlightRefreshStateForTest,
+  _setCockpitDetectionSubjectForTest as setFlightsCockpit,
   _trackedModelRegimeActiveForTest as flightsRegimeActive,
   _updateTrackedModelForTest as flightsDriveTrackedModel,
   _trackedBillboardColorForTest as flightsTrackedBillboardColor,
@@ -36,6 +37,7 @@ import flightsLayer, {
 } from './flights.js';
 import militaryFlightsLayer, {
   _setTrackedMilitaryRefreshStateForTest,
+  _setCockpitDetectionSubjectForTest as setMilitaryCockpit,
   _trackedModelRegimeActiveForTest as militaryRegimeActive,
   _updateTrackedModelForTest as militaryDriveTrackedModel,
   _trackedBillboardColorForTest as militaryTrackedBillboardColor,
@@ -200,6 +202,8 @@ const LAYERS = [
     driveFleetModel: flightsDriveFleetModel,
     ensureFleetModel: flightsEnsureFleetModel,
     trackedBillboardColor: flightsTrackedBillboardColor,
+    setCockpit: setFlightsCockpit,
+    trackingKey: 'selectedFlightsTrackingId',
     bellyM: 6.719,
     seed({ viewer, tracked = true, icao24 = ICAO, modelCollection = null, onGround = false, models = [] }) {
       const billboard = contactBillboard();
@@ -225,6 +229,8 @@ const LAYERS = [
     driveFleetModel: militaryDriveFleetModel,
     ensureFleetModel: militaryEnsureFleetModel,
     trackedBillboardColor: militaryTrackedBillboardColor,
+    setCockpit: setMilitaryCockpit,
+    trackingKey: 'selectedMilitaryTrackingId',
     bellyM: 5.631 * 0.8,
     seed({ viewer, tracked = true, icao24 = ICAO, modelCollection = null, onGround = false, models = [] }) {
       const billboard = contactBillboard();
@@ -573,7 +579,7 @@ for (const fixture of LAYERS) {
   test(`${fixture.name}: grounded tracked model waits for a valid terrain snap with no visual gap`, async () => {
     clearTr3bRegistry();
     fixture.layer.stopTracking();
-    fixture.layer.setParams({ models3d: false });
+    fixture.layer.setParams({ models3d: true });
 
     const realFrom = Cesium.Model.fromGltfAsync;
     const realNow = Date.now;
@@ -692,26 +698,24 @@ for (const fixture of LAYERS) {
     }
   });
 
-  test(`${fixture.name}: the tracked contact goes 3D with the fleet 3D toggle OFF`, () => {
+  test(`${fixture.name}: Models off keeps a close-in tracked contact on the billboard`, () => {
     clearTr3bRegistry();
     fixture.layer.setParams({ models3d: false });
-    assert.equal(fixture.layer.getParams().models3d, false, 'the fleet toggle really is off');
+    assert.equal(fixture.layer.getParams().models3d, false, 'the Models control really is off');
 
-    // Zoomed out past the ceiling → the billboard still owns the visual.
     fixture.seed({ viewer: viewerAtHeight(INSIDE_BAND_M) });
     assert.equal(fixture.regimeActive(), false);
 
-    // Zoom in past the ceiling → the model takes over, toggle untouched.
     fixture.seed({ viewer: viewerAtHeight(WELL_INSIDE_M) });
-    assert.equal(fixture.regimeActive(), true,
-      'zoom-driven 2D↔3D is DEFAULT for the tracked contact');
+    assert.equal(fixture.regimeActive(), false,
+      'close-in hangar models stay off when the operator asked for billboards');
     assert.equal(fixture.layer.getParams().models3d, false,
-      'and it never arms the fleet toggle as a side effect');
+      'and staying 2D never arms the Models control as a side effect');
   });
 
   test(`${fixture.name}: the tracked regime is hysteretic across a live zoom in/out`, () => {
     clearTr3bRegistry();
-    fixture.layer.setParams({ models3d: false });
+    fixture.layer.setParams({ models3d: true });
     const viewer = viewerAtHeight(FAR_OUTSIDE_M);
     fixture.seed({ viewer });
     assert.equal(fixture.regimeActive(), false, 'starts far out, in 2D');
@@ -744,7 +748,7 @@ for (const fixture of LAYERS) {
     // latch reset; the seam re-seeds state but deliberately leaves the latches
     // alone, and `stopTracking()` is the real deselect path.
     clearTr3bRegistry();
-    fixture.layer.setParams({ models3d: false });
+    fixture.layer.setParams({ models3d: true });
 
     // Latch the regime on close in...
     const viewer = viewerAtHeight(TRACKED_MODEL_ENTER_ALT_M - 1);
@@ -769,7 +773,7 @@ for (const fixture of LAYERS) {
 
   test(`${fixture.name}: a converted TR-3B never takes the model, at any zoom`, () => {
     clearTr3bRegistry();
-    fixture.layer.setParams({ models3d: false });
+    fixture.layer.setParams({ models3d: true });
     const viewer = viewerAtHeight(1); // as zoomed in as it gets
     fixture.seed({ viewer });
     assert.equal(fixture.regimeActive(), true, 'control: an unconverted contact does model');
@@ -787,7 +791,7 @@ for (const fixture of LAYERS) {
 
   test(`${fixture.name}: deselecting drops the regime even zoomed all the way in`, () => {
     clearTr3bRegistry();
-    fixture.layer.setParams({ models3d: false });
+    fixture.layer.setParams({ models3d: true });
     const viewer = viewerAtHeight(1);
     fixture.seed({ viewer });
     assert.equal(fixture.regimeActive(), true);
@@ -797,15 +801,59 @@ for (const fixture of LAYERS) {
       'with no selection there is no tracked model to own the visual');
   });
 
-  test(`${fixture.name}: turning the fleet toggle ON does not disturb the tracked regime`, () => {
+  test(`${fixture.name}: Models on restores the tracked hangar model; off drops it`, () => {
     clearTr3bRegistry();
     const viewer = viewerAtHeight(WELL_INSIDE_M);
     fixture.seed({ viewer });
     fixture.layer.setParams({ models3d: true });
-    assert.equal(fixture.regimeActive(), true);
+    assert.equal(fixture.regimeActive(), true, 'Models on: existing hangar path returns');
     fixture.layer.setParams({ models3d: false });
-    assert.equal(fixture.regimeActive(), true,
-      'the fleet toggle owns the FLEET; the selected contact is independent of it');
+    assert.equal(fixture.regimeActive(), false,
+      'Models off uses the same 2D fallback as a failed hangar GLB');
+    fixture.layer.setParams({ models3d: true });
+    assert.equal(fixture.regimeActive(), true, 'turning Models back on re-arms the hangar path');
+  });
+
+  test(`${fixture.name}: Models off starts no new GLB fetch for a close-in tracked contact`, () => {
+    clearTr3bRegistry();
+    fixture.layer.setParams({ models3d: false });
+    const realFrom = Cesium.Model.fromGltfAsync;
+    let attempts = 0;
+    Cesium.Model.fromGltfAsync = () => {
+      attempts += 1;
+      return Promise.reject(new Error('models-off must not fetch hangar GLBs'));
+    };
+    try {
+      const collection = recordingModelCollection();
+      fixture.seed({ viewer: viewerAtHeight(WELL_INSIDE_M), modelCollection: collection });
+      assert.equal(fixture.regimeActive(), false);
+      fixture.driveTrackedModel();
+      assert.equal(attempts, 0, 'the failed-model billboard path is used; no new fromGltfAsync');
+      assert.equal(collection.added.length, 0);
+      assert.equal(fixture.trackedBillboardColor().alpha, 1);
+    } finally {
+      Cesium.Model.fromGltfAsync = realFrom;
+      fixture.layer.stopTracking();
+    }
+  });
+
+  test(`${fixture.name}: track and cockpit still work with Models off`, () => {
+    clearTr3bRegistry();
+    fixture.layer.setParams({ models3d: false });
+    const viewer = viewerAtHeight(WELL_INSIDE_M);
+    fixture.seed({ viewer });
+    assert.equal(fixture.layer.getParams()[fixture.trackingKey], ICAO,
+      'click-to-track still selects the contact when hangar models are off');
+    assert.equal(fixture.regimeActive(), false);
+
+    fixture.setCockpit(true, ICAO);
+    assert.equal(fixture.layer.getParams()[fixture.trackingKey], ICAO,
+      'cockpit entry keeps the tracked subject with models off');
+    assert.equal(fixture.regimeActive(), false,
+      'cockpit still hides the own-airframe model; nearby hangar GLBs stay off');
+    fixture.setCockpit(false);
+    fixture.layer.stopTracking();
+    assert.equal(fixture.layer.getParams()[fixture.trackingKey], null);
   });
 }
 
@@ -831,7 +879,7 @@ async function driveFrames(fixture, count, clock) {
 for (const fixture of LAYERS) {
   test(`${fixture.name}: a rejecting GLB loader is bounded, not a per-frame retry loop`, async () => {
     clearTr3bRegistry();
-    fixture.layer.setParams({ models3d: false });
+    fixture.layer.setParams({ models3d: true });
 
     const realFrom = Cesium.Model.fromGltfAsync;
     const realNow = Date.now;
@@ -892,7 +940,7 @@ for (const fixture of LAYERS) {
 
   test(`${fixture.name}: the failure latch clears on a same-icao re-track too`, async () => {
     clearTr3bRegistry();
-    fixture.layer.setParams({ models3d: false });
+    fixture.layer.setParams({ models3d: true });
 
     const realFrom = Cesium.Model.fromGltfAsync;
     const realNow = Date.now;
@@ -944,19 +992,20 @@ test('both layers gate the tracked-model load and record its failures', async ()
   }
 });
 
-test('the tracked regime never consults the fleet models3d toggle', async () => {
+test('the tracked hangar path obeys the Models on/off control', async () => {
   const { readFile } = await import('node:fs/promises');
   for (const name of ['flights.js', 'militaryFlights.js']) {
     const source = await readFile(new URL(`./${name}`, import.meta.url), 'utf8');
     const regime = /function _trackedModelRegimeActive\(\) \{[\s\S]*?\n\}/.exec(source)?.[0];
     assert.ok(regime, `${name}: _trackedModelRegimeActive is defined`);
-    assert.doesNotMatch(regime, /_models3dEnabled|_modelRegimeActive\(\)/,
-      `${name}: the tracked contact's handoff is default-on, not gated on the fleet toggle`);
+    assert.match(regime, /!_models3dEnabled/,
+      `${name}: Models off keeps the tracked contact on the billboard fallback`);
     assert.match(regime, /trackedModelZoomActive\(/,
-      `${name}: the tracked contact uses the shared hysteretic zoom policy`);
-    // The FLEET must still obey the toggle — the budget decision stays the operator's.
+      `${name}: Models on still uses the shared hysteretic zoom policy`);
     const fleet = /function _modelRegimeActive\(\) \{[\s\S]*?\n\}/.exec(source)?.[0];
     assert.match(fleet, /if \(!_models3dEnabled\) return false;/,
-      `${name}: the fleet regime still obeys the DISPLAY-rail 3D toggle`);
+      `${name}: the fleet hangar path still obeys the same Models control`);
+    assert.match(source, /if \(!_models3dEnabled\) \{\s*_releaseModels\(\);\s*_releaseTrackedModel\(\);/,
+      `${name}: turning Models off releases any already-loaded tracked hangar GLB`);
   }
 });

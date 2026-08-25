@@ -229,6 +229,10 @@ import {
   slewHeading,
   speedRulerTicks,
 } from './cockpitMath.js';
+import {
+  peekModelsPreference,
+  writeModelsPreference,
+} from './modelsPreference.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
@@ -263,6 +267,11 @@ const COCKPIT_ENTRY_COLLAPSE_PANEL_IDS = Object.freeze([
  */
 const PANEL_POSITION_STORAGE_VERSION = 'v8';
 const DETECTION_ALLOCATION_STORAGE_KEY = 'gev:detection-allocation:v1';
+
+/** Best-effort localStorage for `meridian.models`. Access itself can throw. */
+function modelsPreferenceStore() {
+  try { return globalThis.localStorage ?? null; } catch { return null; }
+}
 /** Z ladder: panels promote within [100, 139]; voice pill 150, toast 200, clean-view-exit 300. */
 const PANEL_Z_BASE = 100;
 const PANEL_Z_MAX = 139;
@@ -4693,6 +4702,9 @@ export class StyleManager {
       }
       void this._layerStateRestorePromise.then(() => {
         this._syncModels3dFromLayerState(this._layerStateCoordinator?.getDurableState());
+        // Share links keep their encoded models3d; a laptop that chose Models
+        // off via meridian.models otherwise stays on the billboard path.
+        if (!this._initialShareState) this._applyStoredModelsPreference();
       });
     }
   }
@@ -10091,14 +10103,24 @@ export class StyleManager {
    * renders as 3D glTF models once the camera is zoomed in past the layer's
    * altitude ceiling, and only the nearest MODEL_MAX in view are admitted, so
    * the default costs nothing at globe scale. `all` is the deliberate opt-in;
-   * turning the toggle off returns the fleet to flat billboards. The TRACKED
-   * contact is independent of this toggle (see trackedModelRegime.js).
+   * turning the toggle off returns the fleet AND the tracked hangar model to
+   * flat billboards. Persist as `meridian.models` = on|off (default on).
    * @returns {void}
    */
-  /** One 3D toggle drives BOTH aircraft layers (commercial + military) so all planes flip together. */
+  /** One Models toggle drives BOTH aircraft layers (commercial + military) so all planes flip together. */
   _setModels3dParams(params, { origin = 'user' } = {}) {
     this._dataManager?.setLayerParams('flights', params, { origin });
     this._dataManager?.setLayerParams('military', params, { origin });
+  }
+
+  _applyStoredModelsPreference() {
+    const stored = peekModelsPreference(modelsPreferenceStore());
+    if (stored !== 'on' && stored !== 'off') return;
+    const enabled = stored === 'on';
+    if (enabled === this._models3dEnabled) return;
+    this._setModels3dEnabled(enabled, { persist: false });
+    this._models3dModeRow?.classList.toggle('visible', this._models3dEnabled);
+    this._layoutRightPanels();
   }
 
   _syncModels3dFromLayerState(state) {
@@ -10119,7 +10141,12 @@ export class StyleManager {
 
   _initModels3dToggle() {
     if (!this._models3dBtn) return;
-    // The Proximity/All mode row is revealed only while 3D is on (mirrors the DETECT slider row).
+    const stored = peekModelsPreference(modelsPreferenceStore());
+    if (stored === 'off' || stored === 'on') {
+      this._models3dEnabled = stored === 'on';
+      this._setModels3dParams({ models3d: this._models3dEnabled }, { origin: 'local-restore' });
+    }
+    // The Proximity/All mode row is revealed only while Models is on (mirrors the DETECT slider row).
     const syncModeRow = () => {
       if (this._models3dModeRow) this._models3dModeRow.classList.toggle('visible', this._models3dEnabled);
       this._layoutRightPanels();
@@ -10139,10 +10166,11 @@ export class StyleManager {
     syncModeRow();
   }
 
-  _setModels3dEnabled(enabled) {
+  _setModels3dEnabled(enabled, { persist = true } = {}) {
     this._models3dEnabled = !!enabled;
     this._setModels3dParams({ models3d: this._models3dEnabled });
     this._syncModels3dButtonState();
+    if (persist) writeModelsPreference(modelsPreferenceStore(), this._models3dEnabled ? 'on' : 'off');
   }
 
   _setModels3dMode(mode) {
