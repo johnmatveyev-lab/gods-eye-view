@@ -74,7 +74,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         whole session. Missions run through setContextMode and
  *                         DataManager.setEnabled, neither of which writes it.
  *   NOT TOUCHED           detection allocation (`gev:detection-allocation:v1`),
- *                         3D aircraft models (`meridian.models`), scope feather,
+ *                         3D aircraft models (`meridian.models`), double-click
+ *                         fly-to (`meridian.doubleClickFly`), scope feather,
  *                         trails (`meridian.trails`), contact labels
  *                         (`meridian.contactLabels`), altitude band
  *                         (`meridian.altBand`). All are defaults or

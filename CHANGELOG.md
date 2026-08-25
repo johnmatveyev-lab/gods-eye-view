@@ -33,6 +33,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Double-click on empty globe terrain flies to the pick with the existing
+  landmark helper (reasonable height and tilt). Double-click on a contact or
+  contact card still tracks. Wheel zoom-to-pointer is unchanged. Optional
+  persist is `meridian.doubleClickFly` (default on). No `/api`.
 - Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
   a row to fly to that event (cap 50). Empty or failed feed shows
   UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
@@ -73,7 +77,6 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   The choice persists as `meridian.lockTilt` and defaults off. Home and
   cockpit still set their own pitch. Wheel zoom / invert scroll stay
   wheel-only. No `/api`.
-
 - Added a DISPLAY-rail Keep above ground control. After the camera moves, if
   `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
   below terrain plus a small margin, the camera is lifted. The preference
