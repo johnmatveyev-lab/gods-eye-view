@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites row has client-only **All | 2020s | 2010s | older** launch-year
+  chips next to eccentricity chips. Default All matches the current catalog.
+  The chips filter already-fetched CelesTrak satrecs by `satrec.intldesg`
+  using the existing international-designator year decode (57–99 → 1900s,
+  else 2000s). **2020s** keeps 2020–2029. **2010s** keeps 2010–2019.
+  **older** keeps pre-2010. Missing or unparseable designators stay visible.
+  The tracked satellite stays. Chip changes re-filter in memory and AND with
+  Core | Dense, class chips, POINTS, ORBITS, period, inclination, and
+  eccentricity — no extra `/api/celestrak` fetch and no new endpoint.
+  Preference persists as `meridian.satLaunchYear` and is not a share-link
+  field. Catalog refresh and group switch keep the chip set. Hidden when the
+  Satellites layer is off. Distinct from Plan 164 period chips, Plan 169
+  inclination chips, and Plan 177 eccentricity chips.
 - Bikeshare has client-only **All | 15m | 60m** last-reported chips next to
   Hide empty / Hide full / Hide closed / E-bikes only / min-bikes /
   min-docks. Default **All** matches the current dots. **15m** hides

@@ -55,6 +55,16 @@ import {
   satellitePassesEccentricityFilter,
   setSatEccentricity,
 } from './satelliteEccentricityFilter.js';
+import {
+  DEFAULT_SAT_LAUNCH_YEAR,
+  attachInternationalDesignator,
+  getSatLaunchYear,
+  internationalDesignatorYear,
+  resetSatLaunchYearCache,
+  satelliteLaunchYearChipModels,
+  satellitePassesLaunchYearFilter,
+  setSatLaunchYear,
+} from './satelliteLaunchYearFilter.js';
 import { satelliteCatalogControls } from './satelliteCatalogControls.js';
 import {
   clearOverlaySource,
@@ -324,6 +334,7 @@ let _classTallyCache = {
   period: null,
   inclination: null,
   eccentricity: null,
+  launchYear: null,
   counts: null,
 };
 /** @type {(() => void)|null} Manager callback: "this layer's row controls changed". */
@@ -349,6 +360,7 @@ function _classTally() {
   const period = getSatPeriod();
   const inclination = getSatInclination();
   const eccentricity = getSatEccentricity();
+  const launchYear = getSatLaunchYear();
   if (
     _classTallyCache.counts
     && _classTallyCache.revision === _catalogRevision
@@ -356,6 +368,7 @@ function _classTally() {
     && _classTallyCache.period === period
     && _classTallyCache.inclination === inclination
     && _classTallyCache.eccentricity === eccentricity
+    && _classTallyCache.launchYear === launchYear
   ) {
     return _classTallyCache.counts;
   }
@@ -368,7 +381,15 @@ function _classTally() {
     entries.push({ group: sat.group, isIss: noradId === ISS_NORAD });
   }
   const counts = tallySatelliteClasses(entries);
-  _classTallyCache = { revision: _catalogRevision, filter, period, inclination, eccentricity, counts };
+  _classTallyCache = {
+    revision: _catalogRevision,
+    filter,
+    period,
+    inclination,
+    eccentricity,
+    launchYear,
+    counts,
+  };
   return counts;
 }
 
@@ -434,8 +455,23 @@ function _eccentricityAllowsSatellite(noradId, sat = _catalog.get(noradId), trac
 }
 
 /**
- * Class chips AND period chips AND inclination chips AND eccentricity chips.
- * Tracked stays even when a chip is off.
+ * Whether one catalog row may render under the current launch-year chips.
+ * Missing / unparseable intldesg stays. The tracked satellite always passes.
+ * @param {number} noradId
+ * @param {{satrec?: object}|null|undefined} [sat]
+ * @param {number|null} [trackedNorad]
+ * @returns {boolean}
+ */
+function _launchYearAllowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _trackedNorad) {
+  return satellitePassesLaunchYearFilter(sat, getSatLaunchYear(), {
+    noradId,
+    trackedNorad,
+  });
+}
+
+/**
+ * Class chips AND period chips AND inclination chips AND eccentricity chips
+ * AND launch-year chips. Tracked stays even when a chip is off.
  * @param {number} noradId
  * @param {{group?: string, satrec?: object}|null|undefined} [sat]
  * @param {number|null} [trackedNorad]
@@ -445,16 +481,17 @@ function _allowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _
   return _classAllowsSatellite(noradId, sat, trackedNorad)
     && _periodAllowsSatellite(noradId, sat, trackedNorad)
     && _inclinationAllowsSatellite(noradId, sat, trackedNorad)
-    && _eccentricityAllowsSatellite(noradId, sat, trackedNorad);
+    && _eccentricityAllowsSatellite(noradId, sat, trackedNorad)
+    && _launchYearAllowsSatellite(noradId, sat, trackedNorad);
 }
 
-/** Untracked point show-flag for the current class / period / inclination / eccentricity chips. Tracked stays hidden. */
+/** Untracked point show-flag for the current class / period / inclination / eccentricity / year chips. Tracked stays hidden. */
 function _untrackedPointShouldShow(noradId) {
   if (noradId === _trackedNorad) return false;
   return _allowsSatellite(noradId);
 }
 
-/** Orbit ring show-flag: ORBITS on AND class / period / inclination / eccentricity chips allow this satellite. */
+/** Orbit ring show-flag: ORBITS on AND class / period / inclination / eccentricity / year chips allow this satellite. */
 function _orbitPathShouldShow(noradId) {
   return _params.showOrbits && _allowsSatellite(noradId);
 }
@@ -480,7 +517,7 @@ function _classFilterChips() {
   });
 }
 
-/** Re-apply class, period, inclination, and eccentricity chips to in-memory points and orbit rings. Never fetches CelesTrak. */
+/** Re-apply class, period, inclination, eccentricity, and launch-year chips to in-memory points and orbit rings. Never fetches CelesTrak. */
 function _applyClassVisibility() {
   for (const [noradId, point] of _points) {
     if (!point) continue;
@@ -496,6 +533,7 @@ function _applyClassVisibility() {
     period: null,
     inclination: null,
     eccentricity: null,
+    launchYear: null,
     counts: null,
   };
   _syncIssOverlay();
@@ -687,6 +725,17 @@ function parseTLE(text) {
     }
   }
   return result;
+}
+
+/**
+ * Parse a TLE pair and stamp `satrec.intldesg` from line 1 columns 10–17.
+ * satellite.js 6 does not copy that existing CelesTrak field.
+ * @param {string} line1
+ * @param {string} line2
+ * @returns {object}
+ */
+function satrecFromTleLines(line1, line2) {
+  return attachInternationalDesignator(twoline2satrec(line1, line2), line1);
 }
 
 /**
@@ -1333,7 +1382,7 @@ async function _loadDenseCatalog({ signal = null } = {}) {
       const end = Math.min(start + DENSE_CREATE_CHUNK, entries.length);
       for (let i = start; i < end; i++) {
         const entry = entries[i];
-        const satrec = twoline2satrec(entry.line1, entry.line2);
+        const satrec = satrecFromTleLines(entry.line1, entry.line2);
         if (!satrec || satrec.error !== 0) continue;
         const noradId = Number(satrec.satnum);
         if (_catalog.has(noradId)) continue; // core catalog keeps priority
@@ -1606,6 +1655,8 @@ export function _setDenseCatalogStateForTest({
   setSatInclination(DEFAULT_SAT_INCLINATION, { getItem: () => null, setItem() {} });
   resetSatEccentricityCache();
   setSatEccentricity(DEFAULT_SAT_ECCENTRICITY, { getItem: () => null, setItem() {} });
+  resetSatLaunchYearCache();
+  setSatLaunchYear(DEFAULT_SAT_LAUNCH_YEAR, { getItem: () => null, setItem() {} });
   _enabled = true;
   _applyClassVisibility();
 }
@@ -1639,6 +1690,8 @@ export function _clearDenseCatalogStateForTest() {
   setSatInclination(DEFAULT_SAT_INCLINATION, { getItem: () => null, setItem() {} });
   resetSatEccentricityCache();
   setSatEccentricity(DEFAULT_SAT_ECCENTRICITY, { getItem: () => null, setItem() {} });
+  resetSatLaunchYearCache();
+  setSatLaunchYear(DEFAULT_SAT_LAUNCH_YEAR, { getItem: () => null, setItem() {} });
   _cancelPendingTrackingRestore();
   _enabled = false;
 }
@@ -1698,6 +1751,7 @@ export function _satelliteVisualStateForTest() {
     satPeriod: getSatPeriod(),
     satInclination: getSatInclination(),
     satEccentricity: getSatEccentricity(),
+    satLaunchYear: getSatLaunchYear(),
     pointCollectionShow: _pointCollection ? Boolean(_pointCollection.show) : null,
     pointIds: [..._points.keys()],
     pointShows: Object.fromEntries(
@@ -2034,7 +2088,7 @@ const satellitesLayer = {
       const seen = new Set();
 
       for (const entry of allEntries) {
-        const satrec = twoline2satrec(entry.line1, entry.line2);
+        const satrec = satrecFromTleLines(entry.line1, entry.line2);
         if (!satrec || satrec.error !== 0) continue;
 
         const noradId = Number(satrec.satnum);
@@ -2410,7 +2464,7 @@ const satellitesLayer = {
    * Runtime params (DataLayerManager.setLayerParams path).
    * catalog: 'core' (default, ~840 sats) | 'dense' (adds the Starlink shell
    * as points-only extras on a relaxed propagation budget).
-   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown, satInclination?: unknown, satEccentricity?: unknown }} [params]
+   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown, satInclination?: unknown, satEccentricity?: unknown, satLaunchYear?: unknown }} [params]
    */
   setParams(params = {}, { origin = 'programmatic', storage } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -2487,6 +2541,13 @@ const satellitesLayer = {
         _applyClassVisibility();
       }
     }
+    if (Object.hasOwn(params, 'satLaunchYear')) {
+      const previous = getSatLaunchYear(storage);
+      const next = setSatLaunchYear(params.satLaunchYear, storage);
+      if (next !== previous) {
+        _applyClassVisibility();
+      }
+    }
     if (Object.hasOwn(params, 'selectedSatTrackingId')) {
       const requested = _normalizeTrackedNorad(params.selectedSatTrackingId);
       if (requested === _trackedNorad) {
@@ -2504,7 +2565,7 @@ const satellitesLayer = {
     return true;
   },
 
-  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string, satInclination: string, satEccentricity: string }} Current runtime params. */
+  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string, satInclination: string, satEccentricity: string, satLaunchYear: string }} Current runtime params. */
   getParams() {
     return {
       catalog: _params.catalog,
@@ -2516,6 +2577,7 @@ const satellitesLayer = {
       satPeriod: getSatPeriod(),
       satInclination: getSatInclination(),
       satEccentricity: getSatEccentricity(),
+      satLaunchYear: getSatLaunchYear(),
     };
   },
 
@@ -2523,7 +2585,8 @@ const satellitesLayer = {
    * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
    * Dense catalog chips, PLAN 132 class chips, PLAN 164 period chips
    * (All | <100m | <128m), PLAN 169 inclination chips (Eq | Mid | Polar),
-   * PLAN 177 eccentricity chips (All | <0.01 | <0.05),
+   * PLAN 177 eccentricity chips (All | <0.01 | <0.05), PLAN 182 launch-year
+   * chips (All | 2020s | 2010s | older),
    * the Plan 65 Sats group picker, POINTS and ORBITS chips over the existing
    * `showPoints` / `showOrbits` params, a class legend, and the Next ISS
    * readout host (Plan 139).
@@ -2533,7 +2596,7 @@ const satellitesLayer = {
    * the same `catalog` / `showPoints` / `showOrbits` params) stays the single
    * source of truth. Hiding dots must keep this row: otherwise POINTS could
    * not turn back on, and Orbits / Core|Dense / class / period / inclination /
-   * eccentricity chips would vanish.
+   * eccentricity / year chips would vanish.
    *
    * Dense reports the LOAD state, not the catalog param: the param flips
    * synchronously while the Starlink shell takes seconds to arrive and
@@ -2555,6 +2618,7 @@ const satellitesLayer = {
         ...satellitePeriodChipModels(getSatPeriod()),
         ...satelliteInclinationChipModels(getSatInclination()),
         ...satelliteEccentricityChipModels(getSatEccentricity()),
+        ...satelliteLaunchYearChipModels(getSatLaunchYear()),
         {
           id: 'points',
           label: 'POINTS',
@@ -2698,7 +2762,7 @@ async function _fetchIssSatrecSidecar(signal) {
     const entries = parseTLE(await res.text());
     if (signal) signal.throwIfAborted();
     for (const entry of entries) {
-      const satrec = twoline2satrec(entry.line1, entry.line2);
+      const satrec = satrecFromTleLines(entry.line1, entry.line2);
       if (!satrec || satrec.error !== 0) continue;
       if (Number(satrec.satnum) !== ISS_NORAD) continue;
       _issSatrec = satrec;
@@ -2750,13 +2814,6 @@ export function scoreSatelliteNameMatch(query, catalogName) {
   const tokens = q.split(/[^a-z0-9]+/).filter((token) => token.length >= 4 && !ignored.has(token));
   score += tokens.reduce((total, token) => total + (name.includes(token) ? token.length : 0), 0);
   return score;
-}
-
-function internationalDesignatorYear(satrec) {
-  const match = String(satrec?.intldesg || '').match(/^(\d{2})/);
-  if (!match) return null;
-  const shortYear = Number(match[1]);
-  return shortYear >= 57 ? 1900 + shortYear : 2000 + shortYear;
 }
 
 let _lookupTleText = null;
@@ -2817,7 +2874,7 @@ export function findSatelliteOrbitTrackInTle(tleText, query, options = {}) {
     }
   }
   if (!bestEntry || bestScore < 12) return null;
-  const satrec = twoline2satrec(bestEntry.line1, bestEntry.line2);
+  const satrec = satrecFromTleLines(bestEntry.line1, bestEntry.line2);
   if (!satrec || satrec.error !== 0) return null;
   return orbitTrackFromRecord(bestEntry.name, satrec);
 }
