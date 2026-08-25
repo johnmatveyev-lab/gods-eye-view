@@ -68,7 +68,7 @@ function fakeNode(tag = 'div') {
     className: '',
     hidden: false,
     disabled: false,
-    textContent: '',
+    _text: '',
     title: '',
     dataset: {},
     children,
@@ -106,6 +106,13 @@ function fakeNode(tag = 'div') {
       if (selector === '[data-watch-ident]' && this.dataset.watchIdent) return this;
       if (selector === '[data-watch-remove]' && this.dataset.watchRemove) return this;
       return this.parent?.closest?.(selector) || null;
+    },
+    get textContent() {
+      if (children.length === 0) return this._text || '';
+      return children.map((child) => child.textContent || '').join('');
+    },
+    set textContent(value) {
+      this._text = String(value ?? '');
     },
     querySelector(selector) {
       if (selector === '[data-watch-remove]') {

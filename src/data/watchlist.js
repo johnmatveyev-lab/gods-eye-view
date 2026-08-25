@@ -282,15 +282,20 @@ export function renderWatchlist(items, list, flights) {
     return;
   }
   for (const ident of idents) {
-    const row = items.ownerDocument?.createElement?.('button')
-      || globalThis.document?.createElement?.('button');
+    const row = items.ownerDocument?.createElement?.('div')
+      || globalThis.document?.createElement?.('div');
     if (!row) return;
-    row.type = 'button';
     row.className = 'watchlist-item';
     row.dataset.watchIdent = ident;
     row.setAttribute('role', 'listitem');
     const inView = shouldHighlightWatchIdent(ident, flights);
-    row.textContent = inView ? ident : `${ident} · ${WATCHLIST_NOT_IN_VIEW}`;
+
+    const select = items.ownerDocument?.createElement?.('button')
+      || globalThis.document?.createElement?.('button');
+    select.type = 'button';
+    select.className = 'watchlist-item-select';
+    select.dataset.watchIdent = ident;
+    select.textContent = inView ? ident : `${ident} · ${WATCHLIST_NOT_IN_VIEW}`;
 
     const remove = items.ownerDocument?.createElement?.('button')
       || globalThis.document?.createElement?.('button');
@@ -299,6 +304,8 @@ export function renderWatchlist(items, list, flights) {
     remove.dataset.watchRemove = ident;
     remove.setAttribute('aria-label', `Remove ${ident}`);
     remove.textContent = '×';
+
+    row.appendChild(select);
     row.appendChild(remove);
     items.appendChild(row);
   }

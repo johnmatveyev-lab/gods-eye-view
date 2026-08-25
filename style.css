@@ -2111,7 +2111,11 @@ body.ui-clean-view #scene-runtime.active {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 100%;
+}
+
+.watchlist-item-select {
+  flex: 1;
+  min-width: 0;
   margin: 0;
   padding: 6px 8px;
   border: 1px solid transparent;
@@ -2123,8 +2127,8 @@ body.ui-clean-view #scene-runtime.active {
   cursor: pointer;
 }
 
-.watchlist-item:hover,
-.watchlist-item:focus-visible {
+.watchlist-item-select:hover,
+.watchlist-item-select:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   outline: none;
