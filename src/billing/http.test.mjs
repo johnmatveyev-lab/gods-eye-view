@@ -255,11 +255,12 @@ test('LICENSE keeps the required MIT copyright line', async () => {
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
 });
 
-test('self-host without Clerk does not require a token for voice', async () => {
+test('self-host without Clerk fails closed and never mints a voice token', async () => {
   const runtime = createBillingRuntime({ env: {} });
   const voice = await authorizeVoiceRequest(mockReq({ url: '/api/realtime/token' }), runtime);
-  assert.equal(voice.ok, true);
-  assert.equal(voice.hosted, false);
+  assert.equal(voice.ok, false);
+  assert.equal(voice.status, 401);
+  assert.equal(voice.body.code, BILLING_CODES.AUTH_REQUIRED);
 });
 
 test('webhook 503s when STRIPE_WEBHOOK_SECRET is unset', async () => {

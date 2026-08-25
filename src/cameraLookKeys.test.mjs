@@ -19,9 +19,11 @@ import {
 } from './cameraLookKeys.js';
 import {
   KEYBOARD_SHORTCUT_ENTRIES,
+  bindKeyboardShortcutsToggle,
   handleShortcutsOverlayKeyDown,
   isShortcutsOverlayToggle,
   renderKeyboardShortcutsOverlay,
+  setKeyboardShortcutsOverlayOpen,
 } from './keyboardShortcutsOverlay.js';
 import { applyKeyboardPan } from './keyboardPan.js';
 import { shortcutOverlayLists } from './shortcutsOverlay.js';
@@ -259,6 +261,9 @@ test('shortcuts overlay lists Q/E and the actual pitch keys', () => {
   assert.ok(KEYBOARD_SHORTCUT_ENTRIES.some((row) => row.keys === 'F' && /data/i.test(row.label || row.action)));
   assert.match(html, /id="keyboard-shortcuts-overlay"/);
   assert.match(html, /id="keyboard-shortcuts-list"/);
+  assert.match(html, /Pitch is R \/ Page Up \/ Page Down/);
+  assert.match(ui, /tiltLocked: this\._lockTiltEnabled === true/);
+  assert.match(ui, /bindKeyboardShortcutsToggle/);
   assert.equal(shortcutOverlayLists('Q / E'), true);
   assert.equal(shortcutOverlayLists('R / Page Up'), true);
   assert.equal(shortcutOverlayLists('Page Down'), true);
@@ -266,6 +271,38 @@ test('shortcuts overlay lists Q/E and the actual pitch keys', () => {
   assert.match(ui, /handleShortcutsOverlayKeyDown/);
   assert.match(ui, /handleKeyboardPanKeyDown/);
   assert.doesNotMatch(ui, /\/api\/.*look|\/api\/.*heading-key/);
+});
+
+test('shortcuts chrome button toggles the overlay', () => {
+  const overlay = { hidden: true, setAttribute() {} };
+  const button = {
+    listeners: {},
+    addEventListener(type, handler) { this.listeners[type] = handler; },
+    removeEventListener(type) { delete this.listeners[type]; },
+    setAttribute() {},
+  };
+  const list = { replaceChildren() {}, append() {} };
+  const doc = {
+    getElementById(id) {
+      if (id === 'keyboard-shortcuts-toggle') return button;
+      if (id === 'keyboard-shortcuts-overlay') return overlay;
+      if (id === 'keyboard-shortcuts-list') return list;
+      return null;
+    },
+    createElement() {
+      const node = { className: '', textContent: '', children: [], append() {} };
+      return node;
+    },
+  };
+  const unbind = bindKeyboardShortcutsToggle(doc);
+  button.listeners.click({ preventDefault() {} });
+  assert.equal(overlay.hidden, false);
+  button.listeners.click({ preventDefault() {} });
+  assert.equal(overlay.hidden, true);
+  unbind();
+  assert.equal(button.listeners.click, undefined);
+  setKeyboardShortcutsOverlayOpen(true, doc);
+  assert.equal(overlay.hidden, false);
 });
 
 test('shortcuts overlay renderer writes every catalog row', () => {

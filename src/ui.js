@@ -12,6 +12,11 @@ import {
   clampBloomIntensity,
   decodeBloomIntensity,
 } from './bloom.js';
+import {
+  ALL_OFF_ARIA_LABEL,
+  ALL_OFF_BUSY_ARIA_LABEL,
+  allOffLiveLayers,
+} from './allOffLayers.js';
 import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
@@ -20,6 +25,7 @@ import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNo
 import { handleKeyboardPanKeyDown } from './keyboardPan.js';
 import { handleLookKeyDown } from './cameraLookKeys.js';
 import {
+  bindKeyboardShortcutsToggle,
   handleShortcutsOverlayKeyDown,
   isKeyboardShortcutsOverlayOpen,
   renderKeyboardShortcutsOverlay,
@@ -255,6 +261,12 @@ import {
   viewFromCamera,
 } from './data/datacenterList.js';
 import {
+  DAMS_LAYER_ID,
+  bindDamsInViewList,
+  damFlyDestination,
+  viewFromCamera as damsViewFromCamera,
+} from './data/damsList.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -269,6 +281,13 @@ import {
   setDistanceUnit,
   subscribeDistanceUnit,
 } from './units.js';
+import {
+  clearMeasure,
+  destroyMeasure,
+  initMeasure,
+  isMeasureActive,
+  setMeasureActive,
+} from './measure.js';
 import {
   getPowerMode as readViewerPowerMode,
   installPowerMode,
@@ -505,6 +524,7 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -556,6 +576,7 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -2683,6 +2704,10 @@ export class StyleManager {
     this._shareBtn = document.getElementById('share-btn');
     this._northUpCompassBtn = document.getElementById('north-up-compass');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._measureToggleBtn = document.getElementById('measure-toggle');
+    this._measureReadout = document.getElementById('measure-readout');
+    this._measureReadoutLabel = document.getElementById('measure-readout-label');
+    this._measureClearBtn = document.getElementById('measure-clear');
     this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
@@ -2981,6 +3006,9 @@ export class StyleManager {
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
     });
+    initMeasure(viewer, {
+      onChange: (state) => this._syncMeasureUi(state),
+    });
     initCameraCoords({
       viewer,
       showToast: (text) => this._showToast(text),
@@ -3002,12 +3030,14 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initMeasureButton();
     this._initFullscreenButton();
     this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
     this._initLaunchesPanel();
     this._initStopTrackingButton();
+    this._initDamsInViewList();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
@@ -3736,6 +3766,7 @@ export class StyleManager {
     // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Q/E heading,
     // R/PageUp/PageDown pitch (not F), ? overlay, Escape
     renderKeyboardShortcutsOverlay();
+    bindKeyboardShortcutsToggle();
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
@@ -3756,6 +3787,7 @@ export class StyleManager {
 
       const look = handleLookKeyDown(e, this.viewer, {
         cockpitActive: this.cockpitView?.active,
+        tiltLocked: this._lockTiltEnabled === true,
         storage: globalThis.localStorage,
       });
       if (look) {
@@ -5079,6 +5111,8 @@ export class StyleManager {
       dataManager: this._dataManager,
       setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
     });
+    this._datacenterInViewList?.refresh();
+    this._damsInViewList?.refresh();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5090,6 +5124,9 @@ export class StyleManager {
           this._handleContextLayerChange(change);
           if (change?.layerId === DATACENTER_LAYER_ID) {
             this._datacenterInViewList?.refresh();
+          }
+          if (change?.layerId === DAMS_LAYER_ID) {
+            this._damsInViewList?.refresh();
           }
         }
         if (this._installationsListOpen && change?.layerId === 'military-installations') {
@@ -10797,6 +10834,48 @@ export class StyleManager {
   }
 
   /**
+   * In-view OSM dams list. Reads the existing layer payload and flies
+   * with the same stem-click destination. Datacenters stay on their own list.
+   */
+  _initDamsInViewList() {
+    const root = document.getElementById('dams-in-view');
+    const items = document.getElementById('dams-in-view-items');
+    const count = document.getElementById('dams-in-view-count');
+    this._damsInViewList = bindDamsInViewList({
+      root,
+      items,
+      count,
+      getEnabled: () => Boolean(this._dataManager?.isEnabled(DAMS_LAYER_ID)),
+      getRecords: () => {
+        const module = this._dataManager?.layers?.get(DAMS_LAYER_ID)?.module;
+        if (typeof module?.getListPayload !== 'function') return [];
+        return module.getListPayload() || [];
+      },
+      getView: () => damsViewFromCamera(this.viewer?.camera, Cesium.Math),
+      flyTo: (site) => {
+        const module = this._dataManager?.layers?.get(DAMS_LAYER_ID)?.module;
+        if (typeof module?.flyToRecord === 'function') {
+          return module.flyToRecord(this.viewer, site.id);
+        }
+        const destination = damFlyDestination(site);
+        if (!destination || !this.viewer?.camera) return false;
+        this.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(
+            destination.longitude,
+            destination.latitude,
+            destination.height,
+          ),
+          duration: destination.duration,
+        });
+        return true;
+      },
+    });
+    this._damsListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
+      this._damsInViewList?.refresh();
+    });
+  }
+
+  /**
    * Fly to the default first-load camera. Does not delete lastView;
    * moveEnd overwrites the slot after the flight.
    */
@@ -10904,11 +10983,20 @@ export class StyleManager {
     });
   }
 
-  /** Wire the top-center action that clears only manager-owned data layers. */
+  /** Wire the top-center panic All off control. Does not move the camera. */
   _initClearSelectedLayersButton() {
     if (!this._clearSelectedLayersBtn) return;
-    this._clearSelectedLayersHandler = () => { void this.clearSelectedLayers(); };
+    this._clearSelectedLayersHandler = () => { void this.allOff(); };
     this._clearSelectedLayersBtn.addEventListener('click', this._clearSelectedLayersHandler);
+  }
+
+  /**
+   * Panic All off: disable every live data layer. Globe, credits, camera, and
+   * lastView stay. Next enable is manual.
+   * @returns {Promise<object>} Aggregate manager lifecycle truth for the batch.
+   */
+  allOff() {
+    return this.clearSelectedLayers();
   }
 
   /**
@@ -10938,25 +11026,25 @@ export class StyleManager {
     this._setContactsRosterControlsDisabled(true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     this._clearSelectedLayersBtn.disabled = true;
-    this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clearing selected data layers');
+    this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_BUSY_ARIA_LABEL);
 
-    const managerOperation = this._dataManager.clearSelectedLayers({
+    const managerOperation = allOffLiveLayers(this._dataManager, {
       origin: 'user',
       notificationToken,
     });
     this._clearSelectedLayersManagerPromise = managerOperation;
     const operation = managerOperation.then((result) => {
       if (result.targetIds.length === 0) {
-        this._showToast('No selected data layers');
+        this._showToast('All off — no live layers were on');
       } else if (result.notClearedIds.length > 0) {
-        this._showToast(`${result.notClearedIds.length} data layer${result.notClearedIds.length === 1 ? '' : 's'} could not be cleared`);
+        this._showToast(`${result.notClearedIds.length} live layer${result.notClearedIds.length === 1 ? '' : 's'} could not be turned off`);
       } else {
-        this._showToast(`Cleared ${result.clearedIds.length} data layer${result.clearedIds.length === 1 ? '' : 's'}`);
+        this._showToast('All off');
       }
       return result;
     }).catch((error) => {
-      console.warn('[Data] clear selected layers failed', error);
-      this._showToast('Selected data layers could not be cleared');
+      console.warn('[Data] All off failed', error);
+      this._showToast('All off could not finish');
       return {
         targetIds: [],
         items: [],
@@ -10973,7 +11061,7 @@ export class StyleManager {
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
       }
       this._clearSelectedLayersBtn.disabled = false;
-      this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clear selected data layers');
+      this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_ARIA_LABEL);
       this._preservePanelStateDuringLayerClear = false;
       this._clearSelectedLayersManagerPromise = null;
       this._clearSelectedLayersPromise = null;
@@ -11087,6 +11175,37 @@ export class StyleManager {
       const success = await this.shareLinkManager.copyViewLink();
       this._showToast(success ? 'Link copied' : 'Copy failed');
     });
+  }
+
+  /** Wire two-click geodesic Measure. Does not call /api/route. */
+  _initMeasureButton() {
+    this._measureToggleBtn?.addEventListener('click', () => {
+      setMeasureActive(!isMeasureActive());
+    });
+    this._measureClearBtn?.addEventListener('click', () => {
+      clearMeasure();
+    });
+    this._syncMeasureUi();
+  }
+
+  /**
+   * Keep the Measure button and readout in sync with the current pair.
+   * @param {{active?: boolean, prompt?: string}|null} [state]
+   * @returns {void}
+   */
+  _syncMeasureUi(state = null) {
+    const active = state?.active ?? isMeasureActive();
+    const prompt = state?.prompt || 'Click two globe points';
+    if (this._measureToggleBtn) {
+      this._measureToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      this._measureToggleBtn.classList.toggle('active', active);
+    }
+    if (this._measureReadout) {
+      this._measureReadout.hidden = !active;
+    }
+    if (this._measureReadoutLabel) {
+      this._measureReadoutLabel.textContent = prompt;
+    }
   }
 
   /**
@@ -11599,6 +11718,7 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    destroyMeasure();
     this._keepAboveDispose?.();
     this._keepAboveDispose = null;
     this._unbindZoomToPointer?.();
@@ -11617,6 +11737,10 @@ export class StyleManager {
       this._initialShareGestureHandler = null;
     }
     this._launchesPanelLoadToken += 1;
+    this._damsListMoveEndRemove?.();
+    this._damsListMoveEndRemove = null;
+    this._damsInViewList?.destroy();
+    this._damsInViewList = null;
     this._datacenterListMoveEndRemove?.();
     this._datacenterListMoveEndRemove = null;
     this._datacenterInViewList?.destroy();

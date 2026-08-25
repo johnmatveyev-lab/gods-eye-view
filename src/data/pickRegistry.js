@@ -14,6 +14,31 @@
 /** @type {Map<string, (pickedId: string) => boolean>} layerId -> ownership predicate */
 const _owners = new Map();
 
+/** @type {(() => boolean)|null} Temporary scene-click capture (Measure mode). */
+let _sceneClickCapture = null;
+
+/**
+ * Register a predicate that claims every globe click while it returns true.
+ * Measure uses this so terrain picks do not also select/deselect contacts.
+ * @param {(() => boolean)|null} predicate
+ * @returns {void}
+ */
+export function setSceneClickCapture(predicate) {
+  _sceneClickCapture = typeof predicate === 'function' ? predicate : null;
+}
+
+/**
+ * True when an active tool (Measure) owns the current scene click.
+ * @returns {boolean}
+ */
+export function isSceneClickCaptured() {
+  try {
+    return Boolean(_sceneClickCapture?.());
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolves a scene.pick() result to a String pick id for the ownership scan.
  *
