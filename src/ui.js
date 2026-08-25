@@ -226,6 +226,11 @@ import {
   setDistanceUnit,
   subscribeDistanceUnit,
 } from './units.js';
+import {
+  getPowerMode as readViewerPowerMode,
+  installPowerMode,
+  setPowerMode as writeViewerPowerMode,
+} from './powerMode.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -2413,6 +2418,11 @@ export class StyleManager {
       militaryAwarenessLayer.refreshDistanceLabels?.();
       this.cockpitView?.refreshDistanceUnits?.();
     });
+    this._powerBtns = [
+      document.getElementById('power-normal'),
+      document.getElementById('power-low'),
+    ].filter(Boolean);
+    this._syncPowerModeUi(installPowerMode(this.viewer));
     this._detectionSliderRow = document.getElementById('detection-slider-row');
     this._detectionDensitySlider = document.getElementById('detection-density-slider');
     this._detectionDensityValue = document.getElementById('detection-density-value');
@@ -3723,6 +3733,12 @@ export class StyleManager {
       });
     }
 
+    for (const button of this._powerBtns) {
+      button.addEventListener('click', () => {
+        this.setPowerMode(button.dataset.power);
+      });
+    }
+
     for (const slider of [this._detectionFadeSlider, this._detectionOpacitySlider]) {
       slider?.addEventListener('input', () => {
         this.shareLinkManager?.claimRestoreLane?.('visual');
@@ -3888,6 +3904,14 @@ export class StyleManager {
       outsideOpacity: outsideOpacityPct / 100,
     });
     this.viewer.scene.requestRender?.();
+  }
+
+  _syncPowerModeUi(mode = readViewerPowerMode(this.viewer)) {
+    for (const button of this._powerBtns || []) {
+      const active = button.dataset.power === mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+    }
   }
 
   _syncUnitsUi() {
@@ -8729,6 +8753,22 @@ export class StyleManager {
   }
 
   /**
+   * Caps Cesium `targetFrameRate` only. Low = 30; Normal restores 60.
+   * @param {'normal'|'low'|string} mode
+   * @returns {{ok: boolean, power: 'normal'|'low', targetFrameRate: number}}
+   */
+  setPowerMode(mode) {
+    const power = writeViewerPowerMode(this.viewer, mode);
+    this._syncPowerModeUi(power);
+    return { ok: true, power, targetFrameRate: this.viewer.targetFrameRate };
+  }
+
+  /** @returns {'normal'|'low'} */
+  getPowerMode() {
+    return readViewerPowerMode(this.viewer);
+  }
+
+  /**
    * Reads global context mode state for voice/state-sync consumers.
    * @returns {{mode: 'flights'|'space-missions'|null, active: boolean, changing: boolean, entering: 'flights'|'space-missions'|null, snapshotCaptured: boolean}}
    */
@@ -9150,6 +9190,7 @@ export class StyleManager {
       },
       orbiting: !!this.orbitController?.active,
       reduceMotion: isReduceMotionEnabled(),
+      power: readViewerPowerMode(this.viewer),
       recording: !!this._recordingMode,
       cleanView: document.body.classList.contains('ui-clean-view'),
     };

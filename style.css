@@ -1121,6 +1121,11 @@ body.recording-mode #cesium-credits {
   display: flex;
 }
 
+.pp-toggle-group > .pp-slider-row.visible:first-child:last-child {
+  border-top: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+
 .pp-toggle-group .pp-toggle-btn {
   transition: all var(--transition-fast), border-radius var(--transition-fast);
 }
