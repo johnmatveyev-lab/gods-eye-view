@@ -206,12 +206,12 @@ test('Vite forwards to the extracted plugin; no ais-live/google/voice wrap', () 
 
   for (const forbidden of [
     'api/ais-live.js',
-    'api/ais-live/[...path].js',
     'api/google/[...path].js',
     'api/voice/[...path].js',
   ]) {
     assert.equal(existsSync(path.join(ROOT, forbidden)), false, forbidden);
   }
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live/[...path].js')), true);
   assert.equal(existsSync(path.join(ROOT, 'api/realtime/token.js')), true);
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));

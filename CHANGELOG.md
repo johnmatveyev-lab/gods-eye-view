@@ -7,6 +7,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Hosted `/api/ais-live` answers an honest unsupported empty snapshot (and
+  `/track` → `{samples:[]}`) instead of a generic catch-all 404. No AISStream
+  websocket and no `AISSTREAM_API_KEY`. Vite still owns the live feed.
 - Hosted Netlify `/api/*` no longer 502s with
   `Identifier '__dirname' has already been declared`. The function wrapper
   does not declare `__dirname`, bundled sources use `repoRoot`, and

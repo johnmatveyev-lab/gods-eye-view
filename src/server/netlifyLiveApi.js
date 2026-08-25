@@ -51,6 +51,7 @@ const VERCEL_API_ROUTES = Object.freeze([
   catchAllRoute('/api/tomtom', 'api/tomtom/[...path].js', () => import('../../api/tomtom/[...path].js')),
   catchAllRoute('/api/radio', 'api/radio/[...path].js', () => import('../../api/radio/[...path].js')),
   catchAllRoute('/api/gbfs', 'api/gbfs/[...target].js', () => import('../../api/gbfs/[...target].js')),
+  catchAllRoute('/api/ais-live', 'api/ais-live/[...path].js', () => import('../../api/ais-live/[...path].js')),
   catchAllRoute('/api', 'api/[...path].js', () => import('../../api/[...path].js')),
 ]);
 

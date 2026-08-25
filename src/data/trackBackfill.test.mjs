@@ -179,11 +179,11 @@ test('hosted Node entrypoints forward; ais-live stays unwrapped', () => {
 
   for (const forbidden of [
     'api/ais-live.js',
-    'api/ais-live/[...path].js',
     'api/google/[...path].js',
   ]) {
     assert.equal(existsSync(path.join(ROOT, forbidden)), false, forbidden);
   }
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live/[...path].js')), true);
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
