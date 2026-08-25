@@ -22,14 +22,15 @@ test('commercial flights are adsb.lol-only; OpenSky and Google News stay off', (
 });
 
 test('production proxies never fetch OpenSky or Google News RSS', () => {
+  const flights = readFileSync(path.join(ROOT, 'src/server/openskyFlights.js'), 'utf8');
   const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
   const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
-  for (const source of [proxies, vite]) {
+  for (const source of [flights, proxies, vite]) {
     assert.doesNotMatch(source, /https:\/\/opensky-network\.org/);
     assert.doesNotMatch(source, /https:\/\/auth\.opensky-network\.org/);
     assert.doesNotMatch(source, /news\.google\.com/);
   }
-  assert.match(proxies, /api\.adsb\.lol/);
+  assert.match(flights, /api\.adsb\.lol/);
   assert.match(proxies, /api\.gdeltproject\.org/);
 });
 

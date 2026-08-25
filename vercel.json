@@ -2,6 +2,9 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "functions": {
+    "api/opensky.js": {
+      "maxDuration": 15
+    },
     "api/[...path].js": {
       "maxDuration": 30,
       "includeFiles": "config/**"
