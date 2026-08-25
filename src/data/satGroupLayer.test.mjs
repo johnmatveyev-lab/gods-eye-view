@@ -117,6 +117,10 @@ test('launches panel stays on /api/celestrak/active and is independent of satGro
   assert.match(launches, /fetch\('\/api\/celestrak\/active'\)/);
   assert.doesNotMatch(launches, /meridian\.satGroup/);
   assert.doesNotMatch(launches, /from '\.\/satGroup\.js'/);
+  const panel = readFileSync(path.join(ROOT, 'src/data/launchesPanel.js'), 'utf8');
+  assert.match(panel, /LAUNCHES_FEED_URL = '\/api\/launches'/);
+  assert.doesNotMatch(panel, /meridian\.satGroup/);
+  assert.doesNotMatch(panel, /\/api\/celestrak/);
   const satellites = readFileSync(path.join(ROOT, 'src/data/satellites.js'), 'utf8');
   assert.doesNotMatch(satellites, /\/api\/celestrak\/active/);
 });

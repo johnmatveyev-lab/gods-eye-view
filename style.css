@@ -376,6 +376,60 @@ body.recording-mode #cesium-credits {
   pointer-events: auto !important;
 }
 
+/* Local scale bar. Lives next to the required credit line and stays up in
+   clean-view / recording so operators can still eyeball 1 km vs 1 nmi. */
+.scale-bar {
+  position: fixed;
+  left: 36px;
+  bottom: 68px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: rgba(232, 234, 237, 0.78);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.scale-bar[hidden] {
+  display: none;
+}
+
+.scale-bar-track {
+  display: flex;
+  align-items: stretch;
+  height: 8px;
+}
+
+.scale-bar-tick {
+  width: 1px;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-shaft {
+  width: 96px;
+  height: 2px;
+  margin: auto 0 0;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-label {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.ui-clean-view #scale-bar,
+body.recording-mode #scale-bar {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 #gev-voice-control {
   position: fixed;
   right: 36px;
@@ -1507,6 +1561,7 @@ body.ui-clean-view #clean-view-exit {
 body.ui-clean-view #title-bar,
 body.ui-clean-view #style-indicator,
 body.ui-clean-view #top-center-actions,
+body.ui-clean-view #launches-panel,
 body.ui-clean-view #global-loading-status,
 body.ui-clean-view #traffic-sync-chip,
 body.ui-clean-view #cctv-sync-chip,
@@ -2025,7 +2080,8 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 18px;
 }
 
-#contacts-roster-toggle {
+#contacts-roster-toggle,
+#launches-panel-toggle {
   width: auto;
   min-width: 36px;
   padding: 0 10px;
@@ -2037,15 +2093,150 @@ body.ui-clean-view #scene-runtime.active {
   letter-spacing: 0.08em;
 }
 
-#contacts-roster-toggle .contacts-roster-toggle-label {
+#contacts-roster-toggle .contacts-roster-toggle-label,
+#launches-panel-toggle .launches-panel-toggle-label {
   line-height: 1;
 }
 
 #contacts-roster-toggle.active,
-#contacts-roster-toggle[aria-pressed="true"] {
+#contacts-roster-toggle[aria-pressed="true"],
+#launches-panel-toggle.active,
+#launches-panel-toggle[aria-pressed="true"] {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
   background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+}
+
+#launches-panel {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  z-index: 100;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(52vh, 480px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+#launches-panel[hidden] {
+  display: none;
+}
+
+#launches-panel .launches-panel-inner {
+  display: grid;
+  min-height: 0;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid rgba(98, 181, 255, .2);
+  border-radius: 7px;
+  background: rgba(4, 17, 31, .82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+#launches-panel .launches-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 1px 3px 7px;
+  border-bottom: 1px solid rgba(34, 230, 230, .14);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+#launches-panel .launches-panel-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+#launches-panel .launches-panel-header strong {
+  color: #8fcfff;
+  font-size: 9px;
+  letter-spacing: .16em;
+}
+
+#launches-panel .launches-panel-header span {
+  color: rgba(190, 230, 230, .46);
+  font-size: 7px;
+  letter-spacing: .1em;
+}
+
+#launches-panel .launches-panel-header output {
+  flex: 0 0 auto;
+  color: #22e6e6;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+#launches-panel .launches-panel-list {
+  display: grid;
+  max-height: min(43vh, 400px);
+  gap: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-color: rgba(34, 230, 230, .38) transparent;
+  scrollbar-width: thin;
+}
+
+#launches-panel .launches-panel-item {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid rgba(98, 181, 255, .13);
+  border-radius: 4px;
+  color: #d8ffff;
+  background: rgba(42, 113, 171, .045);
+  font-family: 'JetBrains Mono', monospace;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+#launches-panel .launches-panel-item:hover,
+#launches-panel .launches-panel-item:focus-visible,
+#launches-panel .launches-panel-item.selected,
+#launches-panel .launches-panel-item[aria-pressed="true"] {
+  border-color: rgba(34, 230, 230, .58);
+  outline: none;
+  background: rgba(34, 230, 230, .09);
+}
+
+#launches-panel .launches-panel-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+#launches-panel .launches-panel-copy strong,
+#launches-panel .launches-panel-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#launches-panel .launches-panel-copy strong {
+  color: #d8ffff;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .07em;
+}
+
+#launches-panel .launches-panel-copy small {
+  color: rgba(190, 230, 230, .48);
+  font-size: 7px;
+  letter-spacing: .035em;
+}
+
+#launches-panel .launches-panel-empty {
+  padding: 18px 10px;
+  color: rgba(190, 230, 230, .48);
+  font: 8px/1.5 'JetBrains Mono', monospace;
+  letter-spacing: .09em;
+  text-align: center;
 }
 
 #top-center-actions #stop-tracking {
@@ -4077,7 +4268,7 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-help span { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
-  #title-bar, #style-indicator, #top-center-actions, #traffic-sync-chip, #cctv-sync-chip,
+  #title-bar, #style-indicator, #top-center-actions, #launches-panel, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
@@ -7251,6 +7442,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 body.recording-mode #title-bar,
 body.recording-mode #style-indicator,
 body.recording-mode #top-center-actions,
+body.recording-mode #launches-panel,
 body.recording-mode #global-loading-status,
 body.recording-mode #traffic-sync-chip,
 body.recording-mode #cctv-sync-chip,
