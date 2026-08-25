@@ -441,11 +441,15 @@ test('refresh keeps the state field on the already-fetched roster', async () => 
   try {
     assert.equal(radioLayer.setState('CA'), true);
     const afterSet = fetchCalls.filter((url) => url.startsWith('/api/radio')).length;
+    assert.deepEqual(
+      radioLayer.getDirectoryStations().map((station) => station.id),
+      [rows[0].id, rows[1].id],
+    );
     await radioLayer.update();
     assert.equal(radioLayer.getUIState().state, 'CA');
     assert.deepEqual(
       radioLayer.getDirectoryStations().map((station) => station.id),
-      [rows[0].id],
+      [rows[0].id, rows[1].id],
     );
     assert.ok(fetchCalls.filter((url) => url.startsWith('/api/radio')).length > afterSet);
   } finally {
