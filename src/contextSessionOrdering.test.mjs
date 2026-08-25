@@ -158,7 +158,7 @@ test('wrapped visibility blocks leave the accessible toast to the wrapper token 
 
 test('every user-facing Context exit route settles through the failure surface', () => {
   const initPanel = src.slice(
-    src.indexOf('_initGlobalContextPanel() {'),
+    src.indexOf('_toggleContactsRoster() {'),
     src.indexOf('_captureContextSessionSnapshot(', src.indexOf('_initGlobalContextPanel() {')),
   );
   assert.equal((initPanel.match(/void this\._runUserFacingContextAction/g) || []).length, 3);
