@@ -11,9 +11,9 @@
  *
  * PURE data module — no Cesium imports, node-testable. The packs are lazy-
  * loaded on first lookup and cached in module scope (bbox/area computed once
- * at load). In the browser Vite bundles the JSON via dynamic import; under
- * node the same files are read from disk. A failed load is retried on the
- * next lookup rather than cached (see `createRetryableLoader`).
+ * at load). Browser and Node both use a JSON import attribute so the client
+ * bundle never sees `node:fs`. A failed load is retried on the next lookup
+ * rather than cached (see `createRetryableLoader`).
  */
 
 import { createRetryableLoader } from './retryableLoad.js';
@@ -113,19 +113,10 @@ function suffixVariants(norm) {
 /** @type {Array|null} flat entry list for listRegions() */
 let _entries = null;
 
-const isNode = typeof process !== 'undefined' && !!process.versions?.node
-  && typeof window === 'undefined';
-
 async function loadPackFile(base) {
-  if (isNode) {
-    const { readFileSync } = await import(/* @vite-ignore */ 'node:fs');
-    const url = new URL(`./local_data/natural_earth/${base}.json`, import.meta.url);
-    return JSON.parse(readFileSync(url, 'utf8'));
-  }
-  // Vite bundles these JSON files as modules (same pattern as neighborhoodPolygons.js)
   const mod = base === 'regions'
-    ? await import('./local_data/natural_earth/regions.json')
-    : await import('./local_data/natural_earth/marine.json');
+    ? await import('./local_data/natural_earth/regions.json', { with: { type: 'json' } })
+    : await import('./local_data/natural_earth/marine.json', { with: { type: 'json' } });
   return mod.default || mod;
 }
 
