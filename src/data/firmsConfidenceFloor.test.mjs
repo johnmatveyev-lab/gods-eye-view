@@ -29,6 +29,16 @@ const AND_FIRES = [
   rawFire(TOKYO.lat + 3, TOKYO.lon + 3, 140, 'h'),
 ];
 
+function recentAcqFields(hoursAgo = 2) {
+  const date = new Date(Date.now() - hoursAgo * 3600000);
+  const yyyy = date.getUTCFullYear();
+  const mm = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(date.getUTCDate()).padStart(2, '0');
+  const hh = String(date.getUTCHours()).padStart(2, '0');
+  const min = String(date.getUTCMinutes()).padStart(2, '0');
+  return { acqDate: `${yyyy}-${mm}-${dd}`, acqTime: `${hh}${min}` };
+}
+
 function rawFire(lat, lon, frp, confidence = 'h') {
   return {
     lat,
@@ -37,8 +47,7 @@ function rawFire(lat, lon, frp, confidence = 'h') {
     confidence,
     brightness: 340,
     daynight: 'D',
-    acqDate: '2026-08-03',
-    acqTime: '0412',
+    ...recentAcqFields(),
     instrument: 'VIIRS',
     satellite: 'N20',
   };
