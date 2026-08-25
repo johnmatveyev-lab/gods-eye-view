@@ -12,6 +12,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Clear annotations control on the globe chrome. It calls the existing
+  whiteboard `clear()` action so hosted users can erase voice marks without a
+  spoken command. The control is disabled when the board is empty. Trails,
+  models, and tracking are unchanged.
 - Added a filter field at the top of the Data Layers list. It matches the
   visible layer name plus existing voice common-names (fires, ships, bikes,
   traffic, cameras, and the rest of that map). Empty query shows the full
