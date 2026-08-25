@@ -190,7 +190,10 @@ test('Vercel Node entrypoints exist for token and HUD summary', () => {
   assert.ok(vercelJson.functions['api/realtime/token.js']);
   assert.ok(vercelJson.functions['api/openai/hud-summary.js']);
   assert.equal(vercelJson.framework, 'vite');
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
 });
 
 test('client sources never receive OPENAI_API_KEY', () => {
