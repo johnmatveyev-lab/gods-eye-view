@@ -3935,7 +3935,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
