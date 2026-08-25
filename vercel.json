@@ -2,10 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "functions": {
-    "api/billing/**/*.js": {
+    "api/billing/[...path].js": {
       "maxDuration": 15
     },
-    "api/stripe/**/*.js": {
+    "api/stripe/webhook.js": {
       "maxDuration": 15
     }
   }

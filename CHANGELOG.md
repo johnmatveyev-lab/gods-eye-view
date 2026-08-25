@@ -10,9 +10,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
-- Added Vercel `/api` functions for `/api/billing/*` and `/api/stripe/webhook`
-  so hosted Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*`
-  env returns 503/400 with variable names only.
+- Added Vercel Node functions `api/billing/[...path].js` and
+  `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
+  Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
+  returns 503/400 with variable names only.
 
 ### Fixed
 

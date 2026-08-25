@@ -1,1 +1,4 @@
-export { GET, POST } from '../../src/billing/vercel.js';
+import { config, createVercelBillingHandler } from '../../src/billing/vercel.js';
+
+export { config };
+export default createVercelBillingHandler('/api/stripe/webhook');

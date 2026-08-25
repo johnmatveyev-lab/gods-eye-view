@@ -1,59 +1,63 @@
 import { getBillingRuntime, handleBillingHttp } from './http.js';
 import { publicBillingError } from './env.js';
 
+export const config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
 /**
- * Web Request/Response adapter for Vercel Functions.
- * Vite preview still uses the Connect middleware in plugin.js; this is the
- * hosted path that actually deploys on Vercel.
+ * Restore /api/billing/... or /api/stripe/webhook when a Vercel catch-all
+ * hands us only the leftover path. Do not invent a SPA rewrite.
  */
-export async function handleVercelBilling(request, runtime = getBillingRuntime()) {
-  const url = new URL(request.url);
-  const rawBody = request.method === 'GET' || request.method === 'HEAD'
-    ? ''
-    : await request.text();
-  const headers = Object.fromEntries(request.headers.entries());
-
-  let statusCode = 200;
-  const resHeaders = { 'Cache-Control': 'no-store' };
-  let body = '';
-
-  const req = {
-    method: request.method,
-    url: `${url.pathname}${url.search}`,
-    headers,
-    rawBody,
-  };
-
-  const res = {
-    statusCode: 200,
-    headersSent: false,
-    setHeader(name, value) {
-      resHeaders[name] = value;
-    },
-    end(chunk) {
-      this.headersSent = true;
-      statusCode = this.statusCode;
-      body = chunk == null ? '' : String(chunk);
-    },
-  };
-
-  try {
-    await handleBillingHttp(req, res, runtime);
-  } catch (error) {
-    if (!res.headersSent) {
-      statusCode = 500;
-      resHeaders['Content-Type'] = 'application/json; charset=utf-8';
-      body = JSON.stringify({ error: publicBillingError(error, 'Billing request failed') });
-    }
+export function restoreApiPath(url, prefix) {
+  const parsed = parseUrl(url);
+  if (parsed.pathname.startsWith('/api/billing') || parsed.pathname.startsWith('/api/stripe')) {
+    return `${parsed.pathname}${parsed.search}`;
   }
-
-  return new Response(body, { status: statusCode, headers: resHeaders });
+  if (prefix === '/api/stripe/webhook') {
+    return `${prefix}${parsed.search}`;
+  }
+  const rest = parsed.pathname === '/' ? '' : parsed.pathname;
+  return `${prefix}${rest.startsWith('/') ? rest : `/${rest}`}${parsed.search}`;
 }
 
-export function GET(request) {
-  return handleVercelBilling(request);
+export function createVercelBillingHandler(prefix, runtimeFactory = getBillingRuntime) {
+  return async function handler(req, res) {
+    ensureRawBody(req);
+    req.url = restoreApiPath(req.url, prefix);
+    try {
+      await handleBillingHttp(req, res, runtimeFactory());
+    } catch (error) {
+      if (res.headersSent) return;
+      res.statusCode = 500;
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(JSON.stringify({ error: publicBillingError(error, 'Billing request failed') }));
+    }
+  };
 }
 
-export function POST(request) {
-  return handleVercelBilling(request);
+/** Default Node entry used by api/billing/[...path].js */
+export default createVercelBillingHandler('/api/billing');
+
+function parseUrl(url) {
+  const raw = String(url || '/');
+  try {
+    return raw.startsWith('http') ? new URL(raw) : new URL(raw, 'http://localhost');
+  } catch {
+    return new URL('/', 'http://localhost');
+  }
+}
+
+function ensureRawBody(req) {
+  if (typeof req.rawBody === 'string' || Buffer.isBuffer(req.rawBody)) return;
+  if (typeof req.body === 'string' || Buffer.isBuffer(req.body)) {
+    req.rawBody = String(req.body);
+    return;
+  }
+  if (req.body && typeof req.body === 'object') {
+    req.rawBody = JSON.stringify(req.body);
+  }
 }

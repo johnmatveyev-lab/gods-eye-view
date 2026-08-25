@@ -79,7 +79,7 @@ Setup:
 
 If Stripe keys are missing, the Upgrade button explains that Checkout is not configured instead of failing silently. Unit tests mock Stripe and Clerk — they do not need live keys.
 
-On Vercel the globe is a Vite static build. Hosted billing therefore lives in `/api` serverless functions (`/api/billing/*` and `/api/stripe/webhook`), not in Vite middleware. Leave Clerk/Stripe unset on a preview and those routes still respond with `503` and the missing variable names — they must not 404. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
+On Vercel the globe is a Vite static build. Hosted billing therefore lives in Node functions (`api/billing/[...path].js` and `api/stripe/webhook.js`) that forward to `handleBillingHttp`. Leave Clerk/Stripe unset on a preview and those routes still respond with `503`/`401` JSON — they must not be a Vercel platform 404. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
 
 Optional: `MERIDIAN_BILLING_STORE_PATH=.meridian-billing/accounts.json` persists plan + daily usage across process restarts (in-memory otherwise).
 

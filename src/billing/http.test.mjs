@@ -59,7 +59,10 @@ function hostedRuntime(overrides = {}) {
         },
       },
       webhooks: {
-        constructEvent: (raw) => JSON.parse(String(raw)),
+        constructEvent: (raw, signature) => {
+          if (signature !== 'sig_test') throw new Error('Invalid Stripe webhook signature.');
+          return JSON.parse(String(raw));
+        },
       },
     }),
     ...overrides,
@@ -433,7 +436,10 @@ test('money path: Free cannot use voice, Checkout + completed webhook unlocks Pr
         },
       },
       webhooks: {
-        constructEvent: (raw) => JSON.parse(String(raw)),
+        constructEvent: (raw, signature) => {
+          if (signature !== 'sig_test') throw new Error('Invalid Stripe webhook signature.');
+          return JSON.parse(String(raw));
+        },
       },
     }),
   });
