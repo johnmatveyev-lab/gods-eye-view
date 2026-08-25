@@ -13,6 +13,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Pro accounts can save, restore, and delete up to 10 camera/style/layer
   views in `localStorage` (`meridian.savedViews.<clerkUserId>`). Share-link
   encode/decode is reused. Free and anonymous stay hidden and write nothing.
+- Reload restores the last camera, style, and layers from `meridian.lastView`
+  when the URL has no share params. Share links still win. One slot, no
+  Clerk, no API.
 - Added Vercel Node functions `api/billing/[...path].js` and
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
