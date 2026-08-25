@@ -206,6 +206,13 @@ import {
   routeCctvFocusRequest,
 } from './cctvFocusRequest.js';
 import {
+  cycleFilteredCctvCamera,
+  filterCctvSources,
+  listCctvCityFilterOptions,
+  readCctvCityFilter,
+  writeCctvCityFilter,
+} from './data/cctvCityFilter.js';
+import {
   flyToWorldTarget,
   registerWorldFocusRequestListener,
   routeWorldFocusRequest,
@@ -2309,6 +2316,8 @@ export class StyleManager {
     this._radioTunerCameraRemove = null;
     this._refreshRadioTunerBand = null;
     this._cctvState = null;
+    this._cctvCityFilterValue = readCctvCityFilter(globalThis.localStorage);
+    this._cctvCityFilterSignature = '';
     this._cctvSummaryTypingTimer = null;
     this._lastCctvSummaryText = '';
     // Auto-expand guard: last active camera id seen while the layer was
@@ -2496,6 +2505,7 @@ export class StyleManager {
     this._cctvPrevBtn = document.getElementById('cctv-prev-btn');
     this._cctvNextBtn = document.getElementById('cctv-next-btn');
     this._cctvSelect = document.getElementById('cctv-camera-select');
+    this._cctvCityFilter = document.getElementById('cctv-city-filter');
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
     this._cctvCoverageBtn = document.getElementById('cctv-coverage-btn');
     this._cctvAutoHopBtn = document.getElementById('cctv-auto-hop-btn');
@@ -6541,10 +6551,18 @@ export class StyleManager {
       );
     });
 
+    this._cctvCityFilter?.addEventListener('change', () => {
+      this._cctvCityFilterValue = writeCctvCityFilter(
+        globalThis.localStorage,
+        this._cctvCityFilter.value,
+      );
+      this._renderCctvState(this._cctvState);
+    });
+
     this._cctvPrevBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(-1),
+        () => cycleFilteredCctvCamera(this._visibleCctvCameras(), this._activeCctvCameraId(), -1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
     });
@@ -6552,7 +6570,7 @@ export class StyleManager {
     this._cctvNextBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(1),
+        () => cycleFilteredCctvCamera(this._visibleCctvCameras(), this._activeCctvCameraId(), 1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
     });
@@ -6637,6 +6655,14 @@ export class StyleManager {
    */
   _activeCctvCameraId() {
     return this._cctvState?.activeCameraId || this._cctvSelect?.value || '';
+  }
+
+  /**
+   * Camera rows visible in the panel list for the persisted city/provider filter.
+   * @returns {Array<object>}
+   */
+  _visibleCctvCameras() {
+    return filterCctvSources(this._cctvState?.cameras || [], this._cctvCityFilterValue);
   }
 
   /**
@@ -6951,19 +6977,42 @@ export class StyleManager {
       this._cctvEnableBtn.textContent = enabled ? 'CCTV ON' : 'CCTV OFF';
     }
 
+    const cityOptions = listCctvCityFilterOptions(cameras);
+    if (cameras.length && this._cctvCityFilterValue
+      && !cityOptions.some((option) => option.key === this._cctvCityFilterValue)) {
+      this._cctvCityFilterValue = '';
+    }
+    const visibleCameras = filterCctvSources(cameras, this._cctvCityFilterValue);
+    if (this._cctvCityFilter) {
+      const citySignature = cityOptions.map((option) => `${option.key}:${option.count}`).join('|');
+      if (citySignature !== this._cctvCityFilterSignature) {
+        const nodes = [{ key: '', label: 'All sources', count: cameras.length }, ...cityOptions]
+          .map((option) => {
+            const node = document.createElement('option');
+            node.value = option.key;
+            node.textContent = option.key ? `${option.label} (${option.count})` : option.label;
+            return node;
+          });
+        this._cctvCityFilter.replaceChildren(...nodes);
+        this._cctvCityFilterSignature = citySignature;
+      }
+      this._cctvCityFilter.value = this._cctvCityFilterValue;
+      this._cctvCityFilter.disabled = cameras.length === 0;
+    }
+
     if (this._cctvSelect) {
-      const shouldRebuild = this._cctvSelect.options.length !== cameras.length
-        || cameras.some((cam, idx) => this._cctvSelect.options[idx]?.value !== cam.id);
+      const shouldRebuild = this._cctvSelect.options.length !== visibleCameras.length
+        || visibleCameras.some((cam, idx) => this._cctvSelect.options[idx]?.value !== cam.id);
       if (shouldRebuild) {
         this._cctvSelect.innerHTML = '';
-        for (const camera of cameras) {
+        for (const camera of visibleCameras) {
           const option = document.createElement('option');
           option.value = camera.id;
           option.textContent = `${camera.city} · ${camera.name}`;
           this._cctvSelect.appendChild(option);
         }
       }
-      this._cctvSelect.disabled = !enabled || cameras.length === 0;
+      this._cctvSelect.disabled = !enabled || visibleCameras.length === 0;
       if (activeId && Array.from(this._cctvSelect.options).some((opt) => opt.value === activeId)) {
         this._cctvSelect.value = activeId;
       } else if (!activeId) {
@@ -6971,9 +7020,12 @@ export class StyleManager {
       }
     }
 
-    for (const btn of [this._cctvNearestBtn, this._cctvPrevBtn, this._cctvNextBtn]) {
+    if (this._cctvNearestBtn) {
+      this._cctvNearestBtn.disabled = !enabled || cameras.length === 0;
+    }
+    for (const btn of [this._cctvPrevBtn, this._cctvNextBtn]) {
       if (!btn) continue;
-      btn.disabled = !enabled || cameras.length === 0;
+      btn.disabled = !enabled || visibleCameras.length === 0;
     }
     if (this._cctvFocusBtn) {
       this._cctvFocusBtn.disabled = !enabled || cameras.length === 0 || !activeId;
@@ -7057,6 +7109,7 @@ export class StyleManager {
 
     this._syncCctvSourceBadge(activeCamera, enabled);
     this._typeCctvSummary(state?.summary || 'Enable CCTV to start camera-linked intelligence summaries.');
+    this._syncCctvPanelViewport();
   }
 
   /**
