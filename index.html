@@ -233,6 +233,11 @@
       <div>
         <strong>QUAKES</strong>
         <span>USGS · 24H · M2.5+</span>
+        <div class="earthquake-time-chips" id="earthquake-time-chips" role="group" aria-label="Earthquake time window">
+          <button type="button" class="earthquake-time-chip" data-earthquake-time="1" aria-pressed="false" title="Show earthquakes from the last 1 hour">1h</button>
+          <button type="button" class="earthquake-time-chip" data-earthquake-time="6" aria-pressed="false" title="Show earthquakes from the last 6 hours">6h</button>
+          <button type="button" class="earthquake-time-chip active" data-earthquake-time="24" aria-pressed="true" title="Show earthquakes from the last 24 hours">24h</button>
+        </div>
         <div class="earthquake-depth-chips" id="earthquake-depth-chips" role="group" aria-label="Earthquake depth">
           <button type="button" class="earthquake-depth-chip active" data-earthquake-depth="shallow" aria-pressed="true" title="Show shallow earthquakes (shallower than 70 km)">Shallow</button>
           <button type="button" class="earthquake-depth-chip active" data-earthquake-depth="intermediate" aria-pressed="true" title="Show intermediate earthquakes (70–300 km)">Intermediate</button>

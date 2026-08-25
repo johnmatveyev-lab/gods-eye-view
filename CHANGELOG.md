@@ -45,6 +45,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Earthquake time-window chips — 1h | 6h | 24h — sit next to the magnitude
+  floor and depth chips. Default 24h matches the current all_day discs.
+  1h and 6h keep `properties.time >= now − window`; missing/non-finite time
+  stays visible. Chip changes re-filter the cached USGS GeoJSON; no new
+  fetch and no `/api`. AND with the magnitude floor and depth chips.
 - Satellite class chips on the Satellites row, next to Core | Dense, in
   `SATELLITE_CLASS_ORDER` (STATION, NAV, GEO, VISUAL, COMMS). Default all
   on, so the current catalog is unchanged until a chip is unchecked. The

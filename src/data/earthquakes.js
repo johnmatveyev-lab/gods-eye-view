@@ -4,13 +4,30 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
+import {
+  DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
+  EARTHQUAKE_TIME_WINDOW_LABELS,
+  EARTHQUAKE_TIME_WINDOW_TITLES,
+  EARTHQUAKE_TIME_WINDOWS_HOURS,
+  filterEarthquakeFeaturesByTimeWindow,
+  normalizeEarthquakeTimeWindowHours,
+} from './earthquakeTimeWindow.js';
+
+export {
+  DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
+  EARTHQUAKE_TIME_WINDOW_LABELS,
+  EARTHQUAKE_TIME_WINDOW_TITLES,
+  EARTHQUAKE_TIME_WINDOWS_HOURS,
+  filterEarthquakeFeaturesByTimeWindow,
+  normalizeEarthquakeTimeWindowHours,
+} from './earthquakeTimeWindow.js';
 
 /**
  * USGS earthquake discs — last 24 hours, operator floor 2.5+ / 4.0+ / 5.0+ / 6.0+
- * (default 2.5+, the historic hard-skip) and Shallow | Intermediate | Deep
- * chips (default all on, same buckets as depthColor). Floor and depth chips
- * re-filter the last all_day GeoJSON in memory; they do not change the USGS
- * product.
+ * (default 2.5+, the historic hard-skip), Shallow | Intermediate | Deep chips
+ * (default all on, same buckets as depthColor), and 1h | 6h | 24h chips
+ * (default 24h). Floor, depth, and time chips re-filter the last all_day
+ * GeoJSON in memory; they do not change the USGS product.
  *
  * Ellipse axes are STATIC (plain numbers), redefined only when a poll brings
  * new data. They must never become a `CallbackProperty` again: every entity
@@ -218,18 +235,24 @@ export function filterEarthquakeFeaturesByDepthBands(
 }
 
 /**
- * AND the operator magnitude floor with the depth chips.
+ * AND the operator magnitude floor, depth chips, and time window.
  * @param {Array<object>|null|undefined} features
- * @param {{magnitudeFloor?: number, depthBands?: unknown}} [options]
+ * @param {{magnitudeFloor?: number, depthBands?: unknown, timeWindowHours?: unknown, now?: number}} [options]
  * @returns {Array<object>}
  */
 export function filterEarthquakeFeatures(features, {
   magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
   depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+  timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
+  now = Date.now(),
 } = {}) {
-  return filterEarthquakeFeaturesByDepthBands(
-    filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
-    depthBands,
+  return filterEarthquakeFeaturesByTimeWindow(
+    filterEarthquakeFeaturesByDepthBands(
+      filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
+      depthBands,
+    ),
+    timeWindowHours,
+    now,
   );
 }
 
@@ -336,6 +359,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _listRecords = [];
   let _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
   let _depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+  let _timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS;
   let _lastGeojson = null;
 
   function applyCachedGeojson() {
@@ -343,6 +367,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     const features = filterEarthquakeFeatures(_lastGeojson.features, {
       magnitudeFloor: _magnitudeFloor,
       depthBands: _depthBands,
+      timeWindowHours: _timeWindowHours,
     });
     _dataSource.entities.removeAll();
     let count = 0;
@@ -420,7 +445,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
     _count = count;
     _listRecords = listRecords;
-    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands})`);
+    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands} · ${_timeWindowHours}h)`);
   }
 
   const layer = {
@@ -504,17 +529,23 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _lastGeojson = null;
     _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
     _depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+    _timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS;
   },
 
   getParams() {
-    return { magnitudeFloor: _magnitudeFloor, depthBands: _depthBands };
+    return {
+      magnitudeFloor: _magnitudeFloor,
+      depthBands: _depthBands,
+      timeWindowHours: _timeWindowHours,
+    };
   },
 
   setParams(params = {}) {
     if (!params || typeof params !== 'object') return false;
     const hasFloor = Object.hasOwn(params, 'magnitudeFloor');
     const hasDepth = Object.hasOwn(params, 'depthBands');
-    if (!hasFloor && !hasDepth) return true;
+    const hasTime = Object.hasOwn(params, 'timeWindowHours');
+    if (!hasFloor && !hasDepth && !hasTime) return true;
 
     let nextFloor = _magnitudeFloor;
     if (hasFloor) {
@@ -530,9 +561,21 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       nextDepth = bands;
     }
 
-    if (nextFloor === _magnitudeFloor && nextDepth === _depthBands) return true;
+    let nextTime = _timeWindowHours;
+    if (hasTime) {
+      const hours = normalizeEarthquakeTimeWindowHours(params.timeWindowHours);
+      if (hours == null) return false;
+      nextTime = hours;
+    }
+
+    if (
+      nextFloor === _magnitudeFloor
+      && nextDepth === _depthBands
+      && nextTime === _timeWindowHours
+    ) return true;
     _magnitudeFloor = nextFloor;
     _depthBands = nextDepth;
+    _timeWindowHours = nextTime;
     applyCachedGeojson();
     return true;
   },
@@ -546,6 +589,14 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
           active: _magnitudeFloor === floor,
           title: `Show M${floor.toFixed(1)}+ earthquakes from the last 24 hours`,
           params: { magnitudeFloor: floor },
+        })),
+        ...EARTHQUAKE_TIME_WINDOWS_HOURS.map((hours) => ({
+          id: `time-${hours}`,
+          label: EARTHQUAKE_TIME_WINDOW_LABELS[hours],
+          active: _timeWindowHours === hours,
+          group: 'Time',
+          title: EARTHQUAKE_TIME_WINDOW_TITLES[hours],
+          params: { timeWindowHours: hours },
         })),
         ...EARTHQUAKE_DEPTH_BANDS.map((band) => ({
           id: `depth-${band}`,
@@ -596,8 +647,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   /**
    * Snapshot for the hosted Quakes list. Same USGS features the discs
    * already parsed — no second fetch — and already clipped to the operator
-   * magnitude floor AND depth chips. A failed feed returns [] so the list
-   * can show UNAVAILABLE instead of stale rows or a hang.
+   * magnitude floor, depth chips, AND time window. A failed feed returns []
+   * so the list can show UNAVAILABLE instead of stale rows or a hang.
    * @returns {Array<Object>}
    */
   getListRecords() {

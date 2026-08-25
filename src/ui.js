@@ -211,6 +211,7 @@ import {
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   earthquakeDepthBandFlags,
+  normalizeEarthquakeTimeWindowHours,
   toggleEarthquakeDepthBand,
 } from './data/earthquakes.js';
 import {
@@ -2842,6 +2843,7 @@ export class StyleManager {
     this._earthquakeList = document.getElementById('earthquake-list');
     this._earthquakeListCount = document.getElementById('earthquake-list-count');
     this._earthquakeDepthChips = document.getElementById('earthquake-depth-chips');
+    this._earthquakeTimeChips = document.getElementById('earthquake-time-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -5285,6 +5287,7 @@ export class StyleManager {
         if (change?.layerId === 'earthquakes') {
           this._earthquakeListControl?.refresh();
           this._syncEarthquakeDepthChips();
+          this._syncEarthquakeTimeChips();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -11334,7 +11337,33 @@ export class StyleManager {
     this._syncEarthquakeDepthChips();
   }
 
+  _syncEarthquakeTimeChips() {
+    const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+    const hours = normalizeEarthquakeTimeWindowHours(layer?.getParams?.()?.timeWindowHours) ?? 24;
+    const chips = this._earthquakeTimeChips?.querySelectorAll?.('[data-earthquake-time]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = Number(chip.dataset.earthquakeTime) === hours;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initEarthquakeTimeChips() {
+    if (!this._earthquakeTimeChips) return;
+    this._earthquakeTimeChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-time]');
+      if (!chip || !this._earthquakeTimeChips.contains(chip)) return;
+      const next = normalizeEarthquakeTimeWindowHours(chip.dataset.earthquakeTime);
+      if (next == null) return;
+      this._dataManager?.setLayerParams?.('earthquakes', { timeWindowHours: next }, { origin: 'user' });
+      this._syncEarthquakeTimeChips();
+    });
+    this._syncEarthquakeTimeChips();
+  }
+
   _initEarthquakeListControl() {
+    this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,
