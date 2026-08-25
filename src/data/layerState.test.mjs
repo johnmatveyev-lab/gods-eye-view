@@ -73,6 +73,9 @@ function paramsForLayer(id) {
       sensors: 'all',
     };
   }
+  if (id === 'military-installations') {
+    return { installationClassFilter: 'all' };
+  }
   if (id === 'radio') {
     return {
       filter: 'all',
@@ -421,6 +424,25 @@ test('FIRMS age window is a cheap local-firms enum that defaults to 24h', () => 
   assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), twelve).get('lo'), /w\.a\.1/);
   assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), twelve))
     .options['local-firms'].ageWindow, '12');
+});
+
+test('installation class chips persist on military-installations and default all on', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['military-installations'].installationClassFilter, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=i'));
+  assert.equal(omitted.options['military-installations'].installationClassFilter, 'all',
+    'existing i links keep every class visible');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['military-installations'],
+    options: { 'military-installations': { installationClassFilter: 'ARLP' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /i\.k\.arlp/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['military-installations'].installationClassFilter, 'ARLP');
+  assert.equal(layerOptionsForRestore(decoded, 'military-installations').installationClassFilter, 'ARLP');
 });
 
 test('FIRMS sensor chips persist on local-firms and default all on', () => {

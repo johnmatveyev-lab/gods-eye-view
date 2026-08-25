@@ -815,3 +815,45 @@ test('Places search failure keeps mapped OSM sites and surfaces getStats().error
     run.restore();
   }
 });
+
+test('Naval-off hides naval_base markers, keeps others, and selected stays without a refetch', async () => {
+  const run = await runInstallationLoad({
+    elements: [
+      { type: 'node', id: 1, lat: 30.20, lon: -97.70, tags: { military: 'airfield', name: 'Airfield One' } },
+      { type: 'node', id: 2, lat: 30.21, lon: -97.71, tags: { military: 'naval_base', name: 'Naval Two' } },
+      { type: 'node', id: 3, lat: 30.22, lon: -97.72, tags: { military: 'range', name: 'Range Three' } },
+      { type: 'node', id: 4, lat: 30.23, lon: -97.73, tags: { military: 'base', name: 'Land Four' } },
+    ],
+  });
+  try {
+    const ids = () => run.entities().map((entity) => entity.id).sort();
+    assert.deepEqual(ids(), [
+      'osm:node:1', 'osm:node:2', 'osm:node:3', 'osm:node:4',
+    ]);
+    assert.equal(militaryInstallationsLayer.getParams().installationClassFilter, 'all');
+    const fetchesBefore = run.requests.length;
+    assert.equal(militaryInstallationsLayer.setParams({ installationClassFilter: 'ARLP' }), true);
+    assert.equal(run.requests.length, fetchesBefore, 'class chips must not refetch Overpass');
+    assert.deepEqual(ids(), ['osm:node:1', 'osm:node:3', 'osm:node:4']);
+    assert.deepEqual(
+      militaryInstallationsLayer.getViewportRecords().map((record) => record.id).sort(),
+      ['osm:node:1', 'osm:node:3', 'osm:node:4'],
+    );
+
+    assert.equal(militaryInstallationsLayer.focusById('osm:node:2'), true);
+    assert.ok(ids().includes('osm:node:2'), 'selected naval_base stays');
+    assert.ok(
+      militaryInstallationsLayer.getViewportRecords().some((record) => record.id === 'osm:node:2'),
+    );
+
+    await militaryInstallationsLayer.update();
+    assert.equal(militaryInstallationsLayer.getParams().installationClassFilter, 'ARLP',
+      'refresh of the same viewport keeps the chip set');
+    assert.ok(ids().includes('osm:node:2'));
+    assert.ok(ids().includes('osm:node:1'));
+    assert.equal(militaryInstallationsLayer.setParams({ installationClassFilter: 'bogus' }), false);
+    assert.equal(militaryInstallationsLayer.getParams().installationClassFilter, 'ARLP');
+  } finally {
+    run.restore();
+  }
+});

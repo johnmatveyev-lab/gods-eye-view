@@ -2518,6 +2518,41 @@ body.ui-clean-view #scene-runtime.active {
   color: rgba(232, 244, 255, 0.62);
 }
 
+#installations-viewport-list .installation-class-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+#installations-viewport-list .installation-class-chips[hidden] {
+  display: none;
+}
+
+#installations-viewport-list .installation-class-chip {
+  padding: 3px 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+#installations-viewport-list .installation-class-chip.active {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+#installations-viewport-list .installation-class-chip:hover,
+#installations-viewport-list .installation-class-chip:focus-visible {
+  border-color: var(--glass-border-hover);
+}
+
 #installations-viewport-list .installations-viewport-list-body {
   overflow: auto;
   display: flex;

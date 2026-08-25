@@ -23,6 +23,12 @@ import {
   encodeFirmsSensorFilter,
   normalizeFirmsSensorFilter,
 } from './firmsSensorFilter.js';
+import {
+  DEFAULT_INSTALLATION_CLASS_FILTER,
+  decodeInstallationClassFilter,
+  encodeInstallationClassFilter,
+  normalizeInstallationClassFilter,
+} from './militaryInstallationClassFilter.js';
 
 const VALID_DISPOSITIONS = new Set([
   'enabled-only',
@@ -384,6 +390,21 @@ const OPTION_GROUPS = Object.freeze({
       decode: decodeFirmsSensorFilter,
     }),
   ]),
+  'military-installations': Object.freeze([
+    // PLAN 151: class chips default ALL ON. Omitted `k` means every class
+    // stays visible — there was no prior class filter, so absent === default.
+    Object.freeze({
+      key: 'installationClassFilter',
+      token: 'k',
+      defaultValue: DEFAULT_INSTALLATION_CLASS_FILTER,
+      normalize: (value) => {
+        if (value === undefined || value === null) return null;
+        return normalizeInstallationClassFilter(value);
+      },
+      encode: encodeInstallationClassFilter,
+      decode: decodeInstallationClassFilter,
+    }),
+  ]),
 });
 
 const TRACKING_OPTION_KEY_BY_LAYER = Object.freeze({
@@ -428,7 +449,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled+options', optionOwner: 'local-firms' }),
   Object.freeze({ id: 'military', token: 'm', disposition: 'enabled+mirrored-options', optionOwner: 'flights' }),
   Object.freeze({ id: 'military-awareness', token: 'g', disposition: 'enabled-only' }),
-  Object.freeze({ id: 'military-installations', token: 'i', disposition: 'enabled-only' }),
+  Object.freeze({ id: 'military-installations', token: 'i', disposition: 'enabled+options', optionOwner: 'military-installations' }),
   Object.freeze({ id: 'radio', token: 'r', disposition: 'enabled+options', optionOwner: 'radio' }),
   Object.freeze({ id: 'rocket-launches', token: 'x', disposition: 'enabled-only' }),
   Object.freeze({ id: 'satellites', token: 's', disposition: 'enabled+options', optionOwner: 'satellites' }),
