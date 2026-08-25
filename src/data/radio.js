@@ -825,9 +825,21 @@ function stationTags(station) {
     .filter(Boolean);
 }
 
+function escapeRadioTagNeedle(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function tagMatchesNeedle(tag, needle) {
+  const normalizedTag = normalizeRadioTag(tag);
+  const normalizedNeedle = normalizeRadioTag(needle);
+  if (!normalizedTag || !normalizedNeedle) return false;
+  if (normalizedTag === normalizedNeedle) return true;
+  return new RegExp(`(?:^|\\s)${escapeRadioTagNeedle(normalizedNeedle)}(?:\\s|$)`).test(normalizedTag);
+}
+
 function hasTag(station, needles) {
   const tags = stationTags(station);
-  return needles.some((needle) => tags.some((tag) => tag === needle || tag.includes(needle)));
+  return needles.some((needle) => tags.some((tag) => tagMatchesNeedle(tag, needle)));
 }
 
 function detectedGenres(station) {
