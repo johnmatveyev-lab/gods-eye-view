@@ -23,6 +23,7 @@ import { MapStackController } from './mapStackController.js';
 import { initAnnotations } from './annotations/index.js';
 import { initLogoGaze } from './logoGaze.js';
 import { initReduceMotion } from './reduceMotion.js';
+import { installPowerMode } from './powerMode.js';
 import { initCockpitCloudEffects } from './cockpitCloudEffects.js';
 import {
   installRenderGovernor,
@@ -138,8 +139,9 @@ async function init() {
     // cadences (poll interpolation, trail fades, style crossfades) are all
     // designed against wall-clock time, not frame count. Measured on the
     // 2026-08-05 perf investigation as a strict halving of idle burn on
-    // 120 Hz hardware; a no-op on 60 Hz displays. (perf item 2)
-    viewer.targetFrameRate = 60;
+    // 120 Hz hardware; a no-op on 60 Hz displays. DISPLAY Power Low further
+    // caps at 30 via meridian.power. (perf item 2 / PLAN 77)
+    installPowerMode(viewer);
 
     // Register per-layer data attribution into the "Data attribution" popover.
     // Required by each source's license (ODbL, CC BY-NC-SA, NASA FIRMS, etc.);
@@ -345,6 +347,8 @@ async function init() {
       livePollScheduler,
       getRenderGovernorDiagnostics,
       requestRender: governorRequestRender,
+      getPowerMode: () => styleManager.getPowerMode(),
+      setPowerMode: (mode) => styleManager.setPowerMode(mode),
     };
     window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
     void meridianAccountReady.then((account) => attachVoiceGate(window.__godsEyeView.voiceCommands, account));

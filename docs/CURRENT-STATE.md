@@ -2297,6 +2297,7 @@ silently demoting every later lookup for the session.
 
 ## UI/UX Runtime Defaults
 
+- DISPLAY **Power** (`#power-row`) is `Normal` | `Low`. It writes only the existing Cesium `viewer.targetFrameRate` (60 default, 30 on Low) and persists `meridian.power`. It does not change data polls, does not add a renderer, and does not override the idle render governor's `requestRenderMode`. Reduce-motion / Still still cuts decoration only. Clean view + Low still keeps `#cesium-credits` on.
 - Hidden or offline chrome pauses manager-owned flight/layer poll timers and the HUD summary. Visible+online runs one refresh and resumes intervals. `#offline-chip` reads "Offline — showing last data". Voice stays up; AIS is not wrapped.
 - Z ladder: panels promote within 100–139 (renormalized on wrap), voice pill 150, toast 200, clean-view exit 300.
 - Panel POSITION keys are versioned `v8` (`godsEyeView.v8.panelPos.<id>`); collapsed-state keys remain `v6`. Leftover `v6` / `v7` position keys are still read and clamped in place on boot; they are not renamed this cycle. An off-screen stored position is clamped onto the viewport (or that panel's pos/collapsed keys are reset when the payload is unreadable). The one-time position reset clears stale DISPLAY placements that could overlap the Context rail.
