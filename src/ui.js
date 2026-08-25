@@ -455,6 +455,12 @@ import {
   subscribeWeatherUnits,
 } from './data/weatherUnits.js';
 import {
+  bindWeatherPrecipUnitToggle,
+  formatPrecipitationMm,
+  initWeatherPrecipUnits,
+  subscribeWeatherPrecipUnits,
+} from './data/weatherPrecipUnits.js';
+import {
   altitudeRulerCurveInset,
   altitudeRulerTicks,
   bearingBetweenCoordinates,
@@ -1082,6 +1088,8 @@ class CockpitViewController {
     this.localCondition = document.getElementById('cockpit-local-condition');
     this.localCloud = document.getElementById('cockpit-local-cloud');
     this.localPrecipitation = document.getElementById('cockpit-local-precipitation');
+    this.weatherPrecipToggle = this.signalStream?.querySelector?.('.weather-precip-toggle')
+      || document.querySelector('.weather-precip-toggle');
     this.localVisibility = document.getElementById('cockpit-local-visibility');
     this.localVisibilityCell = document.getElementById('cockpit-local-visibility-cell');
     this.weatherCredit = document.querySelector('.cockpit-weather-credit');
@@ -1165,6 +1173,16 @@ class CockpitViewController {
       this.applyLocalWindReadout();
     });
     this._listenerRemovers.push(() => this._windUnitUnsubscribe?.());
+    initWeatherPrecipUnits();
+    this._unbindWeatherPrecipUnits = bindWeatherPrecipUnitToggle(this.weatherPrecipToggle || this.signalStream, {
+      onChange: () => this.paintLocalPrecipitation(this.regionalBrief?.weather),
+    });
+    this._listenerRemovers.push(() => this._unbindWeatherPrecipUnits?.());
+    this._weatherPrecipUnitsUnsubscribe = subscribeWeatherPrecipUnits(() => {
+      this.paintLocalPrecipitation(this.regionalBrief?.weather);
+    });
+    this._listenerRemovers.push(() => this._weatherPrecipUnitsUnsubscribe?.());
+    this.paintLocalPrecipitation(this.regionalBrief?.weather);
     this._listen(this.entry, 'click', () => {
       this.onEnterRequest();
     });
@@ -2230,10 +2248,7 @@ class CockpitViewController {
       this.localCloud.textContent = Number.isFinite(weather?.cloudCoverPct)
         ? `CLOUD ${Math.round(weather.cloudCoverPct)}%` : 'CLOUD UNKNOWN';
     }
-    if (this.localPrecipitation) {
-      this.localPrecipitation.textContent = Number.isFinite(weather?.precipitationMm)
-        ? weather.precipitationMm.toFixed(1) : '—';
-    }
+    this.paintLocalPrecipitation(weather);
     this.paintWeatherVisibility(weather);
     if (this.signalStream) this.signalStream.dataset.regionalStatus = payload?.status || 'partial';
     if (this.briefPageIndex === 1 && this.briefSource) {
@@ -2255,6 +2270,12 @@ class CockpitViewController {
   applyLocalWindReadout(weather = this.regionalBrief?.weather) {
     if (!this.localWind) return;
     this.localWind.textContent = formatWindSpeed(weather?.windKph);
+  }
+
+  /** Re-apply mm / in from the in-memory observation. Does not refetch. */
+  paintLocalPrecipitation(weather) {
+    if (!this.localPrecipitation) return;
+    this.localPrecipitation.textContent = formatPrecipitationMm(weather?.precipitationMm);
   }
 
   /** Open-Meteo credit is required only while weather values are on screen. */

@@ -277,6 +277,12 @@ test('Local Info briefing still fetches weather and shows Open-Meteo credit when
   assert.doesNotMatch(windUi[1], /setWxEnabled|getWxEnabled|WX_/);
   assert.doesNotMatch(windHelper, /setWxEnabled|getWxEnabled|WX_STORAGE_KEY|weatherEffectsShouldRender/);
   assert.match(html, /id="cockpit-wind-units"[\s\S]*?data-wx-mode|data-wx-mode[\s\S]*?id="cockpit-wind-units"/);
+
+  const precip = ui.match(/paintLocalPrecipitation\(weather\) \{([\s\S]*?)\n  \}/);
+  assert.ok(precip, 'precipitation paint helper is missing');
+  assert.match(precip[1], /formatPrecipitationMm\(weather\?\.precipitationMm\)/);
+  assert.doesNotMatch(precip[1], /getWxEnabled|weatherToggle|cockpitWeather|WX_/);
+  assert.match(html, /id="cockpit-local-precipitation"[\s\S]*?data-weather-precip-units="mm"[\s\S]*?mm[\s\S]*?data-weather-precip-units="in"[\s\S]*?in/);
 });
 
 test('share URLs, annotations, and trails stay off this chrome', () => {
