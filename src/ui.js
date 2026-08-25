@@ -3337,6 +3337,7 @@ export class StyleManager {
       viewer,
       getPass: getNextIssPass,
       isVisible: () => this._issPassReadoutVisible(),
+      layer: satellitesLayer,
     });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();

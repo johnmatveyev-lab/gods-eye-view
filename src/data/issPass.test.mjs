@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { twoline2satrec } from 'satellite.js';
-import { findNextIssPass, lookAnglesAt } from './issPass.js';
+import { DEFAULT_ISS_PASS_MIN_ELEV_DEG, findNextIssPass, lookAnglesAt } from './issPass.js';
 
 // Canonical archived ISS TLE (valid checksums; epoch 2008-09-20 ~12:25 UTC).
 const L1 = '1 25544U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927';
@@ -12,7 +12,12 @@ const FROM_MS = Date.UTC(2008, 8, 20, 12, 30, 0); // just after the TLE epoch
 
 test('finds a structurally-consistent ISS pass within 24h of the TLE epoch', () => {
   const satrec = twoline2satrec(L1, L2);
+  assert.equal(DEFAULT_ISS_PASS_MIN_ELEV_DEG, 10);
+  const omitted = findNextIssPass({ satrec, ...AUSTIN, fromMs: FROM_MS });
   const pass = findNextIssPass({ satrec, ...AUSTIN, fromMs: FROM_MS, minElevDeg: 10 });
+  assert.ok(omitted);
+  assert.equal(omitted.riseMs, pass.riseMs);
+  assert.equal(omitted.maxElevMs, pass.maxElevMs);
   assert.ok(pass, 'expected a pass within 24h at 30°N for a 51.6° inclination orbit');
   assert.ok(pass.riseMs > FROM_MS);
   assert.ok(pass.riseMs < pass.maxElevMs && pass.maxElevMs < pass.setMs);

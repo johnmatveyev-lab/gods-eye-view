@@ -11,6 +11,9 @@ import { propagate, gstime, eciToEcf, ecfToLookAngles } from 'satellite.js';
 const R2D = 180 / Math.PI;
 const D2R = Math.PI / 180;
 
+/** Today's shipped horizon cut. Plan 197 chips pass 30 or 40; omitted stays 10. */
+export const DEFAULT_ISS_PASS_MIN_ELEV_DEG = 10;
+
 /** Observer look angles at an instant, or null when propagation fails. */
 export function lookAnglesAt(satrec, dateMs, latDeg, lonDeg) {
   const date = new Date(dateMs);
@@ -30,7 +33,8 @@ export function lookAnglesAt(satrec, dateMs, latDeg, lonDeg) {
 
 export function findNextIssPass({
   satrec, latDeg, lonDeg, fromMs,
-  minElevDeg = 10, horizonHours = 24, coarseStepSec = 30, fineStepSec = 5,
+  minElevDeg = DEFAULT_ISS_PASS_MIN_ELEV_DEG,
+  horizonHours = 24, coarseStepSec = 30, fineStepSec = 5,
 }) {
   const elev = (t) => lookAnglesAt(satrec, t, latDeg, lonDeg)?.elevDeg ?? -90;
   const horizonMs = fromMs + horizonHours * 3600_000;

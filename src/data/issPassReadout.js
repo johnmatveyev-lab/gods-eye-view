@@ -13,6 +13,13 @@ import {
   formatHudClock,
   getClockMode,
 } from '../clockPreference.js';
+import {
+  getIssPassMinElev,
+  issPassMinElevChipModels,
+  issPassMinElevDeg,
+  resetIssPassMinElevCache,
+  setIssPassMinElev,
+} from './issPassMinElevFilter.js';
 
 export const ISS_PASS_READOUT_ID = 'iss-pass-readout';
 export const ISS_PASS_READOUT_PARK_ID = 'iss-pass-readout-park';
@@ -20,6 +27,7 @@ export const ISS_PASS_UNAVAILABLE = 'UNAVAILABLE';
 export const ISS_PASS_READOUT_TITLE = 'Next ISS pass at the camera location. Not an alert service.';
 
 const RAD_TO_DEG = 180 / Math.PI;
+const ISS_PASS_MIN_ELEV_ROW_INSTALLED = Symbol('issPassMinElevRowControls');
 
 /** @type {object|null} */
 let _viewer = null;
@@ -41,6 +49,8 @@ let _clockRemove = null;
 let _lastResult = null;
 /** @type {{latDeg: number, lonDeg: number}|null} */
 let _lastObserver = null;
+/** @type {{getItem?: Function, setItem?: Function}|null} */
+let _storage = null;
 
 /**
  * Camera-center observer from Cesium `positionCartographic` (radians).
@@ -114,7 +124,7 @@ export function formatIssPassReadout({ status = 'none', pass = null, clockMode }
 }
 
 /**
- * @param {{latDeg?: number, lonDeg?: number, clockMode?: string, fromMs?: number, getPass?: Function}} [input]
+ * @param {{latDeg?: number, lonDeg?: number, clockMode?: string, fromMs?: number, getPass?: Function, minElevDeg?: number}} [input]
  */
 export function computeIssPassReadout({
   latDeg,
@@ -122,16 +132,74 @@ export function computeIssPassReadout({
   clockMode,
   fromMs,
   getPass,
+  minElevDeg,
 } = {}) {
   if (!Number.isFinite(latDeg) || !Number.isFinite(lonDeg) || typeof getPass !== 'function') {
     return formatIssPassReadout({ status: 'no-tle', clockMode });
   }
-  const result = getPass({ latDeg, lonDeg, fromMs }) || { status: 'none' };
+  const floor = issPassMinElevDeg(
+    Number.isFinite(minElevDeg) ? minElevDeg : getIssPassMinElev(),
+  );
+  const result = getPass({ latDeg, lonDeg, fromMs, minElevDeg: floor }) || { status: 'none' };
   return {
     ...formatIssPassReadout({ ...result, clockMode }),
     status: result.status,
     pass: result.pass || null,
   };
+}
+
+/**
+ * Append exclusive 10° | 30° | 40° chips to a layer's getRowControls without
+ * editing satellites.js. Chip clicks write `issPassMinElev` through setParams;
+ * the wrap persists locally and re-runs the already-loaded satrec.
+ * @param {{
+ *   getRowControls?: Function,
+ *   setParams?: Function,
+ *   getParams?: Function,
+ * }|null|undefined} layer
+ * @returns {object|null|undefined}
+ */
+export function installIssPassMinElevRowControls(layer) {
+  if (!layer || layer[ISS_PASS_MIN_ELEV_ROW_INSTALLED]) return layer;
+  const origGetRowControls = typeof layer.getRowControls === 'function'
+    ? layer.getRowControls.bind(layer)
+    : null;
+  const origSetParams = typeof layer.setParams === 'function'
+    ? layer.setParams.bind(layer)
+    : null;
+  const origGetParams = typeof layer.getParams === 'function'
+    ? layer.getParams.bind(layer)
+    : null;
+
+  layer.getRowControls = function getRowControlsWithIssPassMinElev() {
+    const controls = origGetRowControls ? (origGetRowControls() || {}) : {};
+    return {
+      ...controls,
+      chips: [
+        ...(controls.chips || []),
+        ...issPassMinElevChipModels(getIssPassMinElev()),
+      ],
+    };
+  };
+
+  layer.setParams = function setParamsWithIssPassMinElev(params = {}, options) {
+    if (params && Object.hasOwn(params, 'issPassMinElev')) {
+      setIssPassMinElev(params.issPassMinElev, options?.storage || _storage || undefined);
+      syncIssPassReadout({ recompute: true });
+    }
+    return origSetParams ? origSetParams(params, options) : true;
+  };
+
+  layer.getParams = function getParamsWithIssPassMinElev() {
+    const params = origGetParams ? (origGetParams() || {}) : {};
+    return {
+      ...params,
+      issPassMinElev: getIssPassMinElev(),
+    };
+  };
+
+  layer[ISS_PASS_MIN_ELEV_ROW_INSTALLED] = true;
+  return layer;
 }
 
 function resolveRoot() {
@@ -182,6 +250,7 @@ export function syncIssPassReadout({ recompute = true } = {}) {
     clockMode,
     fromMs,
     getPass: _getPass,
+    minElevDeg: getIssPassMinElev(_storage || undefined),
   });
   _lastObserver = observer;
   _lastResult = { status: computed.status || (computed.available ? 'ok' : 'none'), pass: computed.pass || null };
@@ -199,10 +268,18 @@ export function syncIssPassReadout({ recompute = true } = {}) {
  *   getFromMs?: Function,
  *   getClockMode?: Function,
  *   clockTarget?: {addEventListener?: Function, removeEventListener?: Function},
+ *   layer?: {getRowControls?: Function, setParams?: Function, getParams?: Function}|null,
+ *   storage?: {getItem?: Function, setItem?: Function}|null,
  * }} [options]
  */
 export function initIssPassReadout(options = {}) {
   destroyIssPassReadout();
+  _storage = options.storage || null;
+  if (_storage) {
+    resetIssPassMinElevCache();
+    getIssPassMinElev(_storage);
+  }
+  if (options.layer) installIssPassMinElevRowControls(options.layer);
   _viewer = options.viewer || null;
   _getPass = typeof options.getPass === 'function' ? options.getPass : null;
   _isVisible = typeof options.isVisible === 'function' ? options.isVisible : null;
@@ -240,6 +317,7 @@ export function destroyIssPassReadout() {
   _root = null;
   _lastResult = null;
   _lastObserver = null;
+  _storage = null;
 }
 
 /** Last painted observer, or null. Test seam. */
