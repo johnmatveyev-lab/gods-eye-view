@@ -3038,6 +3038,14 @@ export class StyleManager {
     this._speedMaxKt = null;
     this._aircraftClassChips = document.getElementById('aircraft-class-chips');
     this._aircraftClassFilter = AIRCRAFT_CLASS_FILTER_ALL;
+    this._flightRateBtns = {
+      showClimb: document.getElementById('flight-rate-climb'),
+      showLevel: document.getElementById('flight-rate-level'),
+      showDescent: document.getElementById('flight-rate-descent'),
+    };
+    this._showClimb = true;
+    this._showLevel = true;
+    this._showDescent = true;
     this._trailsBtn = document.getElementById('trails-toggle');
     // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
     // existing tracked-target trail renderer without stopping track.
@@ -3116,6 +3124,7 @@ export class StyleManager {
     this._initModels3dToggle();
     this._initZoomToPointer();
     this._initSpeedBandControl();
+    this._initFlightRateToggles();
     this._initTrailsToggle();
     this._initEmergencyHighlightToggle();
     this._initKeepAboveToggle();
@@ -5370,6 +5379,7 @@ export class StyleManager {
             this._syncModels3dFromLayerState(state);
             this._syncSpeedBandFromLayerState(state);
             this._syncAirborneOnlyFromLayerState(state);
+            this._syncFlightRateFromLayerState(state);
           },
           onTrackingRestoreStatus: (result) => this._handleShareTrackingRestoreStatus(result),
         },
@@ -5392,6 +5402,7 @@ export class StyleManager {
         this._syncModels3dFromLayerState(durable);
         this._syncSpeedBandFromLayerState(durable);
         this._syncAirborneOnlyFromLayerState(durable);
+        this._syncFlightRateFromLayerState(durable);
         // Share links keep their encoded models3d; a laptop that chose Models
         // off via meridian.models otherwise stays on the billboard path.
         if (!this._initialShareState) this._applyStoredModelsPreference();
@@ -11726,6 +11737,55 @@ export class StyleManager {
     this._speedMaxKt = next.maxKt;
     this._setModels3dParams({ speedMinKt: next.minKt, speedMaxKt: next.maxKt });
     this._syncSpeedBandUi();
+  }
+
+  _setFlightRateParams(params, { origin = 'user' } = {}) {
+    this._dataManager?.setLayerParams('flights', params, { origin });
+    this._dataManager?.setLayerParams('military', params, { origin });
+  }
+
+  _syncFlightRateFromLayerState(state) {
+    const options = state?.options?.flights;
+    if (!options) return;
+    this._showClimb = options.showClimb !== false;
+    this._showLevel = options.showLevel !== false;
+    this._showDescent = options.showDescent !== false;
+    this._syncFlightRateButtonState();
+  }
+
+  _initFlightRateToggles() {
+    const fieldByParam = {
+      showClimb: '_showClimb',
+      showLevel: '_showLevel',
+      showDescent: '_showDescent',
+    };
+    for (const [paramKey, field] of Object.entries(fieldByParam)) {
+      const button = this._flightRateBtns?.[paramKey];
+      if (!button) continue;
+      button.addEventListener('click', () => {
+        this[field] = !this[field];
+        this._setFlightRateParams({
+          showClimb: this._showClimb,
+          showLevel: this._showLevel,
+          showDescent: this._showDescent,
+        });
+        this._syncFlightRateButtonState();
+      });
+    }
+    this._syncFlightRateButtonState();
+  }
+
+  _syncFlightRateButtonState() {
+    const bindings = [
+      [this._flightRateBtns?.showClimb, this._showClimb],
+      [this._flightRateBtns?.showLevel, this._showLevel],
+      [this._flightRateBtns?.showDescent, this._showDescent],
+    ];
+    for (const [button, enabled] of bindings) {
+      if (!button) continue;
+      button.classList.toggle('active', enabled);
+      button.setAttribute('aria-pressed', String(enabled));
+    }
   }
 
   /**

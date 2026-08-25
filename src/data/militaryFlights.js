@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { aircraftIncludedInNearby } from './aircraftNearbyPolicy.js';
+import { contactPassesVerticalRateFilter } from './flightVerticalFilter.js';
 import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
 import {
@@ -268,6 +269,9 @@ let _aircraftClassFilter = AIRCRAFT_CLASS_FILTER_ALL;
 // the operator arms Airborne only. Must stay in lockstep with layerState.js,
 // flights.js, ui.js, and the unpressed #airborne-only-toggle markup.
 let _airborneOnly = false;
+let _showClimb = true;
+let _showLevel = true;
+let _showDescent = true;
 
 function _airborneOnlyMatcher(contact) {
   return passesAirborneOnlyFilter({
@@ -1049,6 +1053,12 @@ export function _setTrackedMilitaryRefreshStateForTest({
   _backoff = false;
   _retryAt = 0;
   _airborneOnly = false;
+  _speedMinKt = null;
+  _speedMaxKt = null;
+  _showClimb = true;
+  _showLevel = true;
+  _showDescent = true;
+  _aircraftClassFilter = AIRCRAFT_CLASS_FILTER_ALL;
 }
 
 /** Seed the authoritative snapshot outcome used by share-Follow tests. */
@@ -2076,6 +2086,19 @@ function _updateTrackedModel() {
  * degraded by other layers mutating camera.percentageChanged.
  * @returns {void}
  */
+function _verticalRateAndMatcher(contact) {
+  return contactPassesVerticalRateFilter(contact, {
+    showClimb: _showClimb,
+    showLevel: _showLevel,
+    showDescent: _showDescent,
+  });
+}
+
+function _applyBooleanFilterParam(params, key, current) {
+  if (typeof params[key] !== 'boolean') return current;
+  return params[key];
+}
+
 function _fleetTick() {
   if (!_viewer || !_billboardCollection || !_billboardCollection.show) return;
   const scene = _viewer.scene;
@@ -2894,7 +2917,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher],
+    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
   });
 }
 
@@ -2904,7 +2927,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher],
+    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
   });
 }
 
@@ -3650,7 +3673,7 @@ const militaryFlightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in aircraft
    * stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, selectedMilitaryTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedMilitaryTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -3676,6 +3699,16 @@ const militaryFlightsLayer = {
         _refreshCockpitNearContacts();
         _lastFleetTickMs = 0;
       }
+    }
+    const nextClimb = _applyBooleanFilterParam(params, 'showClimb', _showClimb);
+    const nextLevel = _applyBooleanFilterParam(params, 'showLevel', _showLevel);
+    const nextDescent = _applyBooleanFilterParam(params, 'showDescent', _showDescent);
+    if (nextClimb !== _showClimb || nextLevel !== _showLevel || nextDescent !== _showDescent) {
+      _showClimb = nextClimb;
+      _showLevel = nextLevel;
+      _showDescent = nextDescent;
+      _lastFleetTickMs = 0;
+      _applyInFlightFilterVisibility();
     }
     if (typeof params.irBoost === 'boolean' && params.irBoost !== _irBoost) {
       _irBoost = params.irBoost;
@@ -3733,6 +3766,9 @@ const militaryFlightsLayer = {
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),
+      showClimb: _showClimb,
+      showLevel: _showLevel,
+      showDescent: _showDescent,
       selectedMilitaryTrackingId: _trackedIcao,
       speedMinKt: _speedMinKt,
       speedMaxKt: _speedMaxKt,
@@ -3780,8 +3816,9 @@ const militaryFlightsLayer = {
     const nearby = [];
 
     for (const [icao24, bb] of _billboards) {
+      const info = _flightData.get(icao24);
       const isTracked = icao24 === _trackedIcao;
-      if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) continue;
+      if (!_passesInFlightFilters(icao24, info)) continue;
       // Keep planes rendered as a 3D model (billboard hidden) so proximity counts
       // don't drop to zero on the 2D→3D handoff; bb.position stays current while hidden.
       if (!aircraftIncludedInNearby({
@@ -3798,7 +3835,6 @@ const militaryFlightsLayer = {
       const distance = Cesium.Cartesian3.distance(center, pos);
       if (distance > maxRange) continue;
 
-      const info = _flightData.get(icao24);
       nearby.push({
         id: info?.callsign?.trim() || info?.registration?.trim() || icao24,
         icao24,
