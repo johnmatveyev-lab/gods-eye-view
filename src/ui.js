@@ -131,6 +131,7 @@ import {
   shareCacheNeedsHeal,
   shareableDetectionState,
 } from './contactsDetectionPolicy.js';
+import { pinRequiredCredits } from './data/dataCredits.js';
 import { formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
@@ -7763,6 +7764,7 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.classList.toggle('active', shouldEnable);
     }
+    pinRequiredCredits();
     this._scheduleLeftPanelLayout();
   }
 
@@ -8846,6 +8848,7 @@ export class StyleManager {
     this._recordingConfig = { hidePanels, hudMode, safeFrame };
 
     document.body.classList.toggle('recording-mode', this._recordingMode && hidePanels);
+    pinRequiredCredits();
 
     if (this._safeFrameOverlay) {
       this._safeFrameOverlay.classList.remove('ratio-9-16', 'ratio-16-9');
