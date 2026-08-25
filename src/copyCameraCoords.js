@@ -4,15 +4,30 @@
  *
  * Source is `camera.positionCartographic` — the same pose the share link and
  * HUD already read. This is the camera-center (not a cursor pick). Copy writes
- * numeric `lat,lon` (share-link order). `lon,lat` is the secondary GIS order
- * already used by Cesium `fromDegrees`. No height, so no units toggle. No
- * /api and no geocoding.
+ * numeric `lat,lon` (share-link order) plus an MGRS line from the same pair
+ * via the existing `mgrs` package. Polar / undefined conversions stay blank —
+ * no fake grid. `lon,lat` is the secondary GIS order already used by Cesium
+ * `fromDegrees`. No height, so no units toggle. No /api and no geocoding.
  */
+
+import * as mgrsNs from 'mgrs';
 
 export const CAMERA_COORDS_ROOT_ID = 'camera-coords';
 export const CAMERA_COORDS_VALUE_ID = 'camera-coords-value';
+export const CAMERA_COORDS_MGRS_ID = 'camera-coords-mgrs';
 export const CAMERA_COORDS_COPY_ID = 'camera-coords-copy';
 export const COORD_DECIMALS = 4;
+
+/** 10 m square — same precision the cinematic HUD already prints. */
+const MGRS_ACCURACY = 4;
+
+function mgrsForward(lonLat, accuracy) {
+  const forward = mgrsNs.forward || mgrsNs.default?.forward;
+  if (typeof forward !== 'function') {
+    throw new TypeError('mgrs.forward is unavailable');
+  }
+  return forward(lonLat, accuracy);
+}
 
 const RAD_TO_DEG = 180 / Math.PI;
 
@@ -20,6 +35,7 @@ let _viewer = null;
 let _showToast = null;
 let _root = null;
 let _valueButton = null;
+let _mgrsEl = null;
 let _copyButton = null;
 let _clipboard = null;
 let _active = null;
@@ -84,6 +100,49 @@ export function formatLonLat(lat, lon, decimals = COORD_DECIMALS) {
 }
 
 /**
+ * Insert spaces into a raw MGRS string for the chrome readout.
+ * @param {string} raw
+ * @returns {string}
+ */
+function formatMgrsGrid(raw) {
+  const match = String(raw).match(/^(\d{1,2}[A-Z])\s*([A-Z]{2})\s*(\d+)$/);
+  if (!match) return String(raw);
+  const [, zone, square, coords] = match;
+  const half = coords.length / 2;
+  return `${zone} ${square} ${coords.slice(0, half)} ${coords.slice(half)}`;
+}
+
+/**
+ * MGRS from the same lat/lon Copy coords already shows. Polar / undefined
+ * conversions stay blank — the `mgrs` package does not invent a UPS grid.
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {string}
+ */
+export function formatMgrs(lat, lon) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return '';
+  try {
+    const raw = mgrsForward([lon, lat], MGRS_ACCURACY);
+    return raw ? `MGRS ${formatMgrsGrid(raw)}` : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Clipboard payload: lat,lon, then the MGRS line when a grid exists.
+ * @param {number} lat
+ * @param {number} lon
+ * @returns {string}
+ */
+export function formatCopiedCoords(lat, lon) {
+  const latLon = formatLatLon(lat, lon);
+  if (!latLon) return '';
+  const mgrsLine = formatMgrs(lat, lon);
+  return mgrsLine ? `${latLon}\n${mgrsLine}` : latLon;
+}
+
+/**
  * @param {string} latLon
  * @returns {string}
  */
@@ -99,10 +158,11 @@ export function copiedCoordsToast(latLon) {
  */
 export async function copyCameraCenterCoords(cameraOrPose, options = {}) {
   const coords = cameraCenterCoords(cameraOrPose);
-  const latLon = coords ? formatLatLon(coords.lat, coords.lon) : '';
-  if (!latLon) return false;
+  const text = coords ? formatCopiedCoords(coords.lat, coords.lon) : '';
+  if (!text) return false;
+  const latLon = formatLatLon(coords.lat, coords.lon);
   const toast = options.showToast || _showToast;
-  const ok = await writeClipboardText(latLon, options.clipboard || _clipboard);
+  const ok = await writeClipboardText(text, options.clipboard || _clipboard);
   if (typeof toast === 'function') toast(ok ? copiedCoordsToast(latLon) : 'Copy failed');
   return ok;
 }
@@ -121,6 +181,7 @@ export function initCameraCoords(options = {}) {
   _clipboard = options.clipboard || globalThis.navigator?.clipboard || null;
   _root = options.root || globalThis.document?.getElementById(CAMERA_COORDS_ROOT_ID);
   _valueButton = options.valueButton || globalThis.document?.getElementById(CAMERA_COORDS_VALUE_ID);
+  _mgrsEl = options.mgrsEl || globalThis.document?.getElementById(CAMERA_COORDS_MGRS_ID) || null;
   _copyButton = options.copyButton || globalThis.document?.getElementById(CAMERA_COORDS_COPY_ID);
   if (!_root || !_valueButton || !_copyButton) return;
 
@@ -145,6 +206,7 @@ export function destroyCameraCoords() {
   _showToast = null;
   _root = null;
   _valueButton = null;
+  _mgrsEl = null;
   _copyButton = null;
   _clipboard = null;
   _active = null;
@@ -160,20 +222,32 @@ export function syncCameraCoords() {
     _valueButton.removeAttribute?.('aria-label');
     _copyButton.setAttribute?.('aria-label', 'Copy camera coordinates');
     _copyButton.title = 'Copy lat,lon';
+    paintMgrs('');
     delete _root.dataset?.lonlat;
+    delete _root.dataset?.mgrs;
     return;
   }
   const latLon = formatLatLon(coords.lat, coords.lon);
   const lonLat = formatLonLat(coords.lat, coords.lon);
-  _active = { ...coords, latLon, lonLat };
+  const mgrsLabel = formatMgrs(coords.lat, coords.lon);
+  _active = { ...coords, latLon, lonLat, mgrs: mgrsLabel };
   _root.hidden = false;
   _valueButton.textContent = latLon;
   _valueButton.dataset.lonlat = lonLat;
   _root.dataset.lonlat = lonLat;
+  if (mgrsLabel) _root.dataset.mgrs = mgrsLabel;
+  else delete _root.dataset?.mgrs;
+  paintMgrs(mgrsLabel);
   _valueButton.setAttribute('aria-label', `Copy ${latLon}`);
   _copyButton.setAttribute('aria-label', `Copy ${latLon}`);
   _copyButton.title = `Copy ${latLon}`;
   _valueButton.title = `Copy ${latLon}`;
+}
+
+function paintMgrs(mgrsLabel) {
+  if (!_mgrsEl) return;
+  _mgrsEl.textContent = mgrsLabel || '';
+  _mgrsEl.hidden = !mgrsLabel;
 }
 
 /** Current painted camera-center coords, or null. */
