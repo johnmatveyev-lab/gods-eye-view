@@ -430,6 +430,12 @@ import {
   writeCctvCalBadgeFilter,
 } from './data/cctvCalBadgeFilter.js';
 import {
+  DEFAULT_CCTV_FOV_FILTER,
+  normalizeCctvFovFilter,
+  readCctvFovFilter,
+  writeCctvFovFilter,
+} from './data/cctvFovFilter.js';
+import {
   DEFAULT_CCTV_FEED_TYPE_FILTER,
   readCctvFeedTypeFilter,
 } from './data/cctvFeedTypeFilter.js';
@@ -2688,6 +2694,7 @@ export class StyleManager {
     this._cctvHideNoFeed = readCctvHideNoFeed(globalThis.localStorage);
     this._cctvHeadingConfidence = readCctvHeadingConfidenceFilter(globalThis.localStorage);
     this._cctvCalSource = readCctvCalBadgeFilter(globalThis.localStorage);
+    this._cctvFov = readCctvFovFilter(globalThis.localStorage) || DEFAULT_CCTV_FOV_FILTER;
     this._cctvCityFilterSignature = '';
     this._cctvHideUnhealthy = readCctvHideUnhealthy(globalThis.localStorage);
     this._cctvFeedTypeFilter = readCctvFeedTypeFilter(globalThis.localStorage);
@@ -2951,6 +2958,10 @@ export class StyleManager {
     this._cctvCalSourceFilterEl = document.getElementById('cctv-cal-source-filter');
     this._cctvCalSourceBtns = [
       ...document.querySelectorAll('#cctv-cal-source-filter [data-cctv-cal-source]'),
+    ];
+    this._cctvFovFilterEl = document.getElementById('cctv-fov-filter');
+    this._cctvFovBtns = [
+      ...document.querySelectorAll('#cctv-fov-filter [data-cctv-fov]'),
     ];
     this._cctvFeedTypeBtns = [...document.querySelectorAll('#cctv-feed-type-filter [data-cctv-feed-type]')];
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
@@ -7703,6 +7714,18 @@ export class StyleManager {
       });
     }
 
+    for (const button of this._cctvFovBtns || []) {
+      button.addEventListener('click', () => {
+        const id = button.dataset.cctvFov;
+        if (id !== 'all' && id !== 'wide' && id !== 'tight') return;
+        this._cctvFov = writeCctvFovFilter(globalThis.localStorage, id);
+        this._dataManager?.setLayerParams('cctv', {
+          fov: this._cctvFov,
+        }, { origin: 'user' });
+        this._renderCctvState(this._cctvState);
+      });
+    }
+
     for (const button of this._cctvFeedTypeBtns) {
       button.addEventListener('click', () => {
         const family = button.dataset.cctvFeedType;
@@ -7814,8 +7837,8 @@ export class StyleManager {
 
   /**
    * Camera rows visible in the panel list after city/source, Hide no feed,
-   * feed type, Hide unhealthy, heading-confidence, and calibration-source
-   * chips (AND). Re-applied from the in-memory catalog.
+   * feed type, Hide unhealthy, heading-confidence, calibration-source, and
+   * exclusive FOV chips (AND). Re-applied from the in-memory catalog.
    * @returns {Array<object>}
    */
   _visibleCctvCameras() {
@@ -7826,6 +7849,7 @@ export class StyleManager {
       feedTypes: this._cctvState?.feedTypes || this._cctvFeedTypeFilter,
       headingConfidence: this._cctvHeadingConfidence,
       calSource: this._cctvCalSource,
+      fov: this._cctvFov,
       selectedId: this._activeCctvCameraId(),
     });
   }
@@ -8131,6 +8155,9 @@ export class StyleManager {
         'raw-prior': state.calSource['raw-prior'] !== false,
       };
     }
+    if (state?.fov != null) {
+      this._cctvFov = normalizeCctvFovFilter(state.fov);
+    }
     const cameras = state?.cameras || [];
     const enabled = !!state?.enabled && !!this._dataManager?.isEnabled('cctv');
     const activeId = state?.activeCameraId || '';
@@ -8173,6 +8200,7 @@ export class StyleManager {
       feedTypes,
       headingConfidence: this._cctvHeadingConfidence,
       calSource: this._cctvCalSource,
+      fov: this._cctvFov,
       selectedId: activeId,
     });
     for (const button of this._cctvHeadingConfidenceBtns || []) {
@@ -8188,6 +8216,16 @@ export class StyleManager {
     for (const button of this._cctvCalSourceBtns || []) {
       const id = button.dataset.cctvCalSource;
       const active = this._cctvCalSource[id] === true;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+      button.disabled = !enabled || cameras.length === 0;
+    }
+    if (this._cctvFovFilterEl) {
+      this._cctvFovFilterEl.hidden = !enabled;
+    }
+    for (const button of this._cctvFovBtns || []) {
+      const id = button.dataset.cctvFov;
+      const active = this._cctvFov === id;
       button.classList.toggle('active', active);
       button.setAttribute('aria-pressed', String(active));
       button.disabled = !enabled || cameras.length === 0;

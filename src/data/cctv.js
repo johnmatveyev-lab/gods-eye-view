@@ -131,6 +131,13 @@ import {
   sourceMatchesCalBadge,
   writeCctvCalBadgeFilter,
 } from './cctvCalBadgeFilter.js';
+import {
+  DEFAULT_CCTV_FOV_FILTER,
+  normalizeCctvFovFilter,
+  readCctvFovFilter,
+  sourceMatchesCctvFov,
+  writeCctvFovFilter,
+} from './cctvFovFilter.js';
 
 export { deriveCalBadge };
 
@@ -322,6 +329,8 @@ let _hideNoFeed = false;
 let _headingConfidence = { high: true, medium: true, low: true };
 /** Calibrated | Curated | Raw chips. Default all on matches the current catalog. */
 let _calSourceFilter = { ...DEFAULT_CCTV_CAL_SOURCE_FILTER };
+/** Exclusive All | Wide 75+ | Tight <70 chips. Default All matches the current catalog. */
+let _fovFilter = DEFAULT_CCTV_FOV_FILTER;
 // An explicit empty-space deselect keeps AUTO HOP configured but prevents its
 // timer from silently choosing a replacement. A later explicit activation or
 // AUTO HOP toggle-on releases the hold.
@@ -2798,6 +2807,7 @@ function catalogRecordVisible(record, { keepActive = true } = {}) {
   return sourceMatchesHideNoFeed(record?.camera, _hideNoFeed, { selectedId })
     && sourceMatchesHeadingConfidence(record?.camera, _headingConfidence, { selectedId })
     && sourceMatchesCalBadge(record?.camera, _calSourceFilter, { selectedId })
+    && sourceMatchesCctvFov(record?.camera, _fovFilter, { selectedId })
     && cctvRecordMatchesFeedType(record, { keepActive });
 }
 
@@ -3597,6 +3607,7 @@ function uiState() {
     hideNoFeed: _hideNoFeed,
     headingConfidence: { ..._headingConfidence },
     calSource: { ..._calSourceFilter },
+    fov: _fovFilter,
     autoHopSuspended: _autoHopSuspended,
     autoHopSec: _autoHopSec,
     count: _count,
@@ -4146,6 +4157,7 @@ function clearRuntimeState() {
  * @param {boolean} [options.showProjection=false] Projection visibility.
  * @param {object} [options.feedTypes] Image | MJPEG | Video chip map.
  * @param {object} [options.calSource] Calibrated | Curated | Raw chip map.
+ * @param {'all'|'wide'|'tight'} [options.fov] Exclusive All | Wide 75+ | Tight <70 chip.
  * @returns {void}
  */
 export function _setCctvCoverageStateForTest({
@@ -4158,6 +4170,7 @@ export function _setCctvCoverageStateForTest({
   hideNoFeed = false,
   headingConfidence = undefined,
   calSource = undefined,
+  fov = undefined,
   feedTypes,
 } = {}) {
   _viewer = viewer;
@@ -4181,6 +4194,9 @@ export function _setCctvCoverageStateForTest({
   }
   if (calSource != null) {
     _calSourceFilter = normalizeCctvCalBadgeFilter(calSource);
+  }
+  if (fov != null) {
+    _fovFilter = normalizeCctvFovFilter(fov);
   }
   if (feedTypes !== undefined) {
     _feedTypeFilter = normalizeCctvFeedTypeFilter(feedTypes);
@@ -4376,6 +4392,11 @@ const cctvLayer = {
       _calSourceFilter = readCctvCalBadgeFilter(globalThis.localStorage);
     } catch {
       _calSourceFilter = { ...DEFAULT_CCTV_CAL_SOURCE_FILTER };
+    }
+    try {
+      _fovFilter = readCctvFovFilter(globalThis.localStorage);
+    } catch {
+      _fovFilter = DEFAULT_CCTV_FOV_FILTER;
     }
     applyPersistedCctvFeedTypes();
 
@@ -4756,6 +4777,7 @@ const cctvLayer = {
    * @param {boolean} [params.hideUnhealthy] - Hide cameras marked unhealthy in the health map.
    * @param {object} [params.headingConfidence] - High | Medium | Low heading-confidence chips.
    * @param {object} [params.calSource] - Calibrated | Curated | Raw calibration-source chips.
+   * @param {'all'|'wide'|'tight'} [params.fov] - Exclusive All | Wide 75+ | Tight <70 chips.
    */
   setParams(params = {}) {
     if (typeof params.showCoverage === 'boolean') {
@@ -4883,6 +4905,18 @@ const cctvLayer = {
         applyCatalogVisibility();
       }
     }
+    if (params.fov != null) {
+      const next = normalizeCctvFovFilter(params.fov);
+      if (next !== _fovFilter) {
+        _fovFilter = next;
+        try {
+          writeCctvFovFilter(globalThis.localStorage, _fovFilter);
+        } catch {
+          // Fail open: the in-memory catalog still applies.
+        }
+        applyCatalogVisibility();
+      }
+    }
     if (params.feedTypes != null || params.feedTypeFilter != null) {
       setCctvFeedTypes(params.feedTypes ?? params.feedTypeFilter, undefined, { notify: false });
     }
@@ -4917,6 +4951,7 @@ const cctvLayer = {
       hideNoFeed: _hideNoFeed,
       headingConfidence: { ..._headingConfidence },
       calSource: { ..._calSourceFilter },
+      fov: _fovFilter,
       autoHopSec: _autoHopSec,
       hideUnhealthy: _hideUnhealthy,
       selectedCameraId: active?.camera.id || null,
