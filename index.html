@@ -1071,6 +1071,11 @@
         <button type="button" class="fires-sensor-chip active" data-firms-sensor="modis" aria-pressed="true" title="Show MODIS detections">MODIS</button>
         <button type="button" class="fires-sensor-chip active" data-firms-sensor="other" aria-pressed="true" title="Show detections from other named sensors">Other</button>
       </div>
+      <div id="fires-brightness-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS brightness" hidden>
+        <button type="button" class="fires-sensor-chip active" data-firms-brightness="all" aria-pressed="true" title="Show every FIRMS detection brightness">All</button>
+        <button type="button" class="fires-sensor-chip" data-firms-brightness="320" aria-pressed="false" title="Hide detections below 320 K">320+</button>
+        <button type="button" class="fires-sensor-chip" data-firms-brightness="340" aria-pressed="false" title="Hide detections below 340 K">340+</button>
+      </div>
       <div id="fires-list-meta" class="fires-list-meta">Enable FIRMS Active Fires to list nearby detections.</div>
       <ol id="fires-list" class="fires-list" aria-label="Nearby NASA FIRMS fires"></ol>
       <p id="fires-list-ack" class="fires-list-ack">We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Earth Observing System Data and Information System (EOSDIS).</p>
