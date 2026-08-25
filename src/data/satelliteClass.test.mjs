@@ -102,12 +102,13 @@ const ISS_TLE = tleFor('25544', 'ISS (ZARYA)');
  * Weather TLE with explicit inclination + mean motion (rev/day). Columns match
  * the NORAD line-2 layout so satellite.js reads n from substring(52, 63).
  */
-function weatherTle(satnum, name, { inc, n }) {
+function weatherTle(satnum, name, { inc, n, e = 0.0006703 }) {
   const id = String(satnum).padStart(5, '0');
   const incField = inc.toFixed(4).padStart(8, ' ');
   const nField = n.toFixed(8).padStart(11, ' ');
+  const eField = Math.round(e * 1e7).toString().padStart(7, '0');
   const line1 = `1 ${id}U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927`;
-  const line2 = `2 ${id} ${incField} 247.4627 0006703 130.5360 325.0288 ${nField}563537`;
+  const line2 = `2 ${id} ${incField} 247.4627 ${eField} 130.5360 325.0288 ${nField}563537`;
   return [name, line1, line2].join('\n');
 }
 
@@ -115,7 +116,17 @@ const METOP_B_TLE = weatherTle(38771, 'METOP-B', { inc: 98.7, n: 14.21455 });
 const NOAA_20_TLE = weatherTle(43013, 'NOAA 20', { inc: 98.78, n: 14.19523 });
 const SUOMI_NPP_TLE = weatherTle(37849, 'SUOMI NPP', { inc: 98.8, n: 14.19530 });
 const GOES_16_TLE = weatherTle(41866, 'GOES 16', { inc: 0.50, n: 1.00273 });
-const WEATHER_CATALOG_TLE = [METOP_B_TLE, NOAA_20_TLE, SUOMI_NPP_TLE, GOES_16_TLE].join('\n');
+const HIMAWARI_9_TLE = weatherTle(40267, 'HIMAWARI-9', { inc: 0.03, n: 1.00270 });
+// NORAD 58584 line 2 as published — Molniya Arctic weather, not the GEO belt.
+const ARKTIKA_M2_TLE = [
+  'ARKTIKA-M 2',
+  '1 58584U 23185A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927',
+  '2 58584  63.2129 147.3319 6901614 267.6403  18.7125  2.00593343 19562',
+].join('\n');
+const TUNDRA_WX_TLE = weatherTle(59999, 'TUNDRA-WX', { inc: 63.4, n: 1.00270, e: 0.27 });
+const WEATHER_CATALOG_TLE = [
+  METOP_B_TLE, NOAA_20_TLE, SUOMI_NPP_TLE, GOES_16_TLE, ARKTIKA_M2_TLE,
+].join('\n');
 
 function weatherSatrec(tle) {
   const [, line1, line2] = tle.split('\n');
@@ -179,8 +190,17 @@ test('weatherOrbitTag splits polar WX from the GEO belt by mean motion', () => {
   assert.equal(weatherOrbitTag(weatherSatrec(NOAA_20_TLE)), 'weather-leo');
   assert.equal(weatherOrbitTag(weatherSatrec(SUOMI_NPP_TLE)), 'weather-leo');
   assert.equal(weatherOrbitTag(weatherSatrec(GOES_16_TLE)), 'weather-geo');
+  assert.equal(weatherOrbitTag(weatherSatrec(HIMAWARI_9_TLE)), 'weather-geo');
   assert.equal(satelliteClassLabel(weatherOrbitTag(weatherSatrec(METOP_B_TLE))), 'VISUAL · WX');
   assert.equal(satelliteClassLabel(weatherOrbitTag(weatherSatrec(GOES_16_TLE))), 'GEO · WX');
+});
+
+test('weatherOrbitTag does not stamp Molniya / Tundra weather as the GEO belt', () => {
+  // n ≤ 3 used to mean weather-geo. Arktika-M 2 is n ≈ 2, i ≈ 63°, e ≈ 0.69.
+  assert.equal(weatherOrbitTag(weatherSatrec(ARKTIKA_M2_TLE)), 'weather-leo');
+  assert.equal(weatherOrbitTag(weatherSatrec(TUNDRA_WX_TLE)), 'weather-leo');
+  assert.equal(satelliteClassLabel(weatherOrbitTag(weatherSatrec(ARKTIKA_M2_TLE))), 'VISUAL · WX');
+  assert.notEqual(weatherOrbitTag(weatherSatrec(ARKTIKA_M2_TLE)), 'weather-geo');
 });
 
 test('the ISS is a STATION whichever group a partial outage ingested it from', () => {
@@ -696,8 +716,10 @@ test('Weather catalog + GEO off keeps polar WX and hides GOES 16', async () => {
     assert.equal(_catalogGroupForTest(43013), 'weather-leo');
     assert.equal(_catalogGroupForTest(37849), 'weather-leo');
     assert.equal(_catalogGroupForTest(41866), 'weather-geo');
+    assert.equal(_catalogGroupForTest(58584), 'weather-leo');
     assert.equal(satelliteClassLabel(_catalogGroupForTest(38771)), 'VISUAL · WX');
     assert.equal(satelliteClassLabel(_catalogGroupForTest(41866)), 'GEO · WX');
+    assert.equal(satelliteClassLabel(_catalogGroupForTest(58584)), 'VISUAL · WX');
 
     const geoOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'geo');
     satellitesLayer.setParams({ satelliteClassFilter: geoOff });
@@ -705,12 +727,14 @@ test('Weather catalog + GEO off keeps polar WX and hides GOES 16', async () => {
     assert.equal(afterGeoOff.includes(38771), true, 'METOP-B stays when GEO is off');
     assert.equal(afterGeoOff.includes(43013), true, 'NOAA 20 stays when GEO is off');
     assert.equal(afterGeoOff.includes(37849), true, 'SUOMI NPP stays when GEO is off');
+    assert.equal(afterGeoOff.includes(58584), true, 'ARKTIKA-M 2 stays when GEO is off');
     assert.equal(afterGeoOff.includes(41866), false, 'GOES 16 hides when GEO is off');
 
     const visualOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'visual');
     satellitesLayer.setParams({ satelliteClassFilter: visualOff });
     const afterVisualOff = visibleIds();
     assert.equal(afterVisualOff.includes(38771), false, 'VISUAL off hides polar weather');
+    assert.equal(afterVisualOff.includes(58584), false, 'VISUAL off hides Arktika-M 2');
     assert.equal(afterVisualOff.includes(41866), true, 'VISUAL off keeps GOES 16');
   } finally {
     console.log = log;
