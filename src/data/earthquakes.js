@@ -6,7 +6,9 @@ import {
 } from '../overlays/worldOverlay.js';
 
 /**
- * USGS earthquake discs — last 24 hours, M2.5+.
+ * USGS earthquake discs — last 24 hours, operator floor 2.5+ / 4.0+ / 5.0+ / 6.0+
+ * (default 2.5+, the historic hard-skip). Floor chips re-filter the last
+ * all_day GeoJSON in memory; they do not change the USGS product.
  *
  * Ellipse axes are STATIC (plain numbers), redefined only when a poll brings
  * new data. They must never become a `CallbackProperty` again: every entity
@@ -25,7 +27,32 @@ import {
  * already cover every discrete mutation this layer makes.
  */
 
-const API_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
+export const USGS_ALL_DAY_URL = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson';
+const API_URL = USGS_ALL_DAY_URL;
+
+/** Operator floors. 2.5+ is the historic hard-skip; 5.0+ is the isSignificant cohort. */
+export const DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR = 2.5;
+export const EARTHQUAKE_MAGNITUDE_FLOORS = Object.freeze([2.5, 4.0, 5.0, 6.0]);
+
+/** Same cutoff the discs already use for the heavier stroke / fill. */
+export function isSignificantEarthquake(mag) {
+  return mag >= 5.0;
+}
+
+/**
+ * Keep events at or above the operator floor. Comparison matches the historic
+ * `mag < 2.5` skip so 2.5+ is the current view.
+ * @param {Array<object>|null|undefined} features USGS GeoJSON features.
+ * @param {number} [floor=DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR]
+ * @returns {Array<object>}
+ */
+export function filterEarthquakeFeaturesByMagnitudeFloor(
+  features,
+  floor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
+) {
+  if (!Array.isArray(features)) return [];
+  return features.filter((feature) => !(feature?.properties?.mag < floor));
+}
 
 export const EARTHQUAKE_OVERLAY_SOURCE_ID = 'earthquakes';
 export const EARTHQUAKE_OVERLAY_COHORT_LIMIT = 96;
@@ -128,6 +155,93 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _lastError = null;
   let _enabled = false;
   let _listRecords = [];
+  let _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
+  let _lastGeojson = null;
+
+  function applyCachedGeojson() {
+    if (!_dataSource || !_lastGeojson) return;
+    const features = filterEarthquakeFeaturesByMagnitudeFloor(
+      _lastGeojson.features,
+      _magnitudeFloor,
+    );
+    _dataSource.entities.removeAll();
+    let count = 0;
+    const overlayEntries = [];
+    const listRecords = [];
+
+    for (const feature of features) {
+      const [lon, lat, depthKm] = feature.geometry.coordinates;
+      const mag = feature.properties.mag;
+      const place = feature.properties.place;
+      const time = feature.properties.time;
+
+      count++;
+      const baseRadius = Math.pow(2, mag) * 1000;
+      const color = depthColor(depthKm || 0);
+      const isSignificant = isSignificantEarthquake(mag);
+      const fillAlpha = isSignificant ? 0.4 : 0.3;
+      const outlineAlpha = isSignificant ? 1.0 : 0.8;
+
+      const position = Cesium.Cartesian3.fromDegrees(lon, lat);
+      const stableId = feature.id || `event-${count}`;
+      _dataSource.entities.add({
+        id: `earthquake:${stableId}`,
+        position,
+        ellipse: {
+          // Static axes — see the module header. A CallbackProperty here
+          // re-tessellates the clamped ground geometry every frame.
+          semiMajorAxis: baseRadius,
+          semiMinorAxis: baseRadius,
+          material: new Cesium.ColorMaterialProperty(
+            color.withAlpha(fillAlpha)
+          ),
+          outline: true,
+          outlineColor: color.withAlpha(outlineAlpha),
+          outlineWidth: isSignificant ? 3 : 2,
+          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        },
+        properties: {
+          // Analyst seam (additive): the USGS event id (e.g. "us7000abcd").
+          usgsId: feature.id ?? null,
+          mag,
+          place,
+          time,
+          depth: depthKm,
+        },
+      });
+      overlayEntries.push(createEarthquakeOverlayEntry({
+        id: String(stableId),
+        position,
+        magnitude: mag,
+        accent: color.toCssColorString(),
+      }));
+      listRecords.push(mapAnalystRecord({
+        id: feature.id ?? null,
+        mag,
+        place,
+        time,
+        depth: depthKm,
+        lat,
+        lon,
+      }, listRecords.length));
+    }
+
+    if (_enabled) {
+      overlayHost.setEntries(
+        EARTHQUAKE_OVERLAY_SOURCE_ID,
+        selectEarthquakeOverlayCohort(overlayEntries),
+        {
+          cohortLimit: EARTHQUAKE_OVERLAY_COHORT_LIMIT,
+          collisionCapacity: EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
+          moving: false,
+        },
+      );
+    }
+
+    _count = count;
+    _listRecords = listRecords;
+    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+)`);
+  }
 
   const layer = {
   id: 'earthquakes',
@@ -181,87 +295,10 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
         return false;
       }
 
-      _dataSource.entities.removeAll();
-      let count = 0;
-      const overlayEntries = [];
-      const listRecords = [];
-
-      for (const feature of geojson.features) {
-        const [lon, lat, depthKm] = feature.geometry.coordinates;
-        const mag = feature.properties.mag;
-        const place = feature.properties.place;
-        const time = feature.properties.time;
-
-        if (mag < 2.5) continue; // Skip micro-quakes
-
-        count++;
-        const baseRadius = Math.pow(2, mag) * 1000;
-        const color = depthColor(depthKm || 0);
-        const isSignificant = mag >= 5.0;
-        const fillAlpha = isSignificant ? 0.4 : 0.3;
-        const outlineAlpha = isSignificant ? 1.0 : 0.8;
-
-        const position = Cesium.Cartesian3.fromDegrees(lon, lat);
-        const stableId = feature.id || `event-${count}`;
-        _dataSource.entities.add({
-          id: `earthquake:${stableId}`,
-          position,
-          ellipse: {
-            // Static axes — see the module header. A CallbackProperty here
-            // re-tessellates the clamped ground geometry every frame.
-            semiMajorAxis: baseRadius,
-            semiMinorAxis: baseRadius,
-            material: new Cesium.ColorMaterialProperty(
-              color.withAlpha(fillAlpha)
-            ),
-            outline: true,
-            outlineColor: color.withAlpha(outlineAlpha),
-            outlineWidth: isSignificant ? 3 : 2,
-            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          },
-          properties: {
-            // Analyst seam (additive): the USGS event id (e.g. "us7000abcd").
-            usgsId: feature.id ?? null,
-            mag,
-            place,
-            time,
-            depth: depthKm,
-          },
-        });
-        overlayEntries.push(createEarthquakeOverlayEntry({
-          id: String(stableId),
-          position,
-          magnitude: mag,
-          accent: color.toCssColorString(),
-        }));
-        listRecords.push(mapAnalystRecord({
-          id: feature.id ?? null,
-          mag,
-          place,
-          time,
-          depth: depthKm,
-          lat,
-          lon,
-        }, listRecords.length));
-      }
-
-      if (_enabled) {
-        overlayHost.setEntries(
-          EARTHQUAKE_OVERLAY_SOURCE_ID,
-          selectEarthquakeOverlayCohort(overlayEntries),
-          {
-            cohortLimit: EARTHQUAKE_OVERLAY_COHORT_LIMIT,
-            collisionCapacity: EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
-            moving: false,
-          },
-        );
-      }
-
-      _count = count;
+      _lastGeojson = geojson;
+      applyCachedGeojson();
       _lastUpdate = Date.now();
       _lastError = null;
-      _listRecords = listRecords;
-      console.log(`[Data:Earthquakes] Updated: ${_count} events (M2.5+)`);
       return true;
 
     } catch (e) {
@@ -284,6 +321,36 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _lastUpdate = null;
     _lastError = null;
     _listRecords = [];
+    _lastGeojson = null;
+    _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
+  },
+
+  getParams() {
+    return { magnitudeFloor: _magnitudeFloor };
+  },
+
+  setParams(params = {}) {
+    if (!params || typeof params !== 'object') return false;
+    if (!Object.hasOwn(params, 'magnitudeFloor')) return true;
+    const floor = Number(params.magnitudeFloor);
+    if (!EARTHQUAKE_MAGNITUDE_FLOORS.includes(floor)) return false;
+    if (floor === _magnitudeFloor) return true;
+    _magnitudeFloor = floor;
+    applyCachedGeojson();
+    return true;
+  },
+
+  getRowControls() {
+    return {
+      chips: EARTHQUAKE_MAGNITUDE_FLOORS.map((floor) => ({
+        id: `floor-${floor.toFixed(1)}`,
+        label: `${floor.toFixed(1)}+`,
+        active: _magnitudeFloor === floor,
+        title: `Show M${floor.toFixed(1)}+ earthquakes from the last 24 hours`,
+        params: { magnitudeFloor: floor },
+      })),
+      legend: [],
+    };
   },
 
   /**
@@ -321,8 +388,9 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
   /**
    * Snapshot for the hosted Quakes list. Same USGS features the discs
-   * already parsed — no second fetch. A failed feed returns [] so the
-   * list can show UNAVAILABLE instead of stale rows or a hang.
+   * already parsed — no second fetch — and already clipped to the operator
+   * magnitude floor. A failed feed returns [] so the list can show
+   * UNAVAILABLE instead of stale rows or a hang.
    * @returns {Array<Object>}
    */
   getListRecords() {

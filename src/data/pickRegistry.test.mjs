@@ -9,14 +9,20 @@
  *    and never throws on a broken predicate.
  */
 
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   registerPickOwner,
   unregisterPickOwner,
   isOwnedByOtherLayer,
+  isSceneClickCaptured,
   resolvePickId,
+  setSceneClickCapture,
 } from './pickRegistry.js';
+
+afterEach(() => {
+  setSceneClickCapture(null);
+});
 
 // ---------------------------------------------------------------------------
 // resolvePickId — canonical String coercion for every layer's pick shape
@@ -96,4 +102,14 @@ test('ownership: unregister removes the predicate', () => {
   assert.equal(isOwnedByOtherLayer('flights', 'station:1'), true);
   unregisterPickOwner('bikeshare');
   assert.equal(isOwnedByOtherLayer('flights', 'station:1'), false);
+});
+
+test('scene click capture claims every click while armed', () => {
+  assert.equal(isSceneClickCaptured(), false);
+  setSceneClickCapture(() => true);
+  assert.equal(isSceneClickCaptured(), true);
+  setSceneClickCapture(() => { throw new Error('broken capture'); });
+  assert.equal(isSceneClickCaptured(), false);
+  setSceneClickCapture(null);
+  assert.equal(isSceneClickCaptured(), false);
 });

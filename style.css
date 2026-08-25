@@ -1627,6 +1627,7 @@ body.ui-clean-view #title-bar,
 body.ui-clean-view #style-indicator,
 body.ui-clean-view #top-center-actions,
 body.ui-clean-view #watchlist-panel,
+body.ui-clean-view #measure-readout,
 body.ui-clean-view #installations-viewport-list,
 body.ui-clean-view #launches-panel,
 body.ui-clean-view #earthquake-list-panel,
@@ -2147,6 +2148,50 @@ body.ui-clean-view #scene-runtime.active {
 
 #top-center-actions .material-symbols-outlined {
   font-size: 18px;
+}
+
+#top-center-actions #measure-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#measure-readout {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 101;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(-50%);
+  padding: 6px 10px 6px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+#measure-readout:not([hidden]) {
+  display: inline-flex;
+}
+
+#measure-clear {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+#measure-clear:hover,
+#measure-clear:focus-visible {
+  border-color: var(--glass-border-hover);
+  color: var(--text-primary);
 }
 
 #contacts-roster-toggle,
@@ -4738,6 +4783,9 @@ body.cockpit-mode :is(
   #cockpit-entry
 ) { display: none !important; }
 body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
+  display: none !important;
+}
+body.cockpit-mode :is(#measure-toggle, #measure-readout) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -8097,6 +8145,7 @@ body.recording-mode #title-bar,
 body.recording-mode #style-indicator,
 body.recording-mode #top-center-actions,
 body.recording-mode #watchlist-panel,
+body.recording-mode #measure-readout,
 body.recording-mode #installations-viewport-list,
 body.recording-mode #launches-panel,
 body.recording-mode #earthquake-list-panel,
@@ -8126,6 +8175,9 @@ body.recording-mode #scene-runtime.active {
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
 body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
+  display: none !important;
+}
+body.scene-playback-mode :is(#measure-toggle, #measure-readout) {
   display: none !important;
 }
 

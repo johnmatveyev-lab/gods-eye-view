@@ -11,6 +11,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { isSceneClickCaptured } from './pickRegistry.js';
 import { launchPadCoordinates } from './launchesPanel.js';
 
 const WINDOW_DAYS = 30;
@@ -3446,7 +3447,7 @@ const rocketLaunchesLayer = {
     clearMissionOverlaySources();
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((movement) => {
-      if (!_enabled || !_dataSource?.show) return;
+      if (!_enabled || !_dataSource?.show || isSceneClickCaptured()) return;
       const entity = viewer.scene.drillPick(movement.position, 12)
         .map((picked) => picked?.id)
         .find((candidate) => entityLaunchId(candidate));

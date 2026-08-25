@@ -7,6 +7,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Voice token mint and HUD summary fail closed unless Clerk is configured and
+  the signed-in user is Pro. An unset Clerk env no longer mints an unauthenticated
+  Realtime secret or HUD call.
 - Hosted MIC stays locked for Free, anonymous, and exhausted sessions and
   reuses the existing upgrade / sign-in / budget modal. A 404/503 token
   response shows “Voice is not available on this host yet” or
@@ -36,6 +39,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the existing track highlight. Clicking a row tracks that contact if
   present, otherwise toasts `not in view` without inventing a position. The
   list persists as `meridian.watchlist`. No `/api`, person-search, or OpenSky.
+- Emergency highlight paints contacts whose current public ADS-B squawk is
+  7500, 7600, or 7700 using the existing annotation alert-red token. DISPLAY
+  **Emergency** defaults on and persists as `meridian.emergencyHighlight`.
+  Off removes the special paint only; click still tracks. Altitude-band
+  visibility still hides out-of-band contacts even when the squawk is
+  emergency. Client-side current payload only — not an alert service and
+  not a verified emergency. No `/api`.
+- Double-click on empty globe terrain flies to the pick with the existing
+  landmark helper (reasonable height and tilt). Double-click on a contact or
+  contact card still tracks. Wheel zoom-to-pointer is unchanged. Optional
+  persist is `meridian.doubleClickFly` (default on). No `/api`.
+- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
+  a row to fly to that event (cap 50). Empty or failed feed shows
+  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
+- Added a two-click Measure mode on the globe: two terrain picks draw a
+  geodesic line and show the distance in the current `km | nm | mi` units.
+  Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
+  points only — no person-search, OpenSky, Google News, or TeleGeography.
 - Hosted Data Layers now list in-view OSM dams from the existing bundled
   payload (cap 50). Clicking a row flies to those coords using the layer's
   current stem-click camera. Empty or off yields an empty list. The
@@ -45,9 +66,6 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
   the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
   `meridian.altBand`. Empty bands show an empty layer. No `/api`.
-- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
-  a row to fly to that event (cap 50). Empty or failed feed shows
-  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
 - Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
   camera-center aim point copy-coords and measure already use. Default off.
   Persists as `meridian.crosshair`. Clean view may keep it; credits stay
@@ -72,7 +90,6 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   The choice persists as `meridian.lockTilt` and defaults off. Home and
   cockpit still set their own pitch. Wheel zoom / invert scroll stay
   wheel-only. No `/api`.
-
 - Added a DISPLAY-rail Keep above ground control. After the camera moves, if
   `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
   below terrain plus a small margin, the camera is lifted. The preference
@@ -299,6 +316,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “Google News” / “news RSS” is refused with “Google News RSS is
   disabled”. Cockpit headlines stay GDELT with citation and never fetch
   news.google.com. No Google News source picker.
+
+### Changed
+
+- Remaining runtime preference keys now write `meridian.*`. A first read of a
+  known `godsEyeView.*` layout or settings key copies it once and leaves the
+  older key in place. Proxy User-Agents identify as Meridian; the window
+  handle is `window.__meridian`. LICENSE credit and the UI title are unchanged.
 
 ### Fixed
 

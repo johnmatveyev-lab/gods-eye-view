@@ -134,6 +134,9 @@
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
+    <button id="measure-toggle" type="button" aria-label="Measure distance" title="Measure distance" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">straighten</span>
+    </button>
     <div id="camera-coords">
       <button type="button" id="camera-coords-value" class="camera-coords-value" aria-label="Copy camera coordinates" title="Copy lat,lon">—, —</button>
       <button type="button" id="camera-coords-copy" class="camera-coords-copy" aria-label="Copy lat,lon" title="Copy lat,lon">
@@ -157,6 +160,10 @@
     <div class="watchlist-header">WATCH</div>
     <div id="watchlist-items" role="list"></div>
   </aside>
+  <div id="measure-readout" hidden>
+    <span id="measure-readout-label">Click two globe points</span>
+    <button id="measure-clear" type="button">Clear</button>
+  </div>
   <aside id="installations-viewport-list" hidden aria-label="Mapped installations in the current view">
     <div class="installations-viewport-list-header">
       <div>
@@ -642,6 +649,12 @@
       <button class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true" title="Tracked-target trail — hide the fading path without stopping track">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">timeline</span>
         <span class="pp-label">Trails</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn active" id="emergency-highlight-toggle" aria-pressed="true" title="Emergency highlight — public squawk 7500/7600/7700. Not a verified emergency. Public squawk field only. Click still tracks.">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">sos</span>
+        <span class="pp-label">Emergency</span>
       </button>
     </div>
     <div class="pp-toggle-group">

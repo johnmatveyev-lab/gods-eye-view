@@ -3,12 +3,15 @@
  * @description WX on/off chrome for cockpit weather effects.
  *
  * Production default stays off. An explicit stored `'1'` opts in to globe FX.
- * Preference lives in the existing `godsEyeView.cockpitWeatherEffects.enabled`
- * flag and is never written into share URLs. Local Info briefing weather and
- * the Open-Meteo credit stay independent of this render switch.
+ * Preference lives in `meridian.cockpitWeatherEffects.enabled` and is never
+ * written into share URLs. A leftover `godsEyeView.cockpitWeatherEffects.enabled`
+ * value copies once on read. Local Info briefing weather and the Open-Meteo
+ * credit stay independent of this render switch.
  */
 
-export const WX_STORAGE_KEY = 'godsEyeView.cockpitWeatherEffects.enabled';
+import { prefKey, readPrefKey, writePrefKey } from './prefStorage.js';
+
+export const WX_STORAGE_KEY = prefKey('cockpitWeatherEffects.enabled');
 export const DEFAULT_WX_ENABLED = false;
 export const WX_TOGGLE_EVENT = 'gev:cockpit-weather-toggle';
 export const WX_STATE_EVENT = 'gev:cockpit-weather-state';
@@ -36,7 +39,7 @@ export function wxEnabledFromStoredValue(value) {
  */
 export function readWxPreference(storage) {
   try {
-    return wxEnabledFromStoredValue(storage?.getItem?.(WX_STORAGE_KEY));
+    return wxEnabledFromStoredValue(readPrefKey(storage, WX_STORAGE_KEY));
   } catch {
     return DEFAULT_WX_ENABLED;
   }
@@ -51,7 +54,7 @@ export function writeWxPreference(enabled, storage) {
   const next = !!enabled;
   cachedEnabled = next;
   try {
-    storage?.setItem?.(WX_STORAGE_KEY, next ? '1' : '0');
+    writePrefKey(storage, WX_STORAGE_KEY, next ? '1' : '0');
   } catch {
     // Fail open: the session can still apply the chosen render flag.
   }

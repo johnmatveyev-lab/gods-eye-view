@@ -14,6 +14,13 @@ import {
   trailDrawingVisible,
 } from './trailPreference.js';
 import { isWatchHighlighted, subscribeWatchlist } from './watchlist.js';
+import {
+  EMERGENCY_HIGHLIGHT_CSS,
+  getEmergencyHighlightEnabled,
+  normalizeSquawk,
+  shouldPaintEmergencyHighlight,
+  subscribeEmergencyHighlightEnabled,
+} from './emergencySquawk.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
 import {
   screenProjectedRotation,
@@ -100,6 +107,9 @@ const BILLBOARD_SCALE = 0.7;
 const MIL_ICON_COLOR = Cesium.Color.fromCssColorString('#FFB800');
 /** @constant {Cesium.Color} Lighter amber tint applied to the actively tracked aircraft */
 const TRACKED_ICON_COLOR = Cesium.Color.fromCssColorString('#FFD166');
+/** Existing annotation alert red for public emergency squawks 7500/7600/7700. */
+const EMERGENCY_HIGHLIGHT_COLOR = Cesium.Color.fromCssColorString(EMERGENCY_HIGHLIGHT_CSS);
+const EMERGENCY_TRANSPARENT = EMERGENCY_HIGHLIGHT_COLOR.withAlpha(0);
 
 // --- Ground traffic (product change 2026-07-03; mirror of flights.js) ---------------
 // adsb.lol/readsb flags ground traffic with alt_baro === "ground" (no separate
@@ -415,8 +425,9 @@ function _contactHighlightSize(icao24, info) {
 }
 
 function _contactHighlightColor(icao24, info) {
-  if (icao24 === _trackedIcao || _watchHighlightActive(icao24, info)) return TRACKED_ICON_COLOR;
-  return MIL_ICON_COLOR;
+  return _contactIconColor(icao24, {
+    tracked: icao24 === _trackedIcao || _watchHighlightActive(icao24, info),
+  });
 }
 
 function _refreshWatchHighlights() {
@@ -428,6 +439,23 @@ function _refreshWatchHighlights() {
 }
 subscribeWatchlist(_refreshWatchHighlights);
 
+/** Public emergency squawks 7500/7600/7700 use the existing alert-red token
+ *  when Emergency highlight is on. Altitude-band hide still wins. */
+function _contactUsesEmergencyHighlight(icao24) {
+  return shouldPaintEmergencyHighlight({
+    squawk: _flightData.get(icao24)?.squawk,
+    highlightEnabled: getEmergencyHighlightEnabled(),
+    inAltitudeBand: true,
+  });
+}
+
+function _contactIconColor(icao24, { tracked = false } = {}) {
+  if (_contactUsesEmergencyHighlight(icao24)) return EMERGENCY_HIGHLIGHT_COLOR;
+  if (tracked || icao24 === _trackedIcao || _watchHighlightActive(icao24)) return TRACKED_ICON_COLOR;
+  return MIL_ICON_COLOR;
+}
+
+/** Apply the current normal/cockpit visual contract to one owned fleet billboard. */
 function _applyFleetBillboardPresentation(icao24, bb) {
   if (!bb) return;
   const limbScale = _billboardLimbScale.get(bb) ?? 1;
@@ -440,7 +468,7 @@ function _applyFleetBillboardPresentation(icao24, bb) {
     bb.height = COCKPIT_CONTACT_SIZE_PX;
     bb.scale = limbScale;
     bb.scaleByDistance = _cockpitBillboardScaleByDistance();
-    bb.color = MIL_ICON_COLOR.withAlpha(freshnessAlpha);
+    bb.color = _contactIconColor(icao24).withAlpha(freshnessAlpha);
     bb.rotation = 0;
     return;
   }
@@ -548,6 +576,22 @@ function _applyTrailDrawing() {
 }
 
 subscribeTrailsEnabled(_applyTrailDrawing);
+
+/** Restyle fleet billboards/models when Emergency highlight flips. Click still tracks. */
+function _applyEmergencyHighlightPaint() {
+  if (typeof _billboardCollection?.add !== 'function') return;
+  for (const [icao24, bb] of _billboards) {
+    _applyFleetBillboardPresentation(icao24, bb);
+  }
+  if (!_irBoost) {
+    for (const [icao24, model] of _models) {
+      if (model?.color) model.color = _modelColor(icao24);
+    }
+  }
+  _viewer?.scene?.requestRender?.();
+}
+
+subscribeEmergencyHighlightEnabled(_applyEmergencyHighlightPaint);
 
 // ---------------------------------------------------------------------------
 // Render-behind smoothing (mirrors flights.js): the fleet renders at
@@ -949,7 +993,15 @@ export function _updateTrackedModelForTest() {
 
 /** Evaluate the production tracked-billboard handoff colour for focused tests. */
 export function _trackedBillboardColorForTest() {
-  return _modelOwnsVisual(_trackedIcao) ? AMBER_TRANSPARENT : TRACKED_ICON_COLOR;
+  if (_modelOwnsVisual(_trackedIcao)) {
+    return _contactUsesEmergencyHighlight(_trackedIcao) ? EMERGENCY_TRANSPARENT : AMBER_TRANSPARENT;
+  }
+  return _contactIconColor(_trackedIcao, { tracked: true });
+}
+
+/** Evaluate the production fleet/emergency icon colour for focused tests. */
+export function _militaryContactIconColorForTest(icao24, options) {
+  return _contactIconColor(icao24, options);
 }
 
 /** Drive the exact fleet billboard-to-model handoff used by `_fleetTick`. */
@@ -1333,8 +1385,7 @@ function _resetTrackedDisplay() {
 
 /** Model tint, mirroring the billboard color rules (amber instead of cyan/white). */
 function _modelColor(icao24) {
-  if (icao24 === _trackedIcao) return TRACKED_ICON_COLOR;
-  return MIL_ICON_COLOR;
+  return _contactIconColor(icao24, { tracked: icao24 === _trackedIcao });
 }
 
 /** The FLEET's 3D-model regime: models3d enabled AND the camera zoomed in past the altitude
@@ -2414,7 +2465,7 @@ function _clearTracking(skipViewerUntrack = false, {
     // Ground-aware restore (a plane untracked while taxiing comes back at
     // ground scale; tint is full amber on the ground and in the air).
     bb.scale = BILLBOARD_SCALE * (CLASS_SCALE_2D[meta?.klass] || 1) * (meta?.onGround ? GROUND_SCALE : 1);
-    bb.color = MIL_ICON_COLOR;
+    bb.color = _contactIconColor(_trackedIcao);
     bb.rotation = _lastTrackedRotation;
   }
   _lastCamPoseSig = ''; // force a fleet rotation pass on the next tick
@@ -2539,9 +2590,12 @@ function _trackFlight(icao24, { origin = 'programmatic' } = {}) {
       scale: BILLBOARD_SCALE * (CLASS_SCALE_2D[_flightData.get(_trackedIcao)?.klass] || 1),
       // Solid amber when the billboard is the visual (zoomed out, 3D off, or model still loading);
       // transparent once the STANDALONE tracked model is actually up (ready + shown).
-      color: new Cesium.CallbackProperty(() => (
-        _modelOwnsVisual(_trackedIcao) ? AMBER_TRANSPARENT : TRACKED_ICON_COLOR
-      ), false),
+      color: new Cesium.CallbackProperty(() => {
+        const paint = _contactIconColor(_trackedIcao, { tracked: true });
+        return _modelOwnsVisual(_trackedIcao)
+          ? (_contactUsesEmergencyHighlight(_trackedIcao) ? EMERGENCY_TRANSPARENT : AMBER_TRANSPARENT)
+          : paint;
+      }, false),
       sizeInMeters: false,
       scaleByDistance: new Cesium.NearFarScalar(1000, 3.0, 8000000, 0.5),
       alignedAxis: Cesium.Cartesian3.ZERO,
@@ -2911,7 +2965,8 @@ const militaryFlightsLayer = {
       // present on ~45% of records; readsb omits it when the aircraft hasn't
       // reported a geometric altitude this cycle), track (deg true), gs
       // (ground speed in knots), seen_pos (age of last position, seconds),
-      // flight (callsign), t (type), r (registration), ownOp (operator).
+      // flight (callsign), t (type), r (registration), ownOp (operator),
+      // squawk (public transponder code; 7500/7600/7700 paint only).
       for (const aircraft of usableAircraft) {
         const icao24 = _toCleanText(aircraft?.hex).toLowerCase();
         const lon = _toFiniteNumber(aircraft?.lon);
@@ -2946,6 +3001,7 @@ const militaryFlightsLayer = {
         const registration = _toCleanText(aircraft?.r);
         const operator = _toCleanText(aircraft?.ownOp);
         const seenSec = _toFiniteNumber(aircraft?.seen);
+        const squawk = normalizeSquawk(aircraft?.squawk);
 
         // Height-datum fix (Task 7, mirror of flights.js Task 6): `altitudeM`
         // (above) stays the AVIATION field — the sticky barometric/MSL altitude
@@ -3076,6 +3132,9 @@ const militaryFlightsLayer = {
           // re-floor sweep keys floors off these (mirror of flights.js).
           rawLat: lat,
           rawLon: lon,
+          // Current-payload public squawk only. Not sticky: a dropped field
+          // is not treated as an ongoing emergency.
+          squawk,
         };
         _flightData.set(icao24, meta);
 
@@ -3165,7 +3224,9 @@ const militaryFlightsLayer = {
             // Screen-projected rotation lands on the next fleet tick.
             rotation: 0,
             alignedAxis: Cesium.Cartesian3.ZERO,
-            color: _contactHighlightColor(icao24, meta),
+            color: isTracked
+              ? _contactIconColor(icao24, { tracked: true })
+              : _contactHighlightColor(icao24, meta),
             sizeInMeters: false,
             scaleByDistance: _normalBillboardScaleByDistance(),
             // Grounded/near-surface planes sit at/below the photoreal tile

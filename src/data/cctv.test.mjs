@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as Cesium from 'cesium';
+import { legacyPrefKey } from '../prefStorage.js';
 import cctvLayer, {
   CCTV_PROJECTION_OVERLAY_SOURCE_OPTIONS,
   _createCctvProjectionPlaneForTest,
@@ -1169,6 +1170,28 @@ test('calibration v2: a corrupt v1 key never leaks into the v2 store (v1 is dead
   const restored = readCalibrationStoreV2(storage);
   assert.equal(restored.size, 0, 'v2 store must start empty — no legacy import (product rule #3, §9.3)');
   assert.ok(!restored.has('austin-42'));
+});
+
+test('calibration v2: a legacy godsEyeView key copies once onto meridian and still applies', () => {
+  const values = {
+    offsetNorthM: 12.5,
+    offsetEastM: -3.0,
+    headingDeg: 41.0,
+    pitchDeg: 4.0,
+    fovDeg: -8.0,
+    rangeScale: 1.35,
+    heightM: 6.0,
+  };
+  const legacyKey = legacyPrefKey('cctv.calibration.v2');
+  const storage = fakeStorage({
+    [legacyKey]: JSON.stringify({
+      'austin-42': { values, source: 'manual', savedAt: 1782800000000 },
+    }),
+  });
+  const restored = readCalibrationStoreV2(storage);
+  assert.equal(restored.get('austin-42').values.offsetNorthM, 12.5);
+  assert.equal(storage.getItem(CCTV_CALIBRATION_STORAGE_KEY_V2), storage.getItem(legacyKey));
+  assert.ok(CCTV_CALIBRATION_STORAGE_KEY_V2.startsWith('meridian.'));
 });
 
 test('deriveCalBadge: CALIBRATED when the camera carries a manual v2 calibration', () => {

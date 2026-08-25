@@ -6,10 +6,15 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
 import {
+  DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
+  EARTHQUAKE_MAGNITUDE_FLOORS,
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
+  USGS_ALL_DAY_URL,
   createEarthquakeOverlayEntry,
   createEarthquakesLayer,
+  filterEarthquakeFeaturesByMagnitudeFloor,
+  isSignificantEarthquake,
   mapAnalystRecord,
   selectEarthquakeOverlayCohort,
 } from './earthquakes.js';
@@ -335,6 +340,287 @@ test('earthquake refresh reports failure and clears it only after a successful r
     assert.ok(Number.isFinite(layer.getStats().lastUpdate));
   } finally {
     globalThis.fetch = originalFetch;
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 103: operator magnitude floor (client-side, same USGS all_day) ───────
+
+function quakeFeature(id, mag, coords = [-122.4, 37.79, 8.2]) {
+  return {
+    id,
+    geometry: { coordinates: coords },
+    properties: { mag, place: String(id), time: 1_753_600_000_000 },
+  };
+}
+
+const MIXED_DAY = Object.freeze({
+  features: Object.freeze([
+    quakeFeature('micro', 2.4),
+    quakeFeature('floor-25', 2.5),
+    quakeFeature('clutter', 3.2),
+    quakeFeature('floor-40', 4.0),
+    quakeFeature('mid', 4.9),
+    quakeFeature('sig-lo', 5.0),
+    quakeFeature('sig-mid', 5.4),
+    quakeFeature('floor-60', 6.0),
+    quakeFeature('great', 6.8),
+  ]),
+});
+
+function stubUsgs(geojson) {
+  const originalFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = async (url) => {
+    fetches += 1;
+    assert.equal(String(url), USGS_ALL_DAY_URL);
+    return { ok: true, json: async () => geojson };
+  };
+  return {
+    get fetches() { return fetches; },
+    restore() { globalThis.fetch = originalFetch; },
+  };
+}
+
+function stubUsgsFailure(kind = 'network') {
+  const originalFetch = globalThis.fetch;
+  let fetches = 0;
+  globalThis.fetch = async () => {
+    fetches += 1;
+    if (kind === 'http') return { ok: false, status: 503 };
+    throw new Error('USGS network error');
+  };
+  return {
+    get fetches() { return fetches; },
+    restore() { globalThis.fetch = originalFetch; },
+  };
+}
+
+function makeViewer() {
+  const dataSources = [];
+  return {
+    dataSources: {
+      add(dataSource) { dataSources.push(dataSource); return dataSource; },
+      remove(dataSource) {
+        const index = dataSources.indexOf(dataSource);
+        if (index >= 0) dataSources.splice(index, 1);
+        return index >= 0;
+      },
+    },
+    _dataSources: dataSources,
+  };
+}
+
+function makeHost() {
+  const hostCalls = [];
+  return {
+    hostCalls,
+    overlayHost: {
+      setEntries: (...args) => hostCalls.push(['entries', ...args]),
+      setVisible: (...args) => hostCalls.push(['visible', ...args]),
+      clearSource: (...args) => hostCalls.push(['clear', ...args]),
+    },
+  };
+}
+
+function entityIds(dataSource) {
+  return dataSource.entities.values.map((entity) => String(entity.id).replace(/^earthquake:/, '')).sort();
+}
+
+function overlayTitles(hostCalls) {
+  const publication = [...hostCalls].reverse().find(([type]) => type === 'entries');
+  return publication ? publication[2].map(({ title }) => title) : [];
+}
+
+test('2.5+ is the default floor and matches the current M2.5+ view', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR, 2.5);
+  assert.deepEqual([...EARTHQUAKE_MAGNITUDE_FLOORS], [2.5, 4.0, 5.0, 6.0]);
+
+  const expected = filterEarthquakeFeaturesByMagnitudeFloor(MIXED_DAY.features, 2.5)
+    .map((feature) => feature.id);
+  assert.deepEqual(expected, ['floor-25', 'clutter', 'floor-40', 'mid', 'sig-lo', 'sig-mid', 'floor-60', 'great']);
+  assert.ok(!expected.includes('micro'), 'micro-quakes below 2.5 stay hidden');
+
+  const viewer = makeViewer();
+  const { overlayHost, hostCalls } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...expected].sort());
+    assert.equal(layer.getStats().count, expected.length);
+    assert.ok(overlayTitles(hostCalls).includes('M2.5'));
+    assert.ok(!overlayTitles(hostCalls).includes('M2.4'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('5.0+ shows only the existing isSignificant cohort', async () => {
+  const significant = MIXED_DAY.features.filter((feature) => isSignificantEarthquake(feature.properties.mag));
+  assert.deepEqual(significant.map((feature) => feature.properties.mag), [5.0, 5.4, 6.0, 6.8]);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByMagnitudeFloor(MIXED_DAY.features, 5.0).map((feature) => feature.id),
+    significant.map((feature) => feature.id),
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost, hostCalls } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ magnitudeFloor: 5.0 }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.deepEqual(ids, ['floor-60', 'great', 'sig-lo', 'sig-mid']);
+    assert.equal(ids.length, significant.length);
+    assert.ok(overlayTitles(hostCalls).every((title) => {
+      const mag = Number(title.slice(1));
+      return isSignificantEarthquake(mag);
+    }));
+    const records = layer.getAnalystRecords();
+    assert.ok(records.every((record) => isSignificantEarthquake(record.magnitude)));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('6.0+ is quieter than 5.0+ and 2.5+', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    const atDefault = layer.getStats().count;
+    layer.setParams({ magnitudeFloor: 5.0 });
+    const atFive = layer.getStats().count;
+    layer.setParams({ magnitudeFloor: 6.0 });
+    const atSix = layer.getStats().count;
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['floor-60', 'great']);
+    assert.ok(atSix < atFive, `6.0+ (${atSix}) must be quieter than 5.0+ (${atFive})`);
+    assert.ok(atFive < atDefault, `5.0+ (${atFive}) must be quieter than 2.5+ (${atDefault})`);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('chip change redraws from cached geojson without a new USGS fetch', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({ magnitudeFloor: 4.0 }), true);
+    assert.equal(feed.fetches, 1, 'floor chips must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['floor-40', 'floor-60', 'great', 'mid', 'sig-lo', 'sig-mid']);
+    assert.equal(layer.setParams({ magnitudeFloor: 6.0 }), true);
+    assert.equal(feed.fetches, 1);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['floor-60', 'great']);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Plan 71 list sources only include events at or above the floor', async () => {
+  const viewer = makeViewer();
+  const { overlayHost, hostCalls } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    const atDefault = layer.getListRecords();
+    assert.ok(atDefault.some((row) => row.magnitude === 3.2), 'default 2.5+ list still includes clutter');
+    layer.setParams({ magnitudeFloor: 5.0 });
+
+    const rows = layer.getListRecords();
+    assert.deepEqual(rows.map((row) => row.id).sort(), ['floor-60', 'great', 'sig-lo', 'sig-mid']);
+    assert.ok(rows.every((row) => row.magnitude >= 5.0), 'Plan 71 list must not include events below the floor');
+
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.every((id) => ['sig-lo', 'sig-mid', 'floor-60', 'great'].includes(id)));
+    assert.ok(overlayTitles(hostCalls).every((title) => Number(title.slice(1)) >= 5.0));
+    assert.ok(layer.getAnalystRecords().every((record) => record.magnitude >= 5.0));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('failed USGS fetch still shows last-good events above the floor', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(await layer.update(viewer), true);
+    layer.setParams({ magnitudeFloor: 5.0 });
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['floor-60', 'great', 'sig-lo', 'sig-mid']);
+    feed.restore();
+    const fail = stubUsgsFailure('http');
+    try {
+      assert.equal(await layer.update(viewer), false);
+      assert.equal(layer.getStats().error, 'USGS HTTP 503');
+      assert.deepEqual(
+        entityIds(viewer._dataSources[0]),
+        ['floor-60', 'great', 'sig-lo', 'sig-mid'],
+        'a failed poll must keep the last-good discs already filtered to the floor',
+      );
+      assert.equal(layer.setParams({ magnitudeFloor: 6.0 }), true);
+      assert.equal(fail.fetches, 1, 'raising the floor after a failed poll must reuse last-good geojson');
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['floor-60', 'great']);
+    } finally {
+      fail.restore();
+    }
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('earthquake floor chips stay on the existing USGS all_day feed with no new endpoint', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  assert.equal(
+    USGS_ALL_DAY_URL,
+    'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson',
+  );
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(source, /news\.google|opensky|telegeography|quantum-earth/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    assert.deepEqual(chips.map((chip) => chip.label), ['2.5+', '4.0+', '5.0+', '6.0+']);
+    assert.deepEqual(chips.map((chip) => chip.params.magnitudeFloor), [2.5, 4.0, 5.0, 6.0]);
+    assert.equal(chips.find((chip) => chip.active)?.label, '2.5+');
+    assert.equal(layer.setParams({ magnitudeFloor: 4.0 }), true);
+    assert.equal(layer.getRowControls().chips.find((chip) => chip.active)?.label, '4.0+');
+    assert.equal(layer.setParams({ magnitudeFloor: 7.0 }), false);
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+  } finally {
     layer.destroy(viewer);
   }
 });

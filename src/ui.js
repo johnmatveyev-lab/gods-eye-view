@@ -112,12 +112,16 @@ import {
   setTrailsEnabled,
 } from './data/trailPreference.js';
 import {
+  hydrateEmergencyHighlightEnabled,
+  setEmergencyHighlightEnabled,
+} from './data/emergencySquawk.js';
+import {
   hydrateKeepAboveEnabled,
   installKeepAboveGround,
   setKeepAboveEnabled,
 } from './cameraAboveGround.js';
 import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
-import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
+import { destroyWorldOverlay, getOverlayPaintRect, hitTestWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
   initDetection,
@@ -291,6 +295,13 @@ import {
   subscribeDistanceUnit,
 } from './units.js';
 import {
+  clearMeasure,
+  destroyMeasure,
+  initMeasure,
+  isMeasureActive,
+  setMeasureActive,
+} from './measure.js';
+import {
   getPowerMode as readViewerPowerMode,
   installPowerMode,
   setPowerMode as writeViewerPowerMode,
@@ -377,6 +388,11 @@ import {
   writeCrosshairPreference,
 } from './cameraCrosshair.js';
 import {
+  bindDoubleClickFly,
+  DOUBLE_CLICK_FLY_DEFAULT,
+  readDoubleClickFlyPreference,
+} from './doubleClickFly.js';
+import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -403,6 +419,13 @@ import {
   slewHeading,
   speedRulerTicks,
 } from './cockpitMath.js';
+import {
+  hasPanelPrefix,
+  layoutResetNotifiedSuffix,
+  prefKey,
+  readPrefKey,
+  writePrefKey,
+} from './prefStorage.js';
 import {
   peekModelsPreference,
   writeModelsPreference,
@@ -519,6 +542,7 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -570,6 +594,7 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -2566,6 +2591,8 @@ export class StyleManager {
     this._gridBtn = document.getElementById('grid-toggle');
     this._crosshairBtn = document.getElementById('crosshair-toggle');
     this._crosshairEnabled = CROSSHAIR_DEFAULT;
+    this._doubleClickFlyEnabled = DOUBLE_CLICK_FLY_DEFAULT;
+    this._removeDoubleClickFly = null;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2701,6 +2728,10 @@ export class StyleManager {
     this._shareBtn = document.getElementById('share-btn');
     this._northUpCompassBtn = document.getElementById('north-up-compass');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._measureToggleBtn = document.getElementById('measure-toggle');
+    this._measureReadout = document.getElementById('measure-readout');
+    this._measureReadoutLabel = document.getElementById('measure-readout-label');
+    this._measureClearBtn = document.getElementById('measure-clear');
     this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
@@ -2976,6 +3007,10 @@ export class StyleManager {
     // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
     // existing tracked-target trail renderer without stopping track.
     this._trailsEnabled = true;
+    this._emergencyHighlightBtn = document.getElementById('emergency-highlight-toggle');
+    // DISPLAY-rail Emergency highlight. Default ON (`meridian.emergencyHighlight`);
+    // paints public squawk 7500/7600/7700. Click still tracks.
+    this._emergencyHighlightEnabled = true;
     this._keepAboveBtn = document.getElementById('keep-above-toggle');
     // DISPLAY-rail Keep above ground. Default ON (`meridian.keepAbove`);
     // lifts the map camera after a move when an existing terrain helper
@@ -3000,6 +3035,9 @@ export class StyleManager {
       getActiveTrackedId: getActiveTrackedReadoutId,
     });
     this._initWatchlist();
+    initMeasure(viewer, {
+      onChange: (state) => this._syncMeasureUi(state),
+    });
     initCameraCoords({
       viewer,
       showToast: (text) => this._showToast(text),
@@ -3021,6 +3059,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initMeasureButton();
     this._initFullscreenButton();
     this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
@@ -3028,6 +3067,7 @@ export class StyleManager {
     this._initLaunchesPanel();
     this._initStopTrackingButton();
     this._initDamsInViewList();
+    this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
@@ -3035,6 +3075,7 @@ export class StyleManager {
     this._initModels3dToggle();
     this._initZoomToPointer();
     this._initTrailsToggle();
+    this._initEmergencyHighlightToggle();
     this._initKeepAboveToggle();
     this._initLiveSunToggle();
     this._initScaleBar();
@@ -4682,7 +4723,8 @@ export class StyleManager {
 
   /**
    * On boot, clamp or reset leftover/current panelPos keys that would restore
-   * a panel off-screen. Does not rename leftover godsEyeView.* keys.
+   * a panel off-screen. Leftover godsEyeView.* keys copy onto meridian.*
+   * once and stay in place; leftover versions are not rewritten to v8.
    * @returns {void}
    */
   _sanitizeRestoredPanelPositions() {
@@ -4813,11 +4855,10 @@ export class StyleManager {
    */
   _maybeNotifyLayoutReset() {
     try {
-      const marker = `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.layoutResetNotified`;
-      if (localStorage.getItem(marker)) return;
-      localStorage.setItem(marker, '1');
-      const hadOldPositions = Object.keys(localStorage)
-        .some((key) => key.startsWith('godsEyeView.v6.panelPos.'));
+      const marker = prefKey(layoutResetNotifiedSuffix(PANEL_POSITION_STORAGE_VERSION));
+      if (readPrefKey(localStorage, marker)) return;
+      writePrefKey(localStorage, marker, '1');
+      const hadOldPositions = hasPanelPrefix(localStorage, 'v6.panelPos.');
       if (hadOldPositions) {
         this._showToast('Panel layout updated — positions reset to new defaults');
       }
@@ -7636,7 +7677,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelStorageKey(panelId) {
-    return `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`;
+    return prefKey(`${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`);
   }
 
   /**
@@ -7645,7 +7686,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelCollapseStorageKey(panelId) {
-    return `godsEyeView.${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`;
+    return prefKey(`${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`);
   }
 
   /**
@@ -7661,7 +7702,7 @@ export class StyleManager {
     let stored = null;
     if (allowStored) {
       try {
-        stored = localStorage.getItem(this._panelCollapseStorageKey(panelId));
+        stored = readPrefKey(localStorage, this._panelCollapseStorageKey(panelId));
         if (stored === '1') collapsed = true;
         if (stored === '0') collapsed = false;
       } catch {
@@ -7689,7 +7730,7 @@ export class StyleManager {
    */
   _savePanelCollapsedState(panelId, collapsed) {
     try {
-      localStorage.setItem(this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
+      writePrefKey(localStorage, this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
     } catch {
       // storage unavailable
     }
@@ -8475,8 +8516,8 @@ export class StyleManager {
       );
       if (!resolved?.pos) return;
       // Clamp leftover or current coords: a position saved at one window size
-      // would otherwise land off-screen at another. Same-key leftovers are
-      // not renamed this cycle.
+      // would otherwise land off-screen at another. Leftover versions stay on
+      // their version; only the prefix copies onto meridian.*.
       const clamped = this._clampToViewport(
         Math.round(resolved.pos.left),
         Math.round(resolved.pos.top),
@@ -8524,7 +8565,7 @@ export class StyleManager {
   _savePanelPosition(panelId, panelEl) {
     const rect = panelEl.getBoundingClientRect();
     try {
-      localStorage.setItem(this._panelStorageKey(panelId), JSON.stringify({
+      writePrefKey(localStorage, this._panelStorageKey(panelId), JSON.stringify({
         left: Math.round(rect.left),
         top: Math.round(rect.top),
       }));
@@ -10869,6 +10910,30 @@ export class StyleManager {
   }
 
   /**
+   * Double-click empty terrain flies to the pick. Contact cards and
+   * registered contact picks keep the existing track path.
+   */
+  _initDoubleClickFly() {
+    this._removeDoubleClickFly?.();
+    let stored = DOUBLE_CLICK_FLY_DEFAULT;
+    try {
+      stored = readDoubleClickFlyPreference(window.localStorage);
+    } catch {
+      stored = DOUBLE_CLICK_FLY_DEFAULT;
+    }
+    this._doubleClickFlyEnabled = stored;
+    this._removeDoubleClickFly = bindDoubleClickFly(this.viewer, {
+      getEnabled: () => this._doubleClickFlyEnabled !== false,
+      isCockpitActive: () => !!this.cockpitView?.active
+        || document.body.classList.contains('cockpit-mode'),
+      isMeasureActive: () => isMeasureActive(),
+      hitTestOverlay: (x, y) => hitTestWorldOverlay(x, y),
+      flyTo: (viewer, lat, lon, framing) => flyToLandmark(viewer, lat, lon, framing),
+      navigate: (run) => this._runExplicitNavigation('pick', run),
+    });
+  }
+
+  /**
    * Fly to the default first-load camera. Does not delete lastView;
    * moveEnd overwrites the slot after the flight.
    */
@@ -11170,6 +11235,37 @@ export class StyleManager {
     });
   }
 
+  /** Wire two-click geodesic Measure. Does not call /api/route. */
+  _initMeasureButton() {
+    this._measureToggleBtn?.addEventListener('click', () => {
+      setMeasureActive(!isMeasureActive());
+    });
+    this._measureClearBtn?.addEventListener('click', () => {
+      clearMeasure();
+    });
+    this._syncMeasureUi();
+  }
+
+  /**
+   * Keep the Measure button and readout in sync with the current pair.
+   * @param {{active?: boolean, prompt?: string}|null} [state]
+   * @returns {void}
+   */
+  _syncMeasureUi(state = null) {
+    const active = state?.active ?? isMeasureActive();
+    const prompt = state?.prompt || 'Click two globe points';
+    if (this._measureToggleBtn) {
+      this._measureToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      this._measureToggleBtn.classList.toggle('active', active);
+    }
+    if (this._measureReadout) {
+      this._measureReadout.hidden = !active;
+    }
+    if (this._measureReadoutLabel) {
+      this._measureReadoutLabel.textContent = prompt;
+    }
+  }
+
   /**
    * Watch list of pinned aircraft idents. Add from the selected card; rows
    * track when the ident is in the current flights payload.
@@ -11404,6 +11500,24 @@ export class StyleManager {
   _syncTrailsButtonState() {
     this._trailsBtn?.classList.toggle('active', this._trailsEnabled);
     this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
+  }
+
+  /**
+   * Wires the DISPLAY-rail Emergency highlight toggle.
+   * Off removes the special paint only. Click-to-track is unchanged.
+   */
+  _initEmergencyHighlightToggle() {
+    this._emergencyHighlightEnabled = hydrateEmergencyHighlightEnabled();
+    this._emergencyHighlightBtn?.addEventListener('click', () => {
+      this._emergencyHighlightEnabled = setEmergencyHighlightEnabled(!this._emergencyHighlightEnabled);
+      this._syncEmergencyHighlightButtonState();
+    });
+    this._syncEmergencyHighlightButtonState();
+  }
+
+  _syncEmergencyHighlightButtonState() {
+    this._emergencyHighlightBtn?.classList.toggle('active', this._emergencyHighlightEnabled);
+    this._emergencyHighlightBtn?.setAttribute('aria-pressed', String(this._emergencyHighlightEnabled));
   }
 
   /**
@@ -11714,6 +11828,7 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    destroyMeasure();
     this._keepAboveDispose?.();
     this._keepAboveDispose = null;
     this._unbindZoomToPointer?.();
@@ -11764,6 +11879,8 @@ export class StyleManager {
     this._removeWorldRequestFocusListener?.();
     this._removeWorldRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
+    this._removeDoubleClickFly?.();
+    this._removeDoubleClickFly = null;
     this._navigationOwnerChangedRemover?.();
     this._navigationOwnerChangedRemover = null;
     this._removeNavigationAuthorityListener?.();

@@ -11,6 +11,7 @@ import {
   resolveVoiceModel,
   serializeCostLimits,
 } from './voiceCost.js';
+import { prefKey, readPrefKey, writePrefKey } from '../prefStorage.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -35,10 +36,10 @@ const VIEWPORT_MAX_ENCODED_BYTES = 200 * 1024; // ~200 KB encoded ceiling
 const ERROR_LOG_LIMIT = 30;
 const ERROR_STORAGE_KEY = 'gev-realtime-errors';
 const DEBUG_LOG_URL = '/api/realtime/debug-log';
-// Voice cost control (repo-wide `godsEyeView.<feature>.<field>` convention;
+// Voice cost control (repo-wide `meridian.<feature>.<field>` convention;
 // the neighbouring ERROR_STORAGE_KEY predates it).
-const VOICE_TIER_STORAGE_KEY = 'godsEyeView.voiceCost.tier';
-const VOICE_LIMITS_STORAGE_KEY = 'godsEyeView.voiceCost.limits';
+const VOICE_TIER_STORAGE_KEY = prefKey('voiceCost.tier');
+const VOICE_LIMITS_STORAGE_KEY = prefKey('voiceCost.limits');
 // The input meter is intentionally stricter than the assistant-output meter:
 // microphones carry room tone even after browser noise suppression, whereas the
 // incoming Realtime stream is already clean speech audio.
@@ -61,7 +62,7 @@ function voiceStorage(storage) {
  */
 export function readStoredVoiceTier(storage) {
   try {
-    const raw = voiceStorage(storage)?.getItem(VOICE_TIER_STORAGE_KEY);
+    const raw = readPrefKey(voiceStorage(storage), VOICE_TIER_STORAGE_KEY);
     return isKnownVoiceTier(raw) ? resolveVoiceModel(raw).tier : DEFAULT_VOICE_TIER;
   } catch {
     return DEFAULT_VOICE_TIER;
@@ -72,7 +73,7 @@ export function readStoredVoiceTier(storage) {
 export function writeStoredVoiceTier(tier, storage) {
   const resolved = resolveVoiceModel(tier).tier;
   try {
-    voiceStorage(storage)?.setItem(VOICE_TIER_STORAGE_KEY, resolved);
+    writePrefKey(voiceStorage(storage), VOICE_TIER_STORAGE_KEY, resolved);
   } catch {
     /* best effort */
   }
@@ -85,7 +86,7 @@ export function writeStoredVoiceTier(tier, storage) {
  */
 export function readStoredVoiceLimits(storage) {
   try {
-    const raw = voiceStorage(storage)?.getItem(VOICE_LIMITS_STORAGE_KEY);
+    const raw = readPrefKey(voiceStorage(storage), VOICE_LIMITS_STORAGE_KEY);
     if (!raw) return normalizeCostLimits(null);
     return normalizeCostLimits(JSON.parse(raw));
   } catch {
@@ -104,7 +105,8 @@ export function readStoredVoiceLimits(storage) {
 export function writeStoredVoiceLimits(limits, storage) {
   const normalized = normalizeCostLimits(limits);
   try {
-    voiceStorage(storage)?.setItem(
+    writePrefKey(
+      voiceStorage(storage),
       VOICE_LIMITS_STORAGE_KEY,
       JSON.stringify(serializeCostLimits(normalized))
     );
@@ -2191,7 +2193,7 @@ function isSecretLikeKey(key) {
 }
 
 async function captureViewportImage() {
-  const viewer = window.__godsEyeView?.viewer;
+  const viewer = window.__meridian?.viewer;
   const source = viewer?.scene?.canvas || document.querySelector('#cesiumContainer .cesium-widget canvas');
   if (!source || !source.width || !source.height) return null;
   // No fresh frame (hidden, or the bounded render wait timed out) → no

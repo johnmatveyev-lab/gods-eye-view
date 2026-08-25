@@ -3,6 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import {
   clampPanelPosition,
+  leftoverPanelCollapsedStorageKey,
+  leftoverPanelPositionStorageKey,
   panelCollapsedStorageKey,
   panelPositionStorageKey,
   resolveStoredPanelPosition,
@@ -55,9 +57,11 @@ test('clampPanelPosition leaves an on-screen position unchanged', () => {
 });
 
 test('boot sanitize clamps a CCTV panel stored at -4000,-4000 onto the viewport', () => {
-  const key = panelPositionStorageKey('cctv-panel', 'v7');
+  const leftover = leftoverPanelPositionStorageKey('cctv-panel', 'v7');
+  const next = panelPositionStorageKey('cctv-panel', 'v7');
+  const original = JSON.stringify({ left: -4000, top: -4000 });
   const storage = memoryStorage({
-    [key]: JSON.stringify({ left: -4000, top: -4000 }),
+    [leftover]: original,
     'godsEyeView.voiceCost.tier': 'standard',
   });
 
@@ -70,7 +74,9 @@ test('boot sanitize clamps a CCTV panel stored at -4000,-4000 onto the viewport'
 
   assert.equal(result[0].action, 'clamp');
   assert.deepEqual(result[0].position, { left: 6, top: 6 });
-  assert.equal(storage.getItem(key), JSON.stringify({ left: 6, top: 6 }));
+  assert.equal(result[0].key, next);
+  assert.equal(storage.getItem(leftover), original);
+  assert.equal(storage.getItem(next), JSON.stringify({ left: 6, top: 6 }));
   assert.equal(storage.getItem(panelPositionStorageKey('cctv-panel', 'v8')), null);
   assert.equal(storage.getItem('godsEyeView.voiceCost.tier'), 'standard');
   assert.deepEqual(
@@ -79,12 +85,14 @@ test('boot sanitize clamps a CCTV panel stored at -4000,-4000 onto the viewport'
   );
 });
 
-test('boot sanitize clamps a collapsed-off-screen CCTV panel without renaming leftover keys', () => {
-  const posKey = panelPositionStorageKey('cctv-panel', 'v6');
-  const collapsedKey = panelCollapsedStorageKey('cctv-panel');
+test('boot sanitize clamps a collapsed-off-screen CCTV panel without renaming leftover versions', () => {
+  const leftoverPos = leftoverPanelPositionStorageKey('cctv-panel', 'v6');
+  const leftoverCollapsed = leftoverPanelCollapsedStorageKey('cctv-panel');
+  const nextPos = panelPositionStorageKey('cctv-panel', 'v6');
+  const original = JSON.stringify({ left: -4000, top: -4000 });
   const storage = memoryStorage({
-    [posKey]: JSON.stringify({ left: -4000, top: -4000 }),
-    [collapsedKey]: '1',
+    [leftoverPos]: original,
+    [leftoverCollapsed]: '1',
   });
 
   const result = sanitizeStoredPanelPositions({
@@ -99,8 +107,10 @@ test('boot sanitize clamps a collapsed-off-screen CCTV panel without renaming le
 
   assert.equal(result[0].action, 'clamp');
   assert.deepEqual(result[0].position, { left: 6, top: 6 });
-  assert.equal(storage.getItem(posKey), JSON.stringify({ left: 6, top: 6 }));
-  assert.equal(storage.getItem(collapsedKey), '1');
+  assert.equal(storage.getItem(leftoverPos), original);
+  assert.equal(storage.getItem(leftoverCollapsed), '1');
+  assert.equal(storage.getItem(nextPos), JSON.stringify({ left: 6, top: 6 }));
+  assert.equal(storage.getItem(panelCollapsedStorageKey('cctv-panel')), '1');
   assert.equal(storage.getItem(panelPositionStorageKey('cctv-panel', 'v8')), null);
 });
 
@@ -118,29 +128,37 @@ test('boot sanitize keeps a normal on-screen saved CCTV position', () => {
 
   assert.equal(result[0].action, 'keep');
   assert.equal(storage.getItem(key), stored);
+  assert.equal(
+    Object.keys(storage.snapshot()).some((name) => name.startsWith('godsEyeView.')),
+    false,
+  );
   assert.deepEqual(
     restoredPanelPosition(storage, 'cctv-panel', 'v8', VIEWPORT),
     { left: 80, top: 120 },
   );
 });
 
-test('resolveStoredPanelPosition reads leftover versions before inventing a current key', () => {
-  const leftover = panelPositionStorageKey('pp-toggles', 'v6');
+test('resolveStoredPanelPosition copies leftover versions onto Meridian without inventing a current key', () => {
+  const leftover = leftoverPanelPositionStorageKey('pp-toggles', 'v6');
+  const next = panelPositionStorageKey('pp-toggles', 'v6');
+  const stored = JSON.stringify({ left: 40, top: 60 });
   const storage = memoryStorage({
-    [leftover]: JSON.stringify({ left: 40, top: 60 }),
+    [leftover]: stored,
   });
   const resolved = resolveStoredPanelPosition(storage, 'pp-toggles', 'v8');
-  assert.equal(resolved.key, leftover);
+  assert.equal(resolved.key, next);
   assert.deepEqual(resolved.pos, { left: 40, top: 60 });
+  assert.equal(storage.getItem(next), stored);
+  assert.equal(storage.getItem(leftover), stored);
   assert.equal(storage.getItem(panelPositionStorageKey('pp-toggles', 'v8')), null);
 });
 
 test('boot sanitize resets only the unreadable panel layout keys', () => {
-  const posKey = panelPositionStorageKey('cctv-panel', 'v7');
-  const collapsedKey = panelCollapsedStorageKey('cctv-panel');
+  const leftoverPos = leftoverPanelPositionStorageKey('cctv-panel', 'v7');
+  const leftoverCollapsed = leftoverPanelCollapsedStorageKey('cctv-panel');
   const storage = memoryStorage({
-    [posKey]: '{not-json',
-    [collapsedKey]: '1',
+    [leftoverPos]: '{not-json',
+    [leftoverCollapsed]: '1',
     'godsEyeView.cctv.calibration.v2': '{}',
   });
 
@@ -152,8 +170,10 @@ test('boot sanitize resets only the unreadable panel layout keys', () => {
   });
 
   assert.equal(result[0].action, 'reset');
-  assert.equal(storage.getItem(posKey), null);
-  assert.equal(storage.getItem(collapsedKey), null);
+  assert.equal(storage.getItem(leftoverPos), null);
+  assert.equal(storage.getItem(leftoverCollapsed), null);
+  assert.equal(storage.getItem(panelPositionStorageKey('cctv-panel', 'v7')), null);
+  assert.equal(storage.getItem(panelCollapsedStorageKey('cctv-panel')), null);
   assert.equal(storage.getItem('godsEyeView.cctv.calibration.v2'), '{}');
 });
 
