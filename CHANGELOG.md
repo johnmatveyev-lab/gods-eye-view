@@ -5,8 +5,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Changed
+
+- Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
+
 ### Added
 
+- Hosted `/api/google/nearby-places` on Vercel via `api/google/nearby-places.js`,
+  forwarding the same GET handler extracted to `src/google/nearbyPlaces.js`.
+  Reuses `GOOGLE_MAPS_API_KEY` and optional `GEV_RATELIMIT_GOOGLE_PER_MIN`.
+  Place labels only — the Google key never appears in JSON.
+- Added a hosted `/api/adsbdb` enrichment proxy (`api/adsbdb/[...path].js`)
+  that forwards route and aircraft lookups to `api.adsbdb.com` only, with a
+  24h in-memory cache, 404 negative-cache, last-good on error, and optional
+  `/tmp` persist. Dev/preview still use the Vite plugin. OpenSky is not used.
 - Hosted cockpit regional brief now shares one Node handler between Vite and
   Vercel (`api/regional-brief.js`). GET and POST return 200 JSON with place
   and/or weather and/or GDELT news — never a platform `NOT_FOUND`. Google News

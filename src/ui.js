@@ -12,6 +12,7 @@ import {
   clampBloomIntensity,
   decodeBloomIntensity,
 } from './bloom.js';
+import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
@@ -2374,6 +2375,7 @@ export class StyleManager {
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
+    this._homeViewBtn = document.getElementById('home-view');
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
@@ -2644,6 +2646,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initClearSelectedLayersButton();
+    this._initHomeViewButton();
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -3346,7 +3349,7 @@ export class StyleManager {
       btn.addEventListener('click', () => this.setStyle(btn.dataset.style));
     });
 
-    // Keyboard shortcuts: 1-7, H, Escape
+    // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f') otherwise fire while a
@@ -3370,10 +3373,22 @@ export class StyleManager {
         }
       }
       if (e.key.toLowerCase() === 'h') {
+        // h = HUD toggle — Home view uses the Home key, not H
         this.shareLinkManager?.claimRestoreLane?.('visual');
         this.hud.toggle();
         this._updateHudButtonState();
         this._syncShareState();
+      }
+      if (e.key === 'Home') {
+        if (
+          e.target === this._radioTunerSlider
+          || e.target === this._globalContextFlightsBtn
+          || e.target === this._globalContextMissionsBtn
+        ) {
+          return;
+        }
+        e.preventDefault();
+        this.goHome();
       }
       if (e.key.toLowerCase() === 'o') this._toggleOrbit();
       if (e.key.toLowerCase() === 'v') this.toggleCleanView();
@@ -9615,6 +9630,25 @@ export class StyleManager {
       this.orbitController.stop();
       this._orbitIndicator.classList.remove('active');
     }
+  }
+
+  /** Wire the Home control that flies to the settled first-load camera. */
+  _initHomeViewButton() {
+    this._homeViewBtn?.addEventListener('click', () => this.goHome());
+  }
+
+  /**
+   * Fly to the default first-load camera. Does not delete lastView;
+   * moveEnd overwrites the slot after the flight.
+   */
+  goHome() {
+    this._stopOrbit();
+    if (this.viewer) {
+      this.viewer.trackedEntity = undefined;
+      this.viewer.camera?.cancelFlight?.();
+      this.viewer.camera?.lookAtTransform?.(Cesium.Matrix4.IDENTITY);
+    }
+    flyToHomeView(this.viewer);
   }
 
   /** Wire the persistent reset control to the same route used by voice. */
