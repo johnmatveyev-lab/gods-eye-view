@@ -223,6 +223,12 @@ import {
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
 import {
+  handleCleanViewEscape,
+  isCleanView,
+  setCleanViewEnabled,
+  syncCleanViewButton,
+} from './cleanViewChrome.js';
+import {
   DATACENTER_LAYER_ID,
   bindDatacenterInViewList,
   datacenterFlyDestination,
@@ -2495,6 +2501,7 @@ export class StyleManager {
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
+    this._cleanViewChromeBtn = document.getElementById('clean-view-chrome');
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
@@ -3668,7 +3675,11 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
-        handleFullscreenEscape(e);
+        if (handleCleanViewEscape(e)) {
+          this.toggleCleanView(false);
+        } else {
+          handleFullscreenEscape(e);
+        }
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
           this._locationSearch.value = '';
@@ -3772,6 +3783,7 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.addEventListener('click', () => this.toggleCleanView());
     }
+    this._cleanViewChromeBtn?.addEventListener('click', () => this.toggleCleanView());
 
     this._reduceMotionBtn?.addEventListener('click', () => {
       setReduceMotionOverride(!isReduceMotionEnabled());
@@ -6186,9 +6198,9 @@ export class StyleManager {
     this._radioPrevBtn?.addEventListener('click', () => cycleRadio(-1));
     this._radioNextBtn?.addEventListener('click', () => cycleRadio(1));
     this._radioPlayBtn?.addEventListener('click', () => void radioLayer.togglePlayback({ origin: 'user' }));
-    this._radioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
-    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
-    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
+    this._radioStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
+    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
+    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
     this._radioVolume?.addEventListener('input', () => {
       const value = Number(this._radioVolume.value);
       if (this._radioVolumeValue) this._radioVolumeValue.textContent = `${value}%`;
@@ -6613,9 +6625,19 @@ export class StyleManager {
       this._cockpitRadioPlayBtn.title = action;
     }
     const liveRadioAudio = ['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
-    if (this._radioStopBtn) this._radioStopBtn.disabled = !['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
-    if (this._contextRadioMiniStopBtn) this._contextRadioMiniStopBtn.disabled = !liveRadioAudio;
-    if (this._cockpitRadioStopBtn) this._cockpitRadioStopBtn.disabled = !liveRadioAudio;
+    const muteAvailable = interactive || liveRadioAudio;
+    if (this._radioStopBtn) {
+      this._radioStopBtn.disabled = !muteAvailable;
+      this._radioStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
+    if (this._contextRadioMiniStopBtn) {
+      this._contextRadioMiniStopBtn.disabled = !muteAvailable;
+      this._contextRadioMiniStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
+    if (this._cockpitRadioStopBtn) {
+      this._cockpitRadioStopBtn.disabled = !muteAvailable;
+      this._cockpitRadioStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
     if (this._radioVolume) this._radioVolume.disabled = !interactive;
     if (this._radioVolume && document.activeElement !== this._radioVolume) {
       this._radioVolume.value = String(Math.round(state.volume * 100));
@@ -8462,8 +8484,9 @@ export class StyleManager {
   toggleCleanView(forceEnabled) {
     const shouldEnable = typeof forceEnabled === 'boolean'
       ? forceEnabled
-      : !document.body.classList.contains('ui-clean-view');
-    document.body.classList.toggle('ui-clean-view', shouldEnable);
+      : !isCleanView();
+    setCleanViewEnabled(shouldEnable);
+    syncCleanViewButton(this._cleanViewChromeBtn, shouldEnable);
     if (this._cleanViewBtn) {
       this._cleanViewBtn.classList.toggle('active', shouldEnable);
     }

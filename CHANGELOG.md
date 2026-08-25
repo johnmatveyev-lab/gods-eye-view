@@ -25,6 +25,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Clean view control on the globe chrome that toggles the existing
+  `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
+  Google Maps and Data attribution stay on. No new hide system and no `/api`.
 - Contact Labels on/off (declutter) hides ambient callsign billboards on
   busy FIRs. Dots, models, and trails stay. Selected/tracked ident cards stay.
   Density still only changes detections. Persists `meridian.contactLabels`
@@ -154,6 +157,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
   "Offline — showing last data". AIS is not wrapped. No service worker.
+- Radio volume is a 0–100 slider on the existing Radio Browser audio element.
+  The level persists as `meridian.radioVolume`. Mute sets 0 and unmute
+  restores the prior level. Disabling the Radio layer still stops audio.
+  Station search and play are unchanged. No new `/api` and no voice ducking.
 
 ### Changed
 
