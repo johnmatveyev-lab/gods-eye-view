@@ -112,6 +112,7 @@ test('weather visibility uses the same km / nmi / mi helper as measure and scale
   assert.equal(formatWeatherVisibility(null), 'UNAVAILABLE');
   assert.equal(formatWeatherVisibility(Number.NaN), 'UNAVAILABLE');
   assert.equal(formatWeatherVisibility(undefined), 'UNAVAILABLE');
+  assert.equal(formatWeatherVisibility(0, 'km'), '0 m');
 });
 
 test('Display ships a km | nm | mi control wired to meridian.units', () => {

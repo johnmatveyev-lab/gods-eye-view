@@ -195,6 +195,9 @@ export function formatDistanceMeters(meters, unit = getDistanceUnit(), options =
  * @returns {string}
  */
 export function formatWeatherVisibility(visibilityM, unit = getDistanceUnit()) {
+  if (visibilityM === null || visibilityM === undefined || visibilityM === '') {
+    return 'UNAVAILABLE';
+  }
   const meters = Number(visibilityM);
   if (!Number.isFinite(meters) || meters < 0) return 'UNAVAILABLE';
   return formatDistanceMeters(meters, unit);
