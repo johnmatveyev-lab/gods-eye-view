@@ -14,6 +14,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- Hosted CCTV frames use the rest catch-all `api/cctv/[...path].js` plus dedicated `frame|stream|media/[id].js` entries so `/api/cctv/frame/:id` is not a Vercel platform 404. The client URL is unchanged. Austin / Caltrans / TfL only.
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
 - Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
 

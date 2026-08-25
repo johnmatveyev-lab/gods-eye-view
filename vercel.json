@@ -16,6 +16,18 @@
       "maxDuration": 30,
       "includeFiles": "config/**"
     },
+    "api/cctv/frame/[id].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
+    "api/cctv/stream/[id].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
+    "api/cctv/media/[id].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
     "api/celestrak/[...group].js": {
       "maxDuration": 20
     },
