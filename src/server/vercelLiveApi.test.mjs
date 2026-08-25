@@ -91,8 +91,15 @@ test('Vercel live catch-all reuses Node proxies without a Next rewrite', () => {
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/[...path].js']);
   assert.ok(vercelJson.functions['api/billing/[...path].js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  assert.ok(vercelJson.functions['api/gbfs/[...target].js']);
+  assert.ok(vercelJson.functions['api/adsblol/mil.js']);
+  assert.ok(vercelJson.functions['api/tomtom/[...path].js']);
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+    assert.doesNotMatch(rule.destination, /index\.html|ais-live/i);
+  }
 });
 
 test('createLiveApiPlugins registers every live Vite /api proxy', () => {
@@ -159,6 +166,7 @@ test('GET /api/launches reaches the Launch Library handler', async () => {
 
 test('GET leftover /adsblol/mil and /terrain/heights reach existing handlers', async () => {
   assert.equal(restoreLiveApiPath('/adsblol/mil'), '/api/adsblol/mil');
+  assert.equal(existsSync(path.join(ROOT, 'api/adsblol/mil.js')), true);
   const terrain = await dispatch(liveApiHandler, { url: '/terrain/heights' });
   assert.equal(terrain.status, 400);
   assert.match(terrain.json.error, /invalid points/i);
@@ -201,4 +209,24 @@ test('unknown live /api path is a handler 404, not a missing function', async ()
   const { status, json } = await dispatch(liveApiHandler, { url: '/api/does-not-exist' });
   assert.equal(status, 404);
   assert.equal(json.error, 'Not found');
+});
+
+test('hosted Vercel does not wrap AISStream; /api/ais-live is an honest 404', async () => {
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
+  const previous = process.env.AISSTREAM_API_KEY;
+  process.env.AISSTREAM_API_KEY = 'must-not-open-a-hosted-socket';
+  try {
+    const snapshot = await dispatch(liveApiHandler, { url: '/api/ais-live' });
+    assert.equal(snapshot.status, 404);
+    assert.equal(snapshot.json.error, 'Not found');
+    assert.notEqual(snapshot.json.status, 'missing-key');
+    assert.doesNotMatch(JSON.stringify(snapshot.json), /AISStream|aisstream/i);
+
+    const track = await dispatch(liveApiHandler, { url: '/api/ais-live/track?mmsi=353136000' });
+    assert.equal(track.status, 404);
+    assert.doesNotMatch(JSON.stringify(track.json), /AISStream|aisstream/i);
+  } finally {
+    if (previous === undefined) delete process.env.AISSTREAM_API_KEY;
+    else process.env.AISSTREAM_API_KEY = previous;
+  }
 });

@@ -9,6 +9,7 @@ import { getNextIssPass } from '../data/satellites.js';
 import { CCTV_FOCUS_RESULT } from '../data/cctv.js';
 import { contextModeWord } from '../contextModePolicy.js';
 import { createAnalystEngine } from '../data/analystEngine.js';
+import { VOICE_LAYER_ALIASES as LAYER_ALIASES } from '../data/layerAliases.js';
 import { layerFeedState } from '../data/manager.js';
 import militaryAwarenessLayer, {
   collectAircraftProximityWindow,
@@ -140,43 +141,6 @@ const COCKPIT_ACTION_ALIASES = new Map([
   ['go to next', 'next'],
 ]);
 const COCKPIT_TARGET_LAYERS = new Set(['flights', 'military', 'ais-live-vessels', 'military-installations']);
-
-const LAYER_ALIASES = new Map([
-  ['flights', 'flights'],
-  ['planes', 'flights'],
-  ['aircraft', 'flights'],
-  ['military', 'military'],
-  ['military flights', 'military'],
-  ['earthquakes', 'earthquakes'],
-  ['quakes', 'earthquakes'],
-  ['satellites', 'satellites'],
-  ['space mission', 'rocket-launches'],
-  ['space missions', 'rocket-launches'],
-  ['missions', 'rocket-launches'],
-  ['traffic', 'traffic'],
-  ['street traffic', 'traffic'],
-  ['cctv', 'cctv'],
-  ['cameras', 'cctv'],
-  ['radio', 'radio'],
-  ['internet radio', 'radio'],
-  ['radio stations', 'radio'],
-  ['bikeshare', 'bikeshare'],
-  ['bikes', 'bikeshare'],
-  ['ais', 'ais-live-vessels'],
-  ['ships', 'ais-live-vessels'],
-  ['vessels', 'ais-live-vessels'],
-  ['live vessels', 'ais-live-vessels'],
-  ['datacenters', 'local-datacenters'],
-  ['data centers', 'local-datacenters'],
-  ['data centres', 'local-datacenters'],
-  ['dams', 'local-dams'],
-  ['submarine cables', 'telegeography-submarine-cables'],
-  ['cables', 'telegeography-submarine-cables'],
-  ['telegeography', 'telegeography-submarine-cables'],
-  ['firms', 'local-firms'],
-  ['fires', 'local-firms'],
-  ['active fires', 'local-firms'],
-]);
 
 const CITY_ALIASES = new Map([
   ['new york', 'nyc'],
@@ -318,6 +282,24 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
       const layerId = normalizeLayerId(args.layerId);
       if (!layerId) {
         throw new Error(`Unknown data layer: ${args.layerId || 'missing'}`);
+      }
+      if (layerId === 'telegeography-submarine-cables') {
+        return {
+          ok: false,
+          action: 'set_layer_visibility',
+          layerId,
+          error: 'The submarine-cables layer is a commercial no-op',
+          ...readLayerLifecycleSummary(dataManager, layerId),
+        };
+      }
+      if (layerId === 'opensky') {
+        return {
+          ok: false,
+          action: 'set_layer_visibility',
+          layerId,
+          error: 'OpenSky is disabled',
+          ...readLayerLifecycleSummary(dataManager, layerId, { fallbackEnabled: false }),
+        };
       }
       if (!dataManager.layers.has(layerId)) {
         if (layerId === 'radio') {

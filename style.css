@@ -77,6 +77,60 @@ html, body {
   pointer-events: none;
 }
 
+/* Copy control for the selected-contact card ident. Hidden with no selection.
+   Sits on the painted title row; the value button is a transparent hit target
+   over the visible canvas ident, and the copy glyph rides the card's right edge. */
+#selected-contact-ident {
+  position: fixed;
+  z-index: 7;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  pointer-events: none;
+}
+#selected-contact-ident[hidden] { display: none; }
+.selected-contact-ident-value,
+.selected-contact-ident-copy {
+  pointer-events: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: 600 13px "JetBrains Mono", ui-monospace, monospace;
+  color: transparent;
+}
+.selected-contact-ident-value {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+}
+.selected-contact-ident-copy {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(232, 240, 244, 0.92);
+  border-radius: 3px;
+}
+.selected-contact-ident-copy .material-symbols-outlined {
+  font-size: 15px;
+  line-height: 1;
+}
+.selected-contact-ident-value:hover,
+.selected-contact-ident-value:focus-visible,
+.selected-contact-ident-copy:hover,
+.selected-contact-ident-copy:focus-visible {
+  outline: none;
+}
+.selected-contact-ident-copy:hover,
+.selected-contact-ident-copy:focus-visible {
+  color: #fff;
+  background: rgba(107, 232, 255, 0.16);
+}
+
 /* Scope mask — the explicit circular viewport treatment (see
    src/scopeMask.js for the emergent-artifact history). z2 keeps it above
    the WebGL scene but under the z5 detection surface, preserving the old
@@ -305,11 +359,15 @@ body.cockpit-mode #cockpit-cloud-effects.active {
    and launch videos, so hiding #cesium-credits here (as it was before) shipped
    non-compliant footage. The full credit line — Cesium/Ion logo, "Google Maps",
    and the "Data attribution" link that opens the per-layer license popover —
-   stays on screen; it's already styled small and unobtrusive above. The GEV
-   chrome (panels/HUD) still fades via its own rules; only the required notice
-   is exempt. (Note: Cesium re-applies inline styles on the credit elements each
-   frame, so the on-screen credit content is owned by Cesium's update loop, not
-   CSS overrides — we deliberately don't fight it here.) */
+   stays on screen (opacity 1, never display:none). Meridian chrome (panels/HUD)
+   still fades via its own rules; only the required notice is exempt. Cesium
+   owns the inner credit widgets each frame — this pin is on the container. */
+body.ui-clean-view #cesium-credits,
+body.recording-mode #cesium-credits {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
 
 #gev-voice-control {
   position: fixed;
@@ -2020,6 +2078,33 @@ body.ui-clean-view #scene-runtime.active {
   transform: translateX(-50%) translateY(0);
 }
 
+#offline-chip {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  z-index: 102;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 176, 80, 0.38);
+  background: rgba(18, 10, 4, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: rgba(255, 214, 160, 0.94);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34), 0 0 14px rgba(255, 160, 64, 0.08);
+}
+
+#offline-chip[hidden] {
+  display: none;
+}
+
 #traffic-sync-label,
 #cctv-sync-label {
   color: rgba(184, 244, 255, 0.92);
@@ -2843,6 +2928,11 @@ body.cockpit-mode:has(#left-panel-stack > .panel-collapsible:not(.collapsed)) .c
   color: rgba(244, 251, 255, 0.72);
   font-size: 10px;
   letter-spacing: 0.1em;
+}
+.cockpit-clock-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .cockpit-vision-controls {
   display: grid;
@@ -3797,6 +3887,9 @@ body.cockpit-mode #view-switcher button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.cockpit-weather-credit[hidden] {
+  display: none;
+}
 .cockpit-signal-footer {
   display: flex;
   align-items: center;
@@ -3871,7 +3964,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -4291,6 +4384,40 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
+.clock-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  overflow: hidden;
+  vertical-align: middle;
+  pointer-events: auto;
+}
+
+.clock-mode-toggle button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  padding: 2px 6px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.clock-mode-toggle button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+
+.cockpit-clock-row .clock-mode-toggle {
+  margin-left: 0;
+}
+
 #hud-rec-dot {
   color: #ff3333;
   text-shadow: 0 0 6px rgba(255, 51, 51, 0.8);
@@ -4464,6 +4591,34 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.data-layer-filter-wrap {
+  flex: 0 0 auto;
+  margin: 0 0 8px;
+}
+
+#data-layer-filter {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+#data-layer-filter::placeholder {
+  color: var(--text-dim);
+}
+
+#data-layer-filter:focus {
+  border-color: rgba(0, 212, 255, 0.45);
 }
 
 .data-toggle-list {
@@ -6692,6 +6847,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 #control-panel.collapsed .button-grid,
 #data-panel.collapsed .data-toggle-list,
+#data-panel.collapsed .data-layer-filter-wrap,
 #global-context-panel.collapsed #radio-panel,
 #global-context-panel.collapsed #military-awareness-panel,
 #global-context-panel.collapsed .global-context-actions,
@@ -6782,7 +6938,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #home-view, #reset-globe-view) {
   display: none !important;
 }
 
@@ -7237,6 +7393,9 @@ body.recording-mode #cesium-credits {
   right: auto;
   bottom: 36px;
   left: 36px;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 #intel-hud[data-variant='minimal'] .hud-bottom-left {
@@ -9189,6 +9348,117 @@ body.scene-playback-mode #first-run-launcher {
   .first-run-arrow { transition: none; }
   /* Scrolling a tile into view must not animate either. */
   .first-run-choices { scroll-behavior: auto; }
+}
+
+/* ── First-visit responsible-use notice ───────────────────────────
+   Compact and non-modal: the globe stays clickable around the card.
+   Required Google/Cesium credits live bottom-left; this card stays top-center
+   and hides in clean-view / recording so that credit line is never covered. */
+#responsible-use-notice {
+  position: fixed;
+  z-index: 1100;
+  top: 5.6rem;
+  left: 50%;
+  width: min(30rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  color: var(--text-primary);
+  background:
+    linear-gradient(145deg, rgba(10, 27, 37, 0.94), rgba(7, 13, 22, 0.92)),
+    rgba(7, 17, 25, 0.9);
+  border: 1px solid rgba(54, 220, 255, 0.36);
+  border-radius: 0.55rem;
+  box-shadow: 0 0.8rem 2.2rem rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  opacity: 0;
+  transform: translate(-50%, 0.4rem);
+  transition: opacity 200ms ease, transform 240ms ease;
+  pointer-events: none;
+}
+
+#responsible-use-notice[hidden] {
+  display: none;
+}
+
+#responsible-use-notice.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+#responsible-use-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+#responsible-use-copy {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.responsible-use-terms {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  line-height: 1.4;
+  color: rgba(232, 234, 237, 0.55);
+}
+
+.responsible-use-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+}
+
+.responsible-use-actions a,
+.responsible-use-actions button {
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(54, 220, 255, 0.92);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.responsible-use-actions a:hover,
+.responsible-use-actions button:hover {
+  color: #fff;
+}
+
+.responsible-use-actions [data-responsible-use-dismiss] {
+  margin-left: auto;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--glass-border-hover);
+  border-radius: 8px;
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+body.ui-clean-view #responsible-use-notice,
+body.recording-mode #responsible-use-notice,
+body.cockpit-mode #responsible-use-notice,
+body.scene-playback-mode #responsible-use-notice {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #responsible-use-notice { transition: none; }
 }
 
 /* ── Hosted account / billing ─────────────────── */

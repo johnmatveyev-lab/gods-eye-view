@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import gbfsHandler, {
   GBFS_ALLOWED_HOSTS,
+  GBFS_MAX_BODY_BYTES,
   GBFS_USER_AGENT,
   createVercelGbfsHandler,
   gbfsProxy,
@@ -14,6 +15,7 @@ import gbfsHandler, {
   isAllowedGbfsPath,
   restoreGbfsPath,
 } from './gbfs.js';
+import liveApiHandler from '../server/vercelLiveApi.js';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const STATUS_URL = 'https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json';
@@ -96,7 +98,10 @@ test('Vercel Node entry forwards to handleGbfsHttp without a Next rewrite', () =
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/gbfs/[...target].js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
 });
 
@@ -120,14 +125,27 @@ test('host and path allowlists stay exact; no arbitrary hosts', () => {
   assert.equal(GBFS_USER_AGENT, 'Meridian-gbfs-proxy/1.0');
 });
 
-test('GET /api/gbfs/ is 400 missing target', async () => {
+test('GET /api/gbfs/ is 400 missing target, never a platform 404', async () => {
   const missing = await dispatch('/api/gbfs/');
   assert.equal(missing.status, 400);
+  assert.notEqual(missing.status, 404);
   assert.equal(missing.json.error, 'Missing GBFS upstream target');
+  assert.doesNotMatch(JSON.stringify(missing.json), /x-vercel-error|NOT_FOUND/);
 
   const leftover = await dispatch('/');
   assert.equal(leftover.status, 400);
   assert.equal(leftover.json.error, 'Missing GBFS upstream target');
+
+  const vercel = await dispatch('/api/gbfs/', { handler: gbfsHandler });
+  assert.equal(vercel.status, 400);
+  assert.notEqual(vercel.status, 404);
+  assert.equal(vercel.json.error, 'Missing GBFS upstream target');
+
+  const catchAll = await dispatch('/api/gbfs/', { handler: liveApiHandler });
+  assert.equal(catchAll.status, 400);
+  assert.notEqual(catchAll.status, 404);
+  assert.equal(catchAll.json.error, 'Missing GBFS upstream target');
+  assert.doesNotMatch(JSON.stringify(catchAll.json), /x-vercel-error|NOT_FOUND/);
 });
 
 test('http and disallowed hosts are 400/403 and never fetch', async () => {
@@ -142,6 +160,39 @@ test('http and disallowed hosts are 400/403 and never fetch', async () => {
   });
   assert.equal(disallowed.status, 403);
   assert.equal(disallowed.json.error, 'GBFS host not allowed');
+});
+
+test('path not station_* is 400; body over 5MB is 502', async () => {
+  const badPath = await dispatch(gbfsUrl('https://gbfs.lyft.com/gbfs/2.3/bkn/en/gbfs.json'), {
+    fetchImpl: failFetch(),
+  });
+  assert.equal(badPath.status, 400);
+  assert.equal(
+    badPath.json.error,
+    'Only station_information/station_status endpoints are allowed',
+  );
+
+  const headerDenied = await dispatch(gbfsUrl(STATUS_URL), {
+    fetchImpl: async () => new Response('ignored', {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': String(GBFS_MAX_BODY_BYTES + 1),
+      },
+    }),
+  });
+  assert.equal(headerDenied.status, 502);
+  assert.equal(headerDenied.json.error, 'GBFS upstream response too large');
+
+  const huge = 'x'.repeat(GBFS_MAX_BODY_BYTES + 1);
+  const bodyDenied = await dispatch(gbfsUrl(STATUS_URL), {
+    fetchImpl: async () => new Response(huge, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    }),
+  });
+  assert.equal(bodyDenied.status, 502);
+  assert.equal(bodyDenied.json.error, 'GBFS upstream response too large');
 });
 
 test('allowed station_status is 200 and UA is Meridian', async () => {

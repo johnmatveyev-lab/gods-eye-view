@@ -17,6 +17,13 @@ import * as Cesium from 'cesium';
 import { forward as toMGRS } from 'mgrs';
 import { CITY_POIS } from './locations.js';
 import { composeLocalityTag } from './hudLocality.js';
+import {
+  CLOCK_CHANGE_EVENT,
+  bindClockToggle,
+  formatHudClock,
+  getClockMode,
+  syncClockToggleButtons,
+} from './clockPreference.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
 import { canPoll } from './pollPresence.js';
@@ -78,6 +85,7 @@ export class IntelHUD {
     this._updateInterval = null;
     this._recBlinkInterval = null;
     this._timestampInterval = null;
+    this._unbindClockToggle = null;
     this._summaryInterval = null;
     this._summaryTypingInterval = null;
     this._latestMetrics = null;
@@ -87,6 +95,9 @@ export class IntelHUD {
     this._summaryRequest = null;
     this._lastSummarySignature = '';
     this._summaryRevision = 0;
+    this._liveScheduler = null;
+    this._liveSchedulerUnsubscribe = null;
+    this._livePollsSuspended = false;
     // One-shot guards so the very first summary lands immediately instead of
     // waiting for the 15s interval tick: B) swap the "Awaiting telemetry..."
     // placeholder for the deterministic line as soon as metrics exist, then
@@ -119,7 +130,12 @@ export class IntelHUD {
       }
       // First settled view: request the AI summary now rather than waiting for
       // the periodic tick (saves up to ~15s of "Awaiting telemetry...").
-      if (!this._firstSummaryKicked && this._visible && this._latestMetrics) {
+      if (
+        !this._firstSummaryKicked
+        && this._visible
+        && this._latestMetrics
+        && !this._livePollsSuspended
+      ) {
         this._firstSummaryKicked = true;
         void this._updateSummary(true, true);
       }
@@ -131,9 +147,21 @@ export class IntelHUD {
     this._orbitNum = 47000 + Math.floor(Math.random() * 1000);
     this._passNum = 100 + Math.floor(Math.random() * 200);
 
+    this._onClockPreference = () => {
+      this._paintTimestamp();
+      syncClockToggleButtons(this._el, getClockMode());
+    };
+
     this._buildDOM();
+    this._unbindClockToggle = bindClockToggle(this._el, {
+      onChange: () => this._paintTimestamp(),
+    });
+    if (typeof window !== 'undefined') {
+      window.addEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+    }
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
+    this._paintTimestamp();
   }
 
   /**
@@ -167,7 +195,12 @@ export class IntelHUD {
 
       <div class="hud-corner hud-top-right">
         <div class="hud-content" style="text-align:right">
-          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span></div>
+          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span>
+            <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
+              <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
+              <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+            </span>
+          </div>
           <div class="hud-orbital">ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
         </div>
         <div class="hud-bracket">┐</div>
@@ -216,8 +249,7 @@ export class IntelHUD {
   _startTimers() {
     // Timestamp — every second
     this._timestampInterval ??= setInterval(() => {
-      const el = document.getElementById('hud-timestamp');
-      if (el) el.textContent = this._formatUTC();
+      this._paintTimestamp();
     }, 1000);
 
     // REC blink — every 800ms
@@ -233,28 +265,82 @@ export class IntelHUD {
       this._updateCameraData();
     }, 250);
 
-    // Semantic summary refresh cadence. Same handle stays armed while the
-    // tab is hidden or offline; the tick no-ops until resumePausedSummary.
-    this._summaryInterval ??= setInterval(() => {
-      if (!this._visible) return;
+    this._armSummaryInterval();
+  }
+
+  _armSummaryInterval() {
+    if (this._summaryInterval || this._livePollsSuspended) return;
+    this._summaryInterval = setInterval(() => {
+      if (!this._visible || this._livePollsSuspended) return;
       if (!this._canPoll()) return;
       void this._updateSummary(true);
     }, HUD_SUMMARY_INTERVAL_MS);
   }
 
+  _disarmSummaryInterval() {
+    if (!this._summaryInterval) return;
+    clearInterval(this._summaryInterval);
+    this._summaryInterval = null;
+  }
+
   /**
-   * Format the current wall-clock time as a UTC Zulu string.
-   * @returns {string} Timestamp in `YYYY-MM-DD HH:MM:SSZ` format.
+   * Bind the HUD summary poll to the chrome live-poll scheduler.
+   * Voice sessions are not paused here.
+   * @param {{subscribe?: Function}|null} scheduler Chrome scheduler.
    */
-  _formatUTC() {
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const mo = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(now.getUTCDate()).padStart(2, '0');
-    const h = String(now.getUTCHours()).padStart(2, '0');
-    const mi = String(now.getUTCMinutes()).padStart(2, '0');
-    const s = String(now.getUTCSeconds()).padStart(2, '0');
-    return `${y}-${mo}-${d} ${h}:${mi}:${s}Z`;
+  attachLiveScheduler(scheduler) {
+    this.detachLiveScheduler();
+    this._liveScheduler = scheduler || null;
+    if (typeof this._liveScheduler?.subscribe !== 'function') return;
+    this._liveSchedulerUnsubscribe = this._liveScheduler.subscribe((state) => {
+      this._syncLivePolls(state);
+    });
+  }
+
+  detachLiveScheduler() {
+    this._liveSchedulerUnsubscribe?.();
+    this._liveSchedulerUnsubscribe = null;
+    this._liveScheduler = null;
+  }
+
+  _syncLivePolls(state) {
+    if (state?.suspended) {
+      this.pauseSummaryPoll();
+      return;
+    }
+    this.resumeSummaryPoll({ refresh: this._livePollsSuspended });
+  }
+
+  /** Pause the OpenAI HUD summary interval. Idempotent. */
+  pauseSummaryPoll() {
+    this._livePollsSuspended = true;
+    this._disarmSummaryInterval();
+  }
+
+  /**
+   * Resume the HUD summary interval.
+   * @param {{refresh?: boolean}} [options] When true, request one summary first.
+   */
+  resumeSummaryPoll({ refresh = false } = {}) {
+    const wasSuspended = this._livePollsSuspended;
+    this._livePollsSuspended = false;
+    if (refresh && wasSuspended) this.refreshSummaryOnce();
+    this._armSummaryInterval();
+  }
+
+  /** One HUD summary refresh after chrome returns to visible+online. */
+  refreshSummaryOnce() {
+    if (this._livePollsSuspended || !this._visible) return;
+    void this._updateSummary(true, true);
+  }
+
+  /**
+   * Paint the HUD clock from the stored UTC | Local preference.
+   * @returns {void}
+   */
+  _paintTimestamp() {
+    const el = document.getElementById('hud-timestamp');
+    if (el) el.textContent = formatHudClock(new Date(), getClockMode());
   }
 
   /**
@@ -623,7 +709,7 @@ export class IntelHUD {
    *   by character; otherwise sets it instantly.
    */
   async _updateSummary(animate = false, force = false) {
-    if (!this._canPoll()) return;
+    if (!this._canPoll() || this._livePollsSuspended) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
@@ -863,11 +949,17 @@ export class IntelHUD {
 
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
+    this.detachLiveScheduler();
     clearInterval(this._updateInterval);
     clearInterval(this._recBlinkInterval);
     clearInterval(this._timestampInterval);
-    clearInterval(this._summaryInterval);
+    this._disarmSummaryInterval();
     clearInterval(this._summaryTypingInterval);
+    this._unbindClockToggle?.();
+    this._unbindClockToggle = null;
+    if (typeof window !== 'undefined' && this._onClockPreference) {
+      window.removeEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+    }
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();
     this._summaryRequest?.abort();

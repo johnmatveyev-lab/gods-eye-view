@@ -1,6 +1,7 @@
 import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
 import { canPoll } from '../pollPresence.js';
+import { applyLayerListFilter, isBannedToggleLayerId } from './layerListFilter.js';
 function cloneLayerParams(value) {
   if (Array.isArray(value)) return value.map(cloneLayerParams);
   if (value && typeof value === 'object') {
@@ -26,6 +27,8 @@ const VALID_LAYER_SERIALIZATION_DISPOSITIONS = new Set([
   'enabled+options',
   'enabled+mirrored-options',
 ]);
+/** AIS owns its own live stream. Chrome pause/resume must not wrap it. */
+const CHROME_POLL_EXCLUDED_LAYER_IDS = new Set(['ais-live-vessels']);
 
 function isAbortError(error) {
   return error?.name === 'AbortError';
@@ -129,6 +132,106 @@ export class DataLayerManager {
     this._allowQaRegistration = allowQaRegistration === true;
     this._qaLayerIds = new Set();
     this._canPoll = typeof canPollFn === 'function' ? canPollFn : canPoll;
+    this._liveScheduler = null;
+    this._liveSchedulerUnsubscribe = null;
+    this._pollsSuspended = false;
+    this._layerListFilterInput = null;
+    this._layerListFilterQuery = '';
+  }
+
+  /**
+   * Bind manager-owned poll timers to the chrome live-poll scheduler.
+   * AIS is excluded; voice sessions are not registered here.
+   * @param {{subscribe?: Function}|null} scheduler Chrome scheduler.
+   */
+  attachLiveScheduler(scheduler) {
+    this.detachLiveScheduler();
+    this._liveScheduler = scheduler || null;
+    if (typeof this._liveScheduler?.subscribe !== 'function') return;
+    this._liveSchedulerUnsubscribe = this._liveScheduler.subscribe((state) => {
+      this._syncLivePolls(state);
+    });
+  }
+
+  detachLiveScheduler() {
+    this._liveSchedulerUnsubscribe?.();
+    this._liveSchedulerUnsubscribe = null;
+    this._liveScheduler = null;
+  }
+
+  /** @returns {boolean} True when chrome has paused manager-owned poll timers. */
+  areLivePollsSuspended() {
+    return this._pollsSuspended === true;
+  }
+
+  _isChromePollLayer(entry) {
+    return !CHROME_POLL_EXCLUDED_LAYER_IDS.has(entry?.module?.id);
+  }
+
+  _pollSpec(entry) {
+    const configuredRefreshInterval = Number(entry.module.refreshInterval);
+    const updateInterval = Number(entry.module.updateInterval);
+    const refreshInterval = configuredRefreshInterval > 0
+      ? configuredRefreshInterval
+      : (updateInterval > 0 ? updateInterval : 0);
+    return {
+      refreshInterval,
+      wantsLoop: refreshInterval > 0 || updateInterval === 0,
+      wantsDataRefresh: refreshInterval > 0,
+    };
+  }
+
+  _disarmUpdateLoop(entry) {
+    if (!entry.intervalId) return;
+    clearInterval(entry.intervalId);
+    entry.intervalId = null;
+  }
+
+  _syncLivePolls(state) {
+    if (state?.suspended) {
+      this.pauseLivePolls();
+      return;
+    }
+    this.resumeLivePolls({ refresh: this._pollsSuspended });
+  }
+
+  /** Pause chrome-managed layer poll timers. Idempotent. */
+  pauseLivePolls() {
+    this._pollsSuspended = true;
+    for (const entry of this.layers.values()) {
+      if (!this._isChromePollLayer(entry)) continue;
+      this._disarmUpdateLoop(entry);
+    }
+  }
+
+  /**
+   * Resume chrome-managed layer poll timers.
+   * @param {{refresh?: boolean}} [options] When true, run one update first.
+   */
+  resumeLivePolls({ refresh = false } = {}) {
+    const wasSuspended = this._pollsSuspended;
+    this._pollsSuspended = false;
+    if (refresh && wasSuspended) {
+      for (const [layerId, entry] of this.layers) {
+        if (
+          !this._isChromePollLayer(entry)
+          || !entry.enabled
+          || entry.lifecycleState !== 'enabled'
+          || !this._pollSpec(entry).wantsDataRefresh
+        ) continue;
+        void this._runPeriodicUpdate(layerId, entry);
+      }
+    }
+    for (const [layerId, entry] of this.layers) {
+      if (
+        !this._isChromePollLayer(entry)
+        || !entry.enabled
+        || entry.lifecycleState !== 'enabled'
+        || entry.intervalId
+        || !this._pollSpec(entry).wantsLoop
+      ) continue;
+      this._armUpdateLoop(layerId, entry);
+    }
   }
 
   register(layerModule) {
@@ -523,12 +626,10 @@ export class DataLayerManager {
   }
 
   _armUpdateLoop(layerId, entry) {
+    if (this._pollsSuspended && this._isChromePollLayer(entry)) return;
     if (entry.intervalId) return;
-    const configuredRefreshInterval = Number(entry.module.refreshInterval);
+    const { refreshInterval } = this._pollSpec(entry);
     const updateInterval = Number(entry.module.updateInterval);
-    const refreshInterval = configuredRefreshInterval > 0
-      ? configuredRefreshInterval
-      : (updateInterval > 0 ? updateInterval : 0);
     if (refreshInterval > 0) {
       entry.intervalId = setInterval(() => {
         if (!this._canPoll()) return;
@@ -1001,6 +1102,9 @@ export class DataLayerManager {
     const entry = this.layers.get(layerId);
     if (!entry) return { intentEpoch: null, promise: Promise.resolve() };
     const desiredState = Boolean(shouldEnable);
+    if (desiredState === true && entry.module.selectable === false) {
+      return { intentEpoch: null, promise: Promise.resolve(false) };
+    }
     if (entry.destroying) {
       return { intentEpoch: null, promise: Promise.resolve(desiredState === false) };
     }
@@ -1913,6 +2017,7 @@ export class DataLayerManager {
    * Should be called when the viewer is being torn down.
    */
   async destroyAll() {
+    this.detachLiveScheduler();
     for (const layerId of [...this.layers.keys()]) {
       await this.destroyLayer(layerId);
     }
@@ -1942,7 +2047,8 @@ export class DataLayerManager {
         name: entry.module.name,
         icon: entry.module.icon,
         source: entry.module.source,
-        showInTogglePanel: entry.module.showInTogglePanel !== false,
+        showInTogglePanel: entry.module.showInTogglePanel !== false
+          && entry.module.selectable !== false,
         enabled: entry.enabled,
         lifecycleState: entry.lifecycleState,
         lifecycleUncertain: entry.lifecycleUncertain,
@@ -2032,10 +2138,28 @@ export class DataLayerManager {
 
   /**
    * Build the toggle panel UI inside the given container element.
+   * @param {HTMLElement} container Layer-row host (`#data-toggles`).
+   * @param {{filterInput?: HTMLInputElement|null}} [options]
    */
-  buildTogglePanel(container) {
+  buildTogglePanel(container, { filterInput = null } = {}) {
     this._toggleContainer = container;
+    this._layerListFilterQuery = filterInput?.value || this._layerListFilterQuery || '';
+    if (filterInput && filterInput !== this._layerListFilterInput) {
+      this._layerListFilterInput = filterInput;
+      filterInput.addEventListener('input', () => {
+        this._layerListFilterQuery = filterInput.value;
+        this._applyLayerListFilter();
+      });
+    }
     this._renderToggles();
+  }
+
+  _applyLayerListFilter() {
+    applyLayerListFilter(
+      this._toggleContainer,
+      this._layerListFilterQuery || '',
+      this.getAll(),
+    );
   }
 
   _renderToggles() {
@@ -2043,7 +2167,7 @@ export class DataLayerManager {
     this._toggleContainer.innerHTML = '';
 
     for (const layer of this.getAll()) {
-      if (!layer.showInTogglePanel) continue;
+      if (!layer.showInTogglePanel || isBannedToggleLayerId(layer.id)) continue;
       const row = document.createElement('div');
       row.className = 'data-toggle-row';
       row.dataset.layerId = layer.id;
@@ -2114,6 +2238,7 @@ export class DataLayerManager {
 
       this._toggleContainer.appendChild(row);
     }
+    this._applyLayerListFilter();
   }
 
   /**

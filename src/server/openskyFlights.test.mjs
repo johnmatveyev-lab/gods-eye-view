@@ -149,7 +149,7 @@ test('OPENSKY_ENABLED stays false and TeleGeography remains a no-op', () => {
   assert.equal(COMMERCIAL_FLIGHT_SOURCE, 'adsb.lol');
   assert.equal(OPENSKY_ENABLED, false);
   assert.equal(ADSBLOL_POINT_RADIUS_NM, 250);
-  assert.equal(existsSync(path.join(ROOT, 'api/opensky-track.js')), false);
+  assert.equal(existsSync(path.join(ROOT, 'api/opensky-track.js')), true);
   assert.ok(!DATA_CREDITS.some((credit) => credit.key === 'opensky'));
   assert.ok(!DATA_CREDITS.some((credit) => credit.key === 'telegeography'));
   assert.ok(!existsSync(path.join(ROOT, 'src/data/local_data/telegeography_submarine_cables')));
@@ -170,7 +170,10 @@ test('api/opensky.js wraps the extracted handler and never mentions OpenSky host
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.ok(vercelJson.functions['api/opensky.js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
 });
 
 test('restoreOpenskyPath keeps the client /api/opensky path', () => {

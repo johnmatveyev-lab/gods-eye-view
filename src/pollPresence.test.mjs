@@ -307,9 +307,9 @@ test('poll presence adds no service worker, no /api route, and keeps legal names
   assert.doesNotMatch(presence, /serviceWorker|service-worker|navigator\.serviceWorker/);
   assert.doesNotMatch(presence, /\/api\/[a-z]/);
   assert.doesNotMatch(presence, /opensky-network\.org|news\.google\.com|telegeography|quantum-earth|God'?s Eye View/i);
-  assert.match(main, /installPollPresence/);
-  assert.match(main, /resumePausedPolls/);
-  assert.match(main, /resumePausedSummary/);
+  assert.match(main, /createLivePollScheduler/);
+  assert.match(main, /installOfflineBanner/);
+  assert.match(main, /attachLiveScheduler/);
   assert.match(voice, /shortcutVisibilityHandler = \(\) => \{\s*if \(document\.visibilityState === 'hidden'\) this\.shortcutBlurHandler\(\);/);
   assert.doesNotMatch(voice, /visibilitychange[\s\S]{0,80}this\.stop\(/);
 });

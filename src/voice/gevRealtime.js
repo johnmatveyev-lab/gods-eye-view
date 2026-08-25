@@ -614,6 +614,8 @@ export class GevRealtimeController {
       this.releasePushToTalkKey();
     };
     this.shortcutVisibilityHandler = () => {
+      // Hidden tabs pause layer/HUD polls, not an active voice session.
+      // Only release a held Space key so PTT cannot stick muted-open.
       if (document.visibilityState === 'hidden') this.shortcutBlurHandler();
     };
     document.addEventListener('keydown', this.shortcutKeyDownHandler);

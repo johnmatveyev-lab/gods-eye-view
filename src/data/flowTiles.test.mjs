@@ -23,8 +23,10 @@ function loadFixture() {
 
 // ── decodeFlowTile against the real fixture ─────────────────
 
-test('fixture decode: more than 50 flow segments', () => {
-  const segments = decodeFlowTile(loadFixture(), FIXTURE_TILE.z, FIXTURE_TILE.x, FIXTURE_TILE.y);
+test('fixture decode uses only the committed 23KB Austin tile', () => {
+  const buf = loadFixture();
+  assert.equal(buf.length, 22980);
+  const segments = decodeFlowTile(buf, FIXTURE_TILE.z, FIXTURE_TILE.x, FIXTURE_TILE.y);
   assert.ok(segments.length > 50, `got ${segments.length}`);
 });
 

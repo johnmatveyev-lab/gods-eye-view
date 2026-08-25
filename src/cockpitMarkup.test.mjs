@@ -23,8 +23,10 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   );
   const topCenterActions = html.match(/<nav id="top-center-actions"[\s\S]*?<\/nav>/);
   assert.ok(topCenterActions, 'Top-center globe actions are missing');
-  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="share-btn"[\s\S]*?id="reset-globe-view"/);
+  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="share-btn"[\s\S]*?id="home-view"[\s\S]*?id="copy-view-link"[\s\S]*?id="reset-globe-view"/);
   assert.equal((html.match(/id="clear-selected-layers"/g) || []).length, 1, 'Clear Layers must have one DOM owner');
+  assert.equal((html.match(/id="home-view"/g) || []).length, 1, 'Home view must have one DOM owner');
+  assert.equal((html.match(/id="copy-view-link"/g) || []).length, 1, 'Copy view link must have one DOM owner');
   assert.equal((html.match(/id="reset-globe-view"/g) || []).length, 1, 'Reset Globe must have one DOM owner');
   assert.equal((html.match(/id="cockpit-reset-globe"/g) || []).length, 1, 'Cockpit Reset must have one DOM owner');
   const viewSwitcher = html.match(/<nav id="view-switcher"[\s\S]*?<\/nav>/);
@@ -225,7 +227,7 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(css, /body\.recording-mode #top-center-actions/);
   assert.match(
     css,
-    /body\.scene-playback-mode :is\(#clear-selected-layers, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+    /body\.scene-playback-mode :is\(#clear-selected-layers, #home-view, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
   );
   assert.match(sceneDirector, /this\._running = true;\s*document\.body\.classList\.add\('scene-playback-mode'\);/);
   assert.match(sceneDirector, /styleManager\.setRecordingMode\(false\);\s*document\.body\.classList\.remove\('scene-playback-mode'\);/);
@@ -454,7 +456,7 @@ test('Cockpit hides the complete top-center globe action group', () => {
   );
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #share-btn, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
     'Cockpit must hide each map-only globe action even if its group layout is disturbed',
   );
 });
@@ -750,7 +752,7 @@ test('Global Context names its mixed contact cycle without changing the stable m
 
 test('Global Context uses its dedicated right rail without a duplicate Data Layers row', () => {
   assert.match(contextLayer, /id:\s*'military-awareness'[\s\S]*?showInTogglePanel:\s*false/);
-  assert.match(manager, /if \(!layer\.showInTogglePanel\) continue;/);
+  assert.match(manager, /if \(!layer\.showInTogglePanel \|\| isBannedToggleLayerId\(layer\.id\)\) continue;/);
   assert.match(html, /id="global-context-panel"/);
   assert.match(html, /id="global-context-flights-btn"/);
   assert.match(html, /id="global-context-missions-btn"/);

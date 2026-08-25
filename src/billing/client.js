@@ -1,3 +1,5 @@
+import { planLabel } from './accountChrome.js';
+import { handleCheckoutReturn as pollCheckoutReturn } from './checkoutReturn.js';
 import { MERIDIAN_TERMS, PLANS, PRO_PRICE_USD } from './plans.js';
 import { canPoll } from '../pollPresence.js';
 import { formatRemainingBudget } from './usage.js';
@@ -66,7 +68,7 @@ export async function initMeridianAccount() {
       void refreshAccount(root, account);
     });
     await refreshAccount(root, account);
-    handleCheckoutReturn();
+    void beginCheckoutReturnPoll(root, account);
   } catch (error) {
     renderNotice(root, 'Could not load Clerk sign-in. Check CLERK_PUBLISHABLE_KEY.', account);
     console.warn('[Meridian billing]', error);
@@ -96,10 +98,8 @@ export function attachVoiceGate(voiceController, account = window.__meridianAcco
 }
 
 async function refreshAccount(root, account) {
-  const token = await account.getAccessToken();
-  const headers = token ? { Authorization: `Bearer ${token}` } : {};
   try {
-    account.entitlement = await fetchJson('/api/billing/me', { headers });
+    account.entitlement = await fetchBillingMe(account);
   } catch {
     account.entitlement = {
       plan: account.clerk?.user ? PLANS.FREE : PLANS.ANONYMOUS,
@@ -458,38 +458,31 @@ function startHeartbeat(account) {
   window.setInterval(tick, HEARTBEAT_MS);
 }
 
-function handleCheckoutReturn() {
-  const params = new URLSearchParams(window.location.search);
-  const checkout = params.get('checkout');
-  if (!checkout) return;
-  const toast = document.getElementById('toast');
-  if (toast) {
-    toast.textContent = checkout === 'success'
-      ? 'Pro checkout complete. Voice unlocks after the Stripe webhook marks this account.'
-      : 'Checkout canceled. You are still on the Free demo.';
-    toast.classList.add('show');
-    window.setTimeout(() => toast.classList.remove('show'), 6000);
-  }
-  params.delete('checkout');
-  const next = `${window.location.pathname}${params.toString() ? `?${params}` : ''}${window.location.hash}`;
-  window.history.replaceState({}, '', next);
+function beginCheckoutReturnPoll(root, account) {
+  return pollCheckoutReturn({
+    location: window.location,
+    history: window.history,
+    fetchMe: () => fetchBillingMe(account),
+    applyEntitlement: (entitlement) => {
+      account.entitlement = entitlement;
+      renderAccount(root, account);
+    },
+    showToast: showBillingToast,
+  });
 }
 
-function planLabel(plan) {
-  switch (plan) {
-    case PLANS.PRO:
-      return 'PRO';
-    case PLANS.FREE:
-      return 'FREE';
-    case PLANS.SELF_HOST:
-      return 'SELF-HOST';
-    case PLANS.ANONYMOUS:
-      return 'GUEST';
-    default: {
-      const _exhaustive = plan;
-      return String(_exhaustive || 'GUEST').toUpperCase();
-    }
-  }
+async function fetchBillingMe(account) {
+  const token = await account.getAccessToken();
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  return fetchJson('/api/billing/me', { headers });
+}
+
+function showBillingToast(message) {
+  const toast = document.getElementById('toast');
+  if (!toast) return;
+  toast.textContent = message;
+  toast.classList.add('show');
+  window.setTimeout(() => toast.classList.remove('show'), 6000);
 }
 
 function ensureAccountChrome() {

@@ -3,8 +3,8 @@
  *
  * Radio Browser supplies public-domain directory metadata through the local
  * `/api/radio/*` broker. Audio always travels directly from the broadcaster
- * to one active HTMLAudioElement after an explicit user action; GEV does not
- * proxy, cache, record, or redistribute streams.
+ * to one active HTMLAudioElement after an explicit user action; Meridian does
+ * not proxy, cache, record, or redistribute streams.
  *
  * @module radio
  */
@@ -32,6 +32,18 @@ import {
   projectEarthDiscToViewport,
 } from '../celestialRing.js';
 import { governorRequestRender } from '../renderGovernor.js';
+
+export {
+  RADIO_CLIENT_ROUTES,
+  RADIO_USER_AGENT,
+  createRadioProxyMiddleware,
+  isAllowlistedRadioRoute,
+  isPublicRadioAddress,
+  normalizeRadioBrowserStation,
+  publicRadioHttpsUrl,
+  publicRadioStation,
+  radioProxyDestination,
+} from './radioDirectory.js';
 
 const RADIO_PREFIX = 'radio:';
 const DIRECTORY_ENDPOINT = '/api/radio/stations';

@@ -4,7 +4,8 @@
  * The upstream project bundled TeleGeography Submarine Cable Map GeoJSON
  * (CC BY-NC-SA 3.0, NonCommercial). This commercial fork deletes that dataset
  * and never loads or renders it. The layer id stays registered so share-link
- * token `u` and voice enums do not break; enable/update are no-ops.
+ * token `u` and voice enums do not break. The layer is unselectable: hidden
+ * from the Data Layers panel, enable is a no-op, and voice refuses it.
  */
 
 /** Shared world-overlay source id (matches the historical layer id). */
@@ -85,6 +86,8 @@ export function createTeleGeographySubmarineCableLayer() {
     name: 'Submarine Cables',
     icon: '≋',
     source: 'Unavailable',
+    showInTogglePanel: false,
+    selectable: false,
     updateInterval: 0,
     statsRefreshInterval: 500,
 

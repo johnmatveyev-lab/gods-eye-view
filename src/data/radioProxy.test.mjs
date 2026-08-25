@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  RADIO_USER_AGENT,
   createRadioProxyMiddleware,
+  isAllowlistedRadioRoute,
   isPublicRadioAddress,
   normalizeRadioBrowserStation,
-  publicRadioStation,
   publicRadioHttpsUrl,
-} from '../../vite.config.js';
-import { rankRadioStationsForRequest } from './radio.js';
+  publicRadioStation,
+  radioProxyDestination,
+  rankRadioStationsForRequest,
+} from './radio.js';
 
 const UUID = '12345678-1234-4234-8234-123456789abc';
 const publicLookup = async () => [{ address: '93.184.216.34', family: 4 }];
@@ -148,7 +151,9 @@ test('method and route validation happen before any upstream refresh', async () 
   });
   assert.equal((await invoke(middleware, '/stations', 'POST')).status, 405);
   assert.equal((await invoke(middleware, '/click/not-a-uuid', 'POST')).status, 404);
-  assert.equal((await invoke(middleware, '/anything')).status, 404);
+  const unknown = await invoke(middleware, '/anything');
+  assert.equal(unknown.status, 404);
+  assert.equal(JSON.parse(unknown.body).error, 'Unknown radio route');
   assert.equal(fetchCount, 0);
 });
 
@@ -468,4 +473,24 @@ test('proxy rejects any hostname resolution containing a forbidden address befor
     assert.equal((await invoke(middleware, '/stations')).status, 503);
   }
   assert.equal(fetchCount, 0);
+});
+
+test('only allowlisted radio routes and Radio Browser upstreams are accepted', () => {
+  assert.equal(isAllowlistedRadioRoute('/stations'), true);
+  assert.equal(isAllowlistedRadioRoute(`/click/${UUID}`), true);
+  assert.equal(isAllowlistedRadioRoute('/not-a-route'), false);
+  assert.equal(isAllowlistedRadioRoute('/ais-live'), false);
+  assert.equal(isAllowlistedRadioRoute('/json/stations/search'), false);
+
+  assert.ok(radioProxyDestination('https://all.api.radio-browser.info/json/servers'));
+  assert.ok(radioProxyDestination('https://de1.api.radio-browser.info/json/stations/search?limit=1'));
+  assert.ok(radioProxyDestination(`https://de1.api.radio-browser.info/json/url/${UUID}`));
+  assert.equal(radioProxyDestination('https://de1.api.radio-browser.info/not-an-allowed-path'), null);
+  assert.equal(radioProxyDestination('https://example.org/json/stations/search'), null);
+  assert.equal(radioProxyDestination('https://all.api.radio-browser.info/json/stations/all'), null);
+});
+
+test('Radio Browser directory client identifies as Meridian', () => {
+  assert.equal(RADIO_USER_AGENT, 'Meridian/1.0 (Radio Browser directory client)');
+  assert.doesNotMatch(RADIO_USER_AGENT, /gods-eye-view/i);
 });

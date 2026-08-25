@@ -32,10 +32,13 @@ import {
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
+import { initResponsibleUseNotice } from './responsibleUseNotice.js';
 import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
-import { installPollPresence } from './pollPresence.js';
+import { createLivePollScheduler } from './chrome/scheduler.js';
+import { installOfflineBanner } from './chrome/offlineBanner.js';
 
 initLogoGaze();
+initResponsibleUseNotice();
 const meridianAccountReady = initMeridianAccount();
 
 /**
@@ -193,8 +196,17 @@ async function init() {
     });
     await mapStackController.setStack(tileset ? 'photoreal' : 'osm', { silent: true });
 
+    // Chrome live-poll scheduler: pause flight/layer polls + HUD summary when
+    // the tab is hidden or the window is offline. Voice and AIS are not
+    // registered. Hidden+offline share one suspended flag so timers cannot
+    // double-start when both recover.
+    const livePollScheduler = createLivePollScheduler();
+    livePollScheduler.attach();
+
     // Initialize the style manager (post-processing, HUD, locations, share links)
     const styleManager = new StyleManager(viewer, { mapStackController });
+    styleManager.hud.attachLiveScheduler(livePollScheduler);
+    installOfflineBanner(livePollScheduler);
     // The previous multi-canvas weather compositor remains disabled. Cockpit
     // clouds use a separate, capped low-resolution GPU pass that never attaches
     // Cesium fog or post-process stages and is fully stopped in map mode.
@@ -213,6 +225,7 @@ async function init() {
     const dataManager = new DataLayerManager(viewer, {
       allowQaRegistration: import.meta.env.DEV,
     });
+    dataManager.attachLiveScheduler(livePollScheduler);
     dataManager.register(flightsLayer);
     dataManager.register(militaryFlightsLayer);
     dataManager.register(earthquakesLayer);
@@ -242,7 +255,9 @@ async function init() {
         return dataManager.unregisterForQa(layerId);
       };
     }
-    dataManager.buildTogglePanel(document.getElementById('data-toggles'));
+    dataManager.buildTogglePanel(document.getElementById('data-toggles'), {
+      filterInput: document.getElementById('data-layer-filter'),
+    });
     styleManager.attachDataManager(dataManager);
 
     // Initialize deterministic scene playback for social clip capture
@@ -267,6 +282,7 @@ async function init() {
         // dataManager is passed explicitly: the globe missions enable bundled
         // keyless layers through it, and reaching for styleManager._dataManager
         // would make a private field part of this feature's contract.
+        initResponsibleUseNotice();
         initFirstRunExperience({ styleManager, dataManager });
       };
       loadingScreen.addEventListener('transitionend', revealFirstRun, { once: true });
@@ -314,16 +330,6 @@ async function init() {
     // loop burning behind a hidden tab. (perf wave 2 fix)
     syncVisibilitySuspension();
 
-    // Pause live polls while hidden or offline. Same interval handles stay
-    // armed; one resume refresh runs when the tab is visible and online.
-    // Active voice is left alone.
-    installPollPresence({
-      onResume() {
-        dataManager.resumePausedPolls();
-        styleManager.hud?.resumePausedSummary?.();
-      },
-    });
-
     window.__godsEyeView = {
       viewer,
       styleManager,
@@ -334,6 +340,7 @@ async function init() {
       annotations,
       weatherEffects,
       cockpitCloudEffects,
+      livePollScheduler,
       getRenderGovernorDiagnostics,
       requestRender: governorRequestRender,
     };
@@ -344,6 +351,8 @@ async function init() {
     console.error('Meridian initialization failed:', error);
     loaderStatus.textContent = `Error: ${describeError(error)}`;
     loaderStatus.style.color = '#ff4444';
+    // The globe may have failed; the first-visit notice still has to appear.
+    initResponsibleUseNotice();
   }
 }
 
