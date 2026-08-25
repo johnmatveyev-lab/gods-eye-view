@@ -189,7 +189,13 @@
       <div class="cockpit-compass-tape" id="cockpit-compass-tape" aria-hidden="true"></div>
     </div>
     <div class="cockpit-position-readout">
-      <span id="cockpit-clock">--:--:--Z</span>
+      <span class="cockpit-clock-row">
+        <span id="cockpit-clock">--:--:--Z</span>
+        <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
+          <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
+          <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+        </span>
+      </span>
       <span id="cockpit-position">--° · --°</span>
     </div>
     <aside id="cockpit-context" class="cockpit-context-window" aria-label="Contact cockpit summary" hidden>

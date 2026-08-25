@@ -17,6 +17,13 @@ import * as Cesium from 'cesium';
 import { forward as toMGRS } from 'mgrs';
 import { CITY_POIS } from './locations.js';
 import { composeLocalityTag } from './hudLocality.js';
+import {
+  CLOCK_CHANGE_EVENT,
+  bindClockToggle,
+  formatHudClock,
+  getClockMode,
+  syncClockToggleButtons,
+} from './clockPreference.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
 
@@ -76,6 +83,7 @@ export class IntelHUD {
     this._updateInterval = null;
     this._recBlinkInterval = null;
     this._timestampInterval = null;
+    this._unbindClockToggle = null;
     this._summaryInterval = null;
     this._summaryTypingInterval = null;
     this._latestMetrics = null;
@@ -129,9 +137,21 @@ export class IntelHUD {
     this._orbitNum = 47000 + Math.floor(Math.random() * 1000);
     this._passNum = 100 + Math.floor(Math.random() * 200);
 
+    this._onClockPreference = () => {
+      this._paintTimestamp();
+      syncClockToggleButtons(this._el, getClockMode());
+    };
+
     this._buildDOM();
+    this._unbindClockToggle = bindClockToggle(this._el, {
+      onChange: () => this._paintTimestamp(),
+    });
+    if (typeof window !== 'undefined') {
+      window.addEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+    }
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
+    this._paintTimestamp();
   }
 
   /**
@@ -165,7 +185,12 @@ export class IntelHUD {
 
       <div class="hud-corner hud-top-right">
         <div class="hud-content" style="text-align:right">
-          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span></div>
+          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span>
+            <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
+              <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
+              <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+            </span>
+          </div>
           <div class="hud-orbital">ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
         </div>
         <div class="hud-bracket">┐</div>
@@ -214,8 +239,7 @@ export class IntelHUD {
   _startTimers() {
     // Timestamp — every second
     this._timestampInterval = setInterval(() => {
-      const el = document.getElementById('hud-timestamp');
-      if (el) el.textContent = this._formatUTC();
+      this._paintTimestamp();
     }, 1000);
 
     // REC blink — every 800ms
@@ -239,18 +263,12 @@ export class IntelHUD {
   }
 
   /**
-   * Format the current wall-clock time as a UTC Zulu string.
-   * @returns {string} Timestamp in `YYYY-MM-DD HH:MM:SSZ` format.
+   * Paint the HUD clock from the stored UTC | Local preference.
+   * @returns {void}
    */
-  _formatUTC() {
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const mo = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(now.getUTCDate()).padStart(2, '0');
-    const h = String(now.getUTCHours()).padStart(2, '0');
-    const mi = String(now.getUTCMinutes()).padStart(2, '0');
-    const s = String(now.getUTCSeconds()).padStart(2, '0');
-    return `${y}-${mo}-${d} ${h}:${mi}:${s}Z`;
+  _paintTimestamp() {
+    const el = document.getElementById('hud-timestamp');
+    if (el) el.textContent = formatHudClock(new Date(), getClockMode());
   }
 
   /**
@@ -853,6 +871,11 @@ export class IntelHUD {
     clearInterval(this._timestampInterval);
     clearInterval(this._summaryInterval);
     clearInterval(this._summaryTypingInterval);
+    this._unbindClockToggle?.();
+    this._unbindClockToggle = null;
+    if (typeof window !== 'undefined' && this._onClockPreference) {
+      window.removeEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+    }
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();
     this._summaryRequest?.abort();

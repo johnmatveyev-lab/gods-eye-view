@@ -7,6 +7,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- HUD and cockpit clocks can switch UTC | Local next to the existing time.
+  Local uses the browser timezone. The choice persists as `meridian.clock`
+  (`utc` default). Share URLs, units, compass, and Home are unchanged.
+
 - Hosted `/api/route` on Vercel via `api/route.js`, forwarding the same GET
   handler extracted to `src/data/osrmRoute.js`. Public FOSSGIS OSRM only
   (foot/car/bike, 2–12 coords, span guard, rate limiter). Failures are
