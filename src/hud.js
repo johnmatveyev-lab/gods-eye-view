@@ -26,6 +26,7 @@ import {
 } from './clockPreference.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import { canPoll } from './pollPresence.js';
 import { formatHudAltitude, subscribeDistanceUnit } from './units.js';
 import { isReduceMotionEnabled } from './reduceMotion.js';
 
@@ -74,8 +75,9 @@ export class IntelHUD {
    * @param {Cesium.Viewer} viewer - The Cesium Viewer instance used for
    *   camera telemetry and coordinate derivation.
    */
-  constructor(viewer) {
+  constructor(viewer, options = {}) {
     this.viewer = viewer;
+    this._canPoll = typeof options.canPoll === 'function' ? options.canPoll : canPoll;
     this._visible = false;
     this._autoMode = true; // auto show/hide based on style
     this._currentStyle = 'normal';
@@ -249,12 +251,12 @@ export class IntelHUD {
    */
   _startTimers() {
     // Timestamp — every second
-    this._timestampInterval = setInterval(() => {
+    this._timestampInterval ??= setInterval(() => {
       this._paintTimestamp();
     }, 1000);
 
     // REC blink — every 800ms (held solid under reduce-motion)
-    this._recBlinkInterval = setInterval(() => {
+    this._recBlinkInterval ??= setInterval(() => {
       if (isReduceMotionEnabled()) {
         this._recBlinkState = true;
         const held = document.getElementById('hud-rec-dot');
@@ -267,7 +269,7 @@ export class IntelHUD {
     }, 800);
 
     // Camera-derived data — 4 updates/second (250ms)
-    this._updateInterval = setInterval(() => {
+    this._updateInterval ??= setInterval(() => {
       if (!this._visible) return;
       this._updateCameraData();
     }, 250);
@@ -279,6 +281,7 @@ export class IntelHUD {
     if (this._summaryInterval || this._livePollsSuspended) return;
     this._summaryInterval = setInterval(() => {
       if (!this._visible || this._livePollsSuspended) return;
+      if (!this._canPoll()) return;
       void this._updateSummary(true);
     }, HUD_SUMMARY_INTERVAL_MS);
   }
@@ -714,6 +717,7 @@ export class IntelHUD {
    */
   async _updateSummary(animate = false, force = false) {
     if (this._livePollsSuspended) return;
+    if (!this._canPoll()) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
@@ -848,6 +852,16 @@ export class IntelHUD {
         this.hide();
       }
     }
+  }
+
+  /**
+   * One HUD-summary refresh after the tab is visible and online again.
+   * Does not create a second summary timer.
+   */
+  resumePausedSummary() {
+    if (!this._visible || !this._canPoll()) return Promise.resolve();
+    this._markSummaryDirty();
+    return this._updateSummary(true, true);
   }
 
   /**

@@ -2292,6 +2292,35 @@ body.ui-clean-view #scene-runtime.active {
   }
 }
 
+/* ── Offline chip (live polls paused) ────────── */
+#meridian-offline-chip {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 210;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 196, 92, 0.45);
+  border-radius: 8px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #ffc45c;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+#meridian-offline-chip[hidden] {
+  display: none !important;
+}
+
+body.recording-mode #meridian-offline-chip {
+  display: none !important;
+}
+
 /* ── Toast Notification ──────────────────────── */
 #toast {
   position: fixed;
