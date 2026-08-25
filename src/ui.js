@@ -389,6 +389,10 @@ import {
   writeCctvHideUnhealthy,
 } from './data/cctvHealthFilter.js';
 import {
+  readCctvHeadingConfidenceFilter,
+  writeCctvHeadingConfidenceFilter,
+} from './data/cctvHeadingConfidenceFilter.js';
+import {
   flyToWorldTarget,
   registerWorldFocusRequestListener,
   routeWorldFocusRequest,
@@ -2614,6 +2618,7 @@ export class StyleManager {
     this._cctvState = null;
     this._cctvCityFilterValue = readCctvCityFilter(globalThis.localStorage);
     this._cctvHideNoFeed = readCctvHideNoFeed(globalThis.localStorage);
+    this._cctvHeadingConfidence = readCctvHeadingConfidenceFilter(globalThis.localStorage);
     this._cctvCityFilterSignature = '';
     this._cctvHideUnhealthy = readCctvHideUnhealthy(globalThis.localStorage);
     this._cctvSummaryTypingTimer = null;
@@ -2851,6 +2856,9 @@ export class StyleManager {
     this._cctvCityFilter = document.getElementById('cctv-city-filter');
     this._cctvHideNoFeedBtn = document.getElementById('cctv-hide-no-feed-btn');
     this._cctvHideUnhealthyBtn = document.getElementById('cctv-hide-unhealthy-btn');
+    this._cctvHeadingConfidenceBtns = [
+      ...document.querySelectorAll('#cctv-heading-confidence-filter [data-cctv-heading-confidence]'),
+    ];
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
     this._cctvCoverageBtn = document.getElementById('cctv-coverage-btn');
     this._cctvAutoHopBtn = document.getElementById('cctv-auto-hop-btn');
@@ -7441,6 +7449,21 @@ export class StyleManager {
       this._renderCctvState(this._cctvState);
     });
 
+    for (const button of this._cctvHeadingConfidenceBtns || []) {
+      button.addEventListener('click', () => {
+        const id = button.dataset.cctvHeadingConfidence;
+        if (id !== 'high' && id !== 'medium' && id !== 'low') return;
+        this._cctvHeadingConfidence = writeCctvHeadingConfidenceFilter(
+          globalThis.localStorage,
+          { ...this._cctvHeadingConfidence, [id]: this._cctvHeadingConfidence[id] !== true },
+        );
+        this._dataManager?.setLayerParams('cctv', {
+          headingConfidence: this._cctvHeadingConfidence,
+        }, { origin: 'user' });
+        this._renderCctvState(this._cctvState);
+      });
+    }
+
     this._cctvPrevBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
@@ -7541,7 +7564,8 @@ export class StyleManager {
 
   /**
    * Camera rows visible in the panel list after city/source, Hide no feed,
-   * feed type, and Hide unhealthy (AND). Re-applied from the in-memory catalog.
+   * feed type, Hide unhealthy, and heading-confidence chips (AND).
+   * Re-applied from the in-memory catalog.
    * @returns {Array<object>}
    */
   _visibleCctvCameras() {
@@ -7550,6 +7574,7 @@ export class StyleManager {
       hideUnhealthy: this._cctvHideUnhealthy,
       hideNoFeed: this._cctvHideNoFeed === true,
       feedType: this._cctvFeedTypeFilter || '',
+      headingConfidence: this._cctvHeadingConfidence,
       selectedId: this._activeCctvCameraId(),
     });
   }
@@ -7841,6 +7866,13 @@ export class StyleManager {
     if (typeof state?.hideNoFeed === 'boolean') {
       this._cctvHideNoFeed = state.hideNoFeed;
     }
+    if (state?.headingConfidence && typeof state.headingConfidence === 'object') {
+      this._cctvHeadingConfidence = {
+        high: state.headingConfidence.high !== false,
+        medium: state.headingConfidence.medium !== false,
+        low: state.headingConfidence.low !== false,
+      };
+    }
     const cameras = state?.cameras || [];
     const enabled = !!state?.enabled && !!this._dataManager?.isEnabled('cctv');
     const activeId = state?.activeCameraId || '';
@@ -7879,8 +7911,16 @@ export class StyleManager {
       hideUnhealthy: this._cctvHideUnhealthy,
       hideNoFeed: this._cctvHideNoFeed === true,
       feedType: this._cctvFeedTypeFilter || '',
+      headingConfidence: this._cctvHeadingConfidence,
       selectedId: activeId,
     });
+    for (const button of this._cctvHeadingConfidenceBtns || []) {
+      const id = button.dataset.cctvHeadingConfidence;
+      const active = this._cctvHeadingConfidence[id] === true;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-pressed', String(active));
+      button.disabled = cameras.length === 0;
+    }
     if (this._cctvHideNoFeedBtn) {
       this._cctvHideNoFeedBtn.classList.toggle('active', this._cctvHideNoFeed);
       this._cctvHideNoFeedBtn.setAttribute('aria-pressed', String(this._cctvHideNoFeed));
