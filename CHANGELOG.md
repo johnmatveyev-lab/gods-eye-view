@@ -60,6 +60,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster has exclusive **7d | 30d** chips next to status.
+  Default **30d** matches the current Launch Library 2 roster. **7d** hides
+  missions whose `launchTime` is more than seven days from now and keeps
+  nearer ones; missing or non-finite times stay visible. Chip changes
+  re-filter the cached 30-day payload — no extra `/api/launches` fetch and
+  no new endpoint. AND with status, provider, orbit, and site. A selected
+  mission stays. Preference persists as `meridian.launchTimeWindow`.
 - Space Missions roster now has launch-site chips derived from the cached
   30-day Launch Library 2 window via `compactLaunchSiteName(launchSite)`,
   plus Other for blank or unknown pads. Default all on. Filters the
