@@ -1159,6 +1159,19 @@ export function cctvProxy() {
           }
 
           if (url.pathname === '/health') {
+            // Cold serverless isolate: the in-memory map is empty until a
+            // frame/media write. Health is a per-camera report for the served
+            // catalog, not "frames this isolate has already fetched."
+            if (health.size === 0) {
+              for (const source of sources) {
+                setHealth(source.id, {
+                  status: 'unknown',
+                  sourceKind: source.sourceKind || (source.url ? 'configured' : 'fallback'),
+                  label: source.name || source.provider || source.id,
+                  message: '',
+                });
+              }
+            }
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
             res.end(JSON.stringify({ cameras: listHealth() }));
             return;
