@@ -33,6 +33,7 @@ test('adapter maps a proxy record into the internal fire-record shape', () => {
   assert.equal(fire.confidence, 0.6); // 'n' (nominal) → 0.6
   assert.equal(fire.brightness, 303.6);
   assert.equal(fire.night, true); // daynight 'N'
+  assert.equal(fire.daynight, 'N');
   assert.equal(fire.acqMs, Date.UTC(2026, 6, 16, 10, 6));
   assert.equal(fire.sensor, 'VIIRS');
   assert.equal(fire.satellite, 'N20');
@@ -72,6 +73,21 @@ test('parseAcquisitionMs: memo cache is honored, invalid input → 0', () => {
 test('daynight "D" → night false', () => {
   const [fire] = adaptFirmsRecords([proxyRecord({ daynight: 'D' })]);
   assert.equal(fire.night, false);
+  assert.equal(fire.daynight, 'D');
+});
+
+test('daynight "N" stays night; missing/unknown daynight is blank', () => {
+  const [night] = adaptFirmsRecords([proxyRecord({ daynight: 'N' })]);
+  assert.equal(night.night, true);
+  assert.equal(night.daynight, 'N');
+
+  const [missing] = adaptFirmsRecords([proxyRecord({ daynight: undefined })]);
+  assert.equal(missing.night, false);
+  assert.equal(missing.daynight, '');
+
+  const [unknown] = adaptFirmsRecords([proxyRecord({ daynight: 'X' })]);
+  assert.equal(unknown.night, false);
+  assert.equal(unknown.daynight, '');
 });
 
 test('sensor normalization: VIIRS/MODIS detected, junk truncated', () => {

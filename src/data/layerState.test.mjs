@@ -63,7 +63,9 @@ function paramsForLayer(id) {
       calibration: { cameraId: 'secret-camera', values: { heading: 12 } },
     };
   }
-  if (id === 'local-firms') return { frpFloor: 'all', confidenceFloor: 'all' };
+  if (id === 'local-firms') {
+    return { frpFloor: 'all', confidenceFloor: 'all', showDay: true, showNight: true };
+  }
   if (id === 'radio') {
     return {
       filter: 'all',
@@ -353,6 +355,37 @@ test('FIRMS confidence floor is a cheap local-firms enum that defaults to All', 
   assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), high).get('lo'), /w\.c\.8/);
   assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), high))
     .options['local-firms'].confidenceFloor, '0.8');
+});
+
+test('FIRMS Day | Night persists on local-firms with the existing floors', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].showDay, true);
+  assert.equal(defaults.options['local-firms'].showNight, true);
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].showDay, true, 'existing w links keep Day on');
+  assert.equal(omitted.options['local-firms'].showNight, true, 'existing w links keep Night on');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: {
+      'local-firms': {
+        frpFloor: '50',
+        confidenceFloor: '0.5',
+        showDay: true,
+        showNight: false,
+      },
+    },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  assert.match(params.get('lo'), /w\.c\.5/);
+  assert.match(params.get('lo'), /w\.n\.0/);
+  const decoded = decodeLayerStateParams(params).options['local-firms'];
+  assert.equal(decoded.frpFloor, '50');
+  assert.equal(decoded.confidenceFloor, '0.5');
+  assert.equal(decoded.showDay, true);
+  assert.equal(decoded.showNight, false);
 });
 
 test('Radio genre ids with spaces and ampersands round-trip through v2', () => {

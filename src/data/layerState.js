@@ -356,6 +356,8 @@ const OPTION_GROUPS = Object.freeze({
       '0.5': '5',
       '0.8': '8',
     }),
+    booleanOption('showDay', 'd', true),
+    booleanOption('showNight', 'n', true),
   ]),
 });
 
