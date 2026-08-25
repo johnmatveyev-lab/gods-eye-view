@@ -4916,6 +4916,40 @@ body.cockpit-mode #view-switcher button {
   font-size: 6px;
   letter-spacing: 0.07em;
 }
+.cockpit-local-temp-readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+.cockpit-local-grid .weather-unit-toggle {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  margin: 0;
+  color: rgba(244, 251, 255, 0.72);
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cockpit-local-grid .weather-unit-toggle button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 1px 4px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+.cockpit-local-grid .weather-unit-toggle button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
 
 .cockpit-weather-credit {
   display: inline-block;

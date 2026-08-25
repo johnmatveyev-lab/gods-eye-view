@@ -209,6 +209,24 @@ test('existing latitude/longitude query still hits the shared handler', async ()
   assert.deepEqual(json.coordinates, { latitude: 40.7, longitude: -74 });
 });
 
+test('cached weather-effects stay Celsius and do not grow a temperature endpoint', async () => {
+  const { fetchImpl, calls } = mockOpenMeteoFetch();
+  let now = Date.parse('2026-08-25T12:00:00.000Z');
+  const runtime = createWeatherEffectsRuntime({ fetchImpl, now: () => now });
+  const first = await dispatch({ url: '?lat=40.7&lon=-74.0' }, runtime);
+  now += 60_000;
+  const second = await dispatch({ url: '?lat=40.7&lon=-74.0' }, runtime);
+  assert.equal(first.json.weather.temperatureC, 21.4);
+  assert.equal(second.json.weather.temperatureC, 21.4);
+  assert.equal(second.json.weather.apparentTemperatureC, 20.8);
+  assert.equal(second.json.status, 'cached');
+  assert.equal(calls.length, 1);
+  assert.equal(existsSync(path.join(ROOT, 'api/weather-units.js')), false);
+  const helper = readFileSync(path.join(ROOT, 'src/data/weatherUnits.js'), 'utf8');
+  assert.match(helper, /does not fetch `\/api\/weather-effects`/);
+  assert.doesNotMatch(helper, /fetchOpenMeteoWeather|\bfetch\s*\(/);
+});
+
 test('fresh cache is served without a second Open-Meteo call', async () => {
   const { fetchImpl, calls } = mockOpenMeteoFetch();
   let now = Date.parse('2026-08-25T12:00:00.000Z');

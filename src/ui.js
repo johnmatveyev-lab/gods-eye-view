@@ -429,6 +429,12 @@ import {
   weatherCodeLabel,
 } from './data/regionalBrief.js';
 import {
+  bindWeatherUnitToggle,
+  formatTemperatureC,
+  initWeatherUnits,
+  subscribeWeatherUnits,
+} from './data/weatherUnits.js';
+import {
   altitudeRulerCurveInset,
   altitudeRulerTicks,
   bearingBetweenCoordinates,
@@ -1048,6 +1054,8 @@ class CockpitViewController {
     this.localPlace = document.getElementById('cockpit-local-place');
     this.localCoordinates = document.getElementById('cockpit-local-coordinates');
     this.localTemperature = document.getElementById('cockpit-local-temperature');
+    this.weatherUnitToggle = this.signalStream?.querySelector?.('.weather-unit-toggle')
+      || document.querySelector('.weather-unit-toggle');
     this.localWind = document.getElementById('cockpit-local-wind');
     this.localWindDirection = document.getElementById('cockpit-local-wind-direction');
     this.localCondition = document.getElementById('cockpit-local-condition');
@@ -1114,6 +1122,16 @@ class CockpitViewController {
       this.syncWeatherToggle(event?.detail?.enabled === true);
     });
     this.syncWeatherToggle(getWxEnabled());
+    initWeatherUnits();
+    this._unbindWeatherUnits = bindWeatherUnitToggle(this.weatherUnitToggle || this.signalStream, {
+      onChange: () => this.paintLocalTemperature(this.regionalBrief?.weather),
+    });
+    this._listenerRemovers.push(() => this._unbindWeatherUnits?.());
+    this._weatherUnitsUnsubscribe = subscribeWeatherUnits(() => {
+      this.paintLocalTemperature(this.regionalBrief?.weather);
+    });
+    this._listenerRemovers.push(() => this._weatherUnitsUnsubscribe?.());
+    this.paintLocalTemperature(this.regionalBrief?.weather);
     this._listen(this.entry, 'click', () => {
       this.onEnterRequest();
     });
@@ -2156,10 +2174,7 @@ class CockpitViewController {
     this.updateLocalPosition(info);
     const weather = payload?.weather;
     this.updateWeatherCredit(weather);
-    if (this.localTemperature) {
-      this.localTemperature.textContent = Number.isFinite(weather?.temperatureC)
-        ? `${Math.round(weather.temperatureC)}°C` : '—';
-    }
+    this.paintLocalTemperature(weather);
     if (this.localWind) {
       this.localWind.textContent = Number.isFinite(weather?.windKph)
         ? `${Math.round(weather.windKph)} KM/H` : '—';
@@ -2181,6 +2196,12 @@ class CockpitViewController {
       this.briefSource.textContent = `${String(payload?.newsSource || 'REGIONAL NEWS').toUpperCase()} · LOCATION QUERY`;
     }
     this.scheduleContextLayout();
+  }
+
+  /** Re-apply °C / °F from the in-memory observation. Does not refetch. */
+  paintLocalTemperature(weather) {
+    if (!this.localTemperature) return;
+    this.localTemperature.textContent = formatTemperatureC(weather?.temperatureC);
   }
 
   /** Open-Meteo credit is required only while weather values are on screen. */
