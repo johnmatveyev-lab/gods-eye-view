@@ -1,8 +1,8 @@
 /**
  * Client-only AIS hide-parked toggle.
  *
- * Uses `speed` (knots) already present on each in-memory vessel from
- * `/api/ais-live`. Never fetches AISStream and adds no endpoint.
+ * Uses `speed` (knots) already present on each in-memory vessel.
+ * Never fetches AISStream and adds no endpoint.
  * Persistence rides `ais-live-vessels` layerState (`hideParked`).
  *
  * When on, skip vessels with a finite speed < 0.5 kt. Missing / non-finite
