@@ -149,13 +149,9 @@ test('OPENSKY_ENABLED stays false and TeleGeography remains a no-op', () => {
   assert.equal(COMMERCIAL_FLIGHT_SOURCE, 'adsb.lol');
   assert.equal(OPENSKY_ENABLED, false);
   assert.equal(ADSBLOL_POINT_RADIUS_NM, 250);
-<<<<<<< HEAD
-  assert.equal(existsSync(path.join(ROOT, 'api/opensky-track.js')), true);
-=======
   const track = path.join(ROOT, 'api/opensky-track.js');
   assert.equal(existsSync(track), true);
   assert.doesNotMatch(readFileSync(track, 'utf8'), /opensky-network\.org/);
->>>>>>> 5f540f9 (Keep PLAN 26 tests honest after main extracts)
   assert.ok(!DATA_CREDITS.some((credit) => credit.key === 'opensky'));
   assert.ok(!DATA_CREDITS.some((credit) => credit.key === 'telegeography'));
   assert.ok(!existsSync(path.join(ROOT, 'src/data/local_data/telegeography_submarine_cables')));

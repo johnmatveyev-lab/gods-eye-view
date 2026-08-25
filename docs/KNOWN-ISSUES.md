@@ -32,21 +32,19 @@ Next iteration candidates:
 ---
 
 ### CCTV panel can appear "missing" after layout refactors
-Status: Open (workaround available)
+Status: Closed — boot clamp (2026-08-25)
 
 Context:
-- Panel positions are persisted in local storage and can restore off-screen after UI changes.
+- Leftover `godsEyeView.v6` / `v7` (and current `v8`) `panelPos` values could restore a panel off-screen.
+- Boot now copies those keys onto `meridian.*`, clamps the coordinates, or resets that panel's pos/collapsed keys when the payload is unreadable. No console workaround. Leftover `godsEyeView.*` keys stay in place.
 
-Workaround:
-- In browser console:
-  - `localStorage.removeItem('godsEyeView.v6.panelPos.cctv-panel');`
-  - `localStorage.removeItem('godsEyeView.v6.panelCollapsed.cctv-panel');`
-  - `location.reload();`
+Validation target:
+- `src/panelPosition.js`, `src/ui.js` (`_sanitizeRestoredPanelPositions`, `_restorePanelPosition`)
 
-Related keys (current versions):
-- Panel positions: `godsEyeView.v7.panelPos.<panel-id>` (re-versioned 2026-06-10)
-- Panel collapsed state: `godsEyeView.v6.panelCollapsed.<panel-id>`
-- CCTV calibration: `godsEyeView.cctv.calibration.v2`
+Related keys:
+- Panel positions: `meridian.v8.panelPos.<panel-id>` (legacy `v6` / `v7` still read; leftover `godsEyeView.*` copies once)
+- Panel collapsed state: `meridian.v6.panelCollapsed.<panel-id>`
+- CCTV calibration: `meridian.cctv.calibration.v2`
 
 ---
 

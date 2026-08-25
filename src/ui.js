@@ -21,6 +21,13 @@ import {
   enterCockpitWithTracking,
 } from './cockpitTracking.js';
 import { IntelHUD } from './hud.js';
+import {
+  CLOCK_CHANGE_EVENT,
+  bindClockToggle,
+  formatChromeClock,
+  getClockMode,
+  syncClockToggleButtons,
+} from './clockPreference.js';
 import { ShareLinkManager } from './sharelink.js';
 import {
   isExplicitLayerStateOrigin,
@@ -34,8 +41,9 @@ import {
   isCelestialRingStyleSupported,
   setKeyholeFadeTuning,
 } from './celestialRing.js';
-import { destroyTrackedReadout, initTrackedReadout } from './data/trackedReadout.js';
-import { destroyWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
+import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
+import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
   initDetection,
@@ -117,6 +125,12 @@ import {
   resolveLeftStackBottomBoundary,
   resolvePanelStackCorridor,
 } from './panelStackLayout.js';
+import {
+  clampPanelPosition,
+  sanitizeStoredPanelPositions,
+  resolveStoredPanelPosition,
+  isPanelRectOnScreen,
+} from './panelPosition.js';
 import {
   resolveCockpitUtilityAnchor,
   resolveCockpitUtilityLayout,
@@ -706,6 +720,7 @@ class CockpitViewController {
     this.headingValue = document.getElementById('cockpit-heading-value');
     this.compassTape = document.getElementById('cockpit-compass-tape');
     this.clock = document.getElementById('cockpit-clock');
+    this.clockToggle = this.clock?.closest('.cockpit-clock-row') || this.clock?.parentElement;
     this.position = document.getElementById('cockpit-position');
     this.aircraftMeta = document.getElementById('cockpit-aircraft-meta');
     this.route = document.getElementById('cockpit-route');
@@ -811,6 +826,15 @@ class CockpitViewController {
         else this.syncEntry();
       }),
     );
+    this._unbindClockToggle = bindClockToggle(this.clockToggle, {
+      onChange: () => this._paintChromeClock(),
+    });
+    this._listenerRemovers.push(() => this._unbindClockToggle?.());
+    this._listen(window, CLOCK_CHANGE_EVENT, () => {
+      this._paintChromeClock();
+      syncClockToggleButtons(this.clockToggle, getClockMode());
+    });
+    this._paintChromeClock();
     this._listen(this.entry, 'click', () => this.enter());
     this._listen(this.tr3bToggle, 'click', () => this.toggleTrackedTr3b());
     this._listen(this.mapViewButton, 'click', () => this.exit());
@@ -864,6 +888,10 @@ class CockpitViewController {
     if (!target?.addEventListener) return;
     target.addEventListener(type, handler, options);
     this._listenerRemovers.push(() => target.removeEventListener(type, handler, options));
+  }
+
+  _paintChromeClock() {
+    if (this.clock) this.clock.textContent = formatChromeClock(new Date(), getClockMode());
   }
 
   syncWeatherToggle(enabled) {
@@ -1465,7 +1493,7 @@ class CockpitViewController {
           .join('');
       }
     }
-    if (this.clock) this.clock.textContent = new Date().toISOString().slice(11, 19) + 'Z';
+    if (this.clock) this.clock.textContent = formatChromeClock(new Date(), getClockMode());
     if (this.position) {
       const lat = Number.isFinite(info.latitude)
         ? `${Math.abs(info.latitude).toFixed(3)}°${info.latitude >= 0 ? 'N' : 'S'}` : '--';
@@ -2630,6 +2658,12 @@ export class StyleManager {
       this._updateDetectionButton(modeLabel);
     });
     initTrackedReadout(viewer);
+    initSelectedContactIdent({
+      viewer,
+      showToast: (text) => this._showToast(text),
+      getPaintRect: getOverlayPaintRect,
+      getActiveTrackedId: getActiveTrackedReadoutId,
+    });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
 
@@ -2640,6 +2674,7 @@ export class StyleManager {
     this._initPanelChrome();
     this._initLeftPanelAdaptiveLayout();
     this._initRightPanelAdaptiveLayout();
+    this._initRestoredPanelPositions();
     this._initRadioPanel();
     this._initCctvPanel();
     this._initGlobalContextPanel();
@@ -2954,7 +2989,9 @@ export class StyleManager {
     if (!el || !el.style.top || el.style.top === 'auto') return;
     const top = parseInt(el.style.top, 10);
     if (!Number.isFinite(top)) return;
-    el.style.top = `${this._clampToViewport(0, top, el).top}px`;
+    const clamped = this._clampToViewport(0, top, el);
+    if (!clamped) return;
+    el.style.top = `${clamped.top}px`;
     this._pinPanelToRight(el);
   }
 
@@ -3953,6 +3990,7 @@ export class StyleManager {
    * @returns {void}
    */
   _initPanelChrome() {
+    this._sanitizeRestoredPanelPositions();
     const targets = new Set();
     document.querySelectorAll('.panel-collapse-btn[data-collapse-target]').forEach((btn) => {
       const targetId = btn.dataset.collapseTarget;
@@ -3979,6 +4017,26 @@ export class StyleManager {
     this._initCommandDockPins();
     this._initCommandDockTrayMetrics();
     this._maybeNotifyLayoutReset();
+  }
+
+  /**
+   * On boot, clamp or reset leftover/current panelPos keys that would restore
+   * a panel off-screen. Leftover godsEyeView.* keys copy onto meridian.*
+   * once and stay in place; leftover versions are not rewritten to v8.
+   * @returns {void}
+   */
+  _sanitizeRestoredPanelPositions() {
+    try {
+      sanitizeStoredPanelPositions({
+        storage: localStorage,
+        panelIds: SHARE_PANEL_STATE_SPECS.map((spec) => spec.id),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        currentVersion: PANEL_POSITION_STORAGE_VERSION,
+      });
+    } catch {
+      // storage unavailable
+    }
   }
 
   /**
@@ -6853,6 +6911,56 @@ export class StyleManager {
     this._scheduleRightPanelLayout();
   }
 
+  /**
+   * After the rails claim their panels, restore leftover floating positions
+   * (clamped) and pull any still-off-screen panel back into the viewport.
+   * @returns {void}
+   */
+  _initRestoredPanelPositions() {
+    for (const spec of SHARE_PANEL_STATE_SPECS) {
+      const panelEl = document.getElementById(spec.id);
+      if (!panelEl) continue;
+      const parentId = panelEl.parentElement?.id;
+      const managed = parentId === 'right-context-rail' || parentId === 'left-panel-stack';
+      if (managed) continue;
+      this._restorePanelPosition(spec.id, panelEl);
+    }
+    this._clampRestoredPanelsOnScreen();
+  }
+
+  /**
+   * Last-chance boot clamp: leftover inline coords or a collapsed-off-screen
+   * restore must still leave the panel intersecting the viewport.
+   * @returns {void}
+   */
+  _clampRestoredPanelsOnScreen() {
+    const viewport = {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    };
+    for (const spec of SHARE_PANEL_STATE_SPECS) {
+      const panelEl = document.getElementById(spec.id);
+      if (!panelEl) continue;
+      const rect = panelEl.getBoundingClientRect();
+      if (isPanelRectOnScreen(rect, viewport)) continue;
+      const parentId = panelEl.parentElement?.id;
+      const managed = parentId === 'right-context-rail' || parentId === 'left-panel-stack';
+      if (managed) {
+        panelEl.style.removeProperty('left');
+        panelEl.style.removeProperty('top');
+        panelEl.style.removeProperty('right');
+        panelEl.style.removeProperty('bottom');
+        continue;
+      }
+      const clamped = this._clampToViewport(rect.left, rect.top, panelEl);
+      if (!clamped) continue;
+      panelEl.style.left = `${clamped.left}px`;
+      panelEl.style.top = `${clamped.top}px`;
+      panelEl.style.right = 'auto';
+      panelEl.style.bottom = 'auto';
+    }
+  }
+
   _scheduleRightPanelLayout({ reconsiderAutoCollapse = false } = {}) {
     if (reconsiderAutoCollapse) this._rightStackReconsiderAutoCollapse = true;
     if (!this._rightPanelStack || this._rightStackLayoutFrame !== null) return;
@@ -7489,15 +7597,23 @@ export class StyleManager {
    */
   _restorePanelPosition(panelId, panelEl) {
     try {
-      const raw = readPrefKey(localStorage, this._panelStorageKey(panelId));
-      if (!raw) return;
-      const pos = JSON.parse(raw);
-      if (!pos || typeof pos.left !== 'number' || typeof pos.top !== 'number') return;
-      // Clamp to the viewport: a position saved at one window size would otherwise land off-screen at
-      // another (audit U2 — observed a panel at x:-192). The drag handler clamps; restore must too.
-      const { left, top } = this._clampToViewport(Math.round(pos.left), Math.round(pos.top), panelEl);
-      panelEl.style.left = `${left}px`;
-      panelEl.style.top = `${top}px`;
+      const resolved = resolveStoredPanelPosition(
+        localStorage,
+        panelId,
+        PANEL_POSITION_STORAGE_VERSION,
+      );
+      if (!resolved?.pos) return;
+      // Clamp leftover or current coords: a position saved at one window size
+      // would otherwise land off-screen at another. Leftover versions stay on
+      // their version; only the prefix copies onto meridian.*.
+      const clamped = this._clampToViewport(
+        Math.round(resolved.pos.left),
+        Math.round(resolved.pos.top),
+        panelEl,
+      );
+      if (!clamped) return;
+      panelEl.style.left = `${clamped.left}px`;
+      panelEl.style.top = `${clamped.top}px`;
       panelEl.style.right = 'auto';
       panelEl.style.bottom = 'auto';
       if (panelId === 'pp-toggles') {
@@ -7514,16 +7630,18 @@ export class StyleManager {
    * @param {number} left - desired left (px)
    * @param {number} top - desired top (px)
    * @param {HTMLElement} panelEl - the panel element
-   * @returns {{left:number, top:number}}
+   * @returns {{left:number, top:number}|null}
    */
   _clampToViewport(left, top, panelEl) {
     const rect = panelEl.getBoundingClientRect();
-    const maxLeft = Math.max(6, window.innerWidth - rect.width - 6);
-    const maxTop = Math.max(6, window.innerHeight - rect.height - 6);
-    return {
-      left: Math.max(6, Math.min(maxLeft, left)),
-      top: Math.max(6, Math.min(maxTop, top)),
-    };
+    return clampPanelPosition({
+      left,
+      top,
+      width: rect.width,
+      height: rect.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
   }
 
   /**
@@ -10337,6 +10455,7 @@ export class StyleManager {
       document.removeEventListener('gev:radio-selected', this._radioSelectedHandler);
       this._radioSelectedHandler = null;
     }
+    destroySelectedContactIdent();
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();

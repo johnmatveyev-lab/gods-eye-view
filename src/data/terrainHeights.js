@@ -1,4 +1,6 @@
 // src/data/terrainHeights.js — batched, cached client terrain-height resolver.
+// Hosted GET `/api/terrain/heights` is extracted to `terrainHeightsProxy.js`
+// (Vite forwards; `api/terrain/heights.js` re-exports the Node handler).
 //
 // Resolves ELLIPSOIDAL ground height per (lat, lon) via the server-side
 // `/api/terrain/heights` proxy (Task 2 — Re:Earth `heights.json`, disk-cached,

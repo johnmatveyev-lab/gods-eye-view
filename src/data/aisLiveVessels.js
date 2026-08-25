@@ -140,10 +140,40 @@ const AIS_DEGRADED_STATUSES = new Set(['stale', 'reconnecting', 'down', 'auth-fa
 function aisRetryInSec() {
   // A rejected key is terminal until someone changes it; an hour-long
   // countdown would imply waiting is the fix.
-  if (state.transportStatus === 'auth-failed') return 0;
+  if (isAisTerminalPollStatus(state.transportStatus) || state.liveEndpointUnavailable) {
+    return 0;
+  }
   const at = Number(state.nextAttemptAt);
   if (!Number.isFinite(at) || at <= 0) return 0;
   return Math.max(0, Math.ceil((at - _aisRuntime.now()) / 1000));
+}
+
+function isAisTerminalPollStatus(status) {
+  return status === 'missing-key' || status === 'auth-failed';
+}
+
+function isAisReconnectPollStatus(status) {
+  return status === 'reconnecting' || status === 'down' || status === 'connecting';
+}
+
+/**
+ * Manager poll delay in milliseconds. Must never be the seconds helper
+ * (`aisRetryInSec`) — `Number(fn)` is NaN and the ships loop never rearms.
+ * @returns {number} 60000 when live; max(1000, nextAttemptAt-now) when
+ *   reconnecting; -1 when missing-key / auth-failed / hosted-empty (unarmed).
+ */
+function aisPollIntervalMs() {
+  if (isAisTerminalPollStatus(state.transportStatus) || state.liveEndpointUnavailable) {
+    return -1;
+  }
+  if (isAisReconnectPollStatus(state.transportStatus)) {
+    const at = Number(state.nextAttemptAt);
+    const waitMs = Number.isFinite(at) && at > 0
+      ? at - _aisRuntime.now()
+      : 1000;
+    return Math.max(1000, waitMs);
+  }
+  return REFRESH_MS;
 }
 
 /**
@@ -341,7 +371,9 @@ const aisLiveVesselsLayer = {
   name: 'Live AIS Vessels',
   icon: '◭',
   source: 'AISStream',
-  updateInterval: REFRESH_MS,
+  get updateInterval() {
+    return aisPollIntervalMs();
+  },
   statsRefreshInterval: 1000,
 
   init(viewer) {
@@ -936,6 +968,11 @@ function applyAisFeedSnapshot(viewer, payload) {
   state.loadingLabel = '';
   state.transportStatus = snapshot.transportStatus;
   state.nextAttemptAt = Number(payload?.nextAttemptAt) || null;
+  if (isAisTerminalPollStatus(snapshot.transportStatus)) {
+    state.liveEndpointUnavailable = true;
+  } else if (snapshot.transportStatus) {
+    state.liveEndpointUnavailable = false;
+  }
   state.lastMessageAt = snapshot.lastMessageAt;
   state.rawRowCount = snapshot.rawRowCount;
   state.acceptedRowCount = snapshot.acceptedRowCount;
