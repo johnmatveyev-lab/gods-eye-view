@@ -13,7 +13,7 @@ import {
   decodeBloomIntensity,
 } from './bloom.js';
 import { flyToHomeView } from './camera.js';
-import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
+import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
@@ -169,6 +169,7 @@ import {
   nextLaunchesPanelOpen,
   renderLaunchesPanelList,
 } from './data/launchesPanel.js';
+import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   aggregateLayerLoading,
   canPresentDeferredStatusNotice,
@@ -281,6 +282,13 @@ import {
   setScaleBarEnabled,
   uninstallScaleBar,
 } from './scaleBar.js';
+import {
+  altitudeBandStopLabels,
+  getAltitudeBand,
+  hydrateAltitudeBand,
+  setAltitudeBand,
+  subscribeAltitudeBand,
+} from './data/flightAltitudeBand.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -340,6 +348,13 @@ import {
   readLockTiltPreference,
   writeLockTiltPreference,
 } from './lockTilt.js';
+import {
+  CROSSHAIR_DEFAULT,
+  CROSSHAIR_STORAGE_KEY,
+  readCrosshairPreference,
+  setCameraCrosshairEnabled,
+  writeCrosshairPreference,
+} from './cameraCrosshair.js';
 import {
   fetchRegionalBrief,
   regionalDistanceM,
@@ -2510,6 +2525,7 @@ export class StyleManager {
       document.getElementById('power-low'),
     ].filter(Boolean);
     this._syncPowerModeUi(installPowerMode(this.viewer));
+    this._initAltitudeBand();
     this._detectionSliderRow = document.getElementById('detection-slider-row');
     this._detectionDensitySlider = document.getElementById('detection-density-slider');
     this._detectionDensityValue = document.getElementById('detection-density-value');
@@ -2534,6 +2550,8 @@ export class StyleManager {
     this._liveSunBtn = document.getElementById('live-sun-toggle');
     this._liveSunEnabled = false;
     this._gridBtn = document.getElementById('grid-toggle');
+    this._crosshairBtn = document.getElementById('crosshair-toggle');
+    this._crosshairEnabled = CROSSHAIR_DEFAULT;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2681,6 +2699,10 @@ export class StyleManager {
     this._launchesPanelLoadToken = 0;
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._stopTrackingBtn = document.getElementById('stop-tracking');
+    this._earthquakeListToggle = document.getElementById('earthquake-list-toggle');
+    this._earthquakeListPanel = document.getElementById('earthquake-list-panel');
+    this._earthquakeList = document.getElementById('earthquake-list');
+    this._earthquakeListCount = document.getElementById('earthquake-list-count');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -2988,6 +3010,7 @@ export class StyleManager {
     this._initStopTrackingButton();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
+    this._initEarthquakeListControl();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initZoomToPointer();
@@ -2996,6 +3019,7 @@ export class StyleManager {
     this._initLiveSunToggle();
     this._initScaleBar();
     this._initLockTiltToggle();
+    this._initCrosshairToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -4024,6 +4048,42 @@ export class StyleManager {
     return { ok: true, lockTilt: next };
   }
 
+  _initCrosshairToggle() {
+    this._crosshairBtn?.addEventListener('click', () => {
+      this.setCrosshairEnabled(!this._crosshairEnabled);
+    });
+    let stored = CROSSHAIR_DEFAULT;
+    try {
+      stored = readCrosshairPreference(window.localStorage);
+    } catch {
+      stored = CROSSHAIR_DEFAULT;
+    }
+    this.setCrosshairEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Show or hide the camera-center plus. Same aim point as copy-coords / measure.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, crosshair: boolean}}
+   */
+  setCrosshairEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._crosshairEnabled = next;
+    setCameraCrosshairEnabled(next);
+    this._crosshairBtn?.classList.toggle('active', next);
+    this._crosshairBtn?.setAttribute('aria-pressed', String(next));
+    if (this._crosshairBtn) {
+      this._crosshairBtn.title = next
+        ? 'Crosshair on — plus marks the camera-center aim point'
+        : 'Crosshair — mark the camera-center aim point';
+    }
+    if (persist) {
+      try { writeCrosshairPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    return { ok: true, crosshair: next };
+  }
+
   /**
    * Renders the validated map stack chip row from the matching controller
    * entries. Cesium ion/Bing chips remain keyboard-focusable but unavailable,
@@ -4150,6 +4210,37 @@ export class StyleManager {
     refreshScaleBar();
   }
 
+  _initAltitudeBand() {
+    this._altBandBtns = [
+      document.getElementById('alt-band-all'),
+      document.getElementById('alt-band-surface'),
+      document.getElementById('alt-band-lt10k'),
+      document.getElementById('alt-band-mid'),
+      document.getElementById('alt-band-gt30k'),
+    ].filter(Boolean);
+    hydrateAltitudeBand();
+    for (const button of this._altBandBtns) {
+      button.addEventListener('click', () => {
+        setAltitudeBand(button.dataset.altBand);
+        this._syncAltitudeBandUi();
+      });
+    }
+    this._altBandUnsubscribe = subscribeAltitudeBand(() => this._syncAltitudeBandUi());
+    this._syncAltitudeBandUi();
+  }
+
+  _syncAltitudeBandUi() {
+    const band = getAltitudeBand();
+    const labels = altitudeBandStopLabels(getDistanceUnit());
+    for (const button of this._altBandBtns || []) {
+      const id = button.dataset.altBand;
+      const active = band.id === id;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+      if (Object.hasOwn(labels, id)) button.textContent = labels[id];
+    }
+  }
+
   _syncUnitsUi() {
     const unit = getDistanceUnit();
     for (const button of this._unitsBtns || []) {
@@ -4157,6 +4248,7 @@ export class StyleManager {
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', String(active));
     }
+    this._syncAltitudeBandUi();
     const windowPhrase = `${formatDistanceMeters(AWARENESS_RADIUS_M, unit, { style: 'range' })} window`;
     const previous = document.getElementById('cockpit-context-previous');
     const next = document.getElementById('cockpit-context-next');
@@ -5002,6 +5094,9 @@ export class StyleManager {
         }
         if (this._installationsListOpen && change?.layerId === 'military-installations') {
           this._syncInstallationsViewportList();
+        }
+        if (change?.layerId === 'earthquakes') {
+          this._earthquakeListControl?.refresh();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -10772,6 +10867,43 @@ export class StyleManager {
     );
   }
 
+  /**
+   * Hosted Quakes list — rows come from the USGS payload the earthquakes
+   * layer already fetched. Click flies to that event. Empty/fail is
+   * UNAVAILABLE and never waits on the feed.
+   */
+  _initEarthquakeListControl() {
+    this._earthquakeListControl = initEarthquakeListControl({
+      button: this._earthquakeListToggle,
+      panel: this._earthquakeListPanel,
+      list: this._earthquakeList,
+      count: this._earthquakeListCount,
+      getRecords: () => {
+        const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+        return typeof layer?.getListRecords === 'function' ? layer.getListRecords() : [];
+      },
+      getError: () => {
+        const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+        return layer?.getStats?.()?.error || null;
+      },
+      ensureLayer: () => {
+        if (!this._dataManager?.isEnabled?.('earthquakes')) {
+          void this._dataManager?.setEnabled?.('earthquakes', true, { origin: 'user' });
+        }
+      },
+      flyTo: (options) => this._runExplicitNavigation('quake', () => {
+        flyToLandmark(this.viewer, options.lat, options.lon, {
+          range: options.range,
+          pitch: options.pitch,
+          heading: options.heading,
+          buildingHeight: options.buildingHeight,
+          duration: options.duration,
+        });
+        return true;
+      }),
+    });
+  }
+
   /** Wire the top-center action that clears only manager-owned data layers. */
   _initClearSelectedLayersButton() {
     if (!this._clearSelectedLayersBtn) return;
@@ -11552,6 +11684,8 @@ export class StyleManager {
     this._dataManagerVisibilityRequestUnsubscribe = null;
     this._dataManagerUnsubscribe?.();
     this._dataManagerUnsubscribe = null;
+    this._earthquakeListControl?.destroy();
+    this._earthquakeListControl = null;
     if (this._globeResetHandler) {
       this._resetGlobeBtn?.removeEventListener('click', this._globeResetHandler);
       this._cockpitResetGlobeBtn?.removeEventListener('click', this._globeResetHandler);

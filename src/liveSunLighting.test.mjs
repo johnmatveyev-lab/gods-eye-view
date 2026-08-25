@@ -179,7 +179,7 @@ test('DISPLAY Sun control is lighting-only and independent of looks, WX, and ima
   const html = root('index.html');
   const ui = src('ui.js');
   const lighting = src('liveSunLighting.js');
-  const weather = src('cockpitCloudEffects.js');
+  const weather = src('weatherChrome.js');
   const stacks = src('mapStackController.js');
   const clock = src('clockPreference.js');
 

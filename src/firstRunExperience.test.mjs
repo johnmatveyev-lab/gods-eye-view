@@ -527,6 +527,9 @@ test('no mission writes a preference the visitor did not choose by picking it', 
     '_initTrailsToggle',
     '_setContactLabelsEnabled',
     'setContactLabelsEnabled',
+    'setAltitudeBand',
+    'writeAltitudeBand',
+    'hydrateAltitudeBand',
     'setFeather',
   ]) {
     assert.doesNotMatch(code, new RegExp(forbidden), `a mission must never touch ${forbidden}`);
@@ -688,6 +691,8 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   const bans = fs.readFileSync(new URL('./data/commercialBans.js', import.meta.url), 'utf8');
   assert.match(bans, /OpenSky is disabled/);
   assert.match(bans, /Google News RSS is disabled/);
+  assert.match(instructions, /OpenSky Network is disabled in this commercial build/);
+  assert.match(instructions, /Google News RSS is disabled/);
   assert.ok(paragraph.includes('zoom_to_globe'));
   assert.ok(paragraph.includes('set_layer_visibility'));
 });

@@ -253,11 +253,11 @@ test('the compass is map camera chrome beside Share and Reset Globe', () => {
   assert.match(css, /--north-up-heading/);
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view\)/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
   );
   assert.match(
     css,
-    /body\.scene-playback-mode :is\(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view\)/,
+    /body\.scene-playback-mode :is\(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
   );
   assert.match(ui, /e\.key\.toLowerCase\(\) === 'n'/);
   assert.match(ui, /this\.cockpitView\?\.active/);

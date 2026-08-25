@@ -26,6 +26,8 @@ import {
   applyVoiceMicChrome,
   describeRealtimeTokenHttpError,
   voiceGateAction,
+  voiceGateModalCopy,
+  voiceHostErrorChrome,
   voiceSessionAllowed,
   readStoredVoiceTier,
   readStoredVoiceLimits,
@@ -3263,21 +3265,73 @@ test('a genuinely different refused call still gets its own output', async () =>
   assert.deepEqual(outputs, ['call_one', 'call_two'], 'each distinct call is answered');
 });
 
-test('hosted Free disables MIC and routes click to upgrade without a token request', () => {
+function voiceChromeUi() {
+  return {
+    root: { dataset: {}, classList: { remove() {}, toggle() {} } },
+    status: { textContent: '' },
+    detail: { textContent: '', title: '' },
+    errorDetail: { textContent: '' },
+    button: {
+      attributes: {},
+      classList: { toggle(name, on) { this[name] = on; } },
+      setAttribute(name, value) { this.attributes[name] = value; },
+    },
+  };
+}
+
+async function withVoiceWindow(account, fn) {
+  const previousWindow = globalThis.window;
+  const previousFetch = globalThis.fetch;
+  const fetches = [];
+  globalThis.window = { __meridianAccount: account, RTCPeerConnection: function RTCPeerConnection() {} };
+  globalThis.fetch = async (url) => {
+    fetches.push(String(url));
+    return { ok: true, status: 204, json: async () => null, text: async () => '' };
+  };
+  try {
+    await fn(fetches);
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.fetch = previousFetch;
+  }
+}
+
+test('hosted Free disables MIC and routes click to upgrade without a token request', async () => {
   const entitlement = { plan: 'free', signedIn: true, voice: false };
   const account = { config: { hosted: true }, clerk: {}, entitlement };
   assert.equal(voiceSessionAllowed(entitlement, account), false);
   assert.equal(voiceGateAction(entitlement, account), 'upgrade');
-  const button = { attributes: {}, className: '', classList: { toggle(name, on) { this[name] = on; } }, setAttribute(name, value) { this.attributes[name] = value; } };
-  applyVoiceMicChrome({ button, root: { dataset: {} } }, entitlement, account);
-  assert.equal(button.attributes['aria-disabled'], 'true');
+  const copy = voiceGateModalCopy(entitlement, account);
+  assert.equal(copy.action, 'upgrade');
+  assert.match(copy.body, /Voice is a Pro feature|Upgrade to Pro/);
+  const ui = voiceChromeUi();
+  applyVoiceMicChrome(ui, entitlement, account);
+  assert.equal(ui.button.attributes['aria-disabled'], 'true');
+  await withVoiceWindow(account, async (fetches) => {
+    const controller = new GevRealtimeController({ ui, runner: async () => ({}) });
+    await controller.start();
+    assert.equal(fetches.some((url) => url.includes('/api/realtime/token')), false);
+    assert.equal(controller.status, 'idle');
+  });
 });
 
-test('anonymous disables MIC and routes click to sign-in without a token request', () => {
+test('anonymous disables MIC and routes click to sign-in without a token request', async () => {
   const entitlement = { plan: 'anonymous', signedIn: false, voice: false };
   const account = { config: { hosted: true }, clerk: {}, entitlement };
   assert.equal(voiceSessionAllowed(entitlement, account), false);
   assert.equal(voiceGateAction(entitlement, account), 'signin');
+  const copy = voiceGateModalCopy(entitlement, account);
+  assert.equal(copy.action, 'signin');
+  assert.match(copy.primary, /Sign in/);
+  await withVoiceWindow(account, async (fetches) => {
+    const controller = new GevRealtimeController({
+      ui: voiceChromeUi(),
+      runner: async () => ({}),
+    });
+    await controller.start();
+    assert.equal(fetches.some((url) => url.includes('/api/realtime/token')), false);
+    assert.equal(controller.status, 'idle');
+  });
 });
 
 test('Pro 404 token failures are a single unavailable message and do not retry', () => {
@@ -3286,10 +3340,28 @@ test('Pro 404 token failures are a single unavailable message and do not retry',
   assert.equal(shouldRetryRealtimeToken(404), false);
   assert.equal(shouldRetryRealtimeToken(503), false);
   assert.equal(shouldRetryRealtimeToken(502), true);
+  assert.deepEqual(voiceHostErrorChrome('Voice is not available on this host yet'), {
+    statusLabel: 'UNAVAILABLE',
+    detail: 'Voice is not available on this host yet',
+  });
+  assert.deepEqual(voiceHostErrorChrome('Voice is not configured'), {
+    statusLabel: 'UNAVAILABLE',
+    detail: 'Voice is not configured',
+  });
+  assert.equal(voiceHostErrorChrome('Realtime SDP failed').detail, 'VOICE UNAVAILABLE');
   const entitlement = { plan: 'pro', signedIn: true, voice: true };
   const account = { config: { hosted: true }, clerk: {}, entitlement };
   assert.equal(voiceSessionAllowed(entitlement, account), true);
   assert.equal(voiceGateAction(entitlement, account), 'start');
+  const ui = voiceChromeUi();
+  const controller = new GevRealtimeController({ ui, runner: async () => ({}) });
+  controller.setStatus('error', 'Voice is not available on this host yet');
+  assert.equal(ui.status.textContent, 'UNAVAILABLE');
+  assert.equal(ui.detail.textContent, 'Voice is not available on this host yet');
+  assert.equal(ui.errorDetail.textContent, 'Voice is not available on this host yet');
+  controller.setStatus('error', 'Voice is not configured');
+  assert.equal(ui.status.textContent, 'UNAVAILABLE');
+  assert.equal(ui.detail.textContent, 'Voice is not configured');
 });
 
 test('self-host with a key keeps MIC enabled', () => {
@@ -3297,7 +3369,23 @@ test('self-host with a key keeps MIC enabled', () => {
   const account = { config: { hosted: false }, entitlement };
   assert.equal(voiceSessionAllowed(entitlement, account), true);
   assert.equal(voiceGateAction(entitlement, account), 'start');
-  const button = { attributes: {}, classList: { toggle() {} }, setAttribute(name, value) { this.attributes[name] = value; } };
-  applyVoiceMicChrome({ button, root: { dataset: {} } }, entitlement, account);
-  assert.equal(button.attributes['aria-disabled'], 'false');
+  assert.equal(voiceGateModalCopy(entitlement, account), null);
+  const ui = voiceChromeUi();
+  applyVoiceMicChrome(ui, entitlement, account);
+  assert.equal(ui.button.attributes['aria-disabled'], 'false');
+});
+
+test('hosted budget exhausted reuses the existing budget modal and does not start voice', () => {
+  const entitlement = {
+    plan: 'pro',
+    signedIn: true,
+    voice: false,
+    exhausted: true,
+  };
+  const account = { config: { hosted: true }, clerk: {}, entitlement };
+  assert.equal(voiceSessionAllowed(entitlement, account), false);
+  assert.equal(voiceGateAction(entitlement, account), 'exhausted');
+  const copy = voiceGateModalCopy(entitlement, account);
+  assert.equal(copy.action, 'close');
+  assert.match(copy.body, /Daily Pro budget used/);
 });

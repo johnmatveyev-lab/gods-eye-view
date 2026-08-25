@@ -18,6 +18,7 @@ import militaryAwarenessLayer, {
 import { initCameraVerbs, moveCamera, flyRoute, interruptCameraMotion, adjustOrbitRange } from '../cameraVerbs.js';
 import { cachedGroundFloor, warmGroundFloor } from '../data/groundFloor.js';
 import { isPickedWorldPosition } from '../data/scenePick.js';
+import { getViewportCenterPx } from '../cameraCrosshair.js';
 import { resolveRegionRingForQuery } from '../annotations/annotationResolver.js';
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import { TR3B_CLASS } from '../data/tr3bRegistry.js';
@@ -2819,9 +2820,8 @@ function cameraViewSignature(viewer) {
 function getViewTargetCartesian(viewer) {
   const scene = viewer.scene;
   const canvas = scene.canvas;
-  const width = canvas.clientWidth || canvas.width || 0;
-  const height = canvas.clientHeight || canvas.height || 0;
-  const center = new Cesium.Cartesian2(width / 2, height / 2);
+  const { x, y } = getViewportCenterPx(canvas);
+  const center = new Cesium.Cartesian2(x, y);
   let position = null;
 
   if (scene.pickPositionSupported && typeof scene.pickPosition === 'function') {
