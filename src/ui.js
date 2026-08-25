@@ -20,6 +20,11 @@ import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
 } from './cockpitTracking.js';
+import {
+  cockpitEnterControlVisible,
+  cockpitExitControlVisible,
+  requestCockpitEnter,
+} from './cockpitEnterControl.js';
 import { IntelHUD } from './hud.js';
 import {
   CLOCK_CHANGE_EVENT,
@@ -678,6 +683,7 @@ class CockpitViewController {
     onExited = null,
     getInheritedVisionLabel = null,
     restoreTrackingFrame = null,
+    onEnterRequest = null,
   } = {}) {
     this.viewer = viewer;
     this.active = false;
@@ -737,6 +743,9 @@ class CockpitViewController {
     this.restoreTrackingFrame = typeof restoreTrackingFrame === 'function'
       ? restoreTrackingFrame
       : () => false;
+    this.onEnterRequest = typeof onEnterRequest === 'function'
+      ? onEnterRequest
+      : () => this.enter();
     this.isEntryAllowed = typeof isEntryAllowed === 'function' ? isEntryAllowed : () => true;
     this.context = document.getElementById('cockpit-context');
     this.contextSubject = document.getElementById('cockpit-context-subject');
@@ -828,7 +837,9 @@ class CockpitViewController {
       syncClockToggleButtons(this.clockToggle, getClockMode());
     });
     this._paintChromeClock();
-    this._listen(this.entry, 'click', () => this.enter());
+    this._listen(this.entry, 'click', () => {
+      this.onEnterRequest();
+    });
     this._listen(this.tr3bToggle, 'click', () => this.toggleTrackedTr3b());
     this._listen(this.mapViewButton, 'click', () => this.exit());
     this._listen(this.visionPrevious, 'click', () => this.cycleVisionMode(-1));
@@ -963,15 +974,22 @@ class CockpitViewController {
     const info = this.readAircraftInfo();
     const trackedContact = !!(info && this.viewer.trackedEntity?.position);
     this.syncTr3bToggle(trackedContact ? info : null);
-    const available = !!(this.isEntryAllowed() && trackedContact);
+    const available = cockpitEnterControlVisible({
+      cockpitActive: this.active,
+      selectedAircraft: trackedContact ? info : null,
+    });
     // Change-only DOM writes: this runs on a preUpdate cadence, and
     // unconditional `hidden` assignments invalidate style/layout every frame
     // even when nothing changed. (perf item 9)
     if (this._entryAvailable === available) return;
     this._entryAvailable = available;
     if (this.entry) this.entry.hidden = !available;
-    if (this.mapViewButton) this.mapViewButton.hidden = true;
-    if (this.resetGlobeButton) this.resetGlobeButton.hidden = true;
+    if (this.mapViewButton) this.mapViewButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: this.active,
+    });
+    if (this.resetGlobeButton) this.resetGlobeButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: this.active,
+    });
   }
 
   /**
@@ -1064,8 +1082,11 @@ class CockpitViewController {
       }
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (!this.active && !this.isEntryAllowed()) return;
-      const changed = this.active ? this.exit() : this.enter();
+      if (this.active) {
+        this.exit();
+        return;
+      }
+      this.onEnterRequest();
       return;
     }
   }
@@ -1110,13 +1131,20 @@ class CockpitViewController {
     // syncEntry's change-only cache — invalidate it so the exit-path
     // syncEntry re-applies every write (notably re-hiding mapViewButton).
     this._entryAvailable = undefined;
-    if (this.entry) this.entry.hidden = true;
+    if (this.entry) this.entry.hidden = !cockpitEnterControlVisible({
+      cockpitActive: true,
+      selectedAircraft: info,
+    });
     if (this.tr3bToggle) {
       this.tr3bToggle.hidden = true;
       this._tr3bSignature = null;
     }
-    if (this.mapViewButton) this.mapViewButton.hidden = false;
-    if (this.resetGlobeButton) this.resetGlobeButton.hidden = false;
+    if (this.mapViewButton) this.mapViewButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: true,
+    });
+    if (this.resetGlobeButton) this.resetGlobeButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: true,
+    });
     if (this.hud) this.hud.hidden = false;
     if (this.signalStream) this.signalStream.hidden = false;
     this.hud?.classList.add('signals-active');
@@ -2490,6 +2518,7 @@ export class StyleManager {
           });
         }
       },
+      onEnterRequest: () => this.requestCockpitEnter(),
       restoreTrackingFrame: (entity) => {
         const [layerId, ...idParts] = String(entity?.gevTrackedId || '').split(':');
         const trackedId = idParts.join(':');
@@ -8506,6 +8535,26 @@ export class StyleManager {
       ok: false,
       error: `No ${filtered}${label} contact is available to enter — track one first, or say "next ${label}"`,
     };
+  }
+
+  /**
+   * Operator Enter cockpit: same `controlCockpit('enter')` action as voice,
+   * establishing Contacts first when that existing gate is still shut.
+   */
+  async requestCockpitEnter() {
+    if (!this.cockpitView) {
+      return {
+        ok: false,
+        action: 'control_cockpit',
+        error: 'Cockpit controller unavailable',
+        state: this.getCockpitState(),
+      };
+    }
+    return requestCockpitEnter({
+      isEntryAllowed: () => this.cockpitView.isEntryAllowed?.() === true,
+      setContextMode: (mode, options) => this.setContextMode(mode, options),
+      controlCockpit: (action) => this.controlCockpit(action),
+    });
   }
 
   /**
