@@ -33,6 +33,10 @@ function orbitsChip() {
   return satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'orbits');
 }
 
+function pointsChip() {
+  return satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'points');
+}
+
 function catalogChip() {
   return satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'catalog-dense');
 }
@@ -199,7 +203,135 @@ test('orbit chrome does not add an API endpoint', () => {
   const satellites = readFileSync(path.join(ROOT, 'src/data/satellites.js'), 'utf8');
   const layerState = readFileSync(path.join(ROOT, 'src/data/layerState.js'), 'utf8');
   assert.match(satellites, /id: 'orbits'/);
+  assert.match(satellites, /id: 'points'/);
   assert.match(layerState, /booleanOption\('showOrbits', 'o', true\)/);
+  assert.match(layerState, /booleanOption\('showPoints', 'p', true\)/);
   assert.doesNotMatch(satellites, /\/api\/(?!celestrak)/);
   assert.doesNotMatch(layerState, /\/api\//);
+});
+
+test('POINTS chip is stateless and only writes showPoints', () => {
+  try {
+    _setDenseCatalogStateForTest({ showPoints: true, showOrbits: true });
+    const chip = pointsChip();
+    assert.ok(chip, 'satellites row declares a POINTS chip');
+    assert.equal(chip.label, 'POINTS');
+    assert.equal(chip.active, true);
+    assert.equal(chip.state, 'active');
+    assert.deepEqual(chip.params, { showPoints: false });
+    assert.equal(Object.hasOwn(chip.params, 'showOrbits'), false);
+    assert.equal(Object.hasOwn(chip.params, 'catalog'), false);
+    assert.equal(Object.hasOwn(chip.params, 'satGroup'), false);
+    assert.ok(orbitsChip(), 'ORBITS stays next to POINTS');
+    assert.ok(catalogChip(), 'Core | Dense catalog chips stay on the row');
+    assert.ok(
+      (satellitesLayer.getRowControls().selects || []).some((entry) => entry.id === 'sat-group'),
+      'Plan 65 CelesTrak group picker stays on the row',
+    );
+    assert.ok(
+      (satellitesLayer.getRowControls().legend || []).length > 0
+        || satellitesLayer.getRowControls().chips.some((entry) => entry.id === 'catalog-core'),
+      'class legend / Core chip stay independent of the Points write',
+    );
+
+    satellitesLayer.setParams({ showPoints: false });
+    const idle = pointsChip();
+    assert.ok(idle, 'hiding points keeps the POINTS chip so it can turn back on');
+    assert.equal(idle.active, false);
+    assert.equal(idle.state, 'idle');
+    assert.deepEqual(idle.params, { showPoints: true });
+    assert.equal(orbitsChip().active, true, 'ORBITS stays independent');
+    assert.equal(catalogChip().id, 'catalog-dense');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('POINTS off hides dots and leaves ISS, core, and dense orbits', () => {
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'dense',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD, CORE_NORAD, DENSE_NORAD],
+      orbits: [ISS_NORAD],
+    });
+    const before = _satelliteVisualStateForTest();
+    assert.equal(before.showPoints, true);
+    assert.equal(before.pointCollectionShow, true);
+    assert.equal(before.showOrbits, true);
+    assert.equal(before.orbitShows[ISS_NORAD], true);
+
+    satellitesLayer.setParams({ showPoints: false });
+    const after = _satelliteVisualStateForTest();
+    assert.equal(after.showPoints, false);
+    assert.equal(after.pointCollectionShow, false);
+    assert.equal(after.showOrbits, true);
+    assert.equal(after.orbitShows[ISS_NORAD], true);
+    assert.equal(after.catalog, 'dense');
+    assert.deepEqual(after.pointIds.sort((a, b) => a - b), [ISS_NORAD, CORE_NORAD, DENSE_NORAD]);
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('POINTS on restores dots without flipping catalog or orbits', () => {
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'dense',
+      showPoints: false,
+      showOrbits: true,
+      points: [ISS_NORAD, CORE_NORAD, DENSE_NORAD],
+      orbits: [ISS_NORAD],
+    });
+    assert.equal(_satelliteVisualStateForTest().pointCollectionShow, false);
+
+    satellitesLayer.setParams({ showPoints: true });
+    const restored = _satelliteVisualStateForTest();
+    assert.equal(restored.showPoints, true);
+    assert.equal(restored.pointCollectionShow, true);
+    assert.equal(restored.showOrbits, true);
+    assert.equal(restored.orbitShows[ISS_NORAD], true);
+    assert.equal(restored.catalog, 'dense');
+    assert.deepEqual(restored.pointIds.sort((a, b) => a - b), [ISS_NORAD, CORE_NORAD, DENSE_NORAD]);
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('toggling points does not fetch CelesTrak, drop ISS tracking, or change satGroup', () => {
+  const originalFetch = globalThis.fetch;
+  const storage = memoryStorage();
+  const fetches = [];
+  try {
+    resetSatGroupCache();
+    setSatGroup('weather', storage);
+    globalThis.fetch = async (url) => {
+      fetches.push(String(url));
+      return { ok: false, status: 502 };
+    };
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD],
+      orbits: [ISS_NORAD],
+      trackedNorad: ISS_NORAD,
+    });
+    assert.equal(satellitesLayer.getParams().selectedSatTrackingId, ISS_NORAD);
+
+    satellitesLayer.setParams({ showPoints: false }, { storage });
+    satellitesLayer.setParams({ showPoints: true }, { storage });
+    assert.deepEqual(fetches, []);
+    assert.equal(getSatGroup(storage), 'weather');
+    assert.equal(satellitesLayer.getParams().catalog, 'core');
+    assert.equal(satellitesLayer.getParams().satGroup, 'weather');
+    assert.equal(satellitesLayer.getParams().selectedSatTrackingId, ISS_NORAD,
+      'tracked ISS stays while points toggle');
+    assert.equal(satellitesLayer.getParams().showOrbits, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    resetSatGroupCache();
+    _clearDenseCatalogStateForTest();
+  }
 });

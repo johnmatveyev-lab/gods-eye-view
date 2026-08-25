@@ -299,6 +299,9 @@ const OPTION_GROUPS = Object.freeze({
     // new token, so omitted `o` means the same thing existing v2 links already
     // showed: rings on.
     booleanOption('showOrbits', 'o', true),
+    // Default ON matches the long-standing hardcoded fleet dots. Omitted `p`
+    // is the same sky existing v2 links already showed: points on.
+    booleanOption('showPoints', 'p', true),
     integerOption('selectedSatTrackingId', 't', null),
     // PLAN 132: class chips default ALL ON. Omitted `k` means every class
     // stays visible — there was no prior class filter, so absent === default.

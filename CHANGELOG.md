@@ -49,6 +49,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites row has a **POINTS** on/off chip next to ORBITS over the
+  existing `setParams({ showPoints })` path (default ON). Off hides the
+  dots and keeps orbit rings if ORBITS is on. Tracked ISS stays. The
+  choice persists in layer-state / share links (`s.p.0` when off). It
+  does not change catalog Core|Dense, class chips, the CelesTrak group
+  picker, or add an `/api` route.
 - Bikeshare has All | 3+ | 5+ chips next to Hide empty / Hide full /
   Hide closed. Default All matches the current dots. 3+ and 5+ keep
   stations whose last-good `bikesAvailable` is at least that floor.
@@ -88,8 +94,8 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   chips filter already-fetched CelesTrak groups through `satelliteClassOf`
   (ISS stays STATION) and re-apply from in-memory points — no extra
   `/api/celestrak` fetch. Tracked satellites stay visible. AND with Core |
-  Dense and ORBITS. COMMS is a no-op in Core (dense-only) and hides the
-  Starlink shell in Dense. Persists on the existing satellites layerState
+  Dense, POINTS, and ORBITS. COMMS is a no-op in Core (dense-only) and hides
+  the Starlink shell in Dense. Persists on the existing satellites layerState
   option (`s.k.*`). Not an alert service. No new `/api`.
 - FIRMS row chips filter already-fetched detections by age window
   (`6h` | `12h` | `24h`, default 24h). Cells, sprites, overlay cards,

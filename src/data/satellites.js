@@ -1520,6 +1520,8 @@ export function _catalogGroupForTest(noradId) {
  *   showOrbits?: boolean,
  *   points?: number[],
  *   orbits?: number[],
+ *   trackedNorad?: number|null,
+ *   groups?: Record<number, string>,
  * }} [options]
  */
 export function _setSatellitePresentationForTest({
@@ -1529,8 +1531,9 @@ export function _setSatellitePresentationForTest({
   points = [],
   orbits = [],
   groups = {},
+  trackedNorad = null,
 } = {}) {
-  _setDenseCatalogStateForTest({ catalog, showPoints, showOrbits });
+  _setDenseCatalogStateForTest({ catalog, showPoints, showOrbits, trackedNorad });
   for (const noradId of points) {
     const id = Number(noradId);
     const group = groups[id] || (id === 44444 ? 'dense' : 'stations');
@@ -2336,12 +2339,14 @@ const satellitesLayer = {
   /**
    * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
    * Dense catalog chips, PLAN 132 class chips, the Plan 65 Sats group picker,
-   * an ORBITS chip over the existing `showOrbits` param, a class legend, and
-   * the Next ISS readout host (Plan 139).
+   * POINTS and ORBITS chips over the existing `showPoints` / `showOrbits`
+   * params, a class legend, and the Next ISS readout host (Plan 139).
    *
    * The chips are stateless — they declare the params to apply and the manager
    * owns the write, so the Space Missions snapshot/restore path (which drives
-   * the same `catalog` / `showOrbits` params) stays the single source of truth.
+   * the same `catalog` / `showPoints` / `showOrbits` params) stays the single
+   * source of truth. Hiding dots must keep this row: otherwise POINTS could
+   * not turn back on, and Orbits / Core|Dense / class chips would vanish.
    *
    * Dense reports the LOAD state, not the catalog param: the param flips
    * synchronously while the Starlink shell takes seconds to arrive and
@@ -2350,12 +2355,6 @@ const satellitesLayer = {
    * @returns {{ chips: Array<object>, legend: Array<object>, selects: Array<object>, readout?: {id: string} }} Row controls.
    */
   getRowControls() {
-    // A dependency owner (Space Missions) borrows this layer for TLE lookup
-    // with showPoints:false. Nothing is rendered, so a legend would describe an
-    // empty sky and a chip write would be silently reverted by that owner's
-    // restore. Surrender the row rather than lie about it.
-    if (!_params.showPoints) return { chips: [], legend: [], selects: [] };
-
     const catalog = satelliteCatalogControls({
       catalog: _params.catalog,
       denseStatus: _denseStatus,
@@ -2366,6 +2365,18 @@ const satellitesLayer = {
       chips: [
         ...catalog.chips,
         ..._classFilterChips(),
+        {
+          id: 'points',
+          label: 'POINTS',
+          active: _params.showPoints,
+          busy: false,
+          disabled: false,
+          state: _params.showPoints ? 'active' : 'idle',
+          title: _params.showPoints
+            ? 'Hide satellite dots — orbit rings stay if ORBITS is on'
+            : 'Show satellite dots',
+          params: { showPoints: !_params.showPoints },
+        },
         {
           id: 'orbits',
           label: 'ORBITS',

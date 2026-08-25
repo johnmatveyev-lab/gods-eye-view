@@ -327,7 +327,11 @@ test('the satellites row declares the readout next to sat class chips', () => {
     assert.ok(controls.chips.some((chip) => chip.id === 'catalog-core'));
     assert.ok(controls.legend === undefined || Array.isArray(controls.legend));
     satellitesLayer.setParams({ showPoints: false });
-    assert.equal(satellitesLayer.getRowControls().readout, undefined);
+    assert.equal(
+      satellitesLayer.getRowControls().readout?.id,
+      ISS_PASS_READOUT_ID,
+      'hiding points keeps the Next ISS readout on the row',
+    );
   } finally {
     _clearDenseCatalogStateForTest();
   }

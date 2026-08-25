@@ -170,7 +170,7 @@ test('the family pattern catches selection names the old sweep would have missed
   for (const evader of ['trackedVesselMmsi', 'selectedVesselId', 'trackedNorad', 'primaryTargetIcao']) {
     assert.ok(SCENE_SELECTION_PARAM_PATTERN.test(evader), `${evader} must be caught`);
   }
-  for (const ordinary of ['models3d', 'catalog', 'showOrbits', 'densityScale', 'coverageMode', 'calibration']) {
+  for (const ordinary of ['models3d', 'catalog', 'showOrbits', 'showPoints', 'densityScale', 'coverageMode', 'calibration']) {
     assert.equal(SCENE_SELECTION_PARAM_PATTERN.test(ordinary), false, `${ordinary} is not a selection param`);
   }
 });
