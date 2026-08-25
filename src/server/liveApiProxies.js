@@ -87,6 +87,23 @@ export {
 /** Repo root — this module lives in src/server. Not named __dirname: Netlify
  *  esbuild already injects that binding into the function bundle. */
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+/** Hosted Lambda / Netlify / Vercel filesystems are read-only except /tmp. */
+const HOSTED_GEV_LOG_DIR = '/tmp/meridian-gev-logs';
+
+/**
+ * Directory for ephemeral server files. Hosted isolates cannot mkdir under
+ * `repoRoot` (`/var/task/.gev-logs` is ENOENT / EROFS); local Vite keeps the
+ * gitignored `.gev-logs` next to the repo.
+ *
+ * @param {NodeJS.ProcessEnv} [env]
+ * @param {string} [root]
+ */
+export function hostedWritableDir(env = process.env, root = repoRoot) {
+  if (env.NETLIFY || env.VERCEL || env.AWS_LAMBDA_FUNCTION_NAME) {
+    return HOSTED_GEV_LOG_DIR;
+  }
+  return path.join(root, '.gev-logs');
+}
 
 // ---------------------------------------------------------------------------
 // Civilian flights: adsb.lol only (OpenSky is disabled in this commercial fork)
@@ -735,8 +752,7 @@ const AISSTREAM_DOWN_RETRY_MS = 900_000;
 const AISSTREAM_AUTH_PROBE_MS = 3_600_000;
 /** How often the watchdog re-evaluates without request traffic. */
 const AISSTREAM_TICK_MS = 15_000;
-const REALTIME_DEBUG_LOG_DIR = path.join(repoRoot, '.gev-logs');
-const REALTIME_DEBUG_LOG_FILE = path.join(REALTIME_DEBUG_LOG_DIR, 'realtime-conversations.jsonl');
+const REALTIME_DEBUG_LOG_FILE_NAME = 'realtime-conversations.jsonl';
 const REALTIME_DEBUG_LOG_MAX_BYTES = 8 * 1024 * 1024;
 
 /**
@@ -1180,6 +1196,58 @@ function aisLiveProxy() {
 }
 
 /**
+ * Voice beacon. Hosted write failures must stay 204 — the client swallows
+ * errors and a 400 empties hosted forensics without changing the HUD.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ * @param {{
+ *   env?: NodeJS.ProcessEnv,
+ *   root?: string,
+ *   fsImpl?: Pick<typeof fs, 'mkdirSync' | 'appendFileSync'>,
+ *   warn?: (...args: unknown[]) => void,
+ * }} [deps]
+ */
+export async function handleRealtimeDebugLogHttp(req, res, {
+  env = process.env,
+  root = repoRoot,
+  fsImpl = fs,
+  warn = (...args) => console.warn(...args),
+} = {}) {
+  if (req.method !== 'POST') {
+    res.statusCode = 405;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Method not allowed' }));
+    return;
+  }
+
+  let record;
+  try {
+    const body = await readRequestBody(req, REALTIME_DEBUG_LOG_MAX_BYTES);
+    record = JSON.parse(body || '{}');
+  } catch (error) {
+    res.statusCode = 400;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: error?.message || 'Failed to write Realtime debug log' }));
+    return;
+  }
+
+  const dir = hostedWritableDir(env, root);
+  const file = path.join(dir, REALTIME_DEBUG_LOG_FILE_NAME);
+  try {
+    fsImpl.mkdirSync(dir, { recursive: true });
+    fsImpl.appendFileSync(file, `${JSON.stringify({
+      loggedAt: new Date().toISOString(),
+      ...record,
+    })}\n`);
+  } catch (error) {
+    warn('[realtime-debug-log] write failed:', error?.message || error);
+  }
+  res.statusCode = 204;
+  res.end();
+}
+
+/**
  * Vite plugin: OpenAI Realtime ephemeral client secret.
  *
  * Keeps OPENAI_API_KEY server-side while the browser connects to the
@@ -1193,28 +1261,7 @@ function openAiRealtimeProxy() {
     });
 
     middlewares.use('/api/realtime/debug-log', async (req, res) => {
-      if (req.method !== 'POST') {
-        res.statusCode = 405;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed' }));
-        return;
-      }
-
-      try {
-        const body = await readRequestBody(req, REALTIME_DEBUG_LOG_MAX_BYTES);
-        const record = JSON.parse(body || '{}');
-        fs.mkdirSync(REALTIME_DEBUG_LOG_DIR, { recursive: true });
-        fs.appendFileSync(REALTIME_DEBUG_LOG_FILE, JSON.stringify({
-          loggedAt: new Date().toISOString(),
-          ...record,
-        }) + '\n');
-        res.statusCode = 204;
-        res.end();
-      } catch (error) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: error?.message || 'Failed to write Realtime debug log' }));
-      }
+      await handleRealtimeDebugLogHttp(req, res);
     });
 
     middlewares.use('/api/realtime/token', async (req, res) => {
