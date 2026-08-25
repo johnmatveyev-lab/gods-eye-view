@@ -1,6 +1,7 @@
 import { createAnnotationEngine } from './annotationEngine.js';
 import { initAnnotationClearControl } from './clearControl.js';
 import { initAnnotationUndoControl } from './undoControl.js';
+import { initAnnotationExportControl } from './exportControl.js';
 import { createHybridAnnotationRenderer } from './hybridAnnotationRenderer.js';
 
 /**
@@ -22,5 +23,6 @@ export function initAnnotations({ viewer, tileset = null }) {
   window.__gevAnnotations = engine;
   initAnnotationClearControl(engine);
   initAnnotationUndoControl(engine);
+  initAnnotationExportControl(engine);
   return engine;
 }
