@@ -2020,6 +2020,33 @@ body.ui-clean-view #scene-runtime.active {
   transform: translateX(-50%) translateY(0);
 }
 
+#offline-chip {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  z-index: 102;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 176, 80, 0.38);
+  background: rgba(18, 10, 4, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: rgba(255, 214, 160, 0.94);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34), 0 0 14px rgba(255, 160, 64, 0.08);
+}
+
+#offline-chip[hidden] {
+  display: none;
+}
+
 #traffic-sync-label,
 #cctv-sync-label {
   color: rgba(184, 244, 255, 0.92);

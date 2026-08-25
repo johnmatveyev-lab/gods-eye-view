@@ -25,6 +25,8 @@ const VALID_LAYER_SERIALIZATION_DISPOSITIONS = new Set([
   'enabled+options',
   'enabled+mirrored-options',
 ]);
+/** AIS owns its own live stream. Chrome pause/resume must not wrap it. */
+const CHROME_POLL_EXCLUDED_LAYER_IDS = new Set(['ais-live-vessels']);
 
 function isAbortError(error) {
   return error?.name === 'AbortError';
@@ -127,6 +129,104 @@ export class DataLayerManager {
     this._registrationDispositions = null;
     this._allowQaRegistration = allowQaRegistration === true;
     this._qaLayerIds = new Set();
+    this._liveScheduler = null;
+    this._liveSchedulerUnsubscribe = null;
+    this._pollsSuspended = false;
+  }
+
+  /**
+   * Bind manager-owned poll timers to the chrome live-poll scheduler.
+   * AIS is excluded; voice sessions are not registered here.
+   * @param {{subscribe?: Function}|null} scheduler Chrome scheduler.
+   */
+  attachLiveScheduler(scheduler) {
+    this.detachLiveScheduler();
+    this._liveScheduler = scheduler || null;
+    if (typeof this._liveScheduler?.subscribe !== 'function') return;
+    this._liveSchedulerUnsubscribe = this._liveScheduler.subscribe((state) => {
+      this._syncLivePolls(state);
+    });
+  }
+
+  detachLiveScheduler() {
+    this._liveSchedulerUnsubscribe?.();
+    this._liveSchedulerUnsubscribe = null;
+    this._liveScheduler = null;
+  }
+
+  /** @returns {boolean} True when chrome has paused manager-owned poll timers. */
+  areLivePollsSuspended() {
+    return this._pollsSuspended === true;
+  }
+
+  _isChromePollLayer(entry) {
+    return !CHROME_POLL_EXCLUDED_LAYER_IDS.has(entry?.module?.id);
+  }
+
+  _pollSpec(entry) {
+    const configuredRefreshInterval = Number(entry.module.refreshInterval);
+    const updateInterval = Number(entry.module.updateInterval);
+    const refreshInterval = configuredRefreshInterval > 0
+      ? configuredRefreshInterval
+      : (updateInterval > 0 ? updateInterval : 0);
+    return {
+      refreshInterval,
+      wantsLoop: refreshInterval > 0 || updateInterval === 0,
+      wantsDataRefresh: refreshInterval > 0,
+    };
+  }
+
+  _disarmUpdateLoop(entry) {
+    if (!entry.intervalId) return;
+    clearInterval(entry.intervalId);
+    entry.intervalId = null;
+  }
+
+  _syncLivePolls(state) {
+    if (state?.suspended) {
+      this.pauseLivePolls();
+      return;
+    }
+    this.resumeLivePolls({ refresh: this._pollsSuspended });
+  }
+
+  /** Pause chrome-managed layer poll timers. Idempotent. */
+  pauseLivePolls() {
+    this._pollsSuspended = true;
+    for (const entry of this.layers.values()) {
+      if (!this._isChromePollLayer(entry)) continue;
+      this._disarmUpdateLoop(entry);
+    }
+  }
+
+  /**
+   * Resume chrome-managed layer poll timers.
+   * @param {{refresh?: boolean}} [options] When true, run one update first.
+   */
+  resumeLivePolls({ refresh = false } = {}) {
+    const wasSuspended = this._pollsSuspended;
+    this._pollsSuspended = false;
+    if (refresh && wasSuspended) {
+      for (const [layerId, entry] of this.layers) {
+        if (
+          !this._isChromePollLayer(entry)
+          || !entry.enabled
+          || entry.lifecycleState !== 'enabled'
+          || !this._pollSpec(entry).wantsDataRefresh
+        ) continue;
+        void this._runPeriodicUpdate(layerId, entry);
+      }
+    }
+    for (const [layerId, entry] of this.layers) {
+      if (
+        !this._isChromePollLayer(entry)
+        || !entry.enabled
+        || entry.lifecycleState !== 'enabled'
+        || entry.intervalId
+        || !this._pollSpec(entry).wantsLoop
+      ) continue;
+      this._armUpdateLoop(layerId, entry);
+    }
   }
 
   register(layerModule) {
@@ -520,11 +620,13 @@ export class DataLayerManager {
   }
 
   _armUpdateLoop(layerId, entry) {
-    const configuredRefreshInterval = Number(entry.module.refreshInterval);
+    if (this._pollsSuspended && this._isChromePollLayer(entry)) return;
+    const { refreshInterval } = this._pollSpec(entry);
     const updateInterval = Number(entry.module.updateInterval);
-    const refreshInterval = configuredRefreshInterval > 0
-      ? configuredRefreshInterval
-      : (updateInterval > 0 ? updateInterval : 0);
+    if (entry.intervalId) {
+      clearInterval(entry.intervalId);
+      entry.intervalId = null;
+    }
     if (refreshInterval > 0) {
       entry.intervalId = setInterval(() => {
         void this._runPeriodicUpdate(layerId, entry);
@@ -1893,6 +1995,7 @@ export class DataLayerManager {
    * Should be called when the viewer is being torn down.
    */
   async destroyAll() {
+    this.detachLiveScheduler();
     for (const layerId of [...this.layers.keys()]) {
       await this.destroyLayer(layerId);
     }
