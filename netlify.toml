@@ -1,0 +1,35 @@
+# Meridian on Netlify. Product name stays Meridian.
+# Vercel handlers in api/ are unchanged — the Functions v2 adapter invokes them.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  # package.json engines require Node 24; Netlify has 24 LTS as of 2026-07.
+  NODE_VERSION = "24"
+
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+
+[functions.api]
+  included_files = ["config/**"]
+
+# Functions v2 (netlify/functions/api.js, path /api and /api/*) owns /api.
+# Keep this rewrite ahead of the SPA fallback so /api/* never becomes index.html.
+# The adapter also restores leftover /.netlify/functions/api/* URLs.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/api"
+  to = "/.netlify/functions/api"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

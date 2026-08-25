@@ -1,0 +1,201 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import handleNetlifyLiveApi, {
+  applyHostedApiRewrites,
+  config as netlifyFunctionConfig,
+  resolveVercelApiFile,
+  restoreNetlifyApiPath,
+} from './netlifyLiveApi.js';
+
+const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
+
+function parseNetlifyToml(source) {
+  const build = {};
+  const buildEnvironment = {};
+  const redirects = [];
+  let section = null;
+  let currentRedirect = null;
+  for (const rawLine of source.split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+#.*$/, '').trim();
+    if (!line) continue;
+    if (line === '[build]') {
+      section = 'build';
+      currentRedirect = null;
+      continue;
+    }
+    if (line === '[build.environment]') {
+      section = 'build.environment';
+      currentRedirect = null;
+      continue;
+    }
+    if (line === '[[redirects]]') {
+      section = 'redirects';
+      currentRedirect = {};
+      redirects.push(currentRedirect);
+      continue;
+    }
+    if (line.startsWith('[')) {
+      section = 'other';
+      currentRedirect = null;
+      continue;
+    }
+    const match = line.match(/^([A-Za-z0-9_]+)\s*=\s*(?:"([^"]*)"|(\d+))$/);
+    if (!match) continue;
+    const key = match[1];
+    const value = match[2] !== undefined ? match[2] : Number(match[3]);
+    if (section === 'build') build[key] = value;
+    else if (section === 'build.environment') buildEnvironment[key] = value;
+    else if (section === 'redirects' && currentRedirect) currentRedirect[key] = value;
+  }
+  return { build, buildEnvironment, redirects };
+}
+
+async function dispatch(url, { method = 'GET', headers = {}, body } = {}) {
+  const request = new Request(new URL(url, 'http://localhost').href, {
+    method,
+    headers,
+    body,
+  });
+  const response = await handleNetlifyLiveApi(request);
+  const text = await response.text();
+  let json = null;
+  try { json = JSON.parse(text); } catch { json = null; }
+  return { status: response.status, json, text, contentType: response.headers.get('content-type') || '' };
+}
+
+test('netlify.toml builds the Vite dist and never SPA-falls-back /api/*', () => {
+  const tomlPath = path.join(ROOT, 'netlify.toml');
+  assert.equal(existsSync(tomlPath), true);
+  const source = readFileSync(tomlPath, 'utf8');
+  const toml = parseNetlifyToml(source);
+
+  assert.equal(toml.build.command, 'npm run build');
+  assert.equal(toml.build.publish, 'dist');
+  assert.equal(toml.buildEnvironment.NODE_VERSION, '24');
+  assert.match(source, /\[functions\.api\]/);
+  assert.match(source, /included_files\s*=\s*\["config\/\*\*"\]/);
+
+  assert.ok(toml.redirects.length >= 2);
+  const spaIndex = toml.redirects.findIndex((rule) => (
+    rule.from === '/*' && rule.to === '/index.html' && Number(rule.status) === 200
+  ));
+  assert.ok(spaIndex >= 0, 'SPA fallback /* → /index.html 200 is required');
+  assert.equal(spaIndex, toml.redirects.length - 1, 'SPA fallback must be last');
+
+  const apiRules = toml.redirects.filter((rule) => rule.from === '/api/*' || rule.from === '/api');
+  assert.ok(apiRules.length >= 1, '/api must be declared before the SPA fallback');
+  for (const rule of apiRules) {
+    assert.notEqual(rule.to, '/index.html');
+    assert.doesNotMatch(String(rule.to), /index\.html/);
+    assert.ok(toml.redirects.indexOf(rule) < spaIndex);
+  }
+
+  const paths = netlifyFunctionConfig.path;
+  assert.ok(Array.isArray(paths));
+  assert.ok(paths.includes('/api/*'));
+  assert.ok(paths.includes('/api'));
+});
+
+test('Netlify adapter is a thin Vercel-handler map; Vercel files stay untouched', () => {
+  const entry = path.join(ROOT, 'netlify/functions/api.js');
+  assert.equal(existsSync(entry), true);
+  const entrySource = readFileSync(entry, 'utf8');
+  assert.match(entrySource, /netlifyLiveApi\.js/);
+  assert.doesNotMatch(entrySource, /export \{ GET, POST \}/);
+  assert.doesNotMatch(entrySource, /from ['"]next/);
+  assert.doesNotMatch(entrySource, /vite-plugin-cesium|from ['"]vite['"]/);
+
+  const adapter = readFileSync(path.join(ROOT, 'src/server/netlifyLiveApi.js'), 'utf8');
+  assert.doesNotMatch(adapter, /from ['"]vite['"]|vite-plugin-cesium/);
+  assert.doesNotMatch(adapter, /https:\/\/opensky-network\.org|https:\/\/news\.google\.com|telegeography\.com|submarinecablemap/i);
+  assert.doesNotMatch(adapter, /quantum-earth/i);
+  assert.match(adapter, /api\/\[\.\.\.path\]\.js/);
+  assert.match(adapter, /api\/billing\/\[\.\.\.path\]\.js/);
+
+  const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
+  assert.equal(vercelJson.framework, 'vite');
+  assert.ok(vercelJson.functions['api/[...path].js']);
+  assert.ok(vercelJson.functions['api/billing/[...path].js']);
+  assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html|netlify/i);
+
+  assert.equal(existsSync(path.join(ROOT, 'api/google/text-search.js')), true);
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
+});
+
+test('restoreNetlifyApiPath and TomTom rewrite do not invent a SPA path', () => {
+  assert.equal(restoreNetlifyApiPath('/api/google/text-search'), '/api/google/text-search');
+  assert.equal(restoreNetlifyApiPath('/.netlify/functions/api/google/text-search'), '/api/google/text-search');
+  assert.equal(restoreNetlifyApiPath('/google/text-search'), '/api/google/text-search');
+  assert.equal(
+    applyHostedApiRewrites('/api/tomtom/flow/6/12/25.pbf'),
+    '/api/tomtom/flow/6/12/25',
+  );
+  assert.equal(applyHostedApiRewrites('/api/tomtom/status'), '/api/tomtom/status');
+});
+
+test('adapter routes known /api paths onto the existing Vercel handler files', () => {
+  assert.equal(resolveVercelApiFile('/api/google/text-search'), 'api/google/text-search.js');
+  assert.equal(resolveVercelApiFile('/api/tomtom/status'), 'api/tomtom/[...path].js');
+  assert.equal(resolveVercelApiFile('/api/billing/me'), 'api/billing/[...path].js');
+  assert.equal(resolveVercelApiFile('/api/stripe/webhook'), 'api/stripe/webhook.js');
+  assert.equal(resolveVercelApiFile('/api/cctv/frame/354'), 'api/cctv/frame/[id].js');
+  assert.equal(resolveVercelApiFile('/api/opensky'), 'api/opensky.js');
+  assert.equal(resolveVercelApiFile('/api/opensky-track'), 'api/opensky-track.js');
+  assert.equal(resolveVercelApiFile('/api/radio/stations'), 'api/radio/[...path].js');
+});
+
+test('GET /api/google/text-search reaches the existing handler, not index.html', async () => {
+  const previous = process.env.GOOGLE_MAPS_API_KEY;
+  delete process.env.GOOGLE_MAPS_API_KEY;
+  try {
+    const { status, json, text, contentType } = await dispatch('/api/google/text-search?q=capitol');
+    assert.equal(status, 503);
+    assert.deepEqual(json.places, []);
+    assert.match(json.error, /GOOGLE_MAPS_API_KEY/);
+    assert.match(contentType, /json/);
+    assert.doesNotMatch(text, /<!doctype html/i);
+    assert.doesNotMatch(text, /<div id="app"/i);
+  } finally {
+    if (previous !== undefined) process.env.GOOGLE_MAPS_API_KEY = previous;
+  }
+});
+
+test('GET leftover /.netlify/functions/api/tomtom/status reaches TomTom', async () => {
+  const { status, json, text } = await dispatch('/.netlify/functions/api/tomtom/status');
+  assert.equal(status, 200);
+  assert.equal(typeof json.hasKey, 'boolean');
+  assert.equal(typeof json.dailyCount, 'number');
+  assert.doesNotMatch(text, /<!doctype html/i);
+});
+
+test('GET /api/billing/me reaches the existing billing handler', async () => {
+  const { status, json, text } = await dispatch('/api/billing/me');
+  assert.notEqual(status, 404);
+  if (status === 200) {
+    assert.equal(json.plan, 'self_host');
+    assert.equal(json.clerkConfigured, false);
+  } else {
+    assert.ok(status === 401 || status === 503);
+    assert.equal(typeof json.error, 'string');
+  }
+  assert.doesNotMatch(text, /<!doctype html/i);
+});
+
+test('unknown /api path is a handler 404 JSON, never index.html', async () => {
+  const { status, json, text, contentType } = await dispatch('/api/does-not-exist');
+  assert.equal(status, 404);
+  assert.equal(json.error, 'Not found');
+  assert.match(contentType, /json/);
+  assert.doesNotMatch(text, /<!doctype html/i);
+  assert.doesNotMatch(text, /<html/i);
+});
+
+test('GET /api/opensky never contacts OpenSky', async () => {
+  const { status, json } = await dispatch('/api/opensky');
+  assert.equal(status, 400);
+  assert.match(json.error, /adsb\.lol/i);
+  assert.doesNotMatch(JSON.stringify(json), /opensky-network/);
+});

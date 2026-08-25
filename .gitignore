@@ -9,6 +9,7 @@ output/
 .gev-cache/
 .meridian-billing/
 .vercel/
+.netlify/
 .DS_Store
 .gstack/
 3d-models/

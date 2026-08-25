@@ -2,6 +2,14 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — Netlify hosting.** `netlify.toml` builds with `npm run build`,
+> publishes `dist`, and pins Node 24. `netlify/functions/api.js` is a thin
+> Functions v2 adapter (`src/server/netlifyLiveApi.js`) that maps `/api/*` onto
+> the existing Vercel Node default exports. `/api/*` is rewritten to the
+> function before the SPA `/*` → `/index.html` fallback, so a missing API path
+> is handler JSON 404, not `index.html`. Vercel files are unchanged. Hosted
+> still does not wrap AISStream, OpenSky, Google News RSS, or TeleGeography.
+
 > **2026-08-25 — layer Retry chip (plan 112)** (`src/data/manager.js`).
 > An enabled Data Layers row whose feed is `unavailable` / `stale`, or that
 > already presents `error` / `lastError` / `managerRefreshError`, shows a
