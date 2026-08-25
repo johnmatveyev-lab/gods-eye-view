@@ -30,7 +30,6 @@ import {
   getIdentifiedOnlyEnabled,
   hydrateIdentifiedOnlyEnabled,
   passesIdentifiedOnlyFilter,
-  resetIdentifiedOnlyForTest,
   setIdentifiedOnlyEnabled,
   subscribeIdentifiedOnlyEnabled,
 } from './flightIdentifiedFilter.js';
@@ -1076,7 +1075,6 @@ export function _setTrackedMilitaryRefreshStateForTest({
   _backoff = false;
   _retryAt = 0;
   _airborneOnly = false;
-  resetIdentifiedOnlyForTest();
   _speedMinKt = null;
   _speedMaxKt = null;
   _showClimb = true;

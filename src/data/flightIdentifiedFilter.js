@@ -152,10 +152,9 @@ export function subscribeIdentifiedOnlyEnabled(listener) {
   return () => listeners.delete(listener);
 }
 
-/** Test-only: restore the default OFF preference without clearing subscribers. */
+/** Test-only: restore the default OFF preference without notifying layers. */
 export function resetIdentifiedOnlyForTest() {
   currentEnabled = IDENTIFIED_ONLY_DEFAULT;
-  for (const listener of listeners) listener(currentEnabled);
 }
 
 /** Layer-row chip for the civil flights Identified-only toggle. */

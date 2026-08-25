@@ -54,7 +54,6 @@ import {
   hydrateIdentifiedOnlyEnabled,
   identifiedOnlyChipModel,
   passesIdentifiedOnlyFilter,
-  resetIdentifiedOnlyForTest,
   setIdentifiedOnlyEnabled,
   subscribeIdentifiedOnlyEnabled,
 } from './flightIdentifiedFilter.js';
@@ -3723,7 +3722,6 @@ export function _setTrackedFlightRefreshStateForTest({
   _retryAt = 0;
   _airborneOnly = false;
   _emergenciesOnly = false;
-  resetIdentifiedOnlyForTest();
   _speedMinKt = null;
   _speedMaxKt = null;
   _showClimb = true;
