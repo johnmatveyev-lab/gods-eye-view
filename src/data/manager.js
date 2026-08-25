@@ -1,5 +1,7 @@
 import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
+import { canPoll } from '../pollPresence.js';
+import { applyLayerListFilter, isBannedToggleLayerId } from './layerListFilter.js';
 function cloneLayerParams(value) {
   if (Array.isArray(value)) return value.map(cloneLayerParams);
   if (value && typeof value === 'object') {
@@ -118,7 +120,7 @@ export function layerFeedState(stats = {}) {
  * for real-time data overlays on the CesiumJS globe.
  */
 export class DataLayerManager {
-  constructor(viewer, { allowQaRegistration = false } = {}) {
+  constructor(viewer, { allowQaRegistration = false, canPoll: canPollFn = canPoll } = {}) {
     this.viewer = viewer;
     this.layers = new Map(); // id → { module, enabled, initialized, intervalId, lifecycleState, lifecycleUncertain }
     this._listeners = new Set();
@@ -129,9 +131,12 @@ export class DataLayerManager {
     this._registrationDispositions = null;
     this._allowQaRegistration = allowQaRegistration === true;
     this._qaLayerIds = new Set();
+    this._canPoll = typeof canPollFn === 'function' ? canPollFn : canPoll;
     this._liveScheduler = null;
     this._liveSchedulerUnsubscribe = null;
     this._pollsSuspended = false;
+    this._layerListFilterInput = null;
+    this._layerListFilterQuery = '';
   }
 
   /**
@@ -393,6 +398,7 @@ export class DataLayerManager {
       || entry.destroying
       || entry.refreshing
       || signal?.aborted
+      || !this._canPoll()
     ) return false;
     const refreshEpoch = ++entry.refreshEpoch;
     entry.refreshing = true;
@@ -621,22 +627,35 @@ export class DataLayerManager {
 
   _armUpdateLoop(layerId, entry) {
     if (this._pollsSuspended && this._isChromePollLayer(entry)) return;
+    if (entry.intervalId) return;
     const { refreshInterval } = this._pollSpec(entry);
     const updateInterval = Number(entry.module.updateInterval);
-    if (entry.intervalId) {
-      clearInterval(entry.intervalId);
-      entry.intervalId = null;
-    }
     if (refreshInterval > 0) {
       entry.intervalId = setInterval(() => {
+        if (!this._canPoll()) return;
         void this._runPeriodicUpdate(layerId, entry);
       }, refreshInterval);
     } else if (updateInterval === 0) {
       entry.intervalId = setInterval(() => {
         if (!entry.enabled) return;
+        if (!this._canPoll()) return;
         this._refreshTogglePanel();
       }, entry.module.statsRefreshInterval || 1000);
     }
+  }
+
+  /**
+   * One refresh of already-armed live layers after the tab is visible and
+   * online again. Does not create new interval handles.
+   */
+  resumePausedPolls() {
+    if (!this._canPoll()) return Promise.resolve();
+    const jobs = [];
+    for (const [layerId, entry] of this.layers) {
+      if (!entry.enabled || entry.lifecycleState !== 'enabled' || !entry.intervalId) continue;
+      jobs.push(this._runPeriodicUpdate(layerId, entry));
+    }
+    return Promise.all(jobs);
   }
 
   toggle(layerId, { origin = 'programmatic', notificationToken = null } = {}) {
@@ -2119,10 +2138,28 @@ export class DataLayerManager {
 
   /**
    * Build the toggle panel UI inside the given container element.
+   * @param {HTMLElement} container Layer-row host (`#data-toggles`).
+   * @param {{filterInput?: HTMLInputElement|null}} [options]
    */
-  buildTogglePanel(container) {
+  buildTogglePanel(container, { filterInput = null } = {}) {
     this._toggleContainer = container;
+    this._layerListFilterQuery = filterInput?.value || this._layerListFilterQuery || '';
+    if (filterInput && filterInput !== this._layerListFilterInput) {
+      this._layerListFilterInput = filterInput;
+      filterInput.addEventListener('input', () => {
+        this._layerListFilterQuery = filterInput.value;
+        this._applyLayerListFilter();
+      });
+    }
     this._renderToggles();
+  }
+
+  _applyLayerListFilter() {
+    applyLayerListFilter(
+      this._toggleContainer,
+      this._layerListFilterQuery || '',
+      this.getAll(),
+    );
   }
 
   _renderToggles() {
@@ -2130,7 +2167,7 @@ export class DataLayerManager {
     this._toggleContainer.innerHTML = '';
 
     for (const layer of this.getAll()) {
-      if (!layer.showInTogglePanel) continue;
+      if (!layer.showInTogglePanel || isBannedToggleLayerId(layer.id)) continue;
       const row = document.createElement('div');
       row.className = 'data-toggle-row';
       row.dataset.layerId = layer.id;
@@ -2196,12 +2233,21 @@ export class DataLayerManager {
           if (chip?.params) this.setLayerParams(layer.id, chip.params, { origin: 'user' });
         });
         controls.addEventListener('change', (event) => {
-          const select = event.target?.closest?.('select.data-toggle-select');
+          const satSelect = event.target?.closest?.('select.data-toggle-select');
+          if (satSelect && !satSelect.disabled) {
+            const spec = this._rowControlsFor(layer.id)?.selects
+              ?.find((entry) => entry.id === satSelect.dataset.selectId);
+            if (spec?.param) {
+              this.setLayerParams(layer.id, { [spec.param]: satSelect.value }, { origin: 'user' });
+            }
+            return;
+          }
+          const select = event.target?.closest?.('.data-toggle-picker-select');
           if (!select || select.disabled) return;
-          const spec = this._rowControlsFor(layer.id)?.selects
-            ?.find((entry) => entry.id === select.dataset.selectId);
-          if (spec?.param) {
-            this.setLayerParams(layer.id, { [spec.param]: select.value }, { origin: 'user' });
+          const module = this.layers.get(layer.id)?.module;
+          if (typeof module?.setSelectedSystem === 'function') {
+            module.setSelectedSystem(select.value);
+            this._refreshTogglePanel();
           }
         });
         row.appendChild(controls);
@@ -2210,6 +2256,7 @@ export class DataLayerManager {
 
       this._toggleContainer.appendChild(row);
     }
+    this._applyLayerListFilter();
   }
 
   /**
@@ -2217,7 +2264,7 @@ export class DataLayerManager {
    * misbehaving layer cannot blank the whole panel. Resolved from the registry
    * rather than the `getAll()` projection, which deliberately omits `module`.
    * @param {string} layerId Registered layer id.
-   * @returns {{ chips?: Array<object>, legend?: Array<object>, selects?: Array<object> }|null} Descriptor.
+   * @returns {{ chips?: Array<object>, legend?: Array<object>, selects?: Array<object>, picker?: object }|null} Descriptor.
    */
   _rowControlsFor(layerId) {
     const module = this.layers.get(layerId)?.module;
@@ -2245,11 +2292,27 @@ export class DataLayerManager {
    */
   _syncRowControls(container, layer) {
     if (!container) return;
-    const controls = layer.enabled ? this._rowControlsFor(layer.id) : null;
-    const chips = controls?.chips || [];
-    const legend = controls?.legend || [];
-    const selects = controls?.selects || [];
-    container.hidden = chips.length === 0 && legend.length === 0 && selects.length === 0;
+    const declared = this._rowControlsFor(layer.id);
+    const chips = layer.enabled ? (declared?.chips || []) : [];
+    const legend = layer.enabled ? (declared?.legend || []) : [];
+    const selects = layer.enabled ? (declared?.selects || []) : [];
+    const headingText = typeof declared?.heading === 'string' ? declared.heading.trim() : '';
+    const picker = declared?.picker || null;
+    container.hidden = chips.length === 0 && legend.length === 0 && selects.length === 0
+      && !headingText && !picker;
+    this._syncRowPicker(container, picker);
+
+    let heading = container.querySelector?.('.data-toggle-heading');
+    if (headingText) {
+      if (!heading) {
+        heading = document.createElement('span');
+        heading.className = 'data-toggle-heading';
+        container.insertBefore(heading, container.firstChild);
+      }
+      if (heading.textContent !== headingText) heading.textContent = headingText;
+    } else if (heading) {
+      heading.remove();
+    }
 
     for (const node of [...container.children]) {
       if (String(node.className).split(/\s+/).includes('data-toggle-legend-item')) node.remove();
@@ -2328,6 +2391,61 @@ export class DataLayerManager {
       entry.append(swatch, text);
       container.appendChild(entry);
     }
+  }
+
+  /**
+   * Reconcile an allowlisted-system <select> in place so a refresh does not
+   * steal focus. Picker changes call setSelectedSystem — never setLayerParams.
+   * @param {HTMLElement} container
+   * @param {object|null} picker
+   */
+  _syncRowPicker(container, picker) {
+    let wrap = null;
+    for (const node of container.children) {
+      if (String(node.className).split(/\s+/).includes('data-toggle-picker')) {
+        wrap = node;
+        break;
+      }
+    }
+    if (!picker) {
+      wrap?.remove();
+      return;
+    }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'data-toggle-picker';
+      const label = document.createElement('label');
+      label.className = 'data-toggle-picker-label';
+      const select = document.createElement('select');
+      select.className = 'data-toggle-picker-select';
+      wrap.append(label, select);
+      if (typeof container.insertBefore === 'function' && container.firstChild) {
+        container.insertBefore(wrap, container.firstChild);
+      } else {
+        container.appendChild(wrap);
+      }
+    }
+    const label = wrap.children[0];
+    const select = wrap.children[1];
+    const selectId = `data-toggle-picker-${picker.id || 'system'}`;
+    select.id = selectId;
+    label.setAttribute('for', selectId);
+    if (label.textContent !== (picker.label || 'SYSTEM')) {
+      label.textContent = picker.label || 'SYSTEM';
+    }
+    select.setAttribute('aria-label', picker.ariaLabel || picker.label || 'System');
+    select.disabled = Boolean(picker.disabled);
+    const nextIds = (picker.options || []).map((option) => option.value).join('\0');
+    if (select.dataset.optionIds !== nextIds) {
+      select.replaceChildren(...(picker.options || []).map((option) => {
+        const node = document.createElement('option');
+        node.value = option.value;
+        node.textContent = option.label;
+        return node;
+      }));
+      select.dataset.optionIds = nextIds;
+    }
+    if (select.value !== picker.value) select.value = picker.value || '';
   }
 
   _refreshTogglePanel() {

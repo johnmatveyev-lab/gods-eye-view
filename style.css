@@ -309,6 +309,13 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   color: rgba(232, 234, 237, 0.7);
 }
 
+/* Fullscreen targets documentElement so this line stays in the tree. Pin it. */
+:fullscreen #cesium-credits {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
 /* Cesium's stock attribution lightbox grows with every registered data source.
    Keep the title and close affordance fixed while the complete, unabridged
    credit list wraps and scrolls inside a compact panel. */
@@ -568,8 +575,8 @@ body.recording-mode #cesium-credits {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #title-bar.radio-broadcasting .title-logo::before,
-  #title-bar.radio-broadcasting .title-logo::after {
+  html:not([data-reduce-motion="false"]) #title-bar.radio-broadcasting .title-logo::before,
+  html:not([data-reduce-motion="false"]) #title-bar.radio-broadcasting .title-logo::after {
     animation: none;
   }
 }
@@ -1245,6 +1252,28 @@ body.recording-mode #cesium-credits {
   padding: 5px 8px 6px;
 }
 
+.detection-density-control {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  gap: 2px;
+}
+
+.detection-density-control .pp-slider {
+  width: 100%;
+}
+
+.detection-density-stops {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
 #detection-slider-row.visible,
 #detection-allocation-row.visible,
 #detection-fade-row.visible {
@@ -1269,6 +1298,14 @@ body.recording-mode #cesium-credits {
 
 #hud-layout-row {
   min-width: 200px;
+}
+
+#hud-layout-row.visible {
+  border-radius: 0;
+}
+
+#units-row {
+  min-width: 184px;
 }
 
 /* Map Source tiles live with Visual Presets in the bottom command tray. */
@@ -1974,8 +2011,117 @@ body.ui-clean-view #scene-runtime.active {
   transform: none;
 }
 
+#clear-annotations:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 #top-center-actions .material-symbols-outlined {
   font-size: 18px;
+}
+
+#contacts-roster-toggle {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+#contacts-roster-toggle .contacts-roster-toggle-label {
+  line-height: 1;
+}
+
+#contacts-roster-toggle.active,
+#contacts-roster-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+}
+
+#top-center-actions #stop-tracking {
+  width: auto;
+  min-width: 36px;
+  padding: 0 12px 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#top-center-actions #stop-tracking[hidden] {
+  display: none;
+}
+
+#north-up-compass .north-up-compass-rose {
+  display: block;
+  width: 18px;
+  height: 18px;
+  transform: rotate(var(--north-up-heading, 0deg));
+  transition: transform 80ms linear;
+}
+
+#north-up-compass .north-up-needle {
+  display: block;
+  color: #ff8a80;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Camera-center lat,lon readout. Coordinates only — no height, so no units toggle. */
+#camera-coords {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#top-center-actions #camera-coords-value,
+#top-center-actions #camera-coords-copy {
+  width: auto;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transform: none;
+}
+#top-center-actions #camera-coords-value {
+  padding: 0 4px;
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+#top-center-actions #camera-coords-copy {
+  width: 28px;
+  flex: 0 0 28px;
+  color: var(--text-secondary);
+}
+#top-center-actions #camera-coords-value:hover,
+#top-center-actions #camera-coords-value:focus-visible,
+#top-center-actions #camera-coords-copy:hover,
+#top-center-actions #camera-coords-copy:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  transform: none;
+  color: var(--text-primary, #e8f0f4);
+}
+#top-center-actions #camera-coords-copy .material-symbols-outlined {
+  font-size: 16px;
 }
 
 #global-loading-status {
@@ -2240,14 +2386,43 @@ body.ui-clean-view #scene-runtime.active {
    src/splitFlap.js also checks the query and takes the instant path, so
    this is the belt to that braces. */
 @media (prefers-reduced-motion: reduce) {
-  .gev-flap-cell.is-flapping::before,
-  .gev-flap-cell.is-flapping::after {
+  html:not([data-reduce-motion="false"]) .gev-flap-cell.is-flapping::before,
+  html:not([data-reduce-motion="false"]) .gev-flap-cell.is-flapping::after {
     animation-duration: 1ms;
     animation-delay: 0ms;
   }
-  .gev-flap-sizing {
+  html:not([data-reduce-motion="false"]) .gev-flap-sizing {
     transition-duration: 1ms;
   }
+}
+
+/* ── Offline chip (live polls paused) ────────── */
+#meridian-offline-chip {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 210;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 196, 92, 0.45);
+  border-radius: 8px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #ffc45c;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+#meridian-offline-chip[hidden] {
+  display: none !important;
+}
+
+body.recording-mode #meridian-offline-chip {
+  display: none !important;
 }
 
 /* ── Toast Notification ──────────────────────── */
@@ -2282,40 +2457,7 @@ body.ui-clean-view #scene-runtime.active {
 }
 
 /* ── Aircraft Cockpit View ─────────────────── */
-#cockpit-entry {
-  position: fixed;
-  left: calc(50% + 270px);
-  bottom: 34px;
-  z-index: 151;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 12px;
-  border: 1px solid rgba(0, 220, 255, 0.5);
-  border-radius: 8px;
-  background: rgba(2, 12, 18, 0.9);
-  color: #dceeff;
-  font: 600 10px/1 var(--font-mono);
-  letter-spacing: 0.14em;
-  box-shadow: 0 0 18px rgba(0, 220, 255, 0.14);
-  cursor: pointer;
-}
-
 #cockpit-entry[hidden], #cockpit-hud[hidden] { display: none; }
-#cockpit-entry:hover, #cockpit-entry:focus-visible {
-  border-color: #00dcff;
-  color: #fff;
-  outline: none;
-}
-#cockpit-entry .material-symbols-outlined { color: #00dcff; font-size: 18px; }
-#cockpit-entry kbd {
-  padding: 3px 5px;
-  border: 1px solid rgba(220, 238, 255, 0.25);
-  border-radius: 4px;
-  color: rgba(220, 238, 255, 0.6);
-  font: inherit;
-}
 
 #cockpit-hud {
   --cockpit-accent: #00dcff;
@@ -3530,7 +3672,7 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-radio-transport {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 }
 .cockpit-radio-transport button {
@@ -3935,7 +4077,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -3998,7 +4140,6 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
     padding-inline: 9px;
     font-size: 7px;
   }
-  #cockpit-entry { left: auto; right: 16px; bottom: 88px; }
   body.cockpit-mode #left-panel-stack,
   body.cockpit-mode #intel-hud,
   body.cockpit-mode .cockpit-context-window,
@@ -4097,9 +4238,9 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cockpit-altitude-rim-pointer .material-symbols-outlined { animation: none; }
-  .cockpit-altitude-rim-scale > span { transition: none; }
-  [data-cockpit-brief-page] { animation: none; }
+  html:not([data-reduce-motion="false"]) .cockpit-altitude-rim-pointer .material-symbols-outlined { animation: none; }
+  html:not([data-reduce-motion="false"]) .cockpit-altitude-rim-scale > span { transition: none; }
+  html:not([data-reduce-motion="false"]) [data-cockpit-brief-page] { animation: none; }
 }
 
 /* ── Safe Frame Overlay ─────────────────────── */
@@ -4355,7 +4496,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
-.clock-mode-toggle {
+.clock-mode-toggle,
+.wx-mode-toggle {
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
@@ -4366,7 +4508,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   pointer-events: auto;
 }
 
-.clock-mode-toggle button {
+.clock-mode-toggle button,
+.wx-mode-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -4380,12 +4523,14 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.55;
 }
 
-.clock-mode-toggle button[aria-pressed="true"] {
+.clock-mode-toggle button[aria-pressed="true"],
+.wx-mode-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
 
-.cockpit-clock-row .clock-mode-toggle {
+.cockpit-clock-row .clock-mode-toggle,
+.cockpit-clock-row .wx-mode-toggle {
   margin-left: 0;
 }
 
@@ -4562,6 +4707,34 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.data-layer-filter-wrap {
+  flex: 0 0 auto;
+  margin: 0 0 8px;
+}
+
+#data-layer-filter {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+#data-layer-filter::placeholder {
+  color: var(--text-dim);
+}
+
+#data-layer-filter:focus {
+  border-color: rgba(0, 212, 255, 0.45);
 }
 
 .data-toggle-list {
@@ -5249,7 +5422,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mission-replay-thrust ellipse {
+  html:not([data-reduce-motion="false"]) .mission-replay-thrust ellipse {
     animation: none;
   }
 }
@@ -5371,7 +5544,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 .context-radio-mini-transport {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
 }
 .context-radio-mini-transport button {
@@ -5404,17 +5577,13 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .context-radio-mini-volume input { width: 100%; }
 .global-context-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   margin: 0 0 8px;
 }
-.global-context-actions:has(#installations-search-btn) { grid-template-columns: minmax(0, 1fr); }
-.global-context-actions:has(#cockpit-entry:not([hidden])) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.global-context-actions:has(#cockpit-entry[hidden]) { grid-template-columns: 1fr; }
 /* TR-3B reclassify toggle rides an `auto` trailing column so the chip never
-   resizes the COCKPIT / SEARCH buttons beside it. */
-.global-context-actions:has(#tr3b-toggle:not([hidden])) { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
-.global-context-actions:has(#cockpit-entry[hidden]):has(#tr3b-toggle:not([hidden])) { grid-template-columns: minmax(0, 1fr) auto; }
+   resizes the SEARCH button beside it. */
+.global-context-actions:has(#tr3b-toggle:not([hidden])) { grid-template-columns: minmax(0, 1fr) auto; }
 .tr3b-toggle {
   width: 26px;
   min-height: 30px;
@@ -5539,20 +5708,6 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   padding: 6px 8px;
   font-size: 8px;
 }
-#global-context-panel #cockpit-entry {
-  position: static;
-  z-index: auto;
-  width: 100%;
-  min-height: 30px;
-  padding: 5px 8px;
-  border-radius: 5px;
-  justify-content: center;
-  font-size: 8px;
-  box-shadow: none;
-}
-#global-context-panel #cockpit-entry .material-symbols-outlined { font-size: 15px; }
-#global-context-panel #cockpit-entry kbd { padding: 2px 4px; }
-
 /* ── Radio companion section inside Context ── */
 #radio-panel {
   position: relative;
@@ -5604,6 +5759,71 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   color: #c5faff;
   background: rgba(5, 24, 31, .88);
   font: 9px/1.2 var(--font-mono);
+}
+.radio-station-search-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 4px 8px;
+  align-items: center;
+}
+.radio-station-search-wrap .radio-filter-label {
+  grid-column: 1 / -1;
+}
+#radio-station-search {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 8px;
+  border: 1px solid rgba(65, 220, 231, .28);
+  border-radius: 5px;
+  color: #c5faff;
+  background: rgba(5, 24, 31, .88);
+  font: 9px/1.2 var(--font-mono);
+  caret-color: #65f7ff;
+  outline: none;
+}
+#radio-station-search::placeholder { color: var(--text-dim); }
+#radio-station-search:focus { border-color: rgba(101, 247, 255, .55); }
+#radio-station-search:disabled { opacity: .42; cursor: not-allowed; }
+.radio-station-search-count {
+  color: var(--text-dim);
+  font: 8px/1 var(--font-mono);
+  letter-spacing: .08em;
+}
+.radio-station-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 132px;
+  overflow: auto;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid rgba(65, 220, 231, .16);
+  border-radius: 6px;
+  background: rgba(2, 15, 20, .36);
+}
+.radio-station-list[hidden] { display: none; }
+.radio-station-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 6px 7px;
+  border: 0;
+  border-radius: 4px;
+  color: #d7fbff;
+  background: transparent;
+  font: 8px/1.3 var(--font-mono);
+  letter-spacing: .04em;
+  cursor: pointer;
+}
+.radio-station-row:hover,
+.radio-station-row:focus-visible {
+  background: rgba(101, 247, 255, .1);
+  outline: none;
+}
+.radio-station-row[aria-pressed="true"] {
+  color: #65f7ff;
+  background: rgba(101, 247, 255, .12);
 }
 .radio-station-card {
   display: grid;
@@ -6047,6 +6267,82 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: none;
 }
 
+/* Existing OSM datacenter payload — in-view list + fly-to. */
+#datacenter-in-view.in-view-site-list {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#datacenter-in-view[hidden] {
+  display: none;
+}
+
+#datacenter-in-view .in-view-site-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#datacenter-in-view .in-view-site-list-header strong {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+#datacenter-in-view .in-view-site-list-header output {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+#datacenter-in-view .in-view-site-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#datacenter-in-view .in-view-site-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#datacenter-in-view .in-view-site-list-item:hover,
+#datacenter-in-view .in-view-site-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--text-primary);
+}
+
+#datacenter-in-view .in-view-site-list-empty {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 2px 6px;
+}
+
+#datacenter-in-view .in-view-site-list-credit {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+
 .data-toggle-chip {
   padding: 2px 7px;
   font-family: var(--font-mono);
@@ -6076,14 +6372,28 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 /* Async sub-controls: a chip must never read ACTIVE before the data it turns
    on actually exists, so loading and failure are their own visible states. */
+.data-toggle-heading {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+
 .data-toggle-chip:disabled {
-  cursor: wait;
-  opacity: 0.7;
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .data-toggle-chip.chip-loading {
   color: var(--text-secondary);
   border-color: rgba(255, 255, 255, 0.18);
+}
+
+.data-toggle-chip.chip-loading:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 .data-toggle-chip.chip-error {
@@ -6144,6 +6454,51 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
      hairline ring so a near-black class still reads on the panel glass. */
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
   flex: none;
+}
+
+/* Allowlisted-system picker (bikeshare). A compact select of known feeds —
+   not Radio search and not a layer-filter chip. */
+.data-toggle-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 168px;
+}
+
+.data-toggle-picker-label {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.data-toggle-picker-select {
+  min-width: 0;
+  flex: 1;
+  max-width: 100%;
+  padding: 3px 18px 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+}
+
+.data-toggle-picker-select:hover,
+.data-toggle-picker-select:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.data-toggle-picker-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ── CCTV Panel ─────────────────────────────── */
@@ -6285,6 +6640,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.45;
 }
 
+#cctv-city-filter,
 #cctv-camera-select {
   flex: 1;
   min-width: 0;
@@ -6298,6 +6654,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   outline: none;
 }
 
+#cctv-city-filter:disabled,
 #cctv-camera-select:disabled {
   opacity: 0.45;
 }
@@ -6823,6 +7180,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 #control-panel.collapsed .button-grid,
 #data-panel.collapsed .data-toggle-list,
+#data-panel.collapsed .data-layer-filter-wrap,
 #global-context-panel.collapsed #radio-panel,
 #global-context-panel.collapsed #military-awareness-panel,
 #global-context-panel.collapsed .global-context-actions,
@@ -6913,7 +7271,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #home-view, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view) {
   display: none !important;
 }
 
@@ -7265,6 +7623,31 @@ body.scene-playback-mode :is(#clear-selected-layers, #home-view, #reset-globe-vi
 #command-dock .panel-mini-status,
 #command-dock .location-mini-status {
   display: none !important;
+}
+
+#command-dock #look-cycle-btn {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  z-index: 2;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.18rem 0.4rem;
+  border: 1px solid rgba(123, 189, 211, 0.32);
+  border-radius: 0.28rem;
+  background: rgba(8, 24, 34, 0.78);
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+#command-dock #look-cycle-btn:hover,
+#command-dock #look-cycle-btn:focus-visible {
+  border-color: rgba(0, 212, 255, 0.62);
+  outline: none;
 }
 
 #command-dock #control-panel.collapsed .button-grid,
@@ -8904,11 +9287,11 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #gev-voice-control .gev-voice-help-tray {
+  html:not([data-reduce-motion="false"]) #gev-voice-control .gev-voice-help-tray {
     transition: none;
   }
-  .radio-tuner-needle,
-  .radio-tuner-tick {
+  html:not([data-reduce-motion="false"]) .radio-tuner-needle,
+  html:not([data-reduce-motion="false"]) .radio-tuner-tick {
     transition: none;
   }
 }
@@ -9318,11 +9701,11 @@ body.scene-playback-mode #first-run-launcher {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #first-run-launcher,
-  .first-run-choices button,
-  .first-run-arrow { transition: none; }
+  html:not([data-reduce-motion="false"]) #first-run-launcher,
+  html:not([data-reduce-motion="false"]) .first-run-choices button,
+  html:not([data-reduce-motion="false"]) .first-run-arrow { transition: none; }
   /* Scrolling a tile into view must not animate either. */
-  .first-run-choices { scroll-behavior: auto; }
+  html:not([data-reduce-motion="false"]) .first-run-choices { scroll-behavior: auto; }
 }
 
 /* ── First-visit responsible-use notice ───────────────────────────
@@ -9700,4 +10083,64 @@ body.recording-mode #billing-exhausted,
 body.cockpit-mode #account-bar,
 body.cockpit-mode #billing-exhausted {
   display: none !important;
+}
+
+/* Decorative motion — OS reduce-motion or persist meridian.reduceMotion.
+   Functional camera flights are Cesium, not CSS. Toggle off sets
+   data-reduce-motion="false" so these rules lift even when the OS query is on. */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-reduce-motion="false"]) .loader-logo,
+  html:not([data-reduce-motion="false"]) .loader-status,
+  html:not([data-reduce-motion="false"]) #detection-toggle.panoptic,
+  html:not([data-reduce-motion="false"]) #detection-toggle.god,
+  html:not([data-reduce-motion="false"]) .hud-bracket,
+  html:not([data-reduce-motion="false"]) .hud-rec #hud-rec-dot,
+  html:not([data-reduce-motion="false"]) .cockpit-live-dot,
+  html:not([data-reduce-motion="false"]) .cockpit-signal-kicker i,
+  html:not([data-reduce-motion="false"]) .cctv-frame-wrap.loading::after,
+  html:not([data-reduce-motion="false"]) #command-dock #gev-voice-control[data-status='listening'] .gev-voice-visualizer span,
+  html:not([data-reduce-motion="false"]) #command-dock #gev-voice-control[data-status='executing'] .gev-voice-visualizer span,
+  html:not([data-reduce-motion="false"]) .cockpit-altitude-rim-pointer .material-symbols-outlined {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion="true"] .loader-logo,
+html[data-reduce-motion="true"] .loader-status,
+html[data-reduce-motion="true"] #detection-toggle.panoptic,
+html[data-reduce-motion="true"] #detection-toggle.god,
+html[data-reduce-motion="true"] .hud-bracket,
+html[data-reduce-motion="true"] .hud-rec #hud-rec-dot,
+html[data-reduce-motion="true"] .cockpit-live-dot,
+html[data-reduce-motion="true"] .cockpit-signal-kicker i,
+html[data-reduce-motion="true"] .cctv-frame-wrap.loading::after,
+html[data-reduce-motion="true"] #command-dock #gev-voice-control[data-status='listening'] .gev-voice-visualizer span,
+html[data-reduce-motion="true"] #command-dock #gev-voice-control[data-status='executing'] .gev-voice-visualizer span,
+html[data-reduce-motion="true"] .cockpit-altitude-rim-pointer .material-symbols-outlined,
+html[data-reduce-motion="true"] #title-bar.radio-broadcasting .title-logo::before,
+html[data-reduce-motion="true"] #title-bar.radio-broadcasting .title-logo::after,
+html[data-reduce-motion="true"] .mission-replay-thrust ellipse,
+html[data-reduce-motion="true"] [data-cockpit-brief-page] {
+  animation: none;
+}
+
+html[data-reduce-motion="true"] .gev-flap-cell.is-flapping::before,
+html[data-reduce-motion="true"] .gev-flap-cell.is-flapping::after {
+  animation-duration: 1ms;
+  animation-delay: 0ms;
+}
+
+html[data-reduce-motion="true"] .gev-flap-sizing,
+html[data-reduce-motion="true"] #gev-voice-control .gev-voice-help-tray,
+html[data-reduce-motion="true"] .radio-tuner-needle,
+html[data-reduce-motion="true"] .radio-tuner-tick,
+html[data-reduce-motion="true"] .cockpit-altitude-rim-scale > span,
+html[data-reduce-motion="true"] #first-run-launcher,
+html[data-reduce-motion="true"] .first-run-choices button,
+html[data-reduce-motion="true"] .first-run-arrow {
+  transition: none;
+}
+
+html[data-reduce-motion="true"] .first-run-choices {
+  scroll-behavior: auto;
 }

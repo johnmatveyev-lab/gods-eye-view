@@ -444,7 +444,7 @@ test('every explicit visual UI gesture claims restore authority before it mutate
     ["this._scopeFeatherSlider?.addEventListener('input'", 'if (this._sharpenSlider)', 'setScopeMaskFeather(', 'scope feather slider'],
     ["this._sharpenSlider.addEventListener('input'", 'if (this._hudLayoutSelect)', 'this._applySharpenIntensity(', 'sharpen slider'],
     ["this._hudLayoutSelect.addEventListener('change'", 'if (this._cleanViewBtn)', 'this._setHudVariant(', 'HUD layout select'],
-    ["this._detectionDensitySlider.addEventListener('input'", 'for (const button of this._detectionAllocationBtns)', 'this._applyDetectionDensityFromUi()', 'detection density slider'],
+    ["this._detectionDensitySlider.addEventListener('input'", 'for (const button of this._detectionAllocationBtns)', 'this.setDetection(detectionDensityControlRequest(', 'detection density slider'],
     ["button.addEventListener('click'", 'for (const slider of [this._detectionFadeSlider', 'this._setDetectionAllocation(', 'detection allocation button'],
     ["slider?.addEventListener('input'", 'if (this._celestialBtn)', 'this._applyDetectionFadeFromUi()', 'detection fade controls'],
   ];
@@ -461,7 +461,7 @@ test('every explicit visual UI gesture claims restore authority before it mutate
       hudToggle.indexOf("this._hudBtn.addEventListener('click'"),
       hudToggle.indexOf('if (this._hudLayoutSelect)'),
     ),
-    'this.hud.toggle()',
+    'this.cycleHud()',
     'HUD button',
   );
   assertClaimsBefore(
@@ -504,9 +504,14 @@ test('explicit Context transitions claim the visual restore lane before transiti
     'the Context authority helper must claim the visual lane',
   );
 
+  const contactsRoster = sourceBlock('  _toggleContactsRoster() {', '  _initGlobalContextPanel() {');
+  assertContextClaimsBefore(contactsRoster, 'this._selectContextMode(', 'Contacts roster toggle');
+
   const contextPanel = sourceBlock('  _initGlobalContextPanel() {', '  async _runUserFacingContextAction(');
+  assert.match(contextPanel, /this\._contactsRosterToggle\?\.addEventListener\('click'/);
+  assert.match(contextPanel, /this\._globalContextFlightsBtn\?\.addEventListener\('click'/);
+  assert.match(contextPanel, /this\._toggleContactsRoster\(\)/);
   for (const [start, end, label] of [
-    ["this._globalContextFlightsBtn?.addEventListener('click'", "this._globalContextMissionsBtn?.addEventListener('click'", 'Contacts tab'],
     ["this._globalContextMissionsBtn?.addEventListener('click'", 'CONTEXT_PANEL_END', 'Space Missions tab'],
   ]) {
     const startIndex = contextPanel.indexOf(start);
@@ -548,9 +553,11 @@ test('explicit Context transitions claim the visual restore lane before transiti
 // detection: `_detectionUserOverridden` is what suppresses the military-style
 // auto-enable for the rest of the session. Contacts entry is not that.
 test('Context lane claims never set the session detection-override flag', () => {
+  const contactsRoster = sourceBlock('  _toggleContactsRoster() {', '  _initGlobalContextPanel() {');
   const contextPanel = sourceBlock('  _initGlobalContextPanel() {', '  async _runUserFacingContextAction(');
   const facade = sourceBlock('  async setContextMode(mode, {', '  getCockpitState() {');
   for (const [block, label] of [
+    [contactsRoster, 'Contacts roster toggle'],
     [contextPanel, 'Context panel'],
     [facade, 'setContextMode facade'],
   ]) {

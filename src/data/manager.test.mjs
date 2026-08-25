@@ -2744,10 +2744,19 @@ function makeControlElement(tagName = 'div') {
     title: '',
     type: '',
     value: '',
+    id: '',
     classList: { toggle() {} },
     appendChild(child) { child.parent = this; this.children.push(child); return child; },
     append(...nodes) { for (const n of nodes) n.parent = this; this.children.push(...nodes); },
     replaceChildren(...nodes) { this.children = [...nodes]; },
+    insertBefore(node, ref) {
+      node.parent = this;
+      const index = this.children.indexOf(ref);
+      if (index < 0) this.children.push(node);
+      else this.children.splice(index, 0, node);
+      return node;
+    },
+    get firstChild() { return this.children[0] || null; },
     remove() {
       const siblings = this.parent?.children;
       if (siblings) this.parent.children = siblings.filter((n) => n !== this);
@@ -3156,6 +3165,67 @@ test('a layer that surrenders its row controls hides the block entirely', async 
     mgr._refreshTogglePanel();
     assert.equal(controls.hidden, false, 'the row returns when the owner releases it');
     assert.equal(collectByClass(controls, 'data-toggle-chip').length, 1);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('a system picker stays visible while the layer is off and does not write layer params', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  let selected = 'austin-capmetro';
+  const paramsCalls = [];
+  mgr.register({
+    id: 'bikeshare',
+    name: 'Bikeshare',
+    icon: '',
+    source: 'GBFS',
+    updateInterval: -1,
+    async init() {},
+    enable() {},
+    disable() {},
+    async update() {},
+    getStats() { return { count: 0, lastUpdate: null }; },
+    setParams(params) { paramsCalls.push(params); },
+    setSelectedSystem(id) { selected = id; },
+    getRowControls() {
+      return {
+        picker: {
+          id: 'system',
+          label: 'SYSTEM',
+          value: selected,
+          options: [
+            { value: 'austin-capmetro', label: 'Austin, TX · CapMetro' },
+            { value: 'nyc-citibike', label: 'New York, NY · Citi Bike' },
+          ],
+          ariaLabel: 'Bike-share system',
+        },
+      };
+    },
+  });
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    const controls = container
+      .querySelector('[data-layer-id="bikeshare"]')
+      .querySelector('.data-toggle-controls');
+    assert.equal(controls.hidden, false, 'picker is available before the layer is enabled');
+    const select = collectByClass(controls, 'data-toggle-picker-select')[0];
+    assert.ok(select);
+    assert.equal(select.value, 'austin-capmetro');
+    assert.deepEqual(select.children.map((option) => option.value), [
+      'austin-capmetro',
+      'nyc-citibike',
+    ]);
+
+    select.value = 'nyc-citibike';
+    controls.listeners.change({ target: select });
+    assert.equal(selected, 'nyc-citibike');
+    assert.equal(paramsCalls.length, 0, 'picker must not go through setLayerParams');
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;

@@ -1,3 +1,5 @@
+import { formatDistanceMeters, getDistanceUnit } from '../units.js';
+
 /** Pure proximity helpers for Global Context. No capability modeling. */
 
 export const AWARENESS_RADIUS_M = 250000;
@@ -36,10 +38,9 @@ export function findByDoublingRadius(search, {
   return null;
 }
 
-/** @param {number} meters @returns {string} */
-export function formatAwarenessDistance(meters) {
-  if (!Number.isFinite(meters) || meters < 0) return '—';
-  return meters < 1000 ? `${Math.round(meters)} m` : `${(meters / 1000).toFixed(meters < 10000 ? 1 : 0)} km`;
+/** @param {number} meters @param {string} [unit] @returns {string} */
+export function formatAwarenessDistance(meters, unit = getDistanceUnit()) {
+  return formatDistanceMeters(meters, unit, { style: 'range' });
 }
 
 /** Return a stable visible label without leaking missing values into UI text. */

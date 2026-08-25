@@ -22,6 +22,7 @@ import { initGevVoiceCommands } from './voice/gevRealtime.js';
 import { MapStackController } from './mapStackController.js';
 import { initAnnotations } from './annotations/index.js';
 import { initLogoGaze } from './logoGaze.js';
+import { initReduceMotion } from './reduceMotion.js';
 import { initCockpitCloudEffects } from './cockpitCloudEffects.js';
 import {
   installRenderGovernor,
@@ -37,6 +38,7 @@ import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
 import { createLivePollScheduler } from './chrome/scheduler.js';
 import { installOfflineBanner } from './chrome/offlineBanner.js';
 
+initReduceMotion();
 initLogoGaze();
 initResponsibleUseNotice();
 const meridianAccountReady = initMeridianAccount();
@@ -212,6 +214,9 @@ async function init() {
     // Cesium fog or post-process stages and is fully stopped in map mode.
     const weatherEffects = null;
     const cockpitCloudEffects = initCockpitCloudEffects(viewer);
+    livePollScheduler.subscribe((state) => {
+      cockpitCloudEffects?.setSuspended?.(state.suspended);
+    });
 
     // If no share link state, do default fly-to Austin
     if (!styleManager.hasShareState) {
@@ -255,7 +260,9 @@ async function init() {
         return dataManager.unregisterForQa(layerId);
       };
     }
-    dataManager.buildTogglePanel(document.getElementById('data-toggles'));
+    dataManager.buildTogglePanel(document.getElementById('data-toggles'), {
+      filterInput: document.getElementById('data-layer-filter'),
+    });
     styleManager.attachDataManager(dataManager);
 
     // Initialize deterministic scene playback for social clip capture
@@ -313,7 +320,6 @@ async function init() {
     const syncVisibilitySuspension = () => {
       const hidden = document.hidden;
       viewer.useDefaultRenderLoop = !hidden;
-      cockpitCloudEffects?.setSuspended?.(hidden);
       if (!hidden) {
         if (dataManager._panelRefreshPendingOnVisible) {
           dataManager._panelRefreshPendingOnVisible = false;

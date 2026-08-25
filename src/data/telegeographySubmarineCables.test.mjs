@@ -25,6 +25,7 @@ test('TeleGeography cable dataset is not shipped in this commercial fork', () =>
 test('cables layer keeps its registered id but never loads cable data', () => {
   const layer = createTeleGeographySubmarineCableLayer();
   assert.equal(layer.id, 'telegeography-submarine-cables');
+  assert.equal(layer.showInTogglePanel, false);
   assert.equal(CABLE_OVERLAY_SOURCE_ID, 'telegeography-submarine-cables');
   assert.equal(CABLE_REFERENCE_LABEL_WINNER_CAP, 160);
   assert.equal(CABLE_OVERLAY_COLLISION_CAPACITY, 96);
