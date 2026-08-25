@@ -219,6 +219,34 @@ export function registerDynamicCredit(viewer, credit) {
 }
 
 /**
+ * Required on-globe credit container. Google Maps Platform and Cesium both
+ * require this line to stay painted whenever their content is on screen.
+ * Clean-view and recording fade Meridian chrome only — never `#cesium-credits`.
+ *
+ * @param {Pick<Document, 'getElementById'>} [root]
+ * @returns {boolean} True when the credit node was found and pinned visible.
+ */
+export function pinRequiredCredits(root = globalThis.document) {
+  const credits = root?.getElementById?.('cesium-credits');
+  const style = credits?.style;
+  if (!credits || !style) return false;
+  if (typeof style.setProperty === 'function') {
+    style.setProperty('opacity', '1', 'important');
+    style.setProperty('visibility', 'visible', 'important');
+    style.setProperty('pointer-events', 'auto', 'important');
+  } else {
+    style.opacity = '1';
+    style.visibility = 'visible';
+    style.pointerEvents = 'auto';
+  }
+  if (style.display === 'none') {
+    if (typeof style.removeProperty === 'function') style.removeProperty('display');
+    else style.display = '';
+  }
+  return true;
+}
+
+/**
  * Register every per-layer data credit into the viewer's credit display.
  * Idempotent: safe to call once at init. Credits are static and always
  * present in the "Data attribution" popover.

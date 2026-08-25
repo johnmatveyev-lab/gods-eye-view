@@ -58,6 +58,8 @@ import {
 import { gbfsProxy } from '../data/gbfs.js';
 import { adsbdbProxy } from '../data/adsbdb.js';
 import { handleOsrmRouteHttp } from '../data/osrmRoute.js';
+import { weatherEffectsProxy } from '../data/weatherEffects.js';
+import { celestrakProxy } from '../data/celestrak.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from '../voice/voiceCost.js';
 import { trackBackfillProxies } from '../data/trackBackfill.js';
 
@@ -1257,125 +1259,6 @@ const _aisStreamStatic = new Map();
 const _aisStreamTracks = new Map();
 /** @type {Map<string,{lat:number,lon:number,epochSec:number}>} mmsi -> first fix awaiting second (lazy buffer allocation) */
 const _aisStreamTrackPending = new Map();
-
-/**
- * Vite plugin: CelesTrak TLE proxy.
- *
- * CelesTrak does not send CORS headers, so this middleware fetches
- * satellite TLE data server-side and forwards it to the browser.
- * Upstream URL: https://celestrak.org/NORAD/elements/gp.php
- *
- * @returns {import('vite').Plugin}
- */
-/**
- * CelesTrak GP/TLE proxy with a memory + disk cache.
- * Upstream: https://celestrak.org/NORAD/elements/gp.php?GROUP=<group>&FORMAT=tle
- * CelesTrak asks clients not to re-fetch GP data more than ~every 2 h and
- * throttles offenders; every dev reload used to refetch every group. Cache TTL
- * 6 h; on upstream failure the freshest stale copy is served (a stale TLE
- * beats an empty satellites layer). Pattern mirrors openSkyProxy's
- * cache+serve-stale. Adapted from skylight's TleStore (MIT).
- */
-function celestrakProxy() {
-  const TLE_TTL_MS = 6 * 3600_000;
-  const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
-  const mem = new Map(); // group -> { at: epochMs, body: string }
-  const inflight = new Map(); // group -> Promise<{at, body}|null>
-
-  const diskPath = (group) => path.join(CACHE_DIR, `celestrak-${group}.json`);
-
-  async function readDisk(group) {
-    try {
-      const parsed = JSON.parse(await fsp.readFile(diskPath(group), 'utf8'));
-      if (typeof parsed?.body === 'string' && Number.isFinite(parsed?.at)) return parsed;
-    } catch { /* no disk cache yet */ }
-    return null;
-  }
-
-  async function writeDisk(group, entry) {
-    try {
-      await fsp.mkdir(CACHE_DIR, { recursive: true });
-      await fsp.writeFile(diskPath(group), JSON.stringify(entry), 'utf8');
-    } catch (err) {
-      console.warn(`[celestrak-proxy] cache write failed for ${group}:`, err?.message || err);
-    }
-  }
-
-  async function fetchUpstream(group) {
-    const url = new URL('https://celestrak.org/NORAD/elements/gp.php');
-    url.searchParams.set('GROUP', group);
-    url.searchParams.set('FORMAT', 'tle');
-    const res = await fetch(url.toString(), {
-      signal: AbortSignal.timeout(20000),
-      // CelesTrak 403s bulk groups (e.g. `active`) unless the request carries a
-      // descriptive User-Agent with a contact point.
-      headers: { 'User-Agent': 'gods-eye-view-celestrak-proxy/1.0 (+https://github.com/bilawalsidhu/gods-eye-view)' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.text();
-    // An upstream error page parses to zero TLEs — treat as failure, keep cache.
-    if (!/^1 /m.test(body)) throw new Error('no TLE lines in response');
-    return { at: Date.now(), body };
-  }
-
-  return {
-    name: 'celestrak-proxy',
-    configureServer(server) {
-      server.middlewares.use('/api/celestrak', async (req, res) => {
-        const group = String(req.url || '').replace(/^\//, '').split('?')[0];
-        if (!/^[a-z0-9-]+$/i.test(group)) {
-          res.writeHead(400, { 'Content-Type': 'text/plain' });
-          res.end('invalid group');
-          return;
-        }
-        const send = (status, body, cacheStatus) => {
-          // Guard against a double-send (e.g. a throw AFTER a response already
-          // went out routing into the catch's send): writeHead after headersSent
-          // throws "Cannot set headers after they are sent".
-          if (res.headersSent) return;
-          res.writeHead(status, { 'Content-Type': 'text/plain', 'x-tle-cache': cacheStatus });
-          res.end(body);
-        };
-        try {
-          const now = Date.now();
-          let entry = mem.get(group);
-          if (!entry) {
-            entry = await readDisk(group);
-            if (entry) mem.set(group, entry);
-          }
-          if (entry && now - entry.at < TLE_TTL_MS) {
-            send(200, entry.body, 'HIT');
-            return;
-          }
-          // Stale or missing → refresh, single-flight per group.
-          if (!inflight.has(group)) {
-            inflight.set(group, fetchUpstream(group)
-              .then(async (fresh) => {
-                mem.set(group, fresh);
-                await writeDisk(group, fresh);
-                return fresh;
-              })
-              .catch((err) => {
-                console.warn(`[celestrak-proxy] ${group} refresh failed (${err?.message || err}) — serving cache if any`);
-                return null;
-              })
-              .finally(() => inflight.delete(group)));
-          }
-          const fresh = await inflight.get(group);
-          if (fresh) {
-            send(200, fresh.body, 'MISS');
-          } else if (entry) {
-            send(200, entry.body, 'STALE-ERROR'); // upstream down — stale beats empty
-          } else {
-            send(502, 'celestrak fetch failed and no cache available', 'NONE');
-          }
-        } catch (err) {
-          send(500, `celestrak proxy error: ${err?.message || err}`, 'ERROR');
-        }
-      });
-    },
-  };
-}
 
 export const LL2_CACHE_TTL_MS = 15 * 60_000;
 
@@ -4251,13 +4134,7 @@ const REGIONAL_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
 const _regionalBriefCache = new Map();
 const _regionalBriefInFlight = new Map();
 const _regionalBriefRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 30, globalMax: 90 });
-const WEATHER_EFFECTS_CACHE_MS = 5 * 60_000;
-const WEATHER_EFFECTS_STALE_MS = 30 * 60_000;
-const WEATHER_EFFECTS_MAX_CACHE = 180;
 const WEATHER_EFFECTS_MAX_RESPONSE_BYTES = 512 * 1024;
-const _weatherEffectsCache = new Map();
-const _weatherEffectsInFlight = new Map();
-const _weatherEffectsRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 45, globalMax: 120 });
 let _nominatimQueue = Promise.resolve();
 let _nominatimLastRequestAt = 0;
 
@@ -4281,14 +4158,6 @@ function trimRegionalBriefCache() {
     const oldest = _regionalBriefCache.keys().next().value;
     if (oldest === undefined) break;
     _regionalBriefCache.delete(oldest);
-  }
-}
-
-function trimWeatherEffectsCache() {
-  while (_weatherEffectsCache.size > WEATHER_EFFECTS_MAX_CACHE) {
-    const oldest = _weatherEffectsCache.keys().next().value;
-    if (oldest === undefined) break;
-    _weatherEffectsCache.delete(oldest);
   }
 }
 
@@ -4513,88 +4382,6 @@ function regionalBriefProxy() {
 
   return {
     name: 'regional-brief-proxy',
-    configureServer(server) {
-      install(server.middlewares);
-    },
-    configurePreviewServer(server) {
-      install(server.middlewares);
-    },
-  };
-}
-
-function weatherEffectsProxy() {
-  async function refresh(point, key) {
-    const weather = await fetchRegionalWeather(point);
-    if (!weather) throw new Error('Weather observation unavailable');
-    const payload = {
-      status: 'ready',
-      retrievedAt: new Date().toISOString(),
-      coordinates: point,
-      weather,
-    };
-    _weatherEffectsCache.set(key, { payload, cachedAt: Date.now() });
-    trimWeatherEffectsCache();
-    return payload;
-  }
-
-  function install(middlewares) {
-    middlewares.use('/api/weather-effects', async (req, res) => {
-      if (req.method !== 'GET') {
-        res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
-        return;
-      }
-      if (!_weatherEffectsRateLimiter(clientKey(req))) {
-        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '10' });
-        res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
-        return;
-      }
-      const url = new URL(req.url || '', 'http://localhost');
-      const point = validRegionalPoint(url.searchParams);
-      if (!point) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Valid latitude and longitude are required' }));
-        return;
-      }
-      const key = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
-      const now = Date.now();
-      const cached = _weatherEffectsCache.get(key);
-      if (cached && now - cached.cachedAt <= WEATHER_EFFECTS_CACHE_MS) {
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=60',
-          'X-Weather-Effects': 'HIT',
-        });
-        res.end(JSON.stringify({ ...cached.payload, status: 'cached' }));
-        return;
-      }
-      const request = coalesceProxyRequest(_weatherEffectsInFlight, key, () => refresh(point, key));
-      try {
-        const payload = await request.promise;
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=60',
-          'X-Weather-Effects': request.shared ? 'INFLIGHT' : 'MISS',
-        });
-        res.end(JSON.stringify(payload));
-      } catch {
-        if (cached && now - cached.cachedAt <= WEATHER_EFFECTS_STALE_MS) {
-          res.writeHead(200, {
-            'Content-Type': 'application/json',
-            'Cache-Control': 'no-store',
-            'X-Weather-Effects': 'STALE',
-          });
-          res.end(JSON.stringify({ ...cached.payload, status: 'stale' }));
-          return;
-        }
-        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ error: 'Weather effects are temporarily unavailable' }));
-      }
-    });
-  }
-
-  return {
-    name: 'weather-effects-proxy',
     configureServer(server) {
       install(server.middlewares);
     },

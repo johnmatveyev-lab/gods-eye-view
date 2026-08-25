@@ -27,7 +27,8 @@ test('production proxies never fetch OpenSky or Google News RSS', () => {
   const cctv = readFileSync(path.join(ROOT, 'src/data/cctvProxy.js'), 'utf8');
   const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
   const adsbdb = readFileSync(path.join(ROOT, 'src/data/adsbdb.js'), 'utf8');
-  for (const source of [flights, proxies, cctv, vite, adsbdb]) {
+  const weather = readFileSync(path.join(ROOT, 'src/data/weatherEffects.js'), 'utf8');
+  for (const source of [flights, proxies, cctv, vite, adsbdb, weather]) {
     assert.doesNotMatch(source, /https:\/\/opensky-network\.org/);
     assert.doesNotMatch(source, /https:\/\/auth\.opensky-network\.org/);
     assert.doesNotMatch(source, /news\.google\.com/);
@@ -35,6 +36,8 @@ test('production proxies never fetch OpenSky or Google News RSS', () => {
   assert.match(flights, /api\.adsb\.lol/);
   assert.match(proxies, /api\.gdeltproject\.org/);
   assert.match(adsbdb, /api\.adsbdb\.com/);
+  assert.match(weather, /api\.open-meteo\.com/);
+  assert.doesNotMatch(weather, /openweathermap|weatherapi|visualcrossing|accuweather/i);
 });
 
 test('outbound proxy list has no TeleGeography URL', () => {

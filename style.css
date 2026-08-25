@@ -305,11 +305,15 @@ body.cockpit-mode #cockpit-cloud-effects.active {
    and launch videos, so hiding #cesium-credits here (as it was before) shipped
    non-compliant footage. The full credit line — Cesium/Ion logo, "Google Maps",
    and the "Data attribution" link that opens the per-layer license popover —
-   stays on screen; it's already styled small and unobtrusive above. The GEV
-   chrome (panels/HUD) still fades via its own rules; only the required notice
-   is exempt. (Note: Cesium re-applies inline styles on the credit elements each
-   frame, so the on-screen credit content is owned by Cesium's update loop, not
-   CSS overrides — we deliberately don't fight it here.) */
+   stays on screen (opacity 1, never display:none). Meridian chrome (panels/HUD)
+   still fades via its own rules; only the required notice is exempt. Cesium
+   owns the inner credit widgets each frame — this pin is on the container. */
+body.ui-clean-view #cesium-credits,
+body.recording-mode #cesium-credits {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
 
 #gev-voice-control {
   position: fixed;
@@ -7208,6 +7212,9 @@ body.recording-mode #cesium-credits {
   right: auto;
   bottom: 36px;
   left: 36px;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 #intel-hud[data-variant='minimal'] .hud-bottom-left {

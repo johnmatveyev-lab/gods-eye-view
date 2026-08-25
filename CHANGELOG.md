@@ -21,6 +21,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Pro accounts can save, restore, and delete up to 10 camera/style/layer
   views in `localStorage` (`meridian.savedViews.<clerkUserId>`). Share-link
   encode/decode is reused. Free and anonymous stay hidden and write nothing.
+- Reload restores the last camera, style, and layers from `meridian.lastView`
+  when the URL has no share params. Share links still win. One slot, no
+  Clerk, no API.
 - Added Vercel Node functions `api/billing/[...path].js` and
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
@@ -44,6 +47,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   existing public CCTV catalog/proxy (`sources`, `health`, `stream`,
   `frame`/`media`). Helpers live in `src/data/cctvProxy.js`; Vite still
   forwards the same plugin. Does not wrap AIS or Google text-search.
+- Hosted `GET /api/weather-effects` now lives in `src/data/weatherEffects.js`
+  with a Vercel Node entry at `api/weather-effects.js`. Vite and the live
+  proxy plugin forward to the same handler. Cache, rate limit, and the
+  Open-Meteo-only credit are unchanged. This change does not wrap
+  `/api/terrain/heights`.
+- Added hosted CelesTrak TLE function `api/celestrak/[...group].js` with a
+  6-hour memory + optional `/tmp` cache and stale-on-failure. Vite forwards
+  through `src/data/celestrak.js`. User-Agent is
+  `Meridian-celestrak-proxy/1.0 (+https://github.com/johnmatveyev-lab/gods-eye-view)`.
 
 ### Changed
 
