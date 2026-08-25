@@ -68,6 +68,7 @@ import {
 } from '../data/launches.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from '../voice/voiceCost.js';
 import { trackBackfillProxies } from '../data/trackBackfill.js';
+import { approximateDistanceM, handleNearbyPlacesHttp } from '../google/nearbyPlaces.js';
 
 export { LL2_CACHE_TTL_MS, launchLibraryRequestHeaders };
 
@@ -388,7 +389,7 @@ function openAiRateLimiter() {
   if (_openAiRateLimiter === undefined) _openAiRateLimiter = makeOptInRateLimiter(process.env.GEV_RATELIMIT_OPENAI_PER_MIN);
   return _openAiRateLimiter;
 }
-/** Google cost endpoint (nearby-places). Null = unlimited (default). */
+/** Google cost endpoint (text-search; nearby-places has its own limiter). Null = unlimited. */
 function googleRateLimiter() {
   if (_googleRateLimiter === undefined) _googleRateLimiter = makeOptInRateLimiter(process.env.GEV_RATELIMIT_GOOGLE_PER_MIN);
   return _googleRateLimiter;
@@ -2392,113 +2393,7 @@ function readRequestBody(req, maxBytes = 1024 * 1024) {
 function googlePlacesContextProxy() {
   function install(middlewares) {
     middlewares.use('/api/google/nearby-places', async (req, res) => {
-      if (req.method !== 'GET') {
-        res.statusCode = 405;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed', places: [] }));
-        return;
-      }
-
-      // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
-      // Inlined (not the shared helper) so the 429 body keeps this endpoint's
-      // `places: []` contract that the client expects on every error response.
-      const _grl = googleRateLimiter();
-      if (_grl && !_grl(clientKey(req))) {
-        res.statusCode = 429;
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Retry-After', '5');
-        res.end(JSON.stringify({ error: 'Rate limit exceeded', places: [] }));
-        return;
-      }
-
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) {
-        res.statusCode = 503;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'GOOGLE_MAPS_API_KEY is not set', places: [] }));
-        return;
-      }
-
-      const requestUrl = new URL(req.url || '', 'http://localhost');
-      const latitude = Number(requestUrl.searchParams.get('lat'));
-      const longitude = Number(requestUrl.searchParams.get('lon'));
-      const radiusM = Math.max(25, Math.min(5000, Number(requestUrl.searchParams.get('radiusM')) || 250));
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Valid lat and lon are required', places: [] }));
-        return;
-      }
-
-      try {
-        const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask': [
-              'places.id',
-              'places.displayName',
-              'places.formattedAddress',
-              'places.shortFormattedAddress',
-              'places.location',
-              'places.primaryType',
-              'places.primaryTypeDisplayName',
-              'places.types',
-            ].join(','),
-          },
-          body: JSON.stringify({
-            maxResultCount: 20,
-            rankPreference: 'DISTANCE',
-            locationRestriction: {
-              circle: {
-                center: { latitude, longitude },
-                radius: radiusM,
-              },
-            },
-          }),
-        });
-        const data = await response.json().catch(() => ({}));
-        const seenPlaces = new Set();
-        const places = Array.isArray(data.places) ? data.places
-          .map((place) => {
-            const placeLatitude = place.location?.latitude ?? null;
-            const placeLongitude = place.location?.longitude ?? null;
-            const types = Array.isArray(place.types) ? place.types.slice(0, 8) : [];
-            return {
-              id: place.id || null,
-              name: place.displayName?.text || null,
-              address: place.shortFormattedAddress || place.formattedAddress || null,
-              latitude: placeLatitude,
-              longitude: placeLongitude,
-              distanceM: approximateDistanceM(latitude, longitude, placeLatitude, placeLongitude),
-              primaryType: place.primaryTypeDisplayName?.text || place.primaryType || null,
-              types,
-              contextPriority: placeContextPriority(types),
-            };
-          })
-          .filter((place) => {
-            const key = `${place.name}:${place.address || ''}`.toLowerCase();
-            if (!place.name || seenPlaces.has(key)) return false;
-            seenPlaces.add(key);
-            return true;
-          })
-          .sort((a, b) => b.contextPriority - a.contextPriority || a.distanceM - b.distanceM)
-          .map(({ contextPriority, ...place }) => place)
-          .slice(0, 20) : [];
-
-        res.statusCode = response.ok ? 200 : response.status;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'private, max-age=300');
-        res.end(JSON.stringify({
-          places,
-          error: response.ok ? null : data.error?.message || 'Google Places request failed',
-        }));
-      } catch (error) {
-        res.statusCode = 502;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: error?.message || 'Google Places request failed', places: [] }));
-      }
+      await handleNearbyPlacesHttp(req, res);
     });
 
     // Text Search: resolve a named landmark/POI to a real coordinate, biased to
@@ -2514,8 +2409,8 @@ function googlePlacesContextProxy() {
       }
 
       // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
-      // Inlined (like nearby-places) so the 429 body keeps the `places: []`
-      // contract the client expects on every error response.
+      // Inlined (nearby-places lives in src/google/nearbyPlaces.js) so the 429
+      // body keeps the `places: []` contract the client expects on errors.
       const _grl = googleRateLimiter();
       if (_grl && !_grl(clientKey(req))) {
         res.statusCode = 429;
@@ -2627,26 +2522,6 @@ function googlePlacesContextProxy() {
       install(server.middlewares);
     },
   };
-}
-
-function placeContextPriority(types) {
-  const typeSet = new Set(types);
-  if (typeSet.has('historical_landmark') || typeSet.has('monument')) return 100;
-  if (typeSet.has('tourist_attraction') || typeSet.has('museum')) return 90;
-  if (typeSet.has('premise') || typeSet.has('street_address')) return 75;
-  if (typeSet.has('point_of_interest')) return 60;
-  if (typeSet.has('public_bathroom')) return 10;
-  return 40;
-}
-
-function approximateDistanceM(latA, lonA, latB, lonB) {
-  if (![latA, lonA, latB, lonB].every(Number.isFinite)) return Number.MAX_SAFE_INTEGER;
-  const latitudeScale = 111320;
-  const longitudeScale = latitudeScale * Math.cos((latA * Math.PI) / 180);
-  return Math.round(Math.hypot(
-    (latB - latA) * latitudeScale,
-    (lonB - lonA) * longitudeScale
-  ));
 }
 
 const GEV_REALTIME_TOOLS = [
