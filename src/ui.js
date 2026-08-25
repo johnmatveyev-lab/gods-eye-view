@@ -170,6 +170,17 @@ import {
   clampScopeTerminusPct,
 } from './scopeMask.js';
 import {
+  applyLiveSunLighting,
+  CLOCK_DISPLAY_LOCAL,
+  formatHudClock,
+  getClockDisplayMode,
+  LIVE_SUN_DEFAULT,
+  LIVE_SUN_STORAGE_KEY,
+  readLiveSunPreference,
+  toggleClockDisplayMode,
+  writeLiveSunPreference,
+} from './liveSunLighting.js';
+import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -820,6 +831,13 @@ class CockpitViewController {
         detail: { enabled },
       }));
     });
+    this._listen(this.clock, 'click', () => {
+      this.syncClockDisplay(toggleClockDisplayMode());
+    });
+    this._listen(window, 'gev:clock-display-changed', (event) => {
+      this.syncClockDisplay(event?.detail?.mode || getClockDisplayMode());
+    });
+    this.syncClockDisplay(getClockDisplayMode());
     this._listen(window, 'gev:cockpit-weather-state', (event) => {
       this.syncWeatherToggle(event?.detail?.enabled !== false);
     });
@@ -857,6 +875,14 @@ class CockpitViewController {
     if (!target?.addEventListener) return;
     target.addEventListener(type, handler, options);
     this._listenerRemovers.push(() => target.removeEventListener(type, handler, options));
+  }
+
+  syncClockDisplay(mode = getClockDisplayMode()) {
+    const local = mode === CLOCK_DISPLAY_LOCAL;
+    if (!this.clock) return;
+    this.clock.setAttribute('aria-pressed', String(local));
+    this.clock.title = local ? 'Show UTC time' : 'Show local time';
+    this.clock.textContent = formatHudClock(new Date(), mode);
   }
 
   syncWeatherToggle(enabled) {
@@ -1458,7 +1484,7 @@ class CockpitViewController {
           .join('');
       }
     }
-    if (this.clock) this.clock.textContent = new Date().toISOString().slice(11, 19) + 'Z';
+    if (this.clock) this.clock.textContent = formatHudClock(new Date());
     if (this.position) {
       const lat = Number.isFinite(info.latitude)
         ? `${Math.abs(info.latitude).toFixed(3)}°${info.latitude >= 0 ? 'N' : 'S'}` : '--';
@@ -2262,6 +2288,8 @@ export class StyleManager {
     } catch { /* storage can be unavailable in privacy/test contexts */ }
     this._detectionAllocationPreference = normalizeAllocationStrategy(storedDetectionAllocation);
     this._celestialBtn = document.getElementById('celestial-toggle');
+    this._liveSunBtn = document.getElementById('live-sun-toggle');
+    this._liveSunEnabled = false;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2643,6 +2671,7 @@ export class StyleManager {
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initLiveSunToggle();
     this._applyGlobalPostDefaults();
     this._initOrbit();
     this._initRecordingOverlay();
@@ -3504,6 +3533,47 @@ export class StyleManager {
     }
   }
 
+  _initLiveSunToggle() {
+    this._liveSunBtn?.addEventListener('click', () => {
+      this.setLiveSunEnabled(!this._liveSunEnabled);
+    });
+    let stored = LIVE_SUN_DEFAULT;
+    try {
+      stored = readLiveSunPreference(window.localStorage);
+    } catch {
+      stored = LIVE_SUN_DEFAULT;
+    }
+    this.setLiveSunEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Turn live sun lighting on or off. On follows the Cesium clock; off is the
+   * well-lit globe already used when `enableLighting` is false.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, liveSun: boolean}}
+   */
+  setLiveSunEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._liveSunEnabled = next;
+    applyLiveSunLighting(this.viewer, next, {
+      now: Cesium.JulianDate.now(),
+      clockStep: Cesium.ClockStep.SYSTEM_CLOCK,
+    });
+    this._liveSunBtn?.classList.toggle('active', next);
+    this._liveSunBtn?.setAttribute('aria-pressed', String(next));
+    if (this._liveSunBtn) {
+      this._liveSunBtn.title = next
+        ? 'Live sun on — terminator follows real time'
+        : 'Live sun off — fixed well-lit day';
+    }
+    if (persist) {
+      try { writeLiveSunPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    governorRequestRender('live-sun');
+    return { ok: true, liveSun: next };
+  }
+
   /**
    * Renders the validated map stack chip row from the matching controller
    * entries. Cesium ion/Bing chips remain keyboard-focusable but unavailable,
@@ -3539,6 +3609,7 @@ export class StyleManager {
     if (state?.activeId === before && stackId !== before && state?.lastError) {
       this._showToast(state.lastError);
     }
+    this.setLiveSunEnabled(this._liveSunEnabled, { persist: false });
     if (syncShare) this._syncShareState();
   }
 

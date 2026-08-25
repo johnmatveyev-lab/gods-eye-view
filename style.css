@@ -2846,6 +2846,17 @@ body.cockpit-mode:has(#left-panel-stack > .panel-collapsible:not(.collapsed)) .c
   font-size: 10px;
   letter-spacing: 0.1em;
 }
+#cockpit-clock {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
 .cockpit-vision-controls {
   display: grid;
   grid-template-columns: 48px 58px 48px;

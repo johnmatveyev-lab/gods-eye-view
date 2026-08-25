@@ -19,6 +19,12 @@ import { CITY_POIS } from './locations.js';
 import { composeLocalityTag } from './hudLocality.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import {
+  CLOCK_DISPLAY_LOCAL,
+  formatHudClock,
+  getClockDisplayMode,
+  toggleClockDisplayMode,
+} from './liveSunLighting.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -212,6 +218,23 @@ export class IntelHUD {
       </div>
     `;
     this._el.dataset.variant = this._variant;
+    const timestamp = document.getElementById('hud-timestamp');
+    timestamp?.addEventListener('click', () => {
+      toggleClockDisplayMode();
+      this._syncClockDisplay();
+    });
+    this._onClockDisplayChanged = () => this._syncClockDisplay();
+    window.addEventListener('gev:clock-display-changed', this._onClockDisplayChanged);
+    this._syncClockDisplay();
+  }
+
+  _syncClockDisplay() {
+    const local = getClockDisplayMode() === CLOCK_DISPLAY_LOCAL;
+    const el = document.getElementById('hud-timestamp');
+    if (!el) return;
+    el.textContent = this._formatClock();
+    el.title = local ? 'Show UTC time' : 'Show local time';
+    el.style.cursor = 'pointer';
   }
 
   /**
@@ -222,8 +245,7 @@ export class IntelHUD {
   _startTimers() {
     // Timestamp — every second
     this._timestampInterval = setInterval(() => {
-      const el = document.getElementById('hud-timestamp');
-      if (el) el.textContent = this._formatUTC();
+      this._syncClockDisplay();
     }, 1000);
 
     // REC blink — every 800ms
@@ -312,14 +334,20 @@ export class IntelHUD {
    * @returns {string} Timestamp in `YYYY-MM-DD HH:MM:SSZ` format.
    */
   _formatUTC() {
+    return this._formatClock();
+  }
+
+  /**
+   * HUD clock. UTC/local only changes this readout — not Cesium sun lighting.
+   * @returns {string}
+   */
+  _formatClock() {
     const now = new Date();
-    const y = now.getUTCFullYear();
-    const mo = String(now.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(now.getUTCDate()).padStart(2, '0');
-    const h = String(now.getUTCHours()).padStart(2, '0');
-    const mi = String(now.getUTCMinutes()).padStart(2, '0');
-    const s = String(now.getUTCSeconds()).padStart(2, '0');
-    return `${y}-${mo}-${d} ${h}:${mi}:${s}Z`;
+    const local = getClockDisplayMode() === CLOCK_DISPLAY_LOCAL;
+    const y = local ? now.getFullYear() : now.getUTCFullYear();
+    const mo = String((local ? now.getMonth() : now.getUTCMonth()) + 1).padStart(2, '0');
+    const d = String(local ? now.getDate() : now.getUTCDate()).padStart(2, '0');
+    return `${y}-${mo}-${d} ${formatHudClock(now)}`;
   }
 
   /**
@@ -925,6 +953,9 @@ export class IntelHUD {
     this._disarmSummaryInterval();
     clearInterval(this._summaryTypingInterval);
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
+    if (this._onClockDisplayChanged) {
+      window.removeEventListener('gev:clock-display-changed', this._onClockDisplayChanged);
+    }
     this._dataManagerUnsubscribe?.();
     this._summaryRequest?.abort();
   }

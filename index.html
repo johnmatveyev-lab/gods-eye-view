@@ -193,7 +193,7 @@
       <div class="cockpit-compass-tape" id="cockpit-compass-tape" aria-hidden="true"></div>
     </div>
     <div class="cockpit-position-readout">
-      <span id="cockpit-clock">--:--:--Z</span>
+      <button id="cockpit-clock" type="button" aria-pressed="false" title="Show local time">--:--:--Z</button>
       <span id="cockpit-position">--° · --°</span>
     </div>
     <aside id="cockpit-context" class="cockpit-context-window" aria-label="Contact cockpit summary" hidden>
@@ -465,6 +465,12 @@
       <button class="pp-toggle-btn" id="celestial-toggle" title="Celestial ring — reveal the full globe" aria-pressed="false">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">flare</span>
         <span class="pp-label">Celestial</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="live-sun-toggle" title="Live sun — real-time terminator" aria-pressed="false">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">wb_sunny</span>
+        <span class="pp-label">Sun</span>
       </button>
     </div>
     <button class="pp-toggle-btn" id="clean-view-toggle" title="Hide UI chrome">

@@ -11,6 +11,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a DISPLAY-rail Sun on/off control. On follows the existing Cesium
+  clock so the terminator matches real time. Off keeps the well-lit globe
+  already used when lighting is disabled. The choice persists as
+  `meridian.liveSun`. UTC/local only changes the HUD clock. WX FX and visual
+  looks stay independent. No new imagery stack and no `/api`.
 - Hosted `/api/google/nearby-places` on Vercel via `api/google/nearby-places.js`,
   forwarding the same GET handler extracted to `src/google/nearbyPlaces.js`.
   Reuses `GOOGLE_MAPS_API_KEY` and optional `GEV_RATELIMIT_GOOGLE_PER_MIN`.
