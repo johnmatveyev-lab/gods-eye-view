@@ -7,11 +7,13 @@ import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
 import {
   DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+  DEFAULT_EARTHQUAKE_EVENT_TYPES,
   DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
   DEFAULT_EARTHQUAKE_PAGER_ALERTS,
   DEFAULT_EARTHQUAKE_REVIEWED_ONLY,
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
   EARTHQUAKE_DEPTH_BANDS,
+  EARTHQUAKE_EVENT_TYPES,
   EARTHQUAKE_MAGNITUDE_FLOORS,
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
@@ -23,6 +25,7 @@ import {
   earthquakeDepthBand,
   filterEarthquakeFeatures,
   filterEarthquakeFeaturesByDepthBands,
+  filterEarthquakeFeaturesByEventType,
   filterEarthquakeFeaturesByMagnitudeFloor,
   filterEarthquakeFeaturesByPagerAlert,
   filterEarthquakeFeaturesByReviewedStatus,
@@ -30,12 +33,14 @@ import {
   filterEarthquakeFeaturesByTsunamiFlag,
   isSignificantEarthquake,
   mapAnalystRecord,
+  normalizeEarthquakeEventTypes,
   normalizeEarthquakePagerAlerts,
   normalizeEarthquakeReviewedOnly,
   normalizeEarthquakeTimeWindowHours,
   normalizeEarthquakeTsunamiOnly,
   selectEarthquakeOverlayCohort,
   toggleEarthquakeDepthBand,
+  toggleEarthquakeEventType,
   toggleEarthquakePagerAlert,
 } from './earthquakes.js';
 import { DataLayerManager } from './manager.js';
@@ -1368,10 +1373,12 @@ test('Tsunami only chip sits next to mag/depth/time, persists, and hides with th
 function pagerFeature(id, mag, alert, {
   depthKm = 8.2,
   tsunami,
+  type,
   time = 1_753_600_000_000,
 } = {}) {
   const properties = { mag, place: String(id), time, alert };
   if (tsunami !== undefined) properties.tsunami = tsunami;
+  if (type !== undefined) properties.type = type;
   return {
     id,
     geometry: { coordinates: [-122.4, 37.79, depthKm] },
@@ -1392,6 +1399,7 @@ const MIXED_PAGER_DAY = Object.freeze({
     pagerFeature('green-micro', 2.4, 'green'),
     pagerFeature('green-tsunami', 4.4, 'green', {
       tsunami: 1,
+      type: 'earthquake',
       time: 1_800_000_000_000 - 0.5 * HOUR_MS,
     }),
     pagerFeature('yellow-plain', 4.0, 'yellow', { tsunami: 0 }),
@@ -1522,6 +1530,7 @@ test('PAGER chips AND with mag/depth/time/tsunami and redraw from cached geojson
     timeWindowHours: 1,
     tsunamiOnly: true,
     pagerAlerts: 'G',
+    eventTypes: 'Q',
     now,
   }).map((feature) => feature.id);
   assert.deepEqual(anded, ['green-tsunami']);
@@ -1543,10 +1552,12 @@ test('PAGER chips AND with mag/depth/time/tsunami and redraw from cached geojson
       timeWindowHours: 1,
       tsunamiOnly: true,
       pagerAlerts: 'G',
+      eventTypes: 'Q',
     }), true);
     assert.equal(feed.fetches, 1, 'PAGER chips must not refetch the already-cached all_day feed');
     assert.deepEqual(entityIds(viewer._dataSources[0]), ['green-tsunami']);
     assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().eventTypes, 'Q');
     assert.equal(layer.getParams().tsunamiOnly, true);
     assert.equal(layer.getParams().depthBands, 'S');
     assert.equal(layer.getParams().magnitudeFloor, 4.0);
@@ -1606,6 +1617,7 @@ test('PAGER chips sit next to mag/depth/time/tsunami, persist, and hide with the
   assert.match(html, /id="earthquake-tsunami-chips"/);
   assert.match(html, /id="earthquake-depth-chips"/);
   assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(html, /id="earthquake-type-chips"/);
   assert.match(ui, /earthquake-pager-chips|data-earthquake-pager/);
   assert.match(ui, /_earthquakePagerChips\.hidden = !enabled/);
   assert.match(css, /earthquake-pager-chip/);
@@ -1637,6 +1649,7 @@ test('PAGER chips sit next to mag/depth/time/tsunami, persist, and hide with the
     assert.equal(layer.getParams().magnitudeFloor, 2.5);
     assert.equal(layer.getParams().timeWindowHours, 24);
     assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(layer.getParams().eventTypes, 'QERO');
   } finally {
     layer.destroy(viewer);
   }
@@ -1648,11 +1661,13 @@ function reviewedFeature(id, mag, status, {
   depthKm = 8.2,
   tsunami,
   alert,
+  type,
   time = 1_753_600_000_000,
 } = {}) {
   const properties = { mag, place: String(id), time, status };
   if (tsunami !== undefined) properties.tsunami = tsunami;
   if (alert !== undefined) properties.alert = alert;
+  if (type !== undefined) properties.type = type;
   return {
     id,
     geometry: { coordinates: [-122.4, 37.79, depthKm] },
@@ -1673,6 +1688,7 @@ const MIXED_REVIEWED_DAY = Object.freeze({
     reviewedFeature('reviewed-tsunami', 4.4, 'reviewed', {
       tsunami: 1,
       alert: 'green',
+      type: 'earthquake',
       time: 1_800_000_000_000 - 0.5 * HOUR_MS,
     }),
     reviewedFeature('automatic-tsunami', 4.0, 'automatic', { tsunami: 1 }),
@@ -1821,6 +1837,7 @@ test('Reviewed only ANDs with mag/depth/time/tsunami/PAGER and redraws from cach
     tsunamiOnly: true,
     reviewedOnly: true,
     pagerAlerts: 'G',
+    eventTypes: 'Q',
     now,
   }).map((feature) => feature.id);
   assert.deepEqual(anded, ['reviewed-tsunami']);
@@ -1843,12 +1860,14 @@ test('Reviewed only ANDs with mag/depth/time/tsunami/PAGER and redraws from cach
       tsunamiOnly: true,
       reviewedOnly: true,
       pagerAlerts: 'G',
+      eventTypes: 'Q',
     }), true);
     assert.equal(feed.fetches, 1, 'reviewed chip must not refetch the already-cached all_day feed');
     assert.deepEqual(entityIds(viewer._dataSources[0]), ['reviewed-tsunami']);
     assert.equal(layer.getParams().reviewedOnly, true);
     assert.equal(layer.getParams().tsunamiOnly, true);
     assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().eventTypes, 'Q');
     assert.equal(layer.getParams().depthBands, 'S');
     assert.equal(layer.getParams().magnitudeFloor, 4.0);
     assert.equal(layer.getParams().timeWindowHours, 1);
@@ -1903,6 +1922,7 @@ test('Reviewed only chip sits next to mag/depth/time/tsunami/PAGER, persists, an
   assert.match(html, /Reviewed only/);
   assert.match(html, /id="earthquake-tsunami-chips"/);
   assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /id="earthquake-type-chips"/);
   assert.match(html, /id="earthquake-depth-chips"/);
   assert.match(html, /id="earthquake-time-chips"/);
   assert.match(ui, /earthquake-reviewed-chips|data-earthquake-reviewed/);
@@ -1936,6 +1956,327 @@ test('Reviewed only chip sits next to mag/depth/time/tsunami/PAGER, persists, an
     assert.equal(layer.getParams().magnitudeFloor, 2.5);
     assert.equal(layer.getParams().timeWindowHours, 24);
     assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(layer.getParams().pagerAlerts, 'GYORN');
+    assert.equal(layer.getParams().eventTypes, 'QERO');
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 161: event-type chips (client-side, same USGS all_day) ───────────────
+
+function typedFeature(id, mag, type, {
+  depthKm = 8.2,
+  tsunami,
+  alert,
+  status,
+  time = 1_753_600_000_000,
+} = {}) {
+  const properties = { mag, place: String(id), time };
+  if (type !== undefined) properties.type = type;
+  if (tsunami !== undefined) properties.tsunami = tsunami;
+  if (alert !== undefined) properties.alert = alert;
+  if (status !== undefined) properties.status = status;
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties,
+  };
+}
+
+const MIXED_TYPE_DAY = Object.freeze({
+  features: Object.freeze([
+    typedFeature('quake-lo', 3.1, 'earthquake'),
+    typedFeature('quake-sig', 5.4, 'EARTHQUAKE', { depthKm: 80 }),
+    typedFeature('explosion-lo', 4.2, 'explosion'),
+    typedFeature('quarry-word', 3.6, 'quarry'),
+    typedFeature('quarry-blast', 4.1, 'quarry blast'),
+    typedFeature('ice-quake', 3.3, 'ice quake'),
+    typedFeature('missing-type', 4.0),
+    typedFeature('quake-micro', 2.4, 'earthquake'),
+    typedFeature('quake-tsunami', 4.4, 'earthquake', {
+      tsunami: 1,
+      alert: 'green',
+      status: 'reviewed',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+    typedFeature('quarry-tsunami', 4.0, 'quarry blast', { tsunami: 1 }),
+    typedFeature('quake-old', 4.6, 'earthquake', { time: 1_800_000_000_000 - 20 * HOUR_MS }),
+    typedFeature('quake-fresh', 4.7, 'earthquake', {
+      alert: 'green',
+      status: 'reviewed',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+  ]),
+});
+
+test('event type chips default all on and match the current mag/depth/time/tsunami/PAGER/reviewed view', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_EVENT_TYPES, 'QERO');
+  assert.deepEqual([...EARTHQUAKE_EVENT_TYPES], ['quake', 'explosion', 'quarry', 'other']);
+  assert.equal(normalizeEarthquakeEventTypes(undefined), 'QERO');
+  assert.equal(normalizeEarthquakeEventTypes('Q'), 'Q');
+  assert.equal(normalizeEarthquakeEventTypes('bogus'), null);
+  assert.equal(toggleEarthquakeEventType('QERO', 'quarry'), 'QEO');
+  assert.equal(toggleEarthquakeEventType('QEO', 'quarry'), 'QERO');
+  assert.equal(toggleEarthquakeEventType('R', 'quarry'), '0');
+
+  const current = filterEarthquakeFeatures(MIXED_TYPE_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    timeWindowHours: 24,
+    tsunamiOnly: false,
+    reviewedOnly: false,
+    pagerAlerts: DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+  }).map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByEventType(MIXED_TYPE_DAY.features, DEFAULT_EARTHQUAKE_EVENT_TYPES)
+      .map((feature) => feature.id),
+    MIXED_TYPE_DAY.features.map((feature) => feature.id),
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_TYPE_DAY.features, {
+      magnitudeFloor: 2.5,
+      eventTypes: DEFAULT_EARTHQUAKE_EVENT_TYPES,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_TYPE_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().eventTypes, 'QERO');
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Quarry off hides quarry blasts; Quake-only keeps tectonic events', async () => {
+  const noQuarry = filterEarthquakeFeaturesByEventType(MIXED_TYPE_DAY.features, 'QEO')
+    .map((feature) => feature.id);
+  assert.ok(noQuarry.includes('quake-lo'));
+  assert.ok(noQuarry.includes('explosion-lo'));
+  assert.ok(noQuarry.includes('ice-quake'));
+  assert.ok(!noQuarry.includes('quarry-word'));
+  assert.ok(!noQuarry.includes('quarry-blast'));
+  assert.ok(!noQuarry.includes('quarry-tsunami'));
+
+  const quakeOnly = filterEarthquakeFeaturesByEventType(MIXED_TYPE_DAY.features, 'Q')
+    .map((feature) => feature.id);
+  assert.deepEqual(quakeOnly, [
+    'quake-lo',
+    'quake-sig',
+    'quake-micro',
+    'quake-tsunami',
+    'quake-old',
+    'quake-fresh',
+  ]);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_TYPE_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ eventTypes: 'QEO' }), true);
+    let ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('quake-lo'));
+    assert.ok(ids.includes('explosion-lo'));
+    assert.ok(!ids.includes('quarry-blast'));
+    assert.equal(layer.setParams({ eventTypes: 'Q' }), true);
+    ids = entityIds(viewer._dataSources[0]);
+    assert.deepEqual(ids, [
+      'quake-fresh',
+      'quake-lo',
+      'quake-old',
+      'quake-sig',
+      'quake-tsunami',
+    ]);
+    assert.ok(!ids.includes('explosion-lo'));
+    assert.ok(!ids.includes('ice-quake'));
+    assert.ok(!layer.getListRecords().some((row) => row.id.startsWith('quarry-')));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('selected event stays visible when its type chip is off', async () => {
+  assert.deepEqual(
+    filterEarthquakeFeaturesByEventType(MIXED_TYPE_DAY.features, 'Q', {
+      selectedId: 'quarry-blast',
+    }).map((feature) => feature.id),
+    [
+      'quake-lo',
+      'quake-sig',
+      'quarry-blast',
+      'quake-micro',
+      'quake-tsunami',
+      'quake-old',
+      'quake-fresh',
+    ],
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_TYPE_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ selectedId: 'quarry-blast', eventTypes: 'Q' }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('quarry-blast'));
+    assert.ok(ids.includes('quake-lo'));
+    assert.ok(!ids.includes('explosion-lo'));
+    assert.ok(layer.getListRecords().some((row) => row.id === 'quarry-blast'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('event type chips AND with mag/depth/time/tsunami/PAGER/reviewed and redraw from cached geojson', async () => {
+  const now = 1_800_000_000_000;
+  const anded = filterEarthquakeFeatures(MIXED_TYPE_DAY.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 1,
+    tsunamiOnly: true,
+    reviewedOnly: true,
+    pagerAlerts: 'G',
+    eventTypes: 'Q',
+    now,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['quake-tsunami']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(MIXED_TYPE_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({
+      magnitudeFloor: 4.0,
+      depthBands: 'S',
+      timeWindowHours: 1,
+      tsunamiOnly: true,
+      reviewedOnly: true,
+      pagerAlerts: 'G',
+      eventTypes: 'Q',
+    }), true);
+    assert.equal(feed.fetches, 1, 'type chips must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['quake-tsunami']);
+    assert.equal(layer.getParams().eventTypes, 'Q');
+    assert.equal(layer.getParams().reviewedOnly, true);
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+    assert.equal(layer.getParams().timeWindowHours, 1);
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('USGS refresh keeps the event-type chip set applied to the new payload', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const first = stubUsgs(MIXED_TYPE_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ eventTypes: 'Q' }), true);
+    assert.ok(entityIds(viewer._dataSources[0]).every((id) => id.startsWith('quake-')));
+    first.restore();
+    const second = stubUsgs({
+      features: [
+        typedFeature('fresh-quake', 3.3, 'earthquake'),
+        typedFeature('fresh-quarry', 4.4, 'quarry blast'),
+        typedFeature('quake-lo', 3.1, 'earthquake'),
+      ],
+    });
+    try {
+      assert.equal(await layer.update(viewer), true);
+      assert.equal(layer.getParams().eventTypes, 'Q');
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['fresh-quake', 'quake-lo']);
+      assert.ok(!entityIds(viewer._dataSources[0]).includes('fresh-quarry'));
+    } finally {
+      second.restore();
+    }
+  } finally {
+    first.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('event type chips sit next to mag/depth/time/tsunami/PAGER/reviewed, persist, and hide with the layer', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('./earthquakeEventTypeFilter.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-type-chips"/);
+  assert.match(html, /data-earthquake-type="quake"/);
+  assert.match(html, /data-earthquake-type="explosion"/);
+  assert.match(html, /data-earthquake-type="quarry"/);
+  assert.match(html, /data-earthquake-type="other"/);
+  assert.match(html, /id="earthquake-reviewed-chips"/);
+  assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(ui, /earthquake-type-chips|data-earthquake-type/);
+  assert.match(ui, /_earthquakeTypeChips\.hidden = !enabled/);
+  assert.match(css, /earthquake-type-chip/);
+  assert.match(helper, /properties\.type/);
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+  assert.doesNotMatch(helper, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const types = chips.filter((chip) => chip.id.startsWith('type-'));
+    assert.deepEqual(types.map((chip) => chip.label), ['Quake', 'Explosion', 'Quarry', 'Other']);
+    assert.ok(types.every((chip) => chip.active === true));
+    assert.ok(types.every((chip) => chip.group === 'Type'));
+    assert.equal(layer.getParams().eventTypes, 'QERO');
+    assert.equal(layer.setParams({ eventTypes: 'Q' }), true);
+    assert.deepEqual(
+      layer.getRowControls().chips.filter((chip) => chip.id.startsWith('type-')).map((chip) => chip.active),
+      [true, false, false, false],
+    );
+    assert.equal(layer.setParams({ eventTypes: 'bogus' }), false);
+    assert.equal(layer.getParams().eventTypes, 'Q');
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(layer.getParams().reviewedOnly, false);
     assert.equal(layer.getParams().pagerAlerts, 'GYORN');
   } finally {
     layer.destroy(viewer);

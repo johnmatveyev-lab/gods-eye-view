@@ -36,6 +36,16 @@ import {
   filterEarthquakeFeaturesByReviewedStatus,
   normalizeEarthquakeReviewedOnly,
 } from './earthquakeReviewedFilter.js';
+import {
+  DEFAULT_EARTHQUAKE_EVENT_TYPES,
+  EARTHQUAKE_EVENT_TYPES,
+  EARTHQUAKE_EVENT_TYPE_LABELS,
+  EARTHQUAKE_EVENT_TYPE_TITLES,
+  earthquakeEventTypeFlags,
+  filterEarthquakeFeaturesByEventType,
+  normalizeEarthquakeEventTypes,
+  toggleEarthquakeEventType,
+} from './earthquakeEventTypeFilter.js';
 
 export {
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
@@ -76,15 +86,29 @@ export {
   normalizeEarthquakeReviewedOnly,
 } from './earthquakeReviewedFilter.js';
 
+export {
+  DEFAULT_EARTHQUAKE_EVENT_TYPES,
+  EARTHQUAKE_EVENT_TYPES,
+  EARTHQUAKE_EVENT_TYPE_CODES,
+  EARTHQUAKE_EVENT_TYPE_LABELS,
+  EARTHQUAKE_EVENT_TYPE_TITLES,
+  earthquakeEventType,
+  earthquakeEventTypeFlags,
+  filterEarthquakeFeaturesByEventType,
+  normalizeEarthquakeEventTypes,
+  toggleEarthquakeEventType,
+} from './earthquakeEventTypeFilter.js';
+
 /**
  * USGS earthquake discs — last 24 hours, operator floor 2.5+ / 4.0+ / 5.0+ / 6.0+
  * (default 2.5+, the historic hard-skip), Shallow | Intermediate | Deep chips
  * (default all on, same buckets as depthColor), 1h | 6h | 24h chips
  * (default 24h), a Tsunami only toggle (default off), a Reviewed only
- * toggle (default off), and Green | Yellow | Orange | Red | None PAGER
- * chips (default all on). Floor, depth, time, tsunami, reviewed, and
- * PAGER chips re-filter the last all_day GeoJSON in memory; they do not
- * change the USGS product.
+ * toggle (default off), Quake | Explosion | Quarry | Other type chips
+ * (default all on), and Green | Yellow | Orange | Red | None PAGER
+ * chips (default all on). Floor, depth, time, tsunami, reviewed, type,
+ * and PAGER chips re-filter the last all_day GeoJSON in memory; they do
+ * not change the USGS product.
  *
  * Ellipse axes are STATIC (plain numbers), redefined only when a poll brings
  * new data. They must never become a `CallbackProperty` again: every entity
@@ -293,10 +317,11 @@ export function filterEarthquakeFeaturesByDepthBands(
 
 /**
  * AND the operator magnitude floor, depth chips, time window, tsunami flag,
- * reviewed-status toggle, and PAGER alert chips. A selected event stays
- * visible through the tsunami, reviewed, and PAGER gates.
+ * reviewed-status toggle, event-type chips, and PAGER alert chips. A
+ * selected event stays visible through the tsunami, reviewed, type, and
+ * PAGER gates.
  * @param {Array<object>|null|undefined} features
- * @param {{magnitudeFloor?: number, depthBands?: unknown, timeWindowHours?: unknown, tsunamiOnly?: unknown, reviewedOnly?: unknown, pagerAlerts?: unknown, selectedId?: string|null, now?: number}} [options]
+ * @param {{magnitudeFloor?: number, depthBands?: unknown, timeWindowHours?: unknown, tsunamiOnly?: unknown, reviewedOnly?: unknown, eventTypes?: unknown, pagerAlerts?: unknown, selectedId?: string|null, now?: number}} [options]
  * @returns {Array<object>}
  */
 export function filterEarthquakeFeatures(features, {
@@ -305,25 +330,30 @@ export function filterEarthquakeFeatures(features, {
   timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
   tsunamiOnly = DEFAULT_EARTHQUAKE_TSUNAMI_ONLY,
   reviewedOnly = DEFAULT_EARTHQUAKE_REVIEWED_ONLY,
+  eventTypes = DEFAULT_EARTHQUAKE_EVENT_TYPES,
   pagerAlerts = DEFAULT_EARTHQUAKE_PAGER_ALERTS,
   selectedId = null,
   now = Date.now(),
 } = {}) {
   return filterEarthquakeFeaturesByPagerAlert(
-    filterEarthquakeFeaturesByReviewedStatus(
-      filterEarthquakeFeaturesByTsunamiFlag(
-        filterEarthquakeFeaturesByTimeWindow(
-          filterEarthquakeFeaturesByDepthBands(
-            filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
-            depthBands,
+    filterEarthquakeFeaturesByEventType(
+      filterEarthquakeFeaturesByReviewedStatus(
+        filterEarthquakeFeaturesByTsunamiFlag(
+          filterEarthquakeFeaturesByTimeWindow(
+            filterEarthquakeFeaturesByDepthBands(
+              filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
+              depthBands,
+            ),
+            timeWindowHours,
+            now,
           ),
-          timeWindowHours,
-          now,
+          tsunamiOnly,
+          { selectedId },
         ),
-        tsunamiOnly,
+        reviewedOnly,
         { selectedId },
       ),
-      reviewedOnly,
+      eventTypes,
       { selectedId },
     ),
     pagerAlerts,
@@ -437,6 +467,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS;
   let _tsunamiOnly = DEFAULT_EARTHQUAKE_TSUNAMI_ONLY;
   let _reviewedOnly = DEFAULT_EARTHQUAKE_REVIEWED_ONLY;
+  let _eventTypes = DEFAULT_EARTHQUAKE_EVENT_TYPES;
   let _pagerAlerts = DEFAULT_EARTHQUAKE_PAGER_ALERTS;
   let _selectedId = null;
   let _lastGeojson = null;
@@ -449,6 +480,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       timeWindowHours: _timeWindowHours,
       tsunamiOnly: _tsunamiOnly,
       reviewedOnly: _reviewedOnly,
+      eventTypes: _eventTypes,
       pagerAlerts: _pagerAlerts,
       selectedId: _selectedId,
     });
@@ -528,7 +560,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
     _count = count;
     _listRecords = listRecords;
-    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands} · ${_timeWindowHours}h${_tsunamiOnly ? ' · tsunami' : ''}${_reviewedOnly ? ' · reviewed' : ''}${_pagerAlerts !== DEFAULT_EARTHQUAKE_PAGER_ALERTS ? ` · pager ${_pagerAlerts}` : ''})`);
+    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands} · ${_timeWindowHours}h${_tsunamiOnly ? ' · tsunami' : ''}${_reviewedOnly ? ' · reviewed' : ''}${_eventTypes !== DEFAULT_EARTHQUAKE_EVENT_TYPES ? ` · types ${_eventTypes}` : ''}${_pagerAlerts !== DEFAULT_EARTHQUAKE_PAGER_ALERTS ? ` · pager ${_pagerAlerts}` : ''})`);
   }
 
   const layer = {
@@ -615,6 +647,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS;
     _tsunamiOnly = DEFAULT_EARTHQUAKE_TSUNAMI_ONLY;
     _reviewedOnly = DEFAULT_EARTHQUAKE_REVIEWED_ONLY;
+    _eventTypes = DEFAULT_EARTHQUAKE_EVENT_TYPES;
     _pagerAlerts = DEFAULT_EARTHQUAKE_PAGER_ALERTS;
     _selectedId = null;
   },
@@ -626,6 +659,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       timeWindowHours: _timeWindowHours,
       tsunamiOnly: _tsunamiOnly,
       reviewedOnly: _reviewedOnly,
+      eventTypes: _eventTypes,
       pagerAlerts: _pagerAlerts,
       selectedId: _selectedId,
     };
@@ -638,9 +672,10 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     const hasTime = Object.hasOwn(params, 'timeWindowHours');
     const hasTsunami = Object.hasOwn(params, 'tsunamiOnly');
     const hasReviewed = Object.hasOwn(params, 'reviewedOnly');
+    const hasEventTypes = Object.hasOwn(params, 'eventTypes');
     const hasPager = Object.hasOwn(params, 'pagerAlerts');
     const hasSelected = Object.hasOwn(params, 'selectedId');
-    if (!hasFloor && !hasDepth && !hasTime && !hasTsunami && !hasReviewed && !hasPager && !hasSelected) return true;
+    if (!hasFloor && !hasDepth && !hasTime && !hasTsunami && !hasReviewed && !hasEventTypes && !hasPager && !hasSelected) return true;
 
     let nextFloor = _magnitudeFloor;
     if (hasFloor) {
@@ -677,6 +712,13 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       nextReviewed = only;
     }
 
+    let nextEventTypes = _eventTypes;
+    if (hasEventTypes) {
+      const types = normalizeEarthquakeEventTypes(params.eventTypes);
+      if (types == null) return false;
+      nextEventTypes = types;
+    }
+
     let nextPager = _pagerAlerts;
     if (hasPager) {
       const alerts = normalizeEarthquakePagerAlerts(params.pagerAlerts);
@@ -697,6 +739,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       && nextTime === _timeWindowHours
       && nextTsunami === _tsunamiOnly
       && nextReviewed === _reviewedOnly
+      && nextEventTypes === _eventTypes
       && nextPager === _pagerAlerts
       && nextSelected === _selectedId
     ) return true;
@@ -705,6 +748,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _timeWindowHours = nextTime;
     _tsunamiOnly = nextTsunami;
     _reviewedOnly = nextReviewed;
+    _eventTypes = nextEventTypes;
     _pagerAlerts = nextPager;
     _selectedId = nextSelected;
     applyCachedGeojson();
@@ -753,6 +797,14 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
           title: EARTHQUAKE_REVIEWED_CHIP_TITLE,
           params: { reviewedOnly: !_reviewedOnly },
         },
+        ...EARTHQUAKE_EVENT_TYPES.map((type) => ({
+          id: `type-${type}`,
+          label: EARTHQUAKE_EVENT_TYPE_LABELS[type],
+          active: earthquakeEventTypeFlags(_eventTypes)[type] === true,
+          group: 'Type',
+          title: EARTHQUAKE_EVENT_TYPE_TITLES[type],
+          params: { eventTypes: toggleEarthquakeEventType(_eventTypes, type) },
+        })),
         ...EARTHQUAKE_PAGER_ALERTS.map((alert) => ({
           id: `pager-${alert}`,
           label: EARTHQUAKE_PAGER_ALERT_LABELS[alert],
@@ -803,7 +855,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
    * Snapshot for the hosted Quakes list. Same USGS features the discs
    * already parsed — no second fetch — and already clipped to the operator
    * magnitude floor, depth chips, time window, tsunami flag, reviewed
-   * status, AND PAGER alert.
+   * status, event type, AND PAGER alert.
    * A failed feed returns []
    * so the list can show UNAVAILABLE instead of stale rows or a hang.
    * @returns {Array<Object>}
