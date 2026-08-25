@@ -1390,3 +1390,100 @@ test('hide-no-feed catalog visibility skips unconfigured icons and coverage but 
     _setCctvCoverageStateForTest({ enabled: false, hideNoFeed: false });
   }
 });
+
+test('heading-confidence catalog visibility hides low when Low is off and keeps the selected camera', () => {
+  const high = {
+    camera: { id: 'high-cam', name: 'High', headingConfidence: 'high', lat: 30.26, lon: -97.74, headingDeg: 0, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  const medium = {
+    camera: { id: 'medium-cam', name: 'Medium', headingConfidence: 'medium', lat: 30.27, lon: -97.75, headingDeg: 10, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  const low = {
+    camera: { id: 'low-cam', name: 'Low', headingConfidence: 'low', lat: 30.28, lon: -97.76, headingDeg: 20, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  try {
+    _setCctvCoverageStateForTest({
+      records: [high, medium, low],
+      activeCameraId: 'high-cam',
+      headingConfidence: { high: true, medium: true, low: true },
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.deepEqual(cctvLayer.getParams().headingConfidence, { high: true, medium: true, low: true });
+    assert.equal(high.billboard.show, true, 'all on matches the current catalog');
+    assert.equal(medium.billboard.show, true);
+    assert.equal(low.billboard.show, true);
+
+    _setCctvCoverageStateForTest({
+      records: [high, medium, low],
+      activeCameraId: 'high-cam',
+      headingConfidence: { high: true, medium: true, low: false },
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(high.billboard.show, true, 'high stays');
+    assert.equal(medium.billboard.show, true, 'medium stays');
+    assert.equal(low.billboard.show, false, 'low-confidence icon hides');
+    assert.equal(low.coverageEntities[0].show, false, 'low-confidence coverage hides');
+
+    _setCctvCoverageStateForTest({
+      records: [high, medium, low],
+      activeCameraId: 'low-cam',
+      headingConfidence: { high: true, medium: true, low: false },
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    low.billboard.show = false;
+    applyCctvCatalogVisibility();
+    assert.equal(low.billboard.show, true, 'selected low-confidence camera stays');
+    assert.equal(high.billboard.show, true);
+    assert.equal(medium.billboard.show, true);
+  } finally {
+    _setCctvCoverageStateForTest({
+      enabled: false,
+      headingConfidence: { high: true, medium: true, low: true },
+    });
+  }
+});
+
+function extractNamedFunction(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  assert.ok(start >= 0, `${name} is missing`);
+  return source.slice(start, start + 2200);
+}
+
+test('heading-confidence visibility re-applies from memory and does not refetch sources or health', () => {
+  const source = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'cctv.js'),
+    'utf8',
+  );
+  assert.match(source, /from '\.\/cctvHeadingConfidenceFilter\.js'/);
+  assert.match(source, /sourceMatchesHeadingConfidence/);
+  assert.match(source, /_headingConfidence/);
+  const apply = extractNamedFunction(source, 'applyCatalogVisibility');
+  assert.doesNotMatch(apply, /loadCameraSources/);
+  assert.doesNotMatch(apply, /syncHealthState/);
+  assert.doesNotMatch(apply, /SOURCE_ENDPOINT|HEALTH_ENDPOINT/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/sources/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/health/);
+  assert.match(apply, /refreshHorizonCulling/);
+  assert.match(apply, /refreshCoverageStyles/);
+  assert.match(apply, /refreshAmbientCards/);
+  assert.match(extractNamedFunction(source, 'refreshHorizonCulling'), /catalogRecordVisible/);
+  assert.match(extractNamedFunction(source, 'refreshAmbientCards'), /catalogRecordVisible/);
+  assert.match(extractNamedFunction(source, 'buildCoverageVisibleSet'), /catalogRecordVisible/);
+  assert.match(source, /params\.headingConfidence != null/);
+  assert.match(source, /applyCatalogVisibility\(\)/);
+  assert.doesNotMatch(source, /\/api\/cctv\/heading/);
+});

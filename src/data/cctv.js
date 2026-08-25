@@ -110,6 +110,12 @@ import {
   sourceMatchesHideNoFeed,
   writeCctvHideNoFeed,
 } from './cctvCityFilter.js';
+import {
+  normalizeCctvHeadingConfidenceFilter,
+  readCctvHeadingConfidenceFilter,
+  sourceMatchesHeadingConfidence,
+  writeCctvHeadingConfidenceFilter,
+} from './cctvHeadingConfidenceFilter.js';
 
 // ---------------------------------------------------------------------------
 // API endpoints
@@ -296,6 +302,7 @@ let _coverageMode = 'on'; // 'off' | 'on' (wireframes) | 'viewshed' (color-coded
 let _showProjection = true;
 let _autoHop = false;
 let _hideNoFeed = false;
+let _headingConfidence = { high: true, medium: true, low: true };
 // An explicit empty-space deselect keeps AUTO HOP configured but prevents its
 // timer from silently choosing a replacement. A later explicit activation or
 // AUTO HOP toggle-on releases the hold.
@@ -2723,6 +2730,8 @@ function rebuildViewshedVolume(record, isActive) {
 function catalogRecordVisible(record) {
   return sourceMatchesHideNoFeed(record?.camera, _hideNoFeed, {
     selectedId: _activeCameraId,
+  }) && sourceMatchesHeadingConfidence(record?.camera, _headingConfidence, {
+    selectedId: _activeCameraId,
   });
 }
 
@@ -2740,7 +2749,7 @@ function applyCatalogVisibility() {
   refreshAmbientCards();
 }
 
-/** Test seam: hide-no-feed reapplies the cached catalog without a sources fetch. */
+/** Test seam: hide-no-feed / heading-confidence reapply the cached catalog without a sources fetch. */
 export function applyCctvCatalogVisibility() {
   applyCatalogVisibility();
 }
@@ -3493,6 +3502,7 @@ function getPublicCameraState(record, activeId = null) {
     // Panel-only trust signal (design §3b, amended by LOCKED §9.2/§9.3): no
     // in-world rendering reads this, no score-based quality math backs it.
     calBadge: deriveCalBadge(camera),
+    headingConfidence: camera.headingConfidence || null,
     feedConfigured: camera.feedConfigured === true,
     poseSource: camera.poseSource || null,
     basePose: camera.basePose ? { ...camera.basePose } : null,
@@ -3518,6 +3528,7 @@ function uiState() {
     calibrationMode: _calibrationMode,
     autoHop: _autoHop,
     hideNoFeed: _hideNoFeed,
+    headingConfidence: { ..._headingConfidence },
     autoHopSuspended: _autoHopSuspended,
     autoHopSec: _autoHopSec,
     count: _count,
@@ -4073,6 +4084,7 @@ export function _setCctvCoverageStateForTest({
   coverageMode = 'on',
   showProjection = false,
   hideNoFeed = false,
+  headingConfidence = undefined,
 } = {}) {
   _viewer = viewer;
   _records = Array.isArray(records) ? records : [];
@@ -4090,6 +4102,9 @@ export function _setCctvCoverageStateForTest({
   _coverageMode = normalizeCoverageMode(coverageMode, 'on');
   _showProjection = !!showProjection;
   if (typeof hideNoFeed === 'boolean') _hideNoFeed = hideNoFeed;
+  if (headingConfidence != null) {
+    _headingConfidence = normalizeCctvHeadingConfidenceFilter(headingConfidence);
+  }
 }
 
 /**
@@ -4269,6 +4284,11 @@ const cctvLayer = {
       _hideNoFeed = readCctvHideNoFeed(globalThis.localStorage);
     } catch {
       _hideNoFeed = false;
+    }
+    try {
+      _headingConfidence = readCctvHeadingConfidenceFilter(globalThis.localStorage);
+    } catch {
+      _headingConfidence = { high: true, medium: true, low: true };
     }
 
     _billboards = new Cesium.BillboardCollection();
@@ -4645,6 +4665,7 @@ const cctvLayer = {
    * @param {boolean} [params.focusSelected] - Fly to the active camera.
    * @param {number} [params.focusDurationSec] - Fly-to duration.
    * @param {boolean} [params.hideUnhealthy] - Hide cameras marked unhealthy in the health map.
+   * @param {object} [params.headingConfidence] - High | Medium | Low heading-confidence chips.
    */
   setParams(params = {}) {
     if (typeof params.showCoverage === 'boolean') {
@@ -4740,6 +4761,22 @@ const cctvLayer = {
       }
       applyCatalogVisibility();
     }
+    if (params.headingConfidence != null) {
+      const next = normalizeCctvHeadingConfidenceFilter(params.headingConfidence);
+      if (
+        next.high !== _headingConfidence.high
+        || next.medium !== _headingConfidence.medium
+        || next.low !== _headingConfidence.low
+      ) {
+        _headingConfidence = next;
+        try {
+          writeCctvHeadingConfidenceFilter(globalThis.localStorage, _headingConfidence);
+        } catch {
+          // Fail open: the in-memory catalog still applies.
+        }
+        applyCatalogVisibility();
+      }
+    }
     if (params.focusSelected && _activeCameraId) {
       focusCamera(_activeCameraId, Number(params.focusDurationSec) || 1.8);
     }
@@ -4769,6 +4806,7 @@ const cctvLayer = {
       calibrationMode: _calibrationMode,
       autoHop: _autoHop,
       hideNoFeed: _hideNoFeed,
+      headingConfidence: { ..._headingConfidence },
       autoHopSec: _autoHopSec,
       hideUnhealthy: _hideUnhealthy,
       selectedCameraId: active?.camera.id || null,

@@ -60,6 +60,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- CCTV panel has client-only High | Medium | Low heading-confidence chips
+  next to the city/source filter. Default all on. Unchecking Low hides
+  low-confidence headings and keeps high/medium; missing/unknown
+  confidence stays visible. A selected camera stays. Chips AND with
+  city/source, Hide no feed, feed type, and Hide unhealthy, and re-apply
+  the in-memory catalog — no extra `/api/cctv/sources` or `/health` fetch.
+  Persist as `meridian.cctvHeadingConfidence`. Same hosted CCTV catalog.
+  Not an alert service.
 - Satellites row has a **POINTS** on/off chip next to ORBITS over the
   existing `setParams({ showPoints })` path (default ON). Off hides the
   dots and keeps orbit rings if ORBITS is on. Tracked ISS stays. The

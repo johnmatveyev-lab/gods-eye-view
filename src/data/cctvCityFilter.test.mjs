@@ -26,6 +26,11 @@ import {
   readCctvHideUnhealthy,
   writeCctvHideUnhealthy,
 } from './cctvHealthFilter.js';
+import {
+  CCTV_HEADING_CONFIDENCE_STORAGE_KEY,
+  readCctvHeadingConfidenceFilter,
+  writeCctvHeadingConfidenceFilter,
+} from './cctvHeadingConfidenceFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -234,6 +239,7 @@ test('public camera state exposes cityId for the panel filter', () => {
   assert.match(publicState[0], /feedConfigured:\s*camera\.feedConfigured/);
   assert.match(publicState[0], /frameUrl:\s*frameUrlFor\(camera/);
   assert.match(publicState[0], /feedConfigured:\s*camera\.feedConfigured === true/);
+  assert.match(publicState[0], /headingConfidence:\s*camera\.headingConfidence/);
 });
 
 test('hide-no-feed off matches the current catalog', () => {
@@ -320,7 +326,7 @@ test('panel render ANDs hide-no-feed with the city filter and keeps the selected
   assert.match(ui, /_cctvHideNoFeed/);
   const visible = ui.match(/_visibleCctvCameras\(\) \{[\s\S]*?\n  \}/);
   assert.ok(visible, '_visibleCctvCameras is missing');
-  assert.match(visible[0], /filterCctvSources/);
+  assert.match(visible[0], /filterVisibleCctvSources/);
   assert.match(visible[0], /hideNoFeed/);
   assert.match(visible[0], /selectedId/);
   const renderer = ui.match(/_renderCctvState\(state\) \{[\s\S]*?\n  \}\n/);
@@ -459,4 +465,182 @@ test('Hide unhealthy wiring re-applies the in-memory catalog without a new healt
   assert.match(setParams[0], /applyCctvHealthVisibility/);
   const license = readFileSync(path.join(ROOT, 'LICENSE'), 'utf8');
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
+});
+
+const AND_CATALOG = Object.freeze([
+  {
+    id: 'austin-high-video',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'Austin Transportation & Public Works',
+    headingConfidence: 'high',
+    feedType: 'hls',
+    feedConfigured: true,
+    sourceStatus: 'ok',
+    frameUrl: '/api/cctv/frame/austin-high-video',
+  },
+  {
+    id: 'austin-high-image',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'Austin Transportation & Public Works',
+    headingConfidence: 'high',
+    feedType: 'image',
+    feedConfigured: true,
+    sourceStatus: 'ok',
+    frameUrl: '/api/cctv/frame/austin-high-image',
+  },
+  {
+    id: 'austin-low-video',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'Austin Transportation & Public Works',
+    headingConfidence: 'low',
+    feedType: 'mp4',
+    feedConfigured: true,
+    sourceStatus: 'ok',
+    frameUrl: '/api/cctv/frame/austin-low-video',
+  },
+  {
+    id: 'austin-high-video-seed',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'OSM Camera Grid',
+    headingConfidence: 'high',
+    feedType: 'hls',
+    feedConfigured: false,
+    sourceStatus: 'unknown',
+    frameUrl: '/api/cctv/frame/austin-high-video-seed',
+  },
+  {
+    id: 'austin-high-video-unhealthy',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'Austin Transportation & Public Works',
+    headingConfidence: 'high',
+    feedType: 'hls',
+    feedConfigured: true,
+    sourceStatus: 'error',
+    frameUrl: '/api/cctv/frame/austin-high-video-unhealthy',
+  },
+  {
+    id: 'london-high-video',
+    city: 'London',
+    cityId: 'london',
+    provider: 'Transport for London',
+    headingConfidence: 'high',
+    feedType: 'hls',
+    feedConfigured: true,
+    sourceStatus: 'ok',
+    frameUrl: '/api/cctv/frame/london-high-video',
+  },
+]);
+
+test('all heading-confidence chips on match the current catalog', () => {
+  assert.deepEqual(
+    filterVisibleCctvSources(AND_CATALOG, {
+      headingConfidence: { high: true, medium: true, low: true },
+    }).map((source) => source.id),
+    AND_CATALOG.map((source) => source.id),
+  );
+});
+
+test('Low off hides low-confidence headings and keeps high/medium', () => {
+  const hidden = filterVisibleCctvSources(AND_CATALOG, {
+    headingConfidence: { high: true, medium: true, low: false },
+  });
+  assert.deepEqual(
+    hidden.map((source) => source.id),
+    [
+      'austin-high-video',
+      'austin-high-image',
+      'austin-high-video-seed',
+      'austin-high-video-unhealthy',
+      'london-high-video',
+    ],
+  );
+  assert.equal(hidden.some((source) => source.headingConfidence === 'low'), false);
+});
+
+test('selected low-confidence camera stays when Low is off', () => {
+  const kept = filterVisibleCctvSources(AND_CATALOG, {
+    headingConfidence: { high: true, medium: true, low: false },
+    selectedId: 'austin-low-video',
+  });
+  assert.ok(kept.some((source) => source.id === 'austin-low-video'));
+  assert.ok(kept.some((source) => source.headingConfidence === 'high'));
+});
+
+test('city + Hide no feed + Video + High still AND', () => {
+  const anded = filterVisibleCctvSources(AND_CATALOG, {
+    city: 'austin',
+    hideNoFeed: true,
+    feedType: 'video',
+    headingConfidence: { high: true, medium: false, low: false },
+  });
+  assert.deepEqual(
+    anded.map((source) => source.id),
+    ['austin-high-video', 'austin-high-video-unhealthy'],
+  );
+  const withUnhealthy = filterVisibleCctvSources(AND_CATALOG, {
+    city: 'austin',
+    hideNoFeed: true,
+    feedType: 'video',
+    hideUnhealthy: true,
+    headingConfidence: { high: true, medium: false, low: false },
+  });
+  assert.deepEqual(withUnhealthy.map((source) => source.id), ['austin-high-video']);
+});
+
+test('heading-confidence chips persist next to the existing CCTV city pref', () => {
+  const storage = memoryStorage();
+  writeCctvCityFilter(storage, 'austin');
+  writeCctvHeadingConfidenceFilter(storage, { low: false });
+  assert.equal(storage.getItem(CCTV_CITY_FILTER_STORAGE_KEY), 'austin');
+  assert.equal(readCctvCityFilter(storage), 'austin');
+  assert.deepEqual(readCctvHeadingConfidenceFilter(storage), {
+    high: true,
+    medium: true,
+    low: false,
+  });
+  assert.ok(storage.getItem(CCTV_HEADING_CONFIDENCE_STORAGE_KEY));
+});
+
+test('CCTV panel markup has High | Medium | Low chips next to Hide unhealthy', () => {
+  const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const panel = html.match(/<div id="cctv-panel"[\s\S]*?<div id="scene-panel"/);
+  assert.ok(panel, 'cctv-panel markup is missing');
+  assert.match(panel[0], /id="cctv-heading-confidence-filter"/);
+  assert.match(panel[0], /data-cctv-heading-confidence="high"[^>]*>High</);
+  assert.match(panel[0], /data-cctv-heading-confidence="medium"[^>]*>Medium</);
+  assert.match(panel[0], /data-cctv-heading-confidence="low"[^>]*>Low</);
+  assert.match(panel[0], /aria-label="CCTV heading confidence"/);
+  const cityAt = panel[0].indexOf('id="cctv-city-filter"');
+  const hideAt = panel[0].indexOf('id="cctv-hide-unhealthy-btn"');
+  const chipsAt = panel[0].indexOf('id="cctv-heading-confidence-filter"');
+  const cameraAt = panel[0].indexOf('id="cctv-camera-select"');
+  assert.ok(cityAt < chipsAt && hideAt < chipsAt && chipsAt < cameraAt,
+    'heading chips sit on the visibility row above the camera list');
+  assert.doesNotMatch(panel[0], /OpenSky/i);
+  assert.doesNotMatch(panel[0], /Google News/i);
+  assert.doesNotMatch(panel[0], /TeleGeography/i);
+});
+
+test('panel render ANDs heading confidence with city/source and keeps the selected camera', () => {
+  const ui = readFileSync(path.join(ROOT, 'src/ui.js'), 'utf8');
+  assert.match(ui, /from '\.\/data\/cctvHeadingConfidenceFilter\.js'/);
+  assert.match(ui, /readCctvHeadingConfidenceFilter/);
+  assert.match(ui, /writeCctvHeadingConfidenceFilter/);
+  assert.match(ui, /_cctvHeadingConfidence/);
+  const visible = ui.match(/_visibleCctvCameras\(\) \{[\s\S]*?\n  \}/);
+  assert.ok(visible, '_visibleCctvCameras is missing');
+  assert.match(visible[0], /filterVisibleCctvSources/);
+  assert.match(visible[0], /headingConfidence/);
+  assert.match(visible[0], /selectedId/);
+  const renderer = ui.match(/_renderCctvState\(state\) \{[\s\S]*?\n  \}\n/);
+  assert.ok(renderer, '_renderCctvState is missing');
+  assert.match(renderer[0], /headingConfidence:\s*this\._cctvHeadingConfidence/);
+  assert.match(renderer[0], /_cctvCityFilterValue/);
+  assert.doesNotMatch(ui, /\/api\/cctv\/heading/);
+  assert.doesNotMatch(ui, /\/api\/cctv\/filter/);
 });
