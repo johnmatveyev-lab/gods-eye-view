@@ -3510,7 +3510,7 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-radio-transport {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 6px;
 }
 .cockpit-radio-transport button {
@@ -5378,7 +5378,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 .context-radio-mini-transport {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
 }
 .context-radio-mini-transport button {

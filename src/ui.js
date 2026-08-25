@@ -2381,6 +2381,7 @@ export class StyleManager {
     this._contextRadioMiniPrevBtn = document.getElementById('context-radio-mini-prev-btn');
     this._contextRadioMiniPlayBtn = document.getElementById('context-radio-mini-play-btn');
     this._contextRadioMiniNextBtn = document.getElementById('context-radio-mini-next-btn');
+    this._contextRadioMiniStopBtn = document.getElementById('context-radio-mini-stop-btn');
     this._contextRadioMiniVolume = document.getElementById('context-radio-mini-volume');
     this._contextRadioMiniVolumeValue = document.getElementById('context-radio-mini-volume-value');
     this._cockpitUtilityControls = document.getElementById('cockpit-utility-controls');
@@ -2396,6 +2397,7 @@ export class StyleManager {
     this._cockpitRadioPrevBtn = document.getElementById('cockpit-radio-prev-btn');
     this._cockpitRadioPlayBtn = document.getElementById('cockpit-radio-play-btn');
     this._cockpitRadioNextBtn = document.getElementById('cockpit-radio-next-btn');
+    this._cockpitRadioStopBtn = document.getElementById('cockpit-radio-stop-btn');
     this._cockpitRadioVolume = document.getElementById('cockpit-radio-volume');
     this._cockpitRadioVolumeValue = document.getElementById('cockpit-radio-volume-value');
     this._radioLayerState = document.getElementById('radio-layer-state');
@@ -5820,6 +5822,8 @@ export class StyleManager {
     this._radioNextBtn?.addEventListener('click', () => cycleRadio(1));
     this._radioPlayBtn?.addEventListener('click', () => void radioLayer.togglePlayback({ origin: 'user' }));
     this._radioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
+    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
+    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
     this._radioVolume?.addEventListener('input', () => {
       const value = Number(this._radioVolume.value);
       if (this._radioVolumeValue) this._radioVolumeValue.textContent = `${value}%`;
@@ -6202,7 +6206,10 @@ export class StyleManager {
       this._cockpitRadioPlayBtn.setAttribute('aria-label', `${action} ${selected ? 'selected' : 'nearest'} radio station`);
       this._cockpitRadioPlayBtn.title = action;
     }
-    if (this._radioStopBtn) this._radioStopBtn.disabled = !interactive || state.audioState === 'stopped';
+    const liveRadioAudio = ['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
+    if (this._radioStopBtn) this._radioStopBtn.disabled = !['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
+    if (this._contextRadioMiniStopBtn) this._contextRadioMiniStopBtn.disabled = !liveRadioAudio;
+    if (this._cockpitRadioStopBtn) this._cockpitRadioStopBtn.disabled = !liveRadioAudio;
     if (this._radioVolume) this._radioVolume.disabled = !interactive;
     if (this._radioVolume && document.activeElement !== this._radioVolume) {
       this._radioVolume.value = String(Math.round(state.volume * 100));

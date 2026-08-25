@@ -5,6 +5,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Fixed
+
+- Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
+  the Radio layer also silences it. Starting a station unmutes. Compact
+  Context and Cockpit transports now expose the same control. No voice ducking
+  and no `/api/radio` changes.
+
 ### Changed
 
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
