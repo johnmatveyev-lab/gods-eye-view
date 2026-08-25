@@ -32,6 +32,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   now unselectable: the Data Layers panel hides the enable control, manager
   enable is a no-op, and voice `set_layer` refuses undersea/submarine cables
   with “layer is a commercial no-op”. No cable geometry is fetched.
+- Voice “OpenSky” is refused with “OpenSky is disabled”. Civilian flights stay
+  labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
+  compatibility path and never contacts opensky-network.org.
 
 ### Fixed
 

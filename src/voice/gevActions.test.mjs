@@ -709,6 +709,50 @@ test('Data Layers voice inventory hides the Context coordinator while current-vi
   assert.deepEqual(current.cockpit, { active: false, entryAllowed: true });
 });
 
+test('voice enable OpenSky is disabled, never fetches OpenSky, and leaves flights as adsb.lol', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const originalFetch = globalThis.fetch;
+  const fetched = [];
+  globalThis.fetch = async (url) => {
+    fetched.push(String(url));
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  const viewer = {
+    clock: { onTick: { addEventListener: () => () => {} } },
+    scene: { canvas: { addEventListener() {}, removeEventListener() {} } },
+    camera: { moveEnd: { addEventListener() {} } },
+  };
+  const enableCalls = [];
+  const dataManager = {
+    layers: new Map([['flights', {
+      module: { source: 'adsb.lol', enable() { enableCalls.push('flights'); } },
+    }]]),
+    isEnabled: () => false,
+    getLayerLifecycleState: () => ({ enabled: false, lifecycleState: 'disabled', uncertain: false }),
+    getAll: () => [{ id: 'flights', name: 'Live Flights', source: 'adsb.lol', stats: { count: 0 } }],
+    setEnabled: async (...args) => {
+      enableCalls.push(['setEnabled', ...args]);
+      return true;
+    },
+  };
+  const runner = createGevActionRunner({ viewer, styleManager: {}, dataManager });
+
+  try {
+    for (const layerId of ['OpenSky', 'opensky', 'open sky']) {
+      const result = await runner('set_layer_visibility', { layerId, enabled: true });
+      assert.equal(result.ok, false, `${layerId} must refuse`);
+      assert.equal(result.action, 'set_layer_visibility');
+      assert.match(result.error, /OpenSky is disabled/);
+    }
+    assert.deepEqual(enableCalls, []);
+    assert.equal(fetched.some((url) => /opensky-network\.org/i.test(url)), false);
+    assert.equal(dataManager.getAll()[0].source, 'adsb.lol');
+  } finally {
+    if (originalFetch === undefined) delete globalThis.fetch;
+    else globalThis.fetch = originalFetch;
+  }
+});
+
 test('voice refuses submarine cables with the commercial no-op speak and never fetches', async () => {
   globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
   const originalFetch = globalThis.fetch;

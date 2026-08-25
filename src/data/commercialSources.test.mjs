@@ -57,6 +57,15 @@ test('outbound proxy list has no TeleGeography URL', () => {
   );
 });
 
+test('layer list has no OpenSky enable control', () => {
+  assert.equal(flightsLayer.id, 'flights');
+  assert.equal(flightsLayer.name, 'Live Flights');
+  assert.equal(flightsLayer.source, 'adsb.lol');
+  assert.doesNotMatch(flightsLayer.name, /opensky/i);
+  const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /OpenSky/);
+});
+
 test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   const keys = DATA_CREDITS.map((credit) => credit.key);
   assert.ok(!keys.includes('opensky'));

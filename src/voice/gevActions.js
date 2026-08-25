@@ -145,6 +145,9 @@ const LAYER_ALIASES = new Map([
   ['flights', 'flights'],
   ['planes', 'flights'],
   ['aircraft', 'flights'],
+  ['opensky', 'opensky'],
+  ['open sky', 'opensky'],
+  ['open-sky', 'opensky'],
   ['military', 'military'],
   ['military flights', 'military'],
   ['earthquakes', 'earthquakes'],
@@ -329,6 +332,15 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
           layerId,
           error: 'The submarine-cables layer is a commercial no-op',
           ...readLayerLifecycleSummary(dataManager, layerId),
+        };
+      }
+      if (layerId === 'opensky') {
+        return {
+          ok: false,
+          action: 'set_layer_visibility',
+          layerId,
+          error: 'OpenSky is disabled',
+          ...readLayerLifecycleSummary(dataManager, layerId, { fallbackEnabled: false }),
         };
       }
       if (!dataManager.layers.has(layerId)) {
