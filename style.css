@@ -1271,6 +1271,14 @@ body.recording-mode #cesium-credits {
   min-width: 200px;
 }
 
+#hud-layout-row.visible {
+  border-radius: 0;
+}
+
+#units-row {
+  min-width: 184px;
+}
+
 /* Map Source tiles live with Visual Presets in the bottom command tray. */
 .map-source-section {
   display: grid;
