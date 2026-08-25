@@ -50,6 +50,9 @@ const CODE_TO_CHIP = Object.freeze(
 );
 
 const RAD_TO_DEG = 180 / Math.PI;
+/** Degree buckets applied in satrec.inclo's native radians to avoid a deg round-trip. */
+const EQ_MAX_RAD = 30 * (Math.PI / 180);
+const POLAR_MIN_RAD = 80 * (Math.PI / 180);
 
 /** @typedef {'eq'|'mid'|'polar'} SatInclinationChipId */
 
@@ -86,10 +89,9 @@ export function normalizeSatInclination(value) {
       }
     } else if (SAT_INCLINATION_CHIP_IDS.includes(/** @type {SatInclinationChipId} */ (trimmed))) {
       seen.add(trimmed);
-    } else {
+    } else if ([...trimmed].every((character) => Boolean(CODE_TO_CHIP[character]))) {
       for (const character of trimmed) {
-        const chipId = CODE_TO_CHIP[character];
-        if (chipId) seen.add(chipId);
+        seen.add(CODE_TO_CHIP[character]);
       }
     }
     if (!seen.size) return DEFAULT_SAT_INCLINATION;
@@ -166,6 +168,19 @@ export function satelliteInclinationBucket(degrees) {
 }
 
 /**
+ * Bucket a satrec from `inclo` radians using the 30° / 80° plane splits.
+ * @param {{inclo?: number}|null|undefined} satrec
+ * @returns {SatInclinationChipId|null}
+ */
+export function satelliteInclinationBucketOf(satrec) {
+  const inclo = satrec?.inclo;
+  if (!Number.isFinite(inclo)) return null;
+  if (inclo < EQ_MAX_RAD) return 'eq';
+  if (inclo < POLAR_MIN_RAD) return 'mid';
+  return 'polar';
+}
+
+/**
  * Whether one catalog row clears the inclination chips.
  * Missing / non-finite inclination stays visible. The tracked satellite stays
  * even when its chip is off.
@@ -184,9 +199,7 @@ export function satellitePassesInclinationFilter(sat, filter, {
   }
   const token = normalizeSatInclination(filter);
   if (token === DEFAULT_SAT_INCLINATION) return true;
-  const degrees = satelliteInclinationDegrees(sat?.satrec);
-  if (!Number.isFinite(degrees)) return true;
-  const bucket = satelliteInclinationBucket(degrees);
+  const bucket = satelliteInclinationBucketOf(sat?.satrec);
   if (bucket == null) return true;
   const flags = satelliteInclinationFilterFlags(token);
   return flags[bucket] === true;

@@ -18,6 +18,7 @@ import {
   readSatInclinationPreference,
   resetSatInclinationCache,
   satelliteInclinationBucket,
+  satelliteInclinationBucketOf,
   satelliteInclinationChipModels,
   satelliteInclinationDegrees,
   satelliteInclinationFilterFlags,
@@ -191,6 +192,8 @@ test('satrec.inclo is radians; buckets are Eq <30, Mid 30–80, Polar ≥80', ()
   assert.equal(satelliteInclinationBucket(30), 'mid');
   assert.equal(satelliteInclinationBucket(79.999), 'mid');
   assert.equal(satelliteInclinationBucket(80), 'polar');
+  assert.equal(satelliteInclinationBucketOf(satrecForInclinationDegrees(30)), 'mid');
+  assert.equal(satelliteInclinationBucketOf(satrecForInclinationDegrees(80)), 'polar');
   assert.equal(Number.isFinite(satelliteInclinationDegrees({})), false);
   assert.equal(Number.isFinite(satelliteInclinationDegrees(null)), false);
   assert.equal(satelliteInclinationBucket(Number.NaN), null);
