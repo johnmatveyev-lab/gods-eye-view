@@ -264,6 +264,12 @@ const OPTION_GROUPS = Object.freeze({
       encode: (value) => String(Math.round(value * 100)),
       decode: (value) => (/^\d{1,3}$/.test(value) ? normalizeVolume(Number(value) / 100) : null),
     }),
+    enumOption('minBitrate', 'b', 'all', ['all', '64', '128', '192'], {
+      all: 'a',
+      64: '6',
+      128: '1',
+      192: '9',
+    }),
   ]),
   'local-firms': Object.freeze([
     enumOption('frpFloor', 'f', 'all', ['all', '10', '50', '100'], {

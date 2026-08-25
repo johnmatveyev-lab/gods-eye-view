@@ -39,6 +39,12 @@ import {
   stationMatchesRadioSearch,
 } from './radioStationSearch.js';
 import {
+  DEFAULT_RADIO_BITRATE_FLOOR,
+  filterRadioStationsByBitrateFloor,
+  normalizeRadioBitrateFloor,
+  stationMatchesRadioBitrateFloor,
+} from './radioBitrateFloor.js';
+import {
   DEFAULT_RADIO_VOLUME_PCT,
   radioMuteToggle,
   radioVolumePctToUnit,
@@ -99,6 +105,7 @@ const RADIO_PICK_OFFSETS = Object.freeze([
 const _radioEarthScreenCenter = new Cesium.Cartesian2();
 const _radioEarthToCenter = new Cesium.Cartesian3();
 export const DEFAULT_RADIO_FILTER = 'all';
+export { DEFAULT_RADIO_BITRATE_FLOOR };
 export const GLOBAL_RADIO_ALTITUDE_M = 2_000_000;
 
 const MUSIC_GENRES = Object.freeze([
@@ -195,6 +202,7 @@ let _categories = [];
 let _renderById = new Map();
 let _filter = DEFAULT_RADIO_FILTER;
 let _stationSearch = '';
+let _bitrateFloor = DEFAULT_RADIO_BITRATE_FLOOR;
 let _selectedId = null;
 let _selectedEntity = null;
 let _selectionGeneration = 0;
@@ -1183,17 +1191,32 @@ function selectedPresentationStation() {
   return _cancelledTuningPresentationStation || selectedStation();
 }
 
-function directoryStations() {
-  return filterRadioStations(_stations, _filter);
+function playingStationKeepId() {
+  return _audioStationId || null;
 }
 
-function visibleStations() {
-  return filterRadioStationsBySearch(directoryStations(), _stationSearch);
+function directoryStations({ keepPlaying = true } = {}) {
+  return filterRadioStationsByBitrateFloor(
+    filterRadioStations(_stations, _filter),
+    _bitrateFloor,
+    { keepStationId: keepPlaying ? playingStationKeepId() : null },
+  );
 }
 
-function stationMatchesCurrentDirectory(station) {
+function visibleStations({ keepPlaying = true } = {}) {
+  return filterRadioStationsBySearch(directoryStations({ keepPlaying }), _stationSearch);
+}
+
+function walkableStations() {
+  return visibleStations({ keepPlaying: false });
+}
+
+function stationMatchesCurrentDirectory(station, { keepPlaying = true } = {}) {
   return stationMatchesRadioCategory(station, _filter)
-    && stationMatchesRadioSearch(station, _stationSearch);
+    && stationMatchesRadioSearch(station, _stationSearch)
+    && stationMatchesRadioBitrateFloor(station, _bitrateFloor, {
+      keepStationId: keepPlaying ? playingStationKeepId() : null,
+    });
 }
 
 function viewportRadioAnchor() {
@@ -1220,7 +1243,7 @@ function viewportRadioAnchor() {
 
 function rankedVisibleStations() {
   const anchor = viewportRadioAnchor();
-  return rankRadioStationsForViewport(visibleStations(), anchor, {
+  return rankRadioStationsForViewport(walkableStations(), anchor, {
     preferEnglish: Boolean(anchor?.globalView),
   });
 }
@@ -1268,6 +1291,7 @@ export function getRadioUIState() {
     updatedAt: _updatedAt,
     filter: _filter,
     stationSearch: _stationSearch,
+    minBitrate: _bitrateFloor,
     categories: _categories,
     acceptedCatalogGeneration: _acceptedCatalogSnapshot.generation,
     presentationActive: radioPresentationAllowed(),
@@ -1450,12 +1474,12 @@ function installTuningNoise() {
 /** Return the complete accepted filtered directory in stable catalog order. */
 export function getRadioTunerStations(limit = RADIO_TUNER_STATION_LIMIT) {
   if (!radioPresentationAllowed() || !_acceptedCatalogSnapshot.stations.length) return [];
-  return buildRadioTunerBand(visibleStations(), selectedStation(), limit);
+  return buildRadioTunerBand(walkableStations(), selectedStation(), limit);
 }
 
 /** Begin a direct-manipulation tuning gesture and pause the current stream. */
 export function beginRadioTuning() {
-  if (!radioPresentationAllowed() || !visibleStations().length) return false;
+  if (!radioPresentationAllowed() || !walkableStations().length) return false;
   const snapshot = captureRadioTuningResolutionSnapshot();
   if (!Number.isSafeInteger(snapshot.generation) || !snapshot.stations.length) return false;
   _tuningResolutionSnapshot = snapshot;
@@ -2040,6 +2064,10 @@ export function setRadioParams(params = {}) {
     ? normalizeRadioFilter(params.filter)
     : null;
   if (Object.hasOwn(params, 'filter') && !nextFilter) return false;
+  const nextBitrateFloor = Object.hasOwn(params, 'minBitrate')
+    ? normalizeRadioBitrateFloor(params.minBitrate)
+    : null;
+  if (Object.hasOwn(params, 'minBitrate') && !nextBitrateFloor) return false;
   const numericVolume = Object.hasOwn(params, 'volume') ? Number(params.volume) : null;
   if (Object.hasOwn(params, 'volume') && !Number.isFinite(numericVolume)) return false;
   const nextVolume = numericVolume === null ? null : clampRadioVolume(numericVolume);
@@ -2057,6 +2085,14 @@ export function setRadioParams(params = {}) {
     if (filterChanged) resetRadioClusterOverlayIdentities();
     changed ||= filterChanged || clearedCancelledPresentation;
   }
+  let bitrateChanged = false;
+  if (nextBitrateFloor !== null) {
+    bitrateChanged = nextBitrateFloor !== _bitrateFloor;
+    if (bitrateChanged && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+    _bitrateFloor = nextBitrateFloor;
+    if (bitrateChanged) resetRadioClusterOverlayIdentities();
+    changed ||= bitrateChanged;
+  }
   if (nextVolume !== null && nextVolume !== _userVolume) {
     commitUserVolume(nextVolume);
     if (_audio && !_voiceDucked) {
@@ -2069,7 +2105,7 @@ export function setRadioParams(params = {}) {
   }
   if (changed && radioPresentationAllowed()) {
     updateRenderVisibility();
-    if (filterChanged && _dataSource?.clustering?.enabled) {
+    if ((filterChanged || bitrateChanged) && _dataSource?.clustering?.enabled) {
       const clusterPoints = _dataSource.clustering.clusterPoints;
       _dataSource.clustering.clusterPoints = !clusterPoints;
       _dataSource.clustering.clusterPoints = clusterPoints;
@@ -2082,7 +2118,7 @@ export function setRadioParams(params = {}) {
 }
 
 export function getRadioParams() {
-  return { filter: _filter, volume: _userVolume };
+  return { filter: _filter, volume: _userVolume, minBitrate: _bitrateFloor };
 }
 
 /**
@@ -2367,7 +2403,7 @@ export function cycleRadioStation(direction = 1, {
     ? stationIds
       .slice(0, RADIO_TUNER_DIRECTORY_LIMIT)
       .map((id) => _stationById.get(String(id)))
-      .filter((station) => station && stationMatchesCurrentDirectory(station))
+      .filter((station) => station && stationMatchesCurrentDirectory(station, { keepPlaying: false }))
     : rankedVisibleStations();
   if (!ranked.length) return false;
   const current = ranked.findIndex((station) => station.id === _selectedId);
@@ -2467,6 +2503,28 @@ export function setRadioStationSearch(query) {
 export function getRadioDirectoryStations(limit = RADIO_TUNER_STATION_LIMIT) {
   if (!radioPresentationAllowed() || !_stations.length) return [];
   return buildRadioTunerBand(directoryStations(), selectedStation(), limit);
+}
+
+/** Raise or clear the min-bitrate floor without fetching or stopping audio. */
+export function setRadioBitrateFloor(floorId) {
+  if (!radioPresentationAllowed()) return false;
+  const nextFloor = normalizeRadioBitrateFloor(floorId) || DEFAULT_RADIO_BITRATE_FLOOR;
+  const changed = nextFloor !== _bitrateFloor;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _bitrateFloor = nextFloor;
+  if (changed) {
+    resetRadioClusterOverlayIdentities();
+    updateRenderVisibility();
+    if (_dataSource?.clustering?.enabled) {
+      const clusterPoints = _dataSource.clustering.clusterPoints;
+      _dataSource.clustering.clusterPoints = !clusterPoints;
+      _dataSource.clustering.clusterPoints = clusterPoints;
+      _viewer?.scene?.requestRender?.();
+    }
+    scheduleRadioOverlayPublish();
+  }
+  emitState();
+  return true;
 }
 
 /** Change marker/list category without interrupting an active station. */
@@ -2897,6 +2955,7 @@ export const radioLayer = {
     _categories = Object.freeze([]);
     _filter = DEFAULT_RADIO_FILTER;
     _stationSearch = '';
+    _bitrateFloor = DEFAULT_RADIO_BITRATE_FLOOR;
     _renderById.clear();
     resetRadioClusterOverlayIdentities();
     _lastHorizonCameraPosition = null;
@@ -2961,6 +3020,7 @@ export const radioLayer = {
   endTuning: endRadioTuning,
   setFilter: setRadioFilter,
   setStationSearch: setRadioStationSearch,
+  setBitrateFloor: setRadioBitrateFloor,
   selectStation: selectRadioStation,
   selectRequestedStation: selectRequestedRadioStation,
   cycleStation: cycleRadioStation,
