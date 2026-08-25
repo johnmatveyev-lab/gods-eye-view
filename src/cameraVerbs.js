@@ -17,6 +17,7 @@
 
 import * as Cesium from 'cesium';
 import { holdContinuousRender, releaseContinuousRender } from './renderGovernor.js';
+import { isReduceMotionEnabled } from './reduceMotion.js';
 
 /** °/s by speed word — orbit; pan uses fractions of view height/s. */
 const ORBIT_DEG_S = { slow: 2, normal: 6, fast: 15 };
@@ -131,15 +132,9 @@ const ROUTE_MAX_DESCENT_MPS = 10;
 
 /* ── Pure cinematic helpers (unit-tested; no viewer, no module state) ────── */
 
-/** Whether the operating system asked us to keep motion boring. */
+/** Whether decorative motion should stay still (OS query or meridian.reduceMotion). */
 export function prefersReducedMotion() {
-  try {
-    return typeof window !== 'undefined'
-      && typeof window.matchMedia === 'function'
-      && window.matchMedia('(prefers-reduced-motion: reduce)').matches === true;
-  } catch {
-    return false;
-  }
+  return isReduceMotionEnabled();
 }
 
 /**
@@ -1029,6 +1024,13 @@ export function moveCamera(args = {}, runNavigation = null) {
     if (direction === 'down' && pitch <= PITCH_MIN + Cesium.Math.toRadians(0.5)) {
       return { ok: false, action: 'move_camera', error: 'Already looking straight down — tilt up to raise the horizon.' };
     }
+  }
+  if (motion === 'orbit' && mode === 'continuous' && prefersReducedMotion()) {
+    return {
+      ok: false,
+      action: 'move_camera',
+      error: 'Continuous orbit is disabled while reduced motion is on.',
+    };
   }
   if (motion === 'orbit' && _viewer?.trackedEntity && typeof runNavigation !== 'function') {
     // The follow camera owns a tracked view; a lookAt orbit fights it frame

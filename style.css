@@ -575,8 +575,8 @@ body.recording-mode #cesium-credits {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #title-bar.radio-broadcasting .title-logo::before,
-  #title-bar.radio-broadcasting .title-logo::after {
+  html:not([data-reduce-motion="false"]) #title-bar.radio-broadcasting .title-logo::before,
+  html:not([data-reduce-motion="false"]) #title-bar.radio-broadcasting .title-logo::after {
     animation: none;
   }
 }
@@ -2282,12 +2282,12 @@ body.ui-clean-view #scene-runtime.active {
    src/splitFlap.js also checks the query and takes the instant path, so
    this is the belt to that braces. */
 @media (prefers-reduced-motion: reduce) {
-  .gev-flap-cell.is-flapping::before,
-  .gev-flap-cell.is-flapping::after {
+  html:not([data-reduce-motion="false"]) .gev-flap-cell.is-flapping::before,
+  html:not([data-reduce-motion="false"]) .gev-flap-cell.is-flapping::after {
     animation-duration: 1ms;
     animation-delay: 0ms;
   }
-  .gev-flap-sizing {
+  html:not([data-reduce-motion="false"]) .gev-flap-sizing {
     transition-duration: 1ms;
   }
 }
@@ -4105,9 +4105,9 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .cockpit-altitude-rim-pointer .material-symbols-outlined { animation: none; }
-  .cockpit-altitude-rim-scale > span { transition: none; }
-  [data-cockpit-brief-page] { animation: none; }
+  html:not([data-reduce-motion="false"]) .cockpit-altitude-rim-pointer .material-symbols-outlined { animation: none; }
+  html:not([data-reduce-motion="false"]) .cockpit-altitude-rim-scale > span { transition: none; }
+  html:not([data-reduce-motion="false"]) [data-cockpit-brief-page] { animation: none; }
 }
 
 /* ── Safe Frame Overlay ─────────────────────── */
@@ -5285,7 +5285,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .mission-replay-thrust ellipse {
+  html:not([data-reduce-motion="false"]) .mission-replay-thrust ellipse {
     animation: none;
   }
 }
@@ -8915,11 +8915,11 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #gev-voice-control .gev-voice-help-tray {
+  html:not([data-reduce-motion="false"]) #gev-voice-control .gev-voice-help-tray {
     transition: none;
   }
-  .radio-tuner-needle,
-  .radio-tuner-tick {
+  html:not([data-reduce-motion="false"]) .radio-tuner-needle,
+  html:not([data-reduce-motion="false"]) .radio-tuner-tick {
     transition: none;
   }
 }
@@ -9329,11 +9329,11 @@ body.scene-playback-mode #first-run-launcher {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #first-run-launcher,
-  .first-run-choices button,
-  .first-run-arrow { transition: none; }
+  html:not([data-reduce-motion="false"]) #first-run-launcher,
+  html:not([data-reduce-motion="false"]) .first-run-choices button,
+  html:not([data-reduce-motion="false"]) .first-run-arrow { transition: none; }
   /* Scrolling a tile into view must not animate either. */
-  .first-run-choices { scroll-behavior: auto; }
+  html:not([data-reduce-motion="false"]) .first-run-choices { scroll-behavior: auto; }
 }
 
 /* ── First-visit responsible-use notice ───────────────────────────
@@ -9711,4 +9711,64 @@ body.recording-mode #billing-exhausted,
 body.cockpit-mode #account-bar,
 body.cockpit-mode #billing-exhausted {
   display: none !important;
+}
+
+/* Decorative motion — OS reduce-motion or persist meridian.reduceMotion.
+   Functional camera flights are Cesium, not CSS. Toggle off sets
+   data-reduce-motion="false" so these rules lift even when the OS query is on. */
+@media (prefers-reduced-motion: reduce) {
+  html:not([data-reduce-motion="false"]) .loader-logo,
+  html:not([data-reduce-motion="false"]) .loader-status,
+  html:not([data-reduce-motion="false"]) #detection-toggle.panoptic,
+  html:not([data-reduce-motion="false"]) #detection-toggle.god,
+  html:not([data-reduce-motion="false"]) .hud-bracket,
+  html:not([data-reduce-motion="false"]) .hud-rec #hud-rec-dot,
+  html:not([data-reduce-motion="false"]) .cockpit-live-dot,
+  html:not([data-reduce-motion="false"]) .cockpit-signal-kicker i,
+  html:not([data-reduce-motion="false"]) .cctv-frame-wrap.loading::after,
+  html:not([data-reduce-motion="false"]) #command-dock #gev-voice-control[data-status='listening'] .gev-voice-visualizer span,
+  html:not([data-reduce-motion="false"]) #command-dock #gev-voice-control[data-status='executing'] .gev-voice-visualizer span,
+  html:not([data-reduce-motion="false"]) .cockpit-altitude-rim-pointer .material-symbols-outlined {
+    animation: none;
+  }
+}
+
+html[data-reduce-motion="true"] .loader-logo,
+html[data-reduce-motion="true"] .loader-status,
+html[data-reduce-motion="true"] #detection-toggle.panoptic,
+html[data-reduce-motion="true"] #detection-toggle.god,
+html[data-reduce-motion="true"] .hud-bracket,
+html[data-reduce-motion="true"] .hud-rec #hud-rec-dot,
+html[data-reduce-motion="true"] .cockpit-live-dot,
+html[data-reduce-motion="true"] .cockpit-signal-kicker i,
+html[data-reduce-motion="true"] .cctv-frame-wrap.loading::after,
+html[data-reduce-motion="true"] #command-dock #gev-voice-control[data-status='listening'] .gev-voice-visualizer span,
+html[data-reduce-motion="true"] #command-dock #gev-voice-control[data-status='executing'] .gev-voice-visualizer span,
+html[data-reduce-motion="true"] .cockpit-altitude-rim-pointer .material-symbols-outlined,
+html[data-reduce-motion="true"] #title-bar.radio-broadcasting .title-logo::before,
+html[data-reduce-motion="true"] #title-bar.radio-broadcasting .title-logo::after,
+html[data-reduce-motion="true"] .mission-replay-thrust ellipse,
+html[data-reduce-motion="true"] [data-cockpit-brief-page] {
+  animation: none;
+}
+
+html[data-reduce-motion="true"] .gev-flap-cell.is-flapping::before,
+html[data-reduce-motion="true"] .gev-flap-cell.is-flapping::after {
+  animation-duration: 1ms;
+  animation-delay: 0ms;
+}
+
+html[data-reduce-motion="true"] .gev-flap-sizing,
+html[data-reduce-motion="true"] #gev-voice-control .gev-voice-help-tray,
+html[data-reduce-motion="true"] .radio-tuner-needle,
+html[data-reduce-motion="true"] .radio-tuner-tick,
+html[data-reduce-motion="true"] .cockpit-altitude-rim-scale > span,
+html[data-reduce-motion="true"] #first-run-launcher,
+html[data-reduce-motion="true"] .first-run-choices button,
+html[data-reduce-motion="true"] .first-run-arrow {
+  transition: none;
+}
+
+html[data-reduce-motion="true"] .first-run-choices {
+  scroll-behavior: auto;
 }
