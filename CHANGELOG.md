@@ -19,6 +19,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Contacts control that shows or hides the existing 250 km nearby
+  aircraft roster. Selecting a row still uses the current track action. Copy
+  ident stays on the tracked card. Cockpit enter still requires a selected
+  aircraft. Empty sky reports empty or unavailable rather than hanging. No new
+  range math, `/api`, or person-search.
 - Added a Look control that cycles the existing sensor styles — CRT, NVG,
   FLIR, Noir, Snow, then default — through the same setter the share URL and
   voice already use. No new looks.

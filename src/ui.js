@@ -148,6 +148,7 @@ import {
   shouldExpandGlobalContextPanel,
   shouldHideCollapsedRightPanels,
 } from './rightRailPolicy.js';
+import { applyContactsRosterToggle } from './data/contactsRosterToggle.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -2448,6 +2449,7 @@ export class StyleManager {
     this._radioPlaybackState = document.getElementById('radio-playback-state');
     this._radioStationHomepage = document.getElementById('radio-station-homepage');
     this._globalContextFlightsBtn = document.getElementById('global-context-flights-btn');
+    this._contactsRosterToggle = document.getElementById('contacts-roster-toggle');
     this._globalContextMissionsBtn = document.getElementById('global-context-missions-btn');
     this._contextModeStandby = document.getElementById('context-mode-standby');
     this._contextFlightsView = document.getElementById('context-flights-view');
@@ -4844,6 +4846,37 @@ export class StyleManager {
     showAfterStartupCover();
   }
 
+  _setContactsRosterControlsDisabled(disabled) {
+    const value = Boolean(disabled);
+    this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = value);
+    this._contactsRosterToggle && (this._contactsRosterToggle.disabled = value);
+  }
+
+  _toggleContactsRoster() {
+    const nextMode = this._contextMode === 'flights' ? null : 'flights';
+    this._claimContextVisualAuthority();
+    void this._runUserFacingContextAction(
+      (notificationToken) => this._selectContextMode(
+        nextMode,
+        { notificationToken },
+      ),
+      'Contacts could not complete the requested transition; try again',
+    ).then((succeeded) => {
+      if (nextMode && shouldExpandGlobalContextPanel({
+        action: 'contacts',
+        explicitUserAction: true,
+        succeeded: succeeded === true,
+      })) {
+        applyContactsRosterToggle({
+          open: true,
+          toggle: this._contactsRosterToggle,
+          view: this._contextFlightsView,
+          setPanelCollapsed: (id, collapsed, opts) => this.setPanelCollapsed(id, collapsed, opts),
+        });
+      }
+    });
+  }
+
   _initGlobalContextPanel() {
     const contextTabs = [this._globalContextFlightsBtn, this._globalContextMissionsBtn].filter(Boolean);
     contextTabs.forEach((tab, index) => tab.addEventListener('keydown', (event) => {
@@ -4857,22 +4890,11 @@ export class StyleManager {
       contextTabs[nextIndex].focus({ preventScroll: true });
       contextTabs[nextIndex].click();
     }));
+    this._contactsRosterToggle?.addEventListener('click', () => {
+      this._toggleContactsRoster();
+    });
     this._globalContextFlightsBtn?.addEventListener('click', () => {
-      const nextMode = this._contextMode === 'flights' ? null : 'flights';
-      this._claimContextVisualAuthority();
-      void this._runUserFacingContextAction(
-        (notificationToken) => this._selectContextMode(
-          nextMode,
-          { notificationToken },
-        ),
-        'Contacts could not complete the requested transition; try again',
-      ).then((succeeded) => {
-        if (nextMode && shouldExpandGlobalContextPanel({
-          action: 'contacts',
-          explicitUserAction: true,
-          succeeded: succeeded === true,
-        })) this.setPanelCollapsed('global-context-panel', false, { explicit: true });
-      });
+      this._toggleContactsRoster();
     });
     this._globalContextMissionsBtn?.addEventListener('click', () => {
       const nextMode = this._contextMode === 'space-missions' ? null : 'space-missions';
@@ -5124,7 +5146,7 @@ export class StyleManager {
     this._contextModeEntryIntent = null;
     this._contextModeReplacementIntent = null;
     this._contextModeChanging = true;
-    this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = true);
+    this._setContactsRosterControlsDisabled(true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     try {
       if (mode !== 'flights' && this.cockpitView?.active) {
@@ -5279,7 +5301,7 @@ export class StyleManager {
     } finally {
       if (isCurrent()) {
         this._contextModeChanging = false;
-        this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = false);
+        this._setContactsRosterControlsDisabled(false);
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
         this._syncContextModeButtons();
       }
@@ -5530,7 +5552,11 @@ export class StyleManager {
     if (this._globalContextFlightsBtn) this._globalContextFlightsBtn.tabIndex = missionsActive ? -1 : 0;
     if (this._globalContextMissionsBtn) this._globalContextMissionsBtn.tabIndex = missionsActive ? 0 : -1;
     if (this._contextModeStandby) this._contextModeStandby.hidden = flightsActive || missionsActive;
-    if (this._contextFlightsView) this._contextFlightsView.hidden = !flightsActive;
+    applyContactsRosterToggle({
+      open: flightsActive,
+      toggle: this._contactsRosterToggle,
+      view: this._contextFlightsView,
+    });
     if (this._contextMissionsView) this._contextMissionsView.hidden = !missionsActive;
     this.cockpitView?.syncEntry();
     // Every _contextMode mutation funnels through here; the sync no-ops until
@@ -10050,7 +10076,7 @@ export class StyleManager {
     this._preservePanelStateDuringLayerClear = true;
     this._syncContextModeButtons();
     this._userFacingContextNotificationTokens.add(notificationToken);
-    this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = true);
+    this._setContactsRosterControlsDisabled(true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     this._clearSelectedLayersBtn.disabled = true;
     this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clearing selected data layers');
@@ -10084,7 +10110,7 @@ export class StyleManager {
       if (generation === this._contextModeGeneration) {
         this._contextModeChanging = false;
         this._syncContextModeButtons();
-        this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = false);
+        this._setContactsRosterControlsDisabled(false);
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
       }
       this._clearSelectedLayersBtn.disabled = false;

@@ -2020,6 +2020,29 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 18px;
 }
 
+#contacts-roster-toggle {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+#contacts-roster-toggle .contacts-roster-toggle-label {
+  line-height: 1;
+}
+
+#contacts-roster-toggle.active,
+#contacts-roster-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+}
+
 #global-loading-status {
   position: fixed;
   top: 74px;
