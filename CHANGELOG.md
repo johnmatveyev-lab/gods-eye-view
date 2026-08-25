@@ -14,6 +14,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+
+### Changed
+
+- Hosted ships stay an honest empty state: a platform/function 404 or 503 from
+  `/api/ais-live` stops the poll loop, the layer reads unavailable/empty, and
+  the AISStream.io credit appears only after a live snapshot lands. Docker and
+  `vite preview` still serve the BYOK Node snapshot.
 - Pro accounts can save, restore, and delete up to 10 camera/style/layer
   views in `localStorage` (`meridian.savedViews.<clerkUserId>`). Share-link
   encode/decode is reused. Free and anonymous stay hidden and write nothing.
