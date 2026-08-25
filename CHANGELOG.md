@@ -14,6 +14,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- A first hosted visit with no lastView, share-URL layers, or saved layer
+  prefs now starts with the globe plus civilian flights only. Returning
+  lastView / share URLs that include layers, and saved `gev:layer-state:v2`
+  prefs, keep that set. No new `/api` routes or sources. Cables, OpenSky,
+  and Google News stay off.
 - Hosted CCTV frames use the rest catch-all `api/cctv/[...path].js` plus dedicated `frame|stream|media/[id].js` entries so `/api/cctv/frame/:id` is not a Vercel platform 404. The client URL is unchanged. Austin / Caltrans / TfL only.
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
 - Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
@@ -25,6 +30,40 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   below terrain plus a small margin, the camera is lifted. The preference
   persists as `meridian.keepAbove` and defaults on. Cockpit interior still
   owns the camera. A terrain 503 skips the lift. No new API.
+- Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
+  Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
+  The choice persists as `meridian.power`. Data polls, the idle render
+  governor, and required credits are unchanged. Clean view still keeps
+  Google Maps and Data attribution on screen.
+- Added a camera-center lat,lon copy control next to Copy view link. It shows
+  the pose already computed from `positionCartographic` (same source as the
+  share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept
+  as the secondary GIS order. Height is not shown, so the units toggle is
+  unused. No /api and no place names.
+- Hosted WX OFF | ON chrome sits next to the HUD and cockpit clocks and
+  toggles the existing cockpit weather-effects render flag
+  (`godsEyeView.cockpitWeatherEffects.enabled`). Off removes globe FX;
+  Local Info still fetches Open-Meteo and shows the credit when weather
+  values are on screen. Hidden-tab and offline pauses still apply. No new
+  weather vendor or `/api`.
+- Added a bike-share system picker for the existing allowlisted GBFS city list.
+  Switching a system uses the current `/api/gbfs` URL builder only, persists
+  the last system locally, and does not add hosts or open the proxy.
+- Added a top-center north-up compass. Click or `N` sets heading 0 and keeps
+  the current target, range, and tilt. The needle tracks camera heading.
+  Home still returns the full default pose. Share links keep using the
+  existing `heading` field.
+- Hosted `/api/military-installations` on Vercel through the existing live
+  catch-all (`api/[...path].js`), forwarding the GET handler extracted to
+  `src/data/militaryInstallationsHttp.js`. Keeps the non-dateline ≤10° bbox
+  gate, snap-to-cache, `exact=1` after saturated tiles, element cap +
+  `saturated` flag, and the independent 90/300 rate limiter. Public OSM
+  Overpass mapped context only. This extract does not add a dedicated
+  serverless function and does not wrap `/api/ais-live`.
+- Camera chrome shows **Stop tracking** while a contact is followed. The
+  control calls the existing untrack/clear-target action and leaves the camera
+  where it is. Hidden when nothing is tracked. Home still does the full
+  default pose reset. Roster click still tracks. No `/api`.
 - Added a city/provider filter on the CCTV panel list. It uses `city`,
   `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
   isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.
