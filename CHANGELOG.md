@@ -7,6 +7,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Hosted MIC stays locked for Free, anonymous, and exhausted sessions and
+  reuses the existing upgrade / sign-in / budget modal. A 404/503 token
+  response shows “Voice is not available on this host yet” or
+  “Voice is not configured” instead of a generic ERROR. Self-host BYOK MIC
+  is unchanged. Token and HUD mint handlers are not modified in this slice.
 - Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
   the Radio layer also silences it. Starting a station unmutes. Compact
   Context and Cockpit transports now expose the same control. No voice ducking

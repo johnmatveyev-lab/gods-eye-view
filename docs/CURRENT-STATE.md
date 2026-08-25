@@ -2182,7 +2182,7 @@ silently demoting every later lookup for the session.
 
 ### Voice Control (June 2026)
 
-`Meridian MIC` button (bottom UI) starts an OpenAI Realtime session over WebRTC:
+`Meridian MIC` button (bottom UI) starts an OpenAI Realtime session over WebRTC. Hosted Free, anonymous, and budget-exhausted sessions keep MIC disabled and open the existing upgrade / sign-in / budget modal — they never request `/api/realtime/token`. A Pro token 404/503 is a single “Voice is not available on this host yet” / “Voice is not configured” line, not a generic ERROR and not a retry storm. Self-host BYOK keeps MIC enabled.
 
 - **Token flow**: browser fetches a short-lived client secret from `/api/realtime/token`. Shared handlers in `src/voice/openaiApi.js` hold `OPENAI_API_KEY` and post the full session config (instructions, tool schemas, VAD, truncation) to `api.openai.com/v1/realtime/client_secrets`. Vite middleware and Vercel Node (`api/realtime/token.js`) use the same handler. Hosted/Vercel minting fails closed unless Clerk is configured and the user is Pro; local self-host without Clerk stays BYOK. SDP exchange goes directly to `api.openai.com/v1/realtime/calls` with the ephemeral token.
 - **Session defaults** (env-tunable): model `gpt-realtime-2` (or `gpt-realtime-2.1-mini` when the MINI tier is selected — see the model-tier entry below), voice `marin`, reasoning effort `low`, semantic VAD with low eagerness, no response interruption, context window truncated to ~3,000 post-instruction tokens with 0.5 retention ratio — the conversational window stays short because map state is fetched live per turn.
