@@ -28,6 +28,7 @@ import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/
 import { getBasemapLabelContext } from './voice/gevActions.js';
 import { canPoll } from './pollPresence.js';
 import { formatHudAltitude, subscribeDistanceUnit } from './units.js';
+import { isReduceMotionEnabled } from './reduceMotion.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -254,8 +255,14 @@ export class IntelHUD {
       this._paintTimestamp();
     }, 1000);
 
-    // REC blink — every 800ms
+    // REC blink — every 800ms (held solid under reduce-motion)
     this._recBlinkInterval ??= setInterval(() => {
+      if (isReduceMotionEnabled()) {
+        this._recBlinkState = true;
+        const held = document.getElementById('hud-rec-dot');
+        if (held) held.style.visibility = 'visible';
+        return;
+      }
       this._recBlinkState = !this._recBlinkState;
       const dot = document.getElementById('hud-rec-dot');
       if (dot) dot.style.visibility = this._recBlinkState ? 'visible' : 'hidden';

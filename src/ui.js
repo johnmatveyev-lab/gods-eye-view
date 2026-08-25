@@ -48,6 +48,11 @@ import {
 import { renderMapStackChips, syncMapStackChips } from './mapStackChips.js';
 import { OrbitController } from './orbit.js';
 import {
+  isReduceMotionEnabled,
+  setReduceMotionOverride,
+  subscribeReduceMotion,
+} from './reduceMotion.js';
+import {
   CelestialRing,
   getKeyholeFadeTuning,
   isCelestialRingStyleSupported,
@@ -165,6 +170,13 @@ import {
   shareableDetectionState,
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
+import {
+  handleFullscreenEscape,
+  hideFullscreenButtonIfUnsupported,
+  isDocumentFullscreen,
+  syncFullscreenButton,
+  toggleFullscreen,
+} from './fullscreenChrome.js';
 import { AWARENESS_RADIUS_M, formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
 import {
   formatDistanceMeters,
@@ -2372,6 +2384,9 @@ export class StyleManager {
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
+    this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
+    this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
+    this._syncReduceMotionButton();
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -2471,6 +2486,7 @@ export class StyleManager {
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
@@ -2752,6 +2768,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initFullscreenButton();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
     this._initResetGlobeButton();
@@ -3476,6 +3493,7 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
+        handleFullscreenEscape(e);
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
           this._locationSearch.value = '';
@@ -3503,6 +3521,7 @@ export class StyleManager {
       if (e.key.toLowerCase() === 'o') this._toggleOrbit();
       if (e.key.toLowerCase() === 'v') this.toggleCleanView();
       if (e.key.toLowerCase() === 'f') {
+        // f = data-panel — fullscreen uses the button; Escape exits
         document.getElementById('data-panel').classList.toggle('active');
       }
       if (e.key.toLowerCase() === 'd') {
@@ -3575,6 +3594,11 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.addEventListener('click', () => this.toggleCleanView());
     }
+
+    this._reduceMotionBtn?.addEventListener('click', () => {
+      setReduceMotionOverride(!isReduceMotionEnabled());
+      this._syncReduceMotionButton();
+    });
     if (this._cleanViewExitBtn) {
       this._cleanViewExitBtn.addEventListener('click', () => this.toggleCleanView(false));
     }
@@ -8405,6 +8429,9 @@ export class StyleManager {
       this._stopOrbit();
       return { ok: true, orbiting: false };
     }
+    if (isReduceMotionEnabled()) {
+      return { ok: false, orbiting: false, error: 'Orbit is off while reduced motion is on' };
+    }
     if (!this._currentTarget) {
       return { ok: false, orbiting: false, error: 'No active landmark to orbit — fly to a landmark first' };
     }
@@ -8843,6 +8870,7 @@ export class StyleManager {
         visible: !!this.celestialRing?.visible,
       },
       orbiting: !!this.orbitController?.active,
+      reduceMotion: isReduceMotionEnabled(),
       recording: !!this._recordingMode,
       cleanView: document.body.classList.contains('ui-clean-view'),
     };
@@ -9888,11 +9916,27 @@ export class StyleManager {
   }
 
   /**
-   * Toggles the orbit controller around the current POI target. Shows a toast
-   * if no target position has been set (user must fly to a POI first).
+   * Mirror OS reduce-motion (or the persist override) on the DISPLAY toggle.
+   * Turning reduce-motion on also stops leftover idle orbit.
+   * @returns {void}
+   */
+  _syncReduceMotionButton() {
+    const enabled = isReduceMotionEnabled();
+    this._reduceMotionBtn?.classList.toggle('active', enabled);
+    this._reduceMotionBtn?.setAttribute('aria-pressed', String(enabled));
+    if (enabled) this._stopOrbit();
+  }
+
+  /**
+   * Toggles idle orbit around the current POI. Decorative spin is refused
+   * while reduced motion is on; fly-to Home is unaffected.
    * @returns {void}
    */
   _toggleOrbit() {
+    if (isReduceMotionEnabled()) {
+      this._showToast('Orbit is off while reduced motion is on');
+      return;
+    }
     if (!this._currentTarget) {
       this._showToast('Fly to a POI first');
       return;
@@ -9911,9 +9955,9 @@ export class StyleManager {
    * @returns {void}
    */
   _stopOrbit() {
-    if (this.orbitController.active) {
+    if (this.orbitController?.active) {
       this.orbitController.stop();
-      this._orbitIndicator.classList.remove('active');
+      this._orbitIndicator?.classList.remove('active');
     }
   }
 
@@ -10107,6 +10151,27 @@ export class StyleManager {
       const success = await this.shareLinkManager.copyViewLink();
       this._showToast(success ? 'Link copied' : 'Copy failed');
     });
+  }
+
+  /** Wire fullscreen on the document root so #cesium-credits stays painted. */
+  _initFullscreenButton() {
+    hideFullscreenButtonIfUnsupported(this._fullscreenBtn);
+    this._fullscreenBtn?.addEventListener('click', () => { void this.toggleGlobeFullscreen(); });
+    const onChange = () => {
+      syncFullscreenButton(this._fullscreenBtn, isDocumentFullscreen());
+      pinRequiredCredits();
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    this._removeFullscreenListener = () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+    onChange();
+  }
+
+  toggleGlobeFullscreen() {
+    return toggleFullscreen();
   }
 
   /**
@@ -10581,10 +10646,14 @@ export class StyleManager {
       this._loadingVisibilityHandler = null;
     }
     this._stopLoadingFeedbackTicker();
+    this._reduceMotionUnsubscribe?.();
+    this._reduceMotionUnsubscribe = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
     }
+    this._removeFullscreenListener?.();
+    this._removeFullscreenListener = null;
     if (this._poiKeydownHandler) {
       document.removeEventListener('keydown', this._poiKeydownHandler);
       this._poiKeydownHandler = null;
