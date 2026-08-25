@@ -7,6 +7,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Earthquake **US | AK | CI | NC | Other** chips sit next to the event-type
+  row. Default all on matches the current USGS all_day discs. Chips filter
+  cached `properties.net`: `us`, `ak`, `ci`, and `nc` each have a chip;
+  missing, empty, or other contributing networks (tx, hv, uw, …) are Other
+  so the row stays compact. A selected event stays. Chip changes re-filter
+  in memory and AND with mag / depth / time / tsunami / PAGER / reviewed /
+  type / felt — no extra USGS fetch and no `/api`. Preference travels with
+  `earthquakes.networks`. Hidden when the Earthquakes layer is off. Refresh
+  keeps the chip set.
 - Space Missions roster has client-only **All | 50+ | 80+** probability
   chips next to Webcast only. Default **All** matches the current 30-day
   roster. **50+** hides missions whose normalized Launch Library 2
