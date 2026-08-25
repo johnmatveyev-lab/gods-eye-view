@@ -83,6 +83,7 @@ const GROUP_CLASS = Object.freeze({
   glonass: Object.freeze({ klass: 'nav', subtype: 'GLONASS' }),
   galileo: Object.freeze({ klass: 'nav', subtype: 'GALILEO' }),
   geo: Object.freeze({ klass: 'geo', subtype: null }),
+  weather: Object.freeze({ klass: 'geo', subtype: 'WX' }),
   dense: Object.freeze({ klass: 'comms', subtype: 'STARLINK' }),
 });
 

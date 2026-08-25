@@ -270,6 +270,7 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(sceneDirector, /styleManager\.setRecordingMode\(false\);\s*document\.body\.classList\.remove\('scene-playback-mode'\);/);
   assert.equal((html.match(/id="hud-toggle"/g) || []).length, 1, 'HUD control must have one stateful DOM owner');
   assert.equal((html.match(/id="detection-toggle"/g) || []).length, 1, 'Detection control must have one stateful DOM owner');
+  assert.equal((html.match(/id="contact-labels-toggle"/g) || []).length, 1, 'Labels control must have one stateful DOM owner');
   assert.equal((html.match(/id="models3d-toggle"/g) || []).length, 1, '3D control must have one stateful DOM owner');
   assert.doesNotMatch(html, /id="cockpit-(?:hud|detection|models3d)-toggle"/);
   assert.match(html, /id="cockpit-radio-toggle-btn"[^>]*aria-controls="cockpit-radio-panel"/);
@@ -413,6 +414,7 @@ test('fresh Cockpit entry temporarily collapses map panels and exit restores the
   assert.ok(entryPanels, 'Cockpit entry panel list is missing');
   for (const panelId of [
     'data-panel',
+    'fires-panel',
     'cctv-panel',
     'scene-panel',
     'pp-toggles',
@@ -493,7 +495,7 @@ test('Cockpit hides the complete top-center globe action group', () => {
   );
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
     'Cockpit must hide each map-only globe action even if its group layout is disturbed',
   );
   assert.match(

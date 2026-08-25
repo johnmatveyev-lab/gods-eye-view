@@ -11,6 +11,8 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { isSceneClickCaptured } from './pickRegistry.js';
+import { launchPadCoordinates } from './launchesPanel.js';
 
 const WINDOW_DAYS = 30;
 const API_URL = '/api/launches';
@@ -57,6 +59,7 @@ let _enabled = false;
 let _selectedLaunchId = null;
 let _explicitSelection = false;
 let _launches = [];
+let _payload = null;
 let _missionPanel = null;
 let _missionRoster = null;
 let _missionRosterHoverTimer = null;
@@ -124,6 +127,7 @@ const STAGE_REENTRY_ALTITUDE_M = 100000;
 const MISSION_CLOSE_VIEW_RANGE_M = 180000;
 const MISSION_GLOBE_VIEW_RANGE_M = 5000000;
 const MISSION_FOCUS_RANGE_M = 12000;
+export const LAUNCH_PAD_FOCUS_RANGE_M = MISSION_FOCUS_RANGE_M;
 const SATELLITE_STANDALONE_DEFAULTS = {
   catalog: 'core',
   showPoints: true,
@@ -2465,13 +2469,22 @@ function focusMission(launch) {
   });
 }
 
-function focusLaunchSite(launch) {
-  if (!_viewer || !launch) return;
-  stopMissionReplay();
-  stopMissionZoomAnchor();
+/**
+ * Fly to an existing Launch Library pad/target. Same close-pad framing the
+ * Space Missions site-focus path already uses. Returns false when coords are
+ * missing so callers can select/highlight only.
+ * @param {object|null} viewer Cesium viewer.
+ * @param {{lat?: number, lon?: number}|null} launch Pad coordinates.
+ * @param {{duration?: number, complete?: Function}} [options]
+ * @returns {boolean}
+ */
+export function flyToExistingLaunchPad(viewer, launch, options = {}) {
+  if (!viewer?.camera || !Number.isFinite(launch?.lat) || !Number.isFinite(launch?.lon)) {
+    return false;
+  }
   const launchPosition = Cesium.Cartesian3.fromDegrees(launch.lon, launch.lat);
-  _viewer.selectedEntity = _dataSource.entities.getById(`rocket-launch:${launch.id}`);
-  _viewer.camera.flyToBoundingSphere(
+  viewer.camera.cancelFlight?.();
+  viewer.camera.flyToBoundingSphere(
     new Cesium.BoundingSphere(launchPosition, 0),
     {
       offset: new Cesium.HeadingPitchRange(
@@ -2479,15 +2492,26 @@ function focusLaunchSite(launch) {
         Cesium.Math.toRadians(-42),
         MISSION_FOCUS_RANGE_M,
       ),
-      duration: 1.4,
+      duration: Number.isFinite(options.duration) ? options.duration : 1.4,
       easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
-      complete: () => {
-        if (_selectedLaunchId === launch.id) {
-          startMissionZoomAnchor(launch, MISSION_FOCUS_RANGE_M);
-        }
-      },
+      complete: options.complete,
     },
   );
+  return true;
+}
+
+function focusLaunchSite(launch) {
+  if (!_viewer || !launch) return;
+  stopMissionReplay();
+  stopMissionZoomAnchor();
+  _viewer.selectedEntity = _dataSource.entities.getById(`rocket-launch:${launch.id}`);
+  flyToExistingLaunchPad(_viewer, launch, {
+    complete: () => {
+      if (_selectedLaunchId === launch.id) {
+        startMissionZoomAnchor(launch, MISSION_FOCUS_RANGE_M);
+      }
+    },
+  });
 }
 
 function createMissionPanel() {
@@ -2787,10 +2811,7 @@ export function normalizeRocketLaunches(payload, now = new Date()) {
     const date = Date.parse(launchTime);
     const pad = launch.pad || {};
     const location = pad.location || {};
-    const coordinates = location.coordinates || '';
-    const [coordinateLon, coordinateLat] = String(coordinates).split(',').map(Number);
-    const lat = Number.isFinite(Number(pad.latitude)) ? Number(pad.latitude) : coordinateLat;
-    const lon = Number.isFinite(Number(pad.longitude)) ? Number(pad.longitude) : coordinateLon;
+    const { lat, lon } = launchPadCoordinates(launch);
     const payloads = normalizePayloadFlights(launch);
     return {
       id: String(launch.id || launch.slug || launch.name || `launch-${date}`),
@@ -3344,8 +3365,10 @@ async function performMissionUpdate(token) {
     ensureActiveTleLookup(token);
     const response = await fetch(API_URL);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const launches = normalizeRocketLaunches(await response.json());
+    const payload = await response.json();
+    const launches = normalizeRocketLaunches(payload);
     if (!_enabled || token !== _lifecycleToken || !_dataSource) return;
+    _payload = payload;
     const activeTleText = _activeTleText;
     if (_replayCameraLaunchId) stopMissionReplay();
     _launches = launches;
@@ -3424,7 +3447,7 @@ const rocketLaunchesLayer = {
     clearMissionOverlaySources();
     _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     _clickHandler.setInputAction((movement) => {
-      if (!_enabled || !_dataSource?.show) return;
+      if (!_enabled || !_dataSource?.show || isSceneClickCaptured()) return;
       const entity = viewer.scene.drillPick(movement.position, 12)
         .map((picked) => picked?.id)
         .find((candidate) => entityLaunchId(candidate));
@@ -3529,6 +3552,7 @@ const rocketLaunchesLayer = {
     clearMissionOverlaySources();
     destroyReplayVehicleOverlay();
     _launches = [];
+    _payload = null;
     _missionOverlayRecords.clear();
     _animationStarts.clear();
     _satelliteTelemetry.clear();
@@ -3560,6 +3584,8 @@ const rocketLaunchesLayer = {
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },
+  getPayload() { return _payload; },
+  getRecords() { return _launches.slice(); },
   attachDataManager(dataManager) { _dataManager = dataManager; },
 };
 

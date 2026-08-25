@@ -35,6 +35,7 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import { requestWorldFocus } from '../worldFocus.js';
+import { FIRMS_LIST_LIMIT, listNearestFires, resolveFireListView } from './firmsList.js';
 
 /** Same-origin live-fires proxy (vite.config.js firmsProxy — key stays server-side). */
 const FIRMS_API_URL = '/api/firms';
@@ -341,6 +342,46 @@ export function createFirmsHeatmapLayer({
         frp: strongest.frp,
         label: `Fire · FRP ${formatFrp(strongest.frp)} MW`,
       };
+    },
+
+    /**
+     * Up to 50 nearest trailing-24h detections to the camera (or an explicit
+     * origin). Reads the in-memory `/api/firms` payload — no NASA fetch.
+     * @param {{origin?: {lat: number, lon: number}, limit?: number}} [options]
+     * @returns {Array<object>}
+     */
+    getNearbyFires({ origin, limit = FIRMS_LIST_LIMIT } = {}) {
+      return listNearestFires(_fires, origin || cameraOriginFromViewer(_viewer), limit);
+    },
+
+    /**
+     * Hosted FIRES-panel view: nearest rows, or unavailable copy when the
+     * proxy is keyless / empty. Never contacts NASA or traffic.
+     * @param {{camera?: {lat: number, lon: number}, now?: number}} [options]
+     */
+    getFireListView({ camera, now } = {}) {
+      return resolveFireListView({
+        keyRequired: _keyRequired,
+        loading: _loading,
+        enabled: _enabled,
+        fires: _fires,
+        camera: camera || cameraOriginFromViewer(_viewer),
+        now,
+      });
+    },
+
+    /**
+     * Select one listed detection and fly with the existing world-focus helper.
+     * @param {string} key fireDetectionKey
+     * @returns {boolean}
+     */
+    focusFireByKey(key) {
+      const id = String(key || '');
+      if (!id) return false;
+      const fire = _fires.find((entry) => fireDetectionKey(entry) === id);
+      if (!fire) return false;
+      selectAndFocusFire(fire);
+      return true;
     },
 
     /**
@@ -1346,6 +1387,19 @@ function firePosition(fire) {
     fire.positionHeight = height;
   }
   return fire.position;
+}
+
+/** Camera lat/lon for the nearby-fires list. Missing cartographic → null. */
+function cameraOriginFromViewer(viewer) {
+  const carto = viewer?.camera?.positionCartographic
+    || viewer?.scene?.camera?.positionCartographic;
+  if (!carto || !Number.isFinite(carto.latitude) || !Number.isFinite(carto.longitude)) {
+    return null;
+  }
+  return {
+    lat: Cesium.Math.toDegrees(carto.latitude),
+    lon: Cesium.Math.toDegrees(carto.longitude),
+  };
 }
 
 /**

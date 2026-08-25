@@ -561,6 +561,13 @@ const militaryInstallationsLayer = {
     if (state.dataSource && viewer) viewer.dataSources.remove(state.dataSource, true);
     state.dataSource = null;
   },
+  /**
+   * Snapshot the current bbox payload. Does not fetch.
+   * @returns {Array<object>} In-memory records for the last successful view.
+   */
+  getViewportRecords() {
+    return state.records.slice();
+  },
   getNearby(center, rangeM, maxCount = 50) {
     if (!center) return [];
     const range = Number.isFinite(rangeM) ? rangeM : Infinity;

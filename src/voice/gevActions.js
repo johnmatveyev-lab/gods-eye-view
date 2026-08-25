@@ -38,6 +38,9 @@ const PANEL_ALIASES = new Map([
   ['visual styles', 'control-panel'],
   ['cctv', 'cctv-panel'],
   ['cameras', 'cctv-panel'],
+  ['fires panel', 'fires-panel'],
+  ['fire list', 'fires-panel'],
+  ['firms list', 'fires-panel'],
   ['radio', 'radio-panel'],
   ['internet radio', 'radio-panel'],
   ['radio stations', 'radio-panel'],
@@ -57,7 +60,7 @@ const PANEL_ALIASES = new Map([
   ['sources', 'control-panel'],
 ]);
 
-const PANEL_IDS = new Set(['data-panel', 'location-bar', 'control-panel', 'cctv-panel', 'radio-panel', 'global-context-panel', 'scene-panel', 'pp-toggles']);
+const PANEL_IDS = new Set(['data-panel', 'location-bar', 'control-panel', 'fires-panel', 'cctv-panel', 'radio-panel', 'global-context-panel', 'scene-panel', 'pp-toggles']);
 const CONTEXT_MODE_ALIASES = new Map([
   ['off', 'off'],
   ['none', 'off'],

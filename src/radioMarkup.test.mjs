@@ -384,14 +384,11 @@ test('hosted Radio surfaces expose Mute/Stop on the existing player without new 
   assert.match(stopMethod, /_audio\.pause\(\)/);
   assert.doesNotMatch(stopMethod, /setRadioVoiceDucking|_voiceDucked|voiceDucked/);
 
-  assert.match(ui, /contextRadioMiniStopBtn[\s\S]*stopPlayback\(\{ origin: 'user' \}\)/);
-  assert.match(ui, /cockpitRadioStopBtn[\s\S]*stopPlayback\(\{ origin: 'user' \}\)/);
+  assert.match(ui, /contextRadioMiniStopBtn[\s\S]*toggleMute\(\{ origin: 'user' \}\)/);
+  assert.match(ui, /cockpitRadioStopBtn[\s\S]*toggleMute\(\{ origin: 'user' \}\)/);
   assert.doesNotMatch(
     ui,
     /_radioStopBtn\.disabled = !interactive \|\| state\.audioState === 'stopped'/,
   );
-  assert.match(
-    ui,
-    /_radioStopBtn\.disabled = !\['loading', 'playing', 'buffering', 'paused', 'error'\]\.includes\(state\.audioState\)/,
-  );
+  assert.match(ui, /_radioStopBtn\.disabled = !muteAvailable/);
 });

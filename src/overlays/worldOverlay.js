@@ -16,6 +16,12 @@ import {
   placementVariants,
 } from './worldOverlayDraw.js';
 import { WORLD_OVERLAY_STYLE } from './worldOverlayTokens.js';
+import {
+  CONTACT_LABELS_CHANGED_EVENT,
+  applyContactLabelShow,
+  getContactLabelsEnabled,
+  shouldPaintContactLabelText,
+} from '../contactLabels.js';
 
 /**
  * @module worldOverlay
@@ -161,6 +167,7 @@ let _mutationObserver = null;
 let _observedOccluderElements = new WeakSet();
 let _occluderRefreshTimer = null;
 let _cockpitModeHandler = null;
+let _contactLabelsHandler = null;
 let _windowResizeHandler = null;
 let _cockpitActive = false;
 /**
@@ -424,6 +431,8 @@ export function normalizeOverlayEntry(sourceId, entry) {
     paintLane: entry.paintLane,
     priority: Number.isFinite(Number(entry.priority)) ? Number(entry.priority) : 0,
     selected: entry.selected === true,
+    skipLabel: entry.skipLabel === true,
+    label: entry.label && typeof entry.label === 'object' ? entry.label : undefined,
     pinned: entry.pinned === true,
     protected: entry.protected === true,
     tracked: entry.tracked === true || variant === 'tracked',
@@ -2050,6 +2059,11 @@ function paintEntryItem(item, keyhole) {
   const finalAlpha = record.sourceAlpha * item.temporalAlpha
     * record.distanceAlpha * record.altitudeAlpha * keyholeAlpha;
   if (finalAlpha <= 0.001) return;
+  const labelsEnabled = getContactLabelsEnabled();
+  if (entry.label && typeof entry.label === 'object') {
+    applyContactLabelShow(entry, shouldPaintContactLabelText(entry, labelsEnabled));
+  }
+  if (!shouldPaintContactLabelText(entry, labelsEnabled)) return;
   if (record.paintScale === 1) {
     paintOverlayEntry(_ctx, entry, placement, finalAlpha);
   } else {
@@ -2209,7 +2223,9 @@ export function initWorldOverlay(viewer) {
     _cockpitActive = event?.detail?.active === true;
     invalidateHost();
   };
+  _contactLabelsHandler = () => invalidateHost();
   window.addEventListener('gev:cockpit-mode-changed', _cockpitModeHandler);
+  window.addEventListener(CONTACT_LABELS_CHANGED_EVENT, _contactLabelsHandler);
   _removePostRender = viewer.scene.postRender.addEventListener(drawWorldOverlay);
   if (viewer.camera?.moveEnd?.addEventListener) {
     _removeMoveEnd = viewer.camera.moveEnd.addEventListener(() => invalidateHost());
@@ -2237,10 +2253,16 @@ export function destroyWorldOverlay() {
   _removePostRender = null;
   _removeMoveEnd?.();
   _removeMoveEnd = null;
-  if (_cockpitModeHandler && typeof window !== 'undefined') {
-    window.removeEventListener('gev:cockpit-mode-changed', _cockpitModeHandler);
+  if (typeof window !== 'undefined') {
+    if (_cockpitModeHandler) {
+      window.removeEventListener('gev:cockpit-mode-changed', _cockpitModeHandler);
+    }
+    if (_contactLabelsHandler) {
+      window.removeEventListener(CONTACT_LABELS_CHANGED_EVENT, _contactLabelsHandler);
+    }
   }
   _cockpitModeHandler = null;
+  _contactLabelsHandler = null;
   if (_windowResizeHandler && typeof window !== 'undefined') {
     window.removeEventListener('resize', _windowResizeHandler);
   }

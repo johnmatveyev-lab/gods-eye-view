@@ -38,6 +38,15 @@ import {
   normalizeRadioStationSearchQuery,
   stationMatchesRadioSearch,
 } from './radioStationSearch.js';
+import {
+  DEFAULT_RADIO_VOLUME_PCT,
+  radioMuteToggle,
+  radioVolumePctToUnit,
+  radioVolumeUnitToPct,
+  readRadioVolumePct,
+  rememberRadioVolumePrior,
+  writeRadioVolumePct,
+} from './radioVolumePreference.js';
 
 export {
   RADIO_CLIENT_ROUTES,
@@ -198,6 +207,7 @@ let _audioStationId = null;
 let _audioState = 'stopped';
 let _audioError = null;
 let _userVolume = DEFAULT_RADIO_VOLUME;
+let _unmutedVolume = DEFAULT_RADIO_VOLUME;
 let _tuningActive = false;
 let _tuningStatic = false;
 let _tuningAwaitingStationId = null;
@@ -685,6 +695,19 @@ function emptyRadioOverlayDiagnostics() {
 
 function clampRadioVolume(value) {
   return Math.min(1, Math.max(0, Number(value) || 0));
+}
+
+function applyPersistedRadioVolume() {
+  const pct = readRadioVolumePct();
+  _userVolume = radioVolumePctToUnit(pct);
+  _unmutedVolume = radioVolumePctToUnit(rememberRadioVolumePrior(pct, DEFAULT_RADIO_VOLUME_PCT));
+}
+
+function commitUserVolume(volume) {
+  const next = clampRadioVolume(volume);
+  if (next > 0) _unmutedVolume = next;
+  _userVolume = next;
+  writeRadioVolumePct(radioVolumeUnitToPct(next));
 }
 
 /** Return whether camera translation materially changes horizon visibility. */
@@ -1256,6 +1279,8 @@ export function getRadioUIState() {
     audioError: _audioError,
     playingStationId: _audioStationId,
     volume: _userVolume,
+    muted: _userVolume === 0,
+    unmutedVolume: _unmutedVolume,
     effectiveVolume: _audio?.volume ?? (_voiceDucked ? 0 : _userVolume),
     voiceDucked: _voiceDucked,
     voiceRestoring: _voiceRestoring,
@@ -1987,7 +2012,7 @@ export function pauseRadioPlayback({ origin = 'programmatic' } = {}) {
 export function setRadioVolume(value) {
   if (!radioPresentationAllowed()) return false;
   const volume = clampRadioVolume(value);
-  _userVolume = volume;
+  commitUserVolume(volume);
   installAudio();
   if (!_voiceDucked) {
     cancelRadioVolumeTransition();
@@ -1997,6 +2022,16 @@ export function setRadioVolume(value) {
   syncTuningNoiseGain();
   emitState();
   return true;
+}
+
+/** Mute sets volume to 0; unmute restores the remembered prior level. */
+export function toggleRadioMute() {
+  if (!radioPresentationAllowed()) return false;
+  const next = radioMuteToggle({
+    volumePct: radioVolumeUnitToPct(_userVolume),
+    priorPct: radioVolumeUnitToPct(_unmutedVolume),
+  });
+  return setRadioVolume(radioVolumePctToUnit(next.volumePct));
 }
 
 /** Durable Radio preferences; this surface never creates or plays audio. */
@@ -2023,7 +2058,7 @@ export function setRadioParams(params = {}) {
     changed ||= filterChanged || clearedCancelledPresentation;
   }
   if (nextVolume !== null && nextVolume !== _userVolume) {
-    _userVolume = nextVolume;
+    commitUserVolume(nextVolume);
     if (_audio && !_voiceDucked) {
       cancelRadioVolumeTransition();
       _voiceRestoring = false;
@@ -2653,6 +2688,7 @@ export const radioLayer = {
     _sessionGeneration += 1;
     _viewer = viewer;
     resetRadioClusterOverlayIdentities();
+    applyPersistedRadioVolume();
     installAudio();
     if (!_dataSource) {
       _dataSource = new Cesium.CustomDataSource('Radio stations');
@@ -2849,6 +2885,7 @@ export const radioLayer = {
     if (_audio) _audio.volume = DEFAULT_RADIO_VOLUME;
     _audio = null;
     _userVolume = DEFAULT_RADIO_VOLUME;
+    _unmutedVolume = DEFAULT_RADIO_VOLUME;
     _removeClusterListener?.();
     _removeClusterListener = null;
     if (_dataSource && _viewer) _viewer.dataSources.remove(_dataSource, true);
@@ -2933,6 +2970,7 @@ export const radioLayer = {
   pause: pauseRadioPlayback,
   stopPlayback: stopRadioPlayback,
   setVolume: setRadioVolume,
+  toggleMute: toggleRadioMute,
   setVoiceDucked: setRadioVoiceDucking,
 };
 
