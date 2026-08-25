@@ -724,10 +724,11 @@ function _headingAndMatcher(contact) {
  * applied only by `_passesInFlightFilters`, not here — counts stay honest.
  */
 function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
+  if (!_headingAndMatcher(info || {})) return false;
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher],
+    andMatchers: [_altitudeAndMatcher],
   });
 }
 

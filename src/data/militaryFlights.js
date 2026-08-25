@@ -2063,7 +2063,6 @@ function _fleetTick() {
     // Round 6: occlusion-test a LIFTED point for contacts at/below the
     // ellipsoid (mirror of flights.js — sub-ellipsoid points near the limb
     // read "beyond the horizon" and would hide low contacts awaiting floors).
-    const info = _flightData.get(icao24);
     const beyondHorizon = !occluder.isPointVisible(info?.cullPosition || bb.position);
     const filteredOut = _contactHiddenByOperatorFilter(icao24, info);
     const hide = beyondHorizon || filteredOut;
