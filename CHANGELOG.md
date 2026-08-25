@@ -40,6 +40,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   Overpass. TTL / expiring marks are skipped. Clear empties the key. Undo,
   Import, and Export stay the live-board source of truth. Operator-local only;
   not an alert service. No new chrome and no `/api`.
+- Netlify hosting: `netlify.toml` publishes the Vite `dist`, pins Node 24, and
+  serves `/api/*` through a Functions v2 catch-all that invokes the existing
+  Vercel Node handlers. The SPA fallback is `/index.html` only after `/api/*`.
+  Vercel `api/*.js` and `vercel.json` are unchanged. OpenSky, Google News RSS,
+  and TeleGeography stay off.
 - Added an Import annotations control next to Export on the globe chrome.
   Operators pick a Plan 114 `meridian-annotations.geojson` FeatureCollection
   and `annotate()` places pins/lines/areas from latitude/longitude (and
