@@ -529,7 +529,16 @@
               <small id="cockpit-local-wind-direction">—</small>
             </div>
             <div><span>SKY</span><strong id="cockpit-local-condition">UNKNOWN</strong><small id="cockpit-local-cloud">—</small></div>
-            <div><span>PRECIP</span><strong id="cockpit-local-precipitation">—</strong><small>MM</small></div>
+            <div>
+              <span>PRECIP</span>
+              <div class="cockpit-local-precip-readout">
+                <strong id="cockpit-local-precipitation">—</strong>
+                <span class="weather-unit-toggle weather-precip-toggle" role="group" aria-label="Precipitation units">
+                  <button type="button" data-weather-precip-units="mm" aria-pressed="true">mm</button>
+                  <button type="button" data-weather-precip-units="in" aria-pressed="false">in</button>
+                </span>
+              </div>
+            </div>
             <div id="cockpit-local-visibility-cell" hidden>
               <span>VIS</span>
               <strong id="cockpit-local-visibility">UNAVAILABLE</strong>

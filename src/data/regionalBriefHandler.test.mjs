@@ -160,6 +160,7 @@ test('GET and POST cockpit queries return 200 JSON with place, weather, and GDEL
   assert.equal(formatWindSpeed(getResult.json.weather.windKph, 'kmh'), '14 KM/H');
   assert.equal(formatWindSpeed(getResult.json.weather.windKph, 'mph'), '9 MPH');
   assert.equal(formatWindSpeed(getResult.json.weather.windKph, 'kt'), '8 KT');
+  assert.equal(getResult.json.weather.precipitationMm, 0);
   assert.equal(getResult.json.newsSource, 'GDELT Project');
   assert.equal(getResult.json.newsStatus, 'ready');
   assert.equal(getResult.json.articles[0].title, 'Austin regional update');
