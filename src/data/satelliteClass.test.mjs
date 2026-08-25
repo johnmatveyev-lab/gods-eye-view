@@ -14,6 +14,7 @@ import satellitesLayer, {
   _clearDenseCatalogStateForTest,
   _setDenseCatalogStateForTest,
 } from './satellites.js';
+import { resetSatGroupCache, setSatGroup } from './satGroup.js';
 
 /**
  * A real, parseable TLE under an arbitrary 5-digit catalog number, so the dense
@@ -68,6 +69,7 @@ test('the three GNSS constellations share one NAV color and split by subtype', (
 
 test('class labels name the type, and the ISS names itself', () => {
   assert.equal(satelliteClassLabel('geo'), 'GEO');
+  assert.equal(satelliteClassLabel('weather'), 'GEO · WX');
   assert.equal(satelliteClassLabel('stations'), 'STATION');
   assert.equal(satelliteClassLabel('visual'), 'VISUAL');
   assert.equal(satelliteClassLabel('dense'), 'COMMS · STARLINK');
@@ -87,7 +89,7 @@ test('the ISS is a STATION whichever group a partial outage ingested it from', (
 });
 
 test('an unknown group falls back to the neutral bucket instead of vanishing', () => {
-  assert.equal(satelliteClassOf('weather').klass, 'visual');
+  assert.equal(satelliteClassOf('analyst').klass, 'visual');
   assert.equal(satelliteClassOf(undefined).klass, 'visual');
   assert.equal(satelliteClassColor(null), SATELLITE_CLASSES.visual.color);
   assert.equal(satelliteClassLabel('some-new-celestrak-group'), 'VISUAL');
@@ -386,6 +388,8 @@ test('a real stations-feed outage keeps STATION in the legend, matching the card
   console.log = () => {};
   console.warn = () => {};
   try {
+    resetSatGroupCache();
+    setSatGroup('visual', { getItem: () => 'visual', setItem() {} });
     _setDenseCatalogStateForTest({});
     const viewer = { scene: { primitives: { add: (p) => p, remove() {} } } };
     globalThis.fetch = async (url) => ({
@@ -408,6 +412,7 @@ test('a real stations-feed outage keeps STATION in the legend, matching the card
     console.log = log;
     console.warn = warn;
     globalThis.fetch = originalFetch;
+    resetSatGroupCache();
     _clearDenseCatalogStateForTest();
   }
 });
@@ -423,12 +428,18 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
   console.log = () => {};
   console.warn = () => {};
   try {
+    resetSatGroupCache();
+    const storage = {
+      getItem: () => currentGroup,
+      setItem(_key, value) { currentGroup = String(value); },
+    };
+    let currentGroup = 'geo';
+    setSatGroup('geo', storage);
     _setDenseCatalogStateForTest({});
     const viewer = { scene: { primitives: { remove() {} } } };
-    let homeGroup = 'geo';
     globalThis.fetch = async (url) => ({
       ok: true,
-      text: async () => (String(url).endsWith(`/${homeGroup}`) ? ALT_TLE : ''),
+      text: async () => (String(url).endsWith(`/${currentGroup}`) ? ALT_TLE : ''),
     });
 
     await satellitesLayer.update(viewer);
@@ -436,7 +447,7 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
     assert.ok(first, 'the seeded satellite is collectable');
     assert.equal(first.klass, 'GEO');
 
-    homeGroup = 'visual';
+    setSatGroup('visual', storage);
     await satellitesLayer.update(viewer);
     const second = satellitesLayer.getDetectableObjects().find((o) => o.sourceId === 33333);
     assert.equal(second.klass, 'VISUAL', 'the cached record does not outlive its catalog');
@@ -444,6 +455,7 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
     console.log = log;
     console.warn = warn;
     globalThis.fetch = originalFetch;
+    resetSatGroupCache();
     _clearDenseCatalogStateForTest();
   }
 });
