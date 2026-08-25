@@ -20,10 +20,13 @@ import {
 import bikeshareLayer from './bikeshare.js';
 import {
   BIKESHARE_HIDE_EMPTY_STORAGE_KEY,
+  BIKESHARE_HIDE_FULL_STORAGE_KEY,
   BIKESHARE_SYSTEM_STORAGE_KEY,
   buildGbfsProxyUrl,
   readPersistedBikeshareHideEmpty,
+  readPersistedBikeshareHideFull,
   writePersistedBikeshareHideEmpty,
+  writePersistedBikeshareHideFull,
 } from './bikeshareSystems.js';
 
 function makeRecord() {
@@ -379,6 +382,208 @@ test('hide empty persists with the bikeshare layer and adds no new endpoint', ()
     bikeshareLayer.setParams({ hideEmpty: true });
     assert.equal(storage.get(BIKESHARE_HIDE_EMPTY_STORAGE_KEY), '1');
     assert.equal(bikeshareLayer.getParams().hideEmpty, true);
+    assert.match(buildGbfsProxyUrl('https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json'), /^\/api\/gbfs\//);
+  } finally {
+    _resetBikeshareSystemPickerForTest();
+  }
+});
+
+test('hide full off matches the current dots; on hides only 0-dock stations', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const full = makeStationRecord({
+    key: `${cityId}:full`,
+    cityId,
+    stationId: 'full',
+    bikesAvailable: 8,
+    docksAvailable: 0,
+  });
+  const open = makeStationRecord({
+    key: `${cityId}:open`,
+    cityId,
+    stationId: 'open',
+    bikesAvailable: 3,
+    docksAvailable: 5,
+  });
+  const unknown = makeStationRecord({
+    key: `${cityId}:unknown`,
+    cityId,
+    stationId: 'unknown',
+    bikesAvailable: 2,
+    docksAvailable: null,
+  });
+  _seedBikeshareStationsForTest([full, open, unknown], { cityId });
+
+  assert.equal(bikeshareLayer.getParams().hideFull, false);
+  assert.equal(_getBikeshareStationShowForTest(full.key), true);
+  assert.equal(_getBikeshareStationShowForTest(open.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true);
+
+  const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+  assert.equal(bikeshareLayer.setParams({ hideFull: true }), true);
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore,
+    'toggle must filter cached status, not refetch GBFS');
+  assert.equal(_getBikeshareStationShowForTest(full.key), false);
+  assert.equal(_getBikeshareStationShowForTest(open.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true,
+    'unknown / non-finite docksAvailable stay visible');
+
+  assert.equal(bikeshareLayer.setParams({ hideFull: false }), true);
+  assert.equal(_getBikeshareStationShowForTest(full.key), true);
+  assert.equal(_getBikeshareStationShowForTest(open.key), true);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('hide empty and hide full AND independently', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const empty = makeStationRecord({
+    key: `${cityId}:empty`,
+    cityId,
+    stationId: 'empty',
+    bikesAvailable: 0,
+    docksAvailable: 6,
+  });
+  const full = makeStationRecord({
+    key: `${cityId}:full`,
+    cityId,
+    stationId: 'full',
+    bikesAvailable: 7,
+    docksAvailable: 0,
+  });
+  const both = makeStationRecord({
+    key: `${cityId}:both`,
+    cityId,
+    stationId: 'both',
+    bikesAvailable: 0,
+    docksAvailable: 0,
+  });
+  const usable = makeStationRecord({
+    key: `${cityId}:usable`,
+    cityId,
+    stationId: 'usable',
+    bikesAvailable: 4,
+    docksAvailable: 3,
+  });
+  _seedBikeshareStationsForTest([empty, full, both, usable], { cityId });
+
+  bikeshareLayer.setParams({ hideEmpty: true });
+  assert.equal(_getBikeshareStationShowForTest(empty.key), false);
+  assert.equal(_getBikeshareStationShowForTest(full.key), true);
+  assert.equal(_getBikeshareStationShowForTest(both.key), false);
+  assert.equal(_getBikeshareStationShowForTest(usable.key), true);
+
+  bikeshareLayer.setParams({ hideFull: true });
+  assert.equal(_getBikeshareStationShowForTest(empty.key), false);
+  assert.equal(_getBikeshareStationShowForTest(full.key), false);
+  assert.equal(_getBikeshareStationShowForTest(both.key), false);
+  assert.equal(_getBikeshareStationShowForTest(usable.key), true);
+
+  bikeshareLayer.setParams({ hideEmpty: false });
+  assert.equal(_getBikeshareStationShowForTest(empty.key), true);
+  assert.equal(_getBikeshareStationShowForTest(full.key), false);
+  assert.equal(_getBikeshareStationShowForTest(usable.key), true);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('hide full predicate keeps selected full stations and unknown dock counts', () => {
+  const full = { key: 'austin-capmetro:full', docksAvailable: 0 };
+  assert.equal(shouldShowBikeshareStation(full, { hideFull: false }), true);
+  assert.equal(shouldShowBikeshareStation(full, { hideFull: true }), false);
+  assert.equal(shouldShowBikeshareStation(full, {
+    hideFull: true,
+    selectedKey: 'austin-capmetro:full',
+  }), true);
+  assert.equal(shouldShowBikeshareStation({ docksAvailable: Number.NaN }, { hideFull: true }), true);
+  assert.equal(shouldShowBikeshareStation({ docksAvailable: 3 }, { hideFull: true }), true);
+  assert.equal(shouldShowBikeshareStation({
+    bikesAvailable: 0,
+    docksAvailable: 0,
+  }, { hideEmpty: true, hideFull: true }), false);
+});
+
+test('selected full station stays visible until deselected', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const key = `${cityId}:3790`;
+  const record = makeStationRecord({
+    key,
+    cityId,
+    stationId: '3790',
+    bikesAvailable: 4,
+    docksAvailable: 6,
+  });
+  const viewer = { entities: new Cesium.EntityCollection() };
+  const overlayHost = {
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  };
+  _setBikeshareSelectionStateForTest({ viewer, key, record, overlayHost });
+  _seedBikeshareStationsForTest([record], { cityId });
+  try {
+    _selectBikeshareStationForTest(key);
+    assert.equal(record.point.show, false);
+    assert.equal(viewer.entities.values.length, 1);
+
+    bikeshareLayer.setParams({ hideFull: true });
+    _applyBikeshareStatusForTest(cityId, new Map([
+      ['3790', { bikesAvailable: 10, docksAvailable: 0, isInstalled: true, isRenting: true, isReturning: true }],
+    ]));
+    assert.equal(record.docksAvailable, 0);
+    assert.equal(viewer.entities.values.length, 1, 'selected highlight stays after the station fills');
+    assert.equal(record.point.show, false);
+
+    _clearBikeshareSelectionForTest();
+    assert.equal(record.point.show, false, 'deselected full station is hidden while the filter is on');
+  } finally {
+    _clearBikeshareSelectionForTest();
+    _resetBikeshareSystemPickerForTest();
+  }
+});
+
+test('system picker still switches allowlisted systems while hide full is on', () => {
+  const storage = new Map();
+  _setBikeshareSystemStorageForTest({
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => { storage.set(key, value); },
+  });
+  try {
+    bikeshareLayer.setParams({ hideFull: true });
+    assert.equal(bikeshareLayer.setSelectedSystem('chicago-divvy'), true);
+    assert.equal(bikeshareLayer.getSelectedSystem(), 'chicago-divvy');
+    assert.equal(storage.get(BIKESHARE_SYSTEM_STORAGE_KEY), 'chicago-divvy');
+    const controls = bikeshareLayer.getRowControls();
+    assert.equal(controls.picker.value, 'chicago-divvy');
+    assert.ok(controls.picker.options.every((option) => (
+      listBikeshareSystems().some((system) => system.id === option.value)
+    )));
+    assert.equal(controls.chips[0].id, 'hide-empty');
+    assert.equal(controls.chips[1].id, 'hide-full');
+    assert.equal(controls.chips[1].active, true);
+    assert.equal(controls.chips[0].active, false);
+    assert.equal(bikeshareLayer.setSelectedSystem('not-a-real-system'), false);
+    assert.equal(bikeshareLayer.getSelectedSystem(), 'chicago-divvy');
+  } finally {
+    _resetBikeshareSystemPickerForTest();
+  }
+});
+
+test('hide full persists with the bikeshare layer and adds no new endpoint', () => {
+  const storage = new Map();
+  const store = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => { storage.set(key, value); },
+  };
+  _setBikeshareSystemStorageForTest(store);
+  try {
+    assert.equal(writePersistedBikeshareHideFull(true, store), true);
+    assert.equal(storage.get(BIKESHARE_HIDE_FULL_STORAGE_KEY), '1');
+    assert.equal(readPersistedBikeshareHideFull(store), true);
+    bikeshareLayer.setParams({ hideFull: true });
+    assert.equal(storage.get(BIKESHARE_HIDE_FULL_STORAGE_KEY), '1');
+    assert.equal(bikeshareLayer.getParams().hideFull, true);
+    assert.equal(bikeshareLayer.getParams().hideEmpty, false);
     assert.match(buildGbfsProxyUrl('https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json'), /^\/api\/gbfs\//);
   } finally {
     _resetBikeshareSystemPickerForTest();
