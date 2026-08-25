@@ -7,6 +7,12 @@ import {
   normalizeSensor,
   parseAcquisitionMs,
 } from './firmsAdapt.js';
+import {
+  DEFAULT_FIRMS_SENSOR_FILTER,
+  filterFiresBySensor,
+  fireMatchesFirmsSensorFilter,
+  firmsSensorFamily,
+} from './firmsSensorFilter.js';
 
 /** A proxy record as served by /api/firms (firmsCsv.js parser shape). */
 const proxyRecord = (overrides = {}) => ({
@@ -116,6 +122,33 @@ test('sensor normalization: VIIRS/MODIS detected, junk truncated', () => {
   assert.equal(normalizeSensor('some_modis_file'), 'MODIS');
   assert.equal(normalizeSensor(''), '');
   assert.equal(normalizeSensor('ABCDEFGHIJKLMNOP'), 'ABCDEFGHIJKL'); // 12-char cap
+});
+
+test('sensor chips: empty stays visible; non-empty unknown is Other', () => {
+  assert.equal(firmsSensorFamily('VIIRS'), 'viirs');
+  assert.equal(firmsSensorFamily('some_modis_file'), 'modis');
+  assert.equal(firmsSensorFamily(''), null);
+  assert.equal(firmsSensorFamily(null), null);
+  assert.equal(firmsSensorFamily('AVHRR'), 'other');
+  assert.equal(firmsSensorFamily('ABCDEFGHIJKLMNOP'), 'other');
+
+  const adapted = adaptFirmsRecords([
+    proxyRecord({ instrument: 'VIIRS' }),
+    proxyRecord({ instrument: 'MODIS' }),
+    proxyRecord({ instrument: 'AVHRR' }),
+    proxyRecord({ instrument: '' }),
+  ]);
+  assert.deepEqual(adapted.map((fire) => fire.sensor), ['VIIRS', 'MODIS', 'AVHRR', '']);
+  assert.equal(fireMatchesFirmsSensorFilter(adapted[3], { other: false }), true);
+  assert.equal(fireMatchesFirmsSensorFilter(adapted[2], { other: false }), false);
+  assert.deepEqual(
+    filterFiresBySensor(adapted, 'VO').map((fire) => fire.sensor),
+    ['VIIRS', 'AVHRR', ''],
+  );
+  assert.deepEqual(
+    filterFiresBySensor(adapted, DEFAULT_FIRMS_SENSOR_FILTER).map((fire) => fire.sensor),
+    ['VIIRS', 'MODIS', 'AVHRR', ''],
+  );
 });
 
 test('records with non-finite lat/lon are skipped; index stays sequential', () => {

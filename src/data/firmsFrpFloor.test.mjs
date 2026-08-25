@@ -7,6 +7,7 @@ import {
   filterFiresByFrpFloor,
   normalizeFrpFloor,
 } from './firmsHeatmap.js';
+import { adaptFirmsRecords } from './firmsAdapt.js';
 import { unregisterSpriteCollection } from './spriteOrder.js';
 
 const AUSTIN = { lon: -97.7, lat: 30.2 };
@@ -31,7 +32,7 @@ function recentAcqFields(hoursAgo = 2) {
   return { acqDate: `${yyyy}-${mm}-${dd}`, acqTime: `${hh}${min}` };
 }
 
-function rawFire(lat, lon, frp) {
+function rawFire(lat, lon, frp, overrides = {}) {
   return {
     lat,
     lon,
@@ -42,6 +43,7 @@ function rawFire(lat, lon, frp) {
     ...recentAcqFields(),
     instrument: 'VIIRS',
     satellite: 'N20',
+    ...overrides,
   };
 }
 
@@ -201,6 +203,7 @@ test('All is the default and matches the unfiltered heatmap', async () => {
     harness.layer.init(harness.viewer);
     await harness.layer.enable(harness.viewer);
     assert.equal(harness.layer.getParams().frpFloor, 'all');
+    assert.equal(harness.layer.getParams().sensors, 'all');
     assert.equal(harness.layer.getStats().count, 4);
     assert.equal(harness.detectionCount(), 4);
     const frps = harness.layer.getAnalystRecords().map((row) => row.frp).sort((a, b) => a - b);
@@ -308,12 +311,83 @@ test('failed and stale proxy still filter the last-good payload', async () => {
 test('row chips are All | 10+ | 50+ | 100+ MW and write frpFloor params', () => {
   const layer = createFirmsHeatmapLayer({ id: 'firms', name: 'FIRMS' });
   const controls = layer.getRowControls();
-  const frp = controls.chips.filter((chip) => chip.params.frpFloor);
+  const frp = controls.chips.filter((chip) => chip.id.startsWith('frp-'));
   assert.deepEqual(frp.map((chip) => chip.label), ['All', '10+', '50+', '100+ MW']);
   assert.deepEqual(frp.map((chip) => chip.params.frpFloor), ['all', '10', '50', '100']);
   assert.equal(frp[0].active, true);
   layer.setParams({ frpFloor: '50' });
-  const after = layer.getRowControls().chips.filter((chip) => chip.params.frpFloor);
+  const after = layer.getRowControls().chips.filter((chip) => chip.id.startsWith('frp-'));
   assert.equal(after.find((chip) => chip.params.frpFloor === '50').active, true);
   assert.equal(after.filter((chip) => chip.active).length, 1);
+});
+
+function mixedSensorFires() {
+  return [
+    rawFire(AUSTIN.lat, AUSTIN.lon, 80, { instrument: 'VIIRS', daynight: 'D' }),
+    rawFire(AUSTIN.lat + 1, AUSTIN.lon + 1, 90, { instrument: 'MODIS', daynight: 'N' }),
+    rawFire(TOKYO.lat, TOKYO.lon, 70, { instrument: 'AVHRR', daynight: 'N' }),
+    rawFire(TOKYO.lat + 1, TOKYO.lon + 1, 12, { instrument: 'VIIRS', daynight: 'N' }),
+    rawFire(TOKYO.lat + 2, TOKYO.lon + 2, 65, { instrument: '', daynight: 'N' }),
+  ];
+}
+
+test('All sensor chips on matches the current overlay; MODIS off keeps VIIRS', async () => {
+  const harness = createHarness(mixedSensorFires());
+  try {
+    harness.layer.init(harness.viewer);
+    await harness.layer.enable(harness.viewer);
+    assert.equal(harness.layer.getParams().sensors, 'all');
+    assert.equal(harness.layer.getStats().count, 5);
+    assert.equal(harness.detectionCount(), 5);
+
+    assert.equal(harness.layer.setParams({ sensors: 'VO' }), true);
+    assert.equal(harness.detectionCount(), 4, 'MODIS off hides the MODIS detection');
+    assert.equal(harness.layer.getStats().count, 4);
+    const listed = harness.layer.getNearbyFires({ origin: AUSTIN });
+    assert.ok(listed.every((row) => row.sensor !== 'MODIS'), 'Plan 70 list hides MODIS when its chip is off');
+    assert.ok(listed.some((row) => row.sensor === 'VIIRS'));
+    assert.ok(listed.some((row) => row.sensor === ''), 'blank sensor stays listed');
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test('sensor chip change re-filters cached fires without a new /api/firms call', async () => {
+  const harness = createHarness(mixedSensorFires());
+  try {
+    harness.layer.init(harness.viewer);
+    await harness.layer.enable(harness.viewer);
+    assert.equal(harness.fetchCount, 1);
+    assert.match(harness.lastUrl, /\/api\/firms$/);
+
+    harness.layer.setParams({ sensors: 'VO' });
+    harness.layer.setParams({ sensors: 'V' });
+    harness.layer.setParams({ sensors: 'all' });
+    assert.equal(harness.fetchCount, 1, 'sensor chips must not refetch NASA FIRMS');
+    assert.equal(harness.detectionCount(), 5);
+  } finally {
+    harness.cleanup();
+  }
+});
+
+test('FRP 50+ and Night detections still AND with sensor chips', async () => {
+  const harness = createHarness(mixedSensorFires());
+  try {
+    harness.layer.init(harness.viewer);
+    await harness.layer.enable(harness.viewer);
+    assert.equal(harness.layer.setParams({ frpFloor: '50', sensors: 'VO' }), true);
+    assert.equal(harness.fetchCount, 1, 'combined floors still reuse the cached payload');
+    assert.equal(harness.layer.getStats().count, 3);
+    const rows = harness.layer.getNearbyFires({ origin: AUSTIN });
+    assert.equal(rows.length, 3);
+    assert.ok(rows.every((row) => row.frp >= 50), 'Plan 70 list only includes detections that pass all floors');
+    assert.ok(rows.every((row) => row.sensor !== 'MODIS'));
+    assert.ok(rows.some((row) => row.night === true), 'night detections that pass FRP + sensor stay');
+    assert.ok(rows.some((row) => row.sensor === 'VIIRS'));
+    assert.ok(rows.some((row) => row.sensor === ''));
+    const adapted = adaptFirmsRecords(mixedSensorFires());
+    assert.equal(adapted.filter((fire) => fire.night).length, 4);
+  } finally {
+    harness.cleanup();
+  }
 });

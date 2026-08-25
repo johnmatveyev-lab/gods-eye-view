@@ -70,6 +70,7 @@ function paramsForLayer(id) {
       showDay: true,
       showNight: true,
       ageWindow: '24',
+      sensors: 'all',
     };
   }
   if (id === 'radio') {
@@ -420,6 +421,26 @@ test('FIRMS age window is a cheap local-firms enum that defaults to 24h', () => 
   assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), twelve).get('lo'), /w\.a\.1/);
   assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), twelve))
     .options['local-firms'].ageWindow, '12');
+});
+
+test('FIRMS sensor chips persist on local-firms and default all on', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].sensors, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].sensors, 'all', 'existing w links keep every sensor visible');
+  assert.equal(omitted.options['local-firms'].frpFloor, 'all');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { frpFloor: '50', sensors: 'VO' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  assert.match(params.get('lo'), /w\.s\.vo/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['local-firms'].frpFloor, '50');
+  assert.equal(decoded.options['local-firms'].sensors, 'VO');
 });
 
 test('Radio genre ids with spaces and ampersands round-trip through v2', () => {
