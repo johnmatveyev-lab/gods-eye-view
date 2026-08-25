@@ -18,6 +18,13 @@ import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
 import { handleKeyboardPanKeyDown } from './keyboardPan.js';
+import { handleLookKeyDown } from './cameraLookKeys.js';
+import {
+  handleShortcutsOverlayKeyDown,
+  isKeyboardShortcutsOverlayOpen,
+  renderKeyboardShortcutsOverlay,
+  setKeyboardShortcutsOverlayOpen,
+} from './keyboardShortcutsOverlay.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -138,6 +145,7 @@ import {
 import { isTr3b, toggleTr3b } from './data/tr3bRegistry.js';
 import satellitesLayer from './data/satellites.js';
 import cctvLayer from './data/cctv.js';
+import { attachFirmsListPanel } from './data/firmsListPanel.js';
 import radioLayer, {
   buildRadioTunerTicks,
   radioTunerCommitSlot,
@@ -199,6 +207,12 @@ import {
   shouldHideCollapsedRightPanels,
 } from './rightRailPolicy.js';
 import { applyContactsRosterToggle } from './data/contactsRosterToggle.js';
+import {
+  applyInstallationViewportList,
+  flyToInstallationFromList,
+  listViewportInstallations,
+  nextInstallationListOpen,
+} from './data/installationsViewportList.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -383,6 +397,7 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
   { id: 'control-panel', pinnable: true },
   { id: 'location-bar', pinnable: true },
   { id: 'data-panel' },
+  { id: 'fires-panel' },
   { id: 'cctv-panel' },
   { id: 'radio-panel' },
   { id: 'scene-panel' },
@@ -393,6 +408,7 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
 /** Standard map-view panels cleared out of the way on a fresh Cockpit entry. */
 const COCKPIT_ENTRY_COLLAPSE_PANEL_IDS = Object.freeze([
   'data-panel',
+  'fires-panel',
   'cctv-panel',
   'scene-panel',
   'pp-toggles',
@@ -2390,6 +2406,7 @@ export class StyleManager {
     this._clearSelectedLayersManagerPromise = null;
     this._clearSelectedLayersHandler = null;
     this._dataManager = null;
+    this._firmsListDetach = null;
     this._cctvUnsubscribe = null;
     this._radioUnsubscribe = null;
     this._radioState = null;
@@ -2541,6 +2558,7 @@ export class StyleManager {
     this._unbindLockTiltUserRotate = null;
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
+    this._firesPanel = document.getElementById('fires-panel');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -2598,6 +2616,9 @@ export class StyleManager {
     this._radioStationHomepage = document.getElementById('radio-station-homepage');
     this._globalContextFlightsBtn = document.getElementById('global-context-flights-btn');
     this._contactsRosterToggle = document.getElementById('contacts-roster-toggle');
+    this._installationsListToggle = document.getElementById('installations-list-toggle');
+    this._installationsListPanel = document.getElementById('installations-viewport-list');
+    this._installationsListOpen = false;
     this._globalContextMissionsBtn = document.getElementById('global-context-missions-btn');
     this._contextModeStandby = document.getElementById('context-mode-standby');
     this._contextFlightsView = document.getElementById('context-flights-view');
@@ -3671,9 +3692,10 @@ export class StyleManager {
 
   /**
    * Wires up all primary UI event listeners: style buttons, keyboard shortcuts
-   * (1-8 style keys, WASD/arrow pan, H/O/V/F/D/C hotkeys, Escape), AI prompt
-   * input with debounce, bloom/sharpen/HUD toggles, detection density slider,
-   * and clean-view toggle.
+   * (1-8 style keys, WASD/arrow pan, Q/E heading, R/PageUp/PageDown pitch,
+   * H/O/V/F/D/C hotkeys, ? overlay, Escape), AI prompt input with
+   * debounce, bloom/sharpen/HUD toggles, detection density slider, and
+   * clean-view toggle.
    * @returns {void}
    */
   _initUI() {
@@ -3687,7 +3709,9 @@ export class StyleManager {
       this.cycleLook();
     });
 
-    // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
+    // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Q/E heading,
+    // R/PageUp/PageDown pitch (not F), ? overlay, Escape
+    renderKeyboardShortcutsOverlay();
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
@@ -3697,9 +3721,28 @@ export class StyleManager {
         || e.target === this._locationSearch;
       if (isFormControl && e.key !== 'Escape') return;
 
+      if (e.key === 'Escape' && isKeyboardShortcutsOverlayOpen()) {
+        setKeyboardShortcutsOverlayOpen(false);
+      }
+      if (handleShortcutsOverlayKeyDown(e)) return;
+
       // WASD / arrows pan the globe. Must run before letter hotkeys so D
       // does not also cycle detection. Ignores typing targets internally.
       if (handleKeyboardPanKeyDown(e, this.viewer)) return;
+
+      const look = handleLookKeyDown(e, this.viewer, {
+        cockpitActive: this.cockpitView?.active,
+        storage: globalThis.localStorage,
+      });
+      if (look) {
+        e.preventDefault();
+        if (look.kind !== 'blocked') {
+          interruptCameraMotion('look-keys');
+          this._stopOrbit();
+          this.viewer.scene?.requestRender?.();
+        }
+        return;
+      }
 
       const keyMap = {
         '1': 'normal', '2': 'retro', '3': 'surveillance',
@@ -4934,6 +4977,16 @@ export class StyleManager {
     }
     this._dataManager = dataManager || null;
     this.hud.attachDataManager(this._dataManager);
+    if (this._firmsListDetach) {
+      this._firmsListDetach();
+      this._firmsListDetach = null;
+    }
+    this._firmsListDetach = attachFirmsListPanel({
+      root: this._firesPanel,
+      viewer: this.viewer,
+      dataManager: this._dataManager,
+      setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
+    });
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -4946,6 +4999,9 @@ export class StyleManager {
           if (change?.layerId === DATACENTER_LAYER_ID) {
             this._datacenterInViewList?.refresh();
           }
+        }
+        if (this._installationsListOpen && change?.layerId === 'military-installations') {
+          this._syncInstallationsViewportList();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -5194,6 +5250,27 @@ export class StyleManager {
     showAfterStartupCover();
   }
 
+  _toggleInstallationsViewportList() {
+    this._installationsListOpen = nextInstallationListOpen(this._installationsListOpen);
+    this._syncInstallationsViewportList();
+  }
+
+  _syncInstallationsViewportList() {
+    const records = this._dataManager?.layers?.get('military-installations')?.module?.getViewportRecords()
+      || militaryInstallationsLayer.getViewportRecords()
+      || [];
+    applyInstallationViewportList({
+      open: this._installationsListOpen,
+      toggle: this._installationsListToggle,
+      panel: this._installationsListPanel,
+      rows: listViewportInstallations(records),
+    });
+  }
+
+  _flyToListedInstallation(id) {
+    return flyToInstallationFromList(militaryInstallationsLayer, id);
+  }
+
   _setContactsRosterControlsDisabled(disabled) {
     const value = Boolean(disabled);
     this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = value);
@@ -5240,6 +5317,14 @@ export class StyleManager {
     }));
     this._contactsRosterToggle?.addEventListener('click', () => {
       this._toggleContactsRoster();
+    });
+    this._installationsListToggle?.addEventListener('click', () => {
+      this._toggleInstallationsViewportList();
+    });
+    this._installationsListPanel?.addEventListener('click', (event) => {
+      const target = event.target?.closest?.('[data-installation-id]');
+      if (!target) return;
+      this._flyToListedInstallation(target.dataset.installationId);
     });
     this._globalContextFlightsBtn?.addEventListener('click', () => {
       this._toggleContactsRoster();

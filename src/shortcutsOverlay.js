@@ -7,6 +7,7 @@
  */
 
 import { KEYBOARD_PAN_SHORTCUTS } from './keyboardPan.js';
+import { LOOK_SHORTCUT_OVERLAY_ENTRIES } from './cameraLookKeys.js';
 
 export const SHORTCUT_OVERLAY_ROWS = Object.freeze([
   { keys: '1–7', label: 'Visual styles' },
@@ -20,6 +21,7 @@ export const SHORTCUT_OVERLAY_ROWS = Object.freeze([
   { keys: 'Esc', label: 'Dismiss / exit' },
   { keys: '?', label: 'This shortcuts list' },
   ...KEYBOARD_PAN_SHORTCUTS,
+  ...LOOK_SHORTCUT_OVERLAY_ENTRIES,
 ]);
 
 /** Plain-text listing the overlay renders. */
