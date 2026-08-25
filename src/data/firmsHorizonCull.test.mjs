@@ -320,6 +320,7 @@ function canvasStub() {
 
 /** Proxy-shaped FIRMS record (firmsCsv shape) for the fetch stub. */
 function rawFire(lat, lon, frp) {
+  const acquired = new Date(Date.now() - 2 * 3600000);
   return {
     lat,
     lon,
@@ -327,8 +328,8 @@ function rawFire(lat, lon, frp) {
     confidence: 'h',
     brightness: 340,
     daynight: 'D',
-    acqDate: '2026-08-03',
-    acqTime: '0412',
+    acqDate: acquired.toISOString().slice(0, 10),
+    acqTime: `${String(acquired.getUTCHours()).padStart(2, '0')}${String(acquired.getUTCMinutes()).padStart(2, '0')}`,
     instrument: 'VIIRS',
     satellite: 'N20',
   };

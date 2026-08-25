@@ -20,6 +20,13 @@ import {
 } from './pickRegistry.js';
 import { adaptFirmsRecords } from './firmsAdapt.js';
 import {
+  FIRMS_AGE_WINDOW_CHIPS,
+  DEFAULT_FIRMS_AGE_WINDOW,
+  filterFiresByAgeWindow,
+  fireMeetsAgeWindow,
+  normalizeAgeWindow,
+} from './firmsAgeWindow.js';
+import {
   filterFiresByDayNight,
   fireMeetsDayNight,
   firmsDayNightChipModels,
@@ -113,6 +120,14 @@ export function filterFiresByFrpFloor(fires, floor) {
   if (minMw <= 0) return fires.slice();
   return fires.filter((fire) => Number(fire?.frp) >= minMw);
 }
+
+export {
+  FIRMS_AGE_WINDOW_CHIPS,
+  DEFAULT_FIRMS_AGE_WINDOW,
+  filterFiresByAgeWindow,
+  fireMeetsAgeWindow,
+  normalizeAgeWindow,
+};
 
 /**
  * Whether one detection clears the confidence floor. Missing / non-finite
@@ -255,6 +270,7 @@ export function createFirmsHeatmapLayer({
   let _confidenceFloor = 'all';
   let _showDay = true;
   let _showNight = true;
+  let _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
   let _rowControlsListener = null;
   let _count = 0;
   let _cellCount = 0;
@@ -384,6 +400,7 @@ export function createFirmsHeatmapLayer({
       _confidenceFloor = 'all';
       _showDay = true;
       _showNight = true;
+      _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
       _rowControlsListener = null;
       _cellCacheByGrid.clear();
       _count = 0;
@@ -545,9 +562,9 @@ export function createFirmsHeatmapLayer({
     },
 
     /**
-     * FRP / confidence / Day | Night chips. Re-filters in-memory `_fires` —
-     * never hits /api/firms. The three filters AND.
-     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, showDay?: boolean, showNight?: boolean }} [params]
+     * FIRMS floors for the data-panel chips. Re-filters in-memory `_fires`
+     * — never hits /api/firms. Age, FRP, confidence, and Day | Night AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
@@ -555,12 +572,14 @@ export function createFirmsHeatmapLayer({
       const hasConf = Object.hasOwn(params, 'confidenceFloor');
       const hasDay = Object.hasOwn(params, 'showDay');
       const hasNight = Object.hasOwn(params, 'showNight');
-      if (!hasFrp && !hasConf && !hasDay && !hasNight) return true;
+      const hasAge = Object.hasOwn(params, 'ageWindow');
+      if (!hasFrp && !hasConf && !hasDay && !hasNight && !hasAge) return true;
       return applyVisibleFloors({
         frpFloor: hasFrp ? params.frpFloor : undefined,
         confidenceFloor: hasConf ? params.confidenceFloor : undefined,
         showDay: hasDay ? params.showDay : undefined,
         showNight: hasNight ? params.showNight : undefined,
+        ageWindow: hasAge ? params.ageWindow : undefined,
       });
     },
 
@@ -570,6 +589,7 @@ export function createFirmsHeatmapLayer({
      *   confidenceFloor: 'all'|'0.5'|'0.8',
      *   showDay: boolean,
      *   showNight: boolean,
+     *   ageWindow: '6'|'12'|'24',
      * }}
      */
     getParams() {
@@ -578,6 +598,7 @@ export function createFirmsHeatmapLayer({
         confidenceFloor: _confidenceFloor,
         showDay: _showDay,
         showNight: _showNight,
+        ageWindow: _ageWindow,
       };
     },
 
@@ -601,6 +622,14 @@ export function createFirmsHeatmapLayer({
             params: { confidenceFloor: chip.id },
           })),
           ...firmsDayNightChipModels({ showDay: _showDay, showNight: _showNight }),
+          ...FIRMS_AGE_WINDOW_CHIPS.map((chip) => ({
+            id: `age-${chip.id}`,
+            label: chip.label,
+            title: chip.title,
+            active: _ageWindow === chip.id,
+            group: 'Age',
+            params: { ageWindow: chip.id },
+          })),
         ],
       };
     },
@@ -706,29 +735,34 @@ export function createFirmsHeatmapLayer({
 
   /** Rebuild the FRP-sorted visible index from last-good `_fires`. */
   function applyVisibleIndex() {
-    const visible = filterFiresByDayNight(
-      filterFiresByConfidenceFloor(
-        filterFiresByFrpFloor(_fires, _frpFloor),
-        _confidenceFloor,
+    const visible = filterFiresByAgeWindow(
+      filterFiresByDayNight(
+        filterFiresByConfidenceFloor(
+          filterFiresByFrpFloor(_fires, _frpFloor),
+          _confidenceFloor,
+        ),
+        { showDay: _showDay, showNight: _showNight },
       ),
-      { showDay: _showDay, showNight: _showNight },
+      _ageWindow,
+      Date.now(),
     );
     _firesByFrp = visible.sort((a, b) => b.frp - a.frp);
     _count = visible.length;
   }
 
-  /** True when the detection clears FRP, confidence, and Day | Night. */
+  /** True when the detection clears FRP, confidence, Day | Night, and the age window. */
   function fireMeetsVisibleFloors(fire) {
     const minMw = frpFloorThresholdMw(_frpFloor);
     if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
     if (!fireMeetsConfidenceFloor(fire, _confidenceFloor)) return false;
-    return fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight });
+    if (!fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight })) return false;
+    return fireMeetsAgeWindow(fire, _ageWindow, Date.now());
   }
 
   /**
-   * Change FRP / confidence / Day | Night and re-render from memory.
+   * Change FRP, confidence, Day | Night, and/or age and re-render from memory.
    * Never fetches.
-   * @param {{ frpFloor?: *, confidenceFloor?: *, showDay?: *, showNight?: * }} next
+   * @param {{ frpFloor?: *, confidenceFloor?: *, showDay?: *, showNight?: *, ageWindow?: * }} next
    * @returns {boolean}
    */
   function applyVisibleFloors(next = {}) {
@@ -752,6 +786,11 @@ export function createFirmsHeatmapLayer({
       const showNight = next.showNight !== false;
       if (showNight !== _showNight) changed = true;
       _showNight = showNight;
+    }
+    if (next.ageWindow !== undefined) {
+      const window = normalizeAgeWindow(next.ageWindow);
+      if (window !== _ageWindow) changed = true;
+      _ageWindow = window;
     }
     applyVisibleIndex();
     _cellCacheByGrid.clear();

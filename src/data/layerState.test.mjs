@@ -64,7 +64,13 @@ function paramsForLayer(id) {
     };
   }
   if (id === 'local-firms') {
-    return { frpFloor: 'all', confidenceFloor: 'all', showDay: true, showNight: true };
+    return {
+      frpFloor: 'all',
+      confidenceFloor: 'all',
+      showDay: true,
+      showNight: true,
+      ageWindow: '24',
+    };
   }
   if (id === 'radio') {
     return {
@@ -386,6 +392,34 @@ test('FIRMS Day | Night persists on local-firms with the existing floors', () =>
   assert.equal(decoded.confidenceFloor, '0.5');
   assert.equal(decoded.showDay, true);
   assert.equal(decoded.showNight, false);
+});
+
+test('FIRMS age window is a cheap local-firms enum that defaults to 24h', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].ageWindow, '24');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].ageWindow, '24', 'existing w links stay 24h');
+  assert.equal(omitted.options['local-firms'].frpFloor, 'all');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { ageWindow: '6', frpFloor: '50' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.a\.6/);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  const decoded = decodeLayerStateParams(params).options['local-firms'];
+  assert.equal(decoded.ageWindow, '6');
+  assert.equal(decoded.frpFloor, '50');
+
+  const twelve = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { ageWindow: '12' } },
+  });
+  assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), twelve).get('lo'), /w\.a\.1/);
+  assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), twelve))
+    .options['local-firms'].ageWindow, '12');
 });
 
 test('Radio genre ids with spaces and ampersands round-trip through v2', () => {

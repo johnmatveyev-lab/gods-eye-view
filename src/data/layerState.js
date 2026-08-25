@@ -358,6 +358,11 @@ const OPTION_GROUPS = Object.freeze({
     }),
     booleanOption('showDay', 'd', true),
     booleanOption('showNight', 'n', true),
+    enumOption('ageWindow', 'a', '24', ['6', '12', '24'], {
+      6: '6',
+      12: '1',
+      24: '2',
+    }),
   ]),
 });
 
