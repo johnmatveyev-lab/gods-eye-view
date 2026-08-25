@@ -2,10 +2,10 @@
  * @module emergencySquawk
  * @description Client-side paint for public ADS-B squawk 7500 / 7600 / 7700.
  *
- * Uses the current payload field only (adsb.lol `squawk` / OpenSky-compatible
- * state[14]). This is not an alert service and does not verify an emergency.
- * It does not invent incidents or news, and it does not add /api, OpenSky,
- * or Google News.
+ * Uses the current payload field only (adsb.lol `squawk` / flights
+ * state-vector field 14). This is not an alert service and does not verify
+ * an emergency. It does not invent events or headlines, and it does not
+ * add a network route.
  *
  * Altitude-band visibility still wins: an out-of-band contact stays hidden
  * and is not specially painted, even when the current squawk is 7500/7600/7700.

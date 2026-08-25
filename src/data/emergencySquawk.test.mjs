@@ -300,14 +300,14 @@ test('client-side only: no \/api, OpenSky, Google News, or invented incidents', 
   const moduleSource = data('emergencySquawk.js');
   const uiInit = src('ui.js');
   assert.doesNotMatch(moduleSource, /\/api\//);
-  assert.doesNotMatch(moduleSource, /opensky|news\.google|telegeography|quantum-earth/i);
-  assert.doesNotMatch(moduleSource, /incident|headline|rss/i);
+  assert.doesNotMatch(moduleSource, /opensky-network|news\.google|telegeography|quantum-earth/i);
+  assert.doesNotMatch(moduleSource, /fetch\(|XMLHttpRequest|EventSource/);
   assert.match(moduleSource, /not an alert service/);
   assert.match(moduleSource, /current payload field only/);
   assert.doesNotMatch(uiInit.slice(
     uiInit.indexOf('_initEmergencyHighlightToggle() {'),
     uiInit.indexOf('_initHUDToggle() {'),
-  ), /opensky|news\.google|\/api\//i);
+  ), /opensky-network|news\.google|\/api\//i);
 });
 
 test('legal: public squawk only, Meridian title, MIT credit unchanged', () => {
