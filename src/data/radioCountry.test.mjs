@@ -388,7 +388,7 @@ test('playing a DE station stays when the field is US', async () => {
   }
 });
 
-test('category, search, bitrate, codec, favorites, and English-only still AND with country', async () => {
+test('category, search, bitrate, codec, favorites, English-only, and state still AND with country', async () => {
   const rows = DIRECTORY.map((station, index) => makeStation({
     ...station,
     id: `00000000-0000-4000-8000-00000000003${index + 1}`,
@@ -404,6 +404,7 @@ test('category, search, bitrate, codec, favorites, and English-only still AND wi
     assert.equal(radioLayer.setBitrateFloor('128'), true);
     assert.equal(radioLayer.setCodecs({ mp3: true, aac: true }), true);
     assert.equal(radioLayer.setFavoritesOnly(true), true);
+    assert.equal(radioLayer.setState('Texas'), true);
     assert.equal(radioLayer.setCountry('US'), true);
     const englishAndUs = radioLayer.getTunerStations().filter((station) => isEnglishRadioStation(station));
     assert.deepEqual(englishAndUs.map((station) => station.id), [rows[0].id]);

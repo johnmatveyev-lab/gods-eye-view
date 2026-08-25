@@ -5,6 +5,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Added
+
+- Radio operators can narrow the already-fetched Radio Browser roster by
+  state/region (`CA`, Bavaria, Ontario) next to country/search. Empty keeps
+  the current view. Case-insensitive exact or contains match on
+  `station.state`; empty-state rows hide when the field is set. Invalid
+  input fails closed. The playing station stays visible. Persists as
+  `meridian.radioState`. Hidden while Radio is off. Client-only; no `/api`.
+
 ### Fixed
 
 - Space Missions PREV/NEXT and the N/M index walk the chip-filtered roster

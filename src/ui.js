@@ -2849,6 +2849,8 @@ export class StyleManager {
     this._radioStationSearch = document.getElementById('radio-station-search');
     this._radioStationSearchCount = document.getElementById('radio-station-search-count');
     this._radioCountry = document.getElementById('radio-country');
+    this._radioState = document.getElementById('radio-state');
+    this._radioStateWrap = document.querySelector('.radio-state-wrap');
     this._radioStationList = document.getElementById('radio-station-list');
     this._radioStationName = document.getElementById('radio-station-name');
     this._radioStationMeta = document.getElementById('radio-station-meta');
@@ -6897,6 +6899,22 @@ export class StyleManager {
       this._radioDirectoryListSignature = '';
       refreshTunerBand({ force: true });
     });
+    this._radioState?.addEventListener('input', () => {
+      const presentation = radioLayer.getUIState();
+      if (!presentation.presentationActive) {
+        this._radioState.value = presentation.state || '';
+        return;
+      }
+      if (this._radioTunerDragging) finishTuner(false);
+      if (!radioLayer.setState(this._radioState.value)) {
+        this._radioState.value = radioLayer.getUIState().state || '';
+        return;
+      }
+      this._radioTunerBandPinnedForNavigation = false;
+      this._radioTunerPool = [];
+      this._radioDirectoryListSignature = '';
+      refreshTunerBand({ force: true });
+    });
     this._radioPrevBtn?.addEventListener('click', () => cycleRadio(-1));
     this._radioNextBtn?.addEventListener('click', () => cycleRadio(1));
     this._radioPlayBtn?.addEventListener('click', () => void radioLayer.togglePlayback({ origin: 'user' }));
@@ -7125,8 +7143,9 @@ export class StyleManager {
     const directory = radioLayer.getDirectoryStations?.() || [];
     const query = state?.stationSearch || '';
     const country = state?.country || '';
+    const regionState = state?.state || '';
     const codecs = state?.codecs || { mp3: true, aac: true };
-    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.minBitrate || 'all'}:${country}:${codecs.mp3 ? '1' : '0'}${codecs.aac ? '1' : '0'}:${state?.favoritesOnly ? '1' : '0'}:${state?.englishOnly ? '1' : '0'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
+    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.minBitrate || 'all'}:${country}:${regionState}:${codecs.mp3 ? '1' : '0'}${codecs.aac ? '1' : '0'}:${state?.favoritesOnly ? '1' : '0'}:${state?.englishOnly ? '1' : '0'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
     if (this._radioStationSearch && document.activeElement !== this._radioStationSearch) {
       this._radioStationSearch.value = query;
     }
@@ -7138,6 +7157,15 @@ export class StyleManager {
     }
     if (this._radioCountry) {
       this._radioCountry.disabled = !interactive || !state?.stationCount;
+    }
+    if (this._radioState && document.activeElement !== this._radioState) {
+      this._radioState.value = regionState;
+    }
+    if (this._radioState) {
+      this._radioState.disabled = !interactive || !state?.stationCount;
+    }
+    if (this._radioStateWrap) {
+      this._radioStateWrap.hidden = !state?.enabled;
     }
     if (signature !== this._radioDirectoryListSignature) {
       renderRadioStationList(this._radioStationList, directory, {
