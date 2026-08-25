@@ -1,5 +1,6 @@
 import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
+import { applyLayerListFilter, isBannedToggleLayerId } from './layerListFilter.js';
 function cloneLayerParams(value) {
   if (Array.isArray(value)) return value.map(cloneLayerParams);
   if (value && typeof value === 'object') {
@@ -132,6 +133,8 @@ export class DataLayerManager {
     this._liveScheduler = null;
     this._liveSchedulerUnsubscribe = null;
     this._pollsSuspended = false;
+    this._layerListFilterInput = null;
+    this._layerListFilterQuery = '';
   }
 
   /**
@@ -2119,10 +2122,28 @@ export class DataLayerManager {
 
   /**
    * Build the toggle panel UI inside the given container element.
+   * @param {HTMLElement} container Layer-row host (`#data-toggles`).
+   * @param {{filterInput?: HTMLInputElement|null}} [options]
    */
-  buildTogglePanel(container) {
+  buildTogglePanel(container, { filterInput = null } = {}) {
     this._toggleContainer = container;
+    this._layerListFilterQuery = filterInput?.value || this._layerListFilterQuery || '';
+    if (filterInput && filterInput !== this._layerListFilterInput) {
+      this._layerListFilterInput = filterInput;
+      filterInput.addEventListener('input', () => {
+        this._layerListFilterQuery = filterInput.value;
+        this._applyLayerListFilter();
+      });
+    }
     this._renderToggles();
+  }
+
+  _applyLayerListFilter() {
+    applyLayerListFilter(
+      this._toggleContainer,
+      this._layerListFilterQuery || '',
+      this.getAll(),
+    );
   }
 
   _renderToggles() {
@@ -2130,7 +2151,7 @@ export class DataLayerManager {
     this._toggleContainer.innerHTML = '';
 
     for (const layer of this.getAll()) {
-      if (!layer.showInTogglePanel) continue;
+      if (!layer.showInTogglePanel || isBannedToggleLayerId(layer.id)) continue;
       const row = document.createElement('div');
       row.className = 'data-toggle-row';
       row.dataset.layerId = layer.id;
@@ -2201,6 +2222,7 @@ export class DataLayerManager {
 
       this._toggleContainer.appendChild(row);
     }
+    this._applyLayerListFilter();
   }
 
   /**

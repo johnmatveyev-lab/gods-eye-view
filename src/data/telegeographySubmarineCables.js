@@ -86,10 +86,10 @@ export function createTeleGeographySubmarineCableLayer() {
     name: 'Submarine Cables',
     icon: '≋',
     source: 'Unavailable',
-    updateInterval: 0,
-    statsRefreshInterval: 500,
     showInTogglePanel: false,
     selectable: false,
+    updateInterval: 0,
+    statsRefreshInterval: 500,
 
     init() {},
     enable() {},

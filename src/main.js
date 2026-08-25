@@ -255,7 +255,9 @@ async function init() {
         return dataManager.unregisterForQa(layerId);
       };
     }
-    dataManager.buildTogglePanel(document.getElementById('data-toggles'));
+    dataManager.buildTogglePanel(document.getElementById('data-toggles'), {
+      filterInput: document.getElementById('data-layer-filter'),
+    });
     styleManager.attachDataManager(dataManager);
 
     // Initialize deterministic scene playback for social clip capture
