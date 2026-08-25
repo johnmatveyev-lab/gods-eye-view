@@ -399,6 +399,19 @@ export function createAnnotationEngine({
     if (type === 'route') {
       const points = Array.isArray(spec.points) ? spec.points : [];
       if (points.length < 2) throw new Error('a route needs at least 2 waypoints');
+      // Coordinate-only waypoints (no names) already are the path — skip
+      // name resolution and street routing so an import stays local.
+      const importedPath = importedCoordinatePath(points);
+      if (importedPath) {
+        return {
+          path: importedPath,
+          distanceM: null,
+          durationS: null,
+          mode: normalizeMode(spec.mode),
+          source: 'coordinate',
+          fallback: false,
+        };
+      }
       const resolvedPts = [];
       const failed = [];
       for (const pt of points) {
@@ -446,6 +459,8 @@ export function createAnnotationEngine({
       return { path: resolvedPts, distanceM: straight, durationS: null, mode, source: resolvedPts[0].source, fallback: true };
     }
     if (type === 'arrow') {
+      const importedArrow = importedCoordinateArrow(spec);
+      if (importedArrow) return importedArrow;
       const from = await resolveTarget({
         viewer,
         target: spec.target,
@@ -480,7 +495,11 @@ export function createAnnotationEngine({
       }
       return { from, to, distanceM: greatCircleM(from, to), source: from.source };
     }
+    const importedArea = type === 'area' ? importedCoordinateArea(spec) : null;
+    if (importedArea) return importedArea;
     const wantFootprint = type === 'area' ? spec.footprint !== false : Boolean(spec.footprint);
+    const importedPoint = importedCoordinatePoint(spec);
+    if (importedPoint && !wantFootprint) return importedPoint;
     return resolveTarget({
       viewer,
       target: spec.target,
@@ -1112,6 +1131,74 @@ function cleanLabel(label) {
 
 function round5(n) {
   return Number.isFinite(n) ? Math.round(n * 1e5) / 1e5 : null;
+}
+
+/** Finite number, or null. Used by coordinate-only import specs. */
+function finiteCoord(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Closed-or-open ring of [lon,lat] pairs, or null if any vertex is missing. */
+function importedRing(ring) {
+  if (!Array.isArray(ring) || ring.length < 3) return null;
+  const out = [];
+  for (const pair of ring) {
+    if (!Array.isArray(pair) || !Number.isFinite(pair[0]) || !Number.isFinite(pair[1])) return null;
+    out.push([pair[0], pair[1]]);
+  }
+  return out;
+}
+
+/**
+ * Route waypoints that already carry lon/lat and no place names. Import uses
+ * this so annotate() can draw the exported LineString without geocoding or OSRM.
+ */
+function importedCoordinatePath(points) {
+  if (!Array.isArray(points) || points.length < 2) return null;
+  const path = [];
+  for (const pt of points) {
+    if (pt?.target || pt?.name) return null;
+    const lat = finiteCoord(pt?.latitude);
+    const lon = finiteCoord(pt?.longitude);
+    if (lat == null || lon == null) return null;
+    path.push({ lon, lat, height: 0 });
+  }
+  return path;
+}
+
+/** Arrow whose both ends are explicit coords and neither end is a named target. */
+function importedCoordinateArrow(spec) {
+  if (spec?.target || spec?.toTarget) return null;
+  const lat = finiteCoord(spec?.latitude);
+  const lon = finiteCoord(spec?.longitude);
+  const toLat = finiteCoord(spec?.toLatitude);
+  const toLon = finiteCoord(spec?.toLongitude);
+  if (lat == null || lon == null || toLat == null || toLon == null) return null;
+  return {
+    from: { lon, lat, height: 0 },
+    to: { lon: toLon, lat: toLat, height: 0 },
+    distanceM: null,
+    source: 'coordinate',
+  };
+}
+
+/** Area that already has a ring and an anchor — keep the supplied footprint. */
+function importedCoordinateArea(spec) {
+  const lat = finiteCoord(spec?.latitude);
+  const lon = finiteCoord(spec?.longitude);
+  const ring = importedRing(spec?.ring);
+  if (lat == null || lon == null || !ring) return null;
+  return { lon, lat, height: 0, ring, source: 'coordinate' };
+}
+
+/** Pin/highlight/label (or degenerate area) placed by coords only. */
+function importedCoordinatePoint(spec) {
+  if (spec?.target) return null;
+  const lat = finiteCoord(spec?.latitude);
+  const lon = finiteCoord(spec?.longitude);
+  if (lat == null || lon == null) return null;
+  return { lon, lat, height: 0, ring: null, source: 'coordinate' };
 }
 
 function normalizeMode(m) {

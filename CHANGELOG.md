@@ -33,6 +33,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added an Import annotations control next to Export on the globe chrome.
+  Operators pick a Plan 114 `meridian-annotations.geojson` FeatureCollection
+  and `annotate()` places pins/lines/areas from latitude/longitude (and
+  ring/points) only — no geocode, Places, or Overpass. Appends to the live
+  board, stays enabled when empty, skips features without coordinates, and
+  stops at the existing 120-mark cap. A malformed file is a no-op with
+  `Invalid GeoJSON`. No `/api`.
 - Added a DISPLAY **Airborne only** control. Default off. When on, commercial
   and military flight layers skip contacts whose existing `onGround` flag is
   true, so parked and taxiing aircraft leave the globe. A selected or tracked
