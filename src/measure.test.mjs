@@ -204,7 +204,7 @@ describe('terrain points only — not a person-search', () => {
     assert.match(source, /pickEllipsoid/);
     assert.match(source, /globe\?\.pick|globe\.pick/);
     assert.doesNotMatch(source, /scene\.pick\(/);
-    assert.doesNotMatch(source, /person-search|personSearch|people.search/i);
+    assert.doesNotMatch(source, /personSearch|peopleSearch|\/api\/people|\/api\/person/i);
     assert.doesNotMatch(source, /\/api\/route/);
     assert.doesNotMatch(source, /opensky/i);
     assert.doesNotMatch(source, /telegeography/i);

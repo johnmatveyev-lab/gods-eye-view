@@ -3,7 +3,7 @@
  *
  * Operators pick two terrain/ellipsoid points. Distance is Cesium's
  * EllipsoidGeodesic surface length, formatted with the Plan 44 km/nm/mi
- * preference. This is not a route, person-search, or extra /api.
+ * preference. This is not a route, contact lookup, or extra /api.
  */
 
 import * as Cesium from 'cesium';
@@ -79,8 +79,8 @@ export function geodesicLineDegrees(lon1, lat1, lon2, lat2) {
 }
 
 /**
- * Pick a globe/terrain point. Never uses scene.pick — contacts and people
- * are not measure endpoints.
+ * Pick a globe/terrain point. Never uses scene.pick — contacts are not
+ * measure endpoints.
  * @param {object} viewer
  * @param {{x: number, y: number}} screenPosition
  * @returns {MeasurePoint|null}
