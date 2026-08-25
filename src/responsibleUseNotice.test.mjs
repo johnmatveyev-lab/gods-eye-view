@@ -224,18 +224,21 @@ test('markup, startup, and clean-view credits stay pinned', () => {
   assert.match(noticeHtml, /not for navigation/i);
   assert.doesNotMatch(noticeHtml.slice(0, noticeHtml.indexOf('</aside>')), /God'?s Eye View/i);
 
+  assert.match(main, /initLogoGaze\(\);\ninitResponsibleUseNotice\(\);/);
   const startup = main.slice(main.indexOf('void Promise.all(['), main.indexOf('// Expose for debugging'));
   assert.match(startup, /initResponsibleUseNotice\(/);
   assert.ok(
     startup.indexOf('initResponsibleUseNotice') < startup.indexOf('initFirstRunExperience'),
     'the notice must reveal with the globe, before the mission launcher',
   );
+  assert.match(main, /Meridian initialization failed[\s\S]*initResponsibleUseNotice\(\)/);
 
   const noticeCss = css.slice(css.indexOf('#responsible-use-notice {'));
   assert.ok(noticeCss.length > 0, 'notice styles are missing');
   const base = noticeCss.slice(0, noticeCss.indexOf('#responsible-use-notice.visible'));
   assert.doesNotMatch(base, /\binset:\s*0\b/);
   assert.doesNotMatch(base, /background:\s*rgba\(6,\s*8,\s*12/);
+  assert.match(base, /z-index:\s*1100/);
   assert.match(base, /pointer-events:\s*none/);
   assert.match(css, /#responsible-use-notice\.visible \{[\s\S]*?pointer-events:\s*auto/);
   assert.match(css, /body\.ui-clean-view #responsible-use-notice/);

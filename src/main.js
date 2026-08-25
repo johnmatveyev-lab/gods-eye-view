@@ -36,6 +36,7 @@ import { initResponsibleUseNotice } from './responsibleUseNotice.js';
 import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
 
 initLogoGaze();
+initResponsibleUseNotice();
 const meridianAccountReady = initMeridianAccount();
 
 /**
@@ -335,6 +336,8 @@ async function init() {
     console.error('Meridian initialization failed:', error);
     loaderStatus.textContent = `Error: ${describeError(error)}`;
     loaderStatus.style.color = '#ff4444';
+    // The globe may have failed; the first-visit notice still has to appear.
+    initResponsibleUseNotice();
   }
 }
 

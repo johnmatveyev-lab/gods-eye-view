@@ -9168,7 +9168,7 @@ body.scene-playback-mode #first-run-launcher {
    and hides in clean-view / recording so that credit line is never covered. */
 #responsible-use-notice {
   position: fixed;
-  z-index: 160;
+  z-index: 1100;
   top: 5.6rem;
   left: 50%;
   width: min(30rem, calc(100vw - 2rem));
