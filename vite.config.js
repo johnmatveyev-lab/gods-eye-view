@@ -1,9 +1,9 @@
 /**
- * Vite configuration for God's Eye View — a cinematic geospatial app.
+ * Vite configuration for Meridian — a cinematic geospatial app.
  *
  * Registers the dev-server proxy middlewares that bypass CORS and add
  * caching/auth for upstream APIs:
- *   1. OpenSky  — aircraft state vectors (OAuth / Basic / anon)
+ *   1. adsb.lol — civilian aircraft state vectors (ODbL; OpenSky is disabled)
  *   2. CelesTrak — satellite TLE orbital elements
  *   3. Overpass  — OpenStreetMap road geometry queries
  *   4. GBFS     — bike-share station feeds
@@ -67,77 +67,22 @@ import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from './src/voice/v
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
-// OpenSky OAuth2 token + response cache state
+// Civilian flights: adsb.lol only (OpenSky is disabled in this commercial fork)
 // ---------------------------------------------------------------------------
-/** @type {string|null} Current OAuth2 bearer token. */
-let _openskyToken = null;
-/** @type {number} Epoch-ms when the current token expires. */
-let _openskyTokenExpiry = 0;
-/** @type {Promise<string|null>|null} In-flight token refresh promise (coalesces concurrent callers). */
-let _openskyTokenPromise = null;
-/** @type {string|null} Cached upstream response body (JSON text). */
-let _openskyCacheBody = null;
-/** @type {number} HTTP status of the cached response. */
-let _openskyCacheStatus = 0;
-/** @type {number} Epoch-ms when the response was cached. */
-let _openskyCacheTime = 0;
-/** @type {{requestedMode:string,usedMode:string,reason:string}|null} Auth metadata for the cached response. */
-let _openskyCacheMeta = null;
-/** @type {number|null} Source snapshot epoch from the cached OpenSky body. */
-let _openskyCacheSourceEpochMs = null;
-/** TTL for the OpenSky response cache (ms). */
-const OPENSKY_CACHE_MS = 9000;
-// --- OpenSky credit governor (field-test fix 2026-07-06) -------------------
-// The global /states/all this proxy fetches costs 4 CREDITS per call against
-// OpenSky's ~4000/day authenticated budget — a day with the app open burned
-// the whole quota in ~8h and the layer then hard-died until the daily reset
-// ("rate limited for 48h" owner report; auth itself was fine). Three levers:
-//  1. Adaptive TTL: OpenSky returns X-Rate-Limit-Remaining on success; as the
-//     budget thins, the proxy stretches its cache TTL so a full day of
-//     continuous use never exhausts it.
-//  2. 429 cooldown: honor X-Rate-Limit-Retry-After-Seconds — no upstream
-//     attempts until it passes (bounded 30 s … 30 min).
-//  3. Serve-stale: while rate-limited/cooling, serve the last-good body (200 +
-//     X-OpenSky-Stale) so the layer keeps rendering instead of dying.
-/** @type {number} Current adaptive TTL (ms) — starts at the base cache TTL. */
-let _openskyTtlMs = OPENSKY_CACHE_MS;
-/** @type {number} Epoch-ms before which no upstream fetch is attempted. */
-let _openskyCooldownUntil = 0;
-/**
- * Picks the cache TTL from the remaining daily credit budget.
- * Client polls every 30 s, so tiers ≤30 s cost the same 480 credits/h; the
- * later tiers stretch the day: >2400 → ~3 h of full freshness, then 30 s
- * (~2.5 h), 90 s (~5 h), 300 s (~8 h) ≈ 18+ h of continuous use per day.
- * @param {number} remaining - X-Rate-Limit-Remaining header value.
- * @returns {number} TTL in ms.
- */
-function openskyAdaptiveTtlMs(remaining) {
-  if (!Number.isFinite(remaining)) return OPENSKY_CACHE_MS;
-  if (remaining > 2400) return OPENSKY_CACHE_MS;
-  if (remaining > 1200) return 30_000;
-  if (remaining > 400) return 90_000;
-  return 300_000;
-}
-/** @type {boolean} Guards duplicate auth-failure warnings in logs. */
-let _openskyAuthWarned = false;
-/** @type {boolean} Guards duplicate invalid-auth-mode warnings. */
-let _openskyAuthModeWarned = false;
-/** Default auth mode when OPENSKY_AUTH_MODE env is unset. */
-const OPENSKY_AUTH_MODE_DEFAULT = 'oauth';
-/** Set of valid OPENSKY_AUTH_MODE values. */
-const OPENSKY_AUTH_MODE_SET = new Set(['basic', 'oauth', 'auto', 'anon']);
-/** Regional civilian fallback cache, keyed by a coarse 0.25° view anchor. */
+/** Commercial flights feed. OpenSky is not contacted. */
+export const COMMERCIAL_FLIGHT_SOURCE = 'adsb.lol';
+/** Hard off — do not fetch opensky-network.org from production paths. */
+export const OPENSKY_ENABLED = false;
+/** Hard off — cockpit headlines use GDELT only. */
+export const GOOGLE_NEWS_RSS_ENABLED = false;
+/** Regional civilian snapshot cache, keyed by a coarse 0.25° view anchor. */
 const _adsbLolPointCache = new Map();
-/** Per-anchor single-flight map for concurrent regional fallback requests. */
+/** Per-anchor single-flight map for concurrent regional requests. */
 const _adsbLolPointInFlight = new Map();
 const ADSBLOL_POINT_CACHE_MS = 12000;
 const ADSBLOL_POINT_CACHE_MAX = 80;
 const ADSBLOL_POINT_RADIUS_NM = 250;
 const ADSBLOL_POINT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
-// A 200 response can still contain an old OpenSky snapshot. Past this point
-// the viewport-scoped adsb.lol source is more honest and keeps local motion
-// current instead of coasting a stale worldwide frame indefinitely.
-const OPENSKY_SOURCE_STALE_MS = 120_000;
 // ---------------------------------------------------------------------------
 // Overpass API proxy constants and cache state
 // ---------------------------------------------------------------------------
@@ -747,7 +692,7 @@ const RADIO_RESPONSE_MAX_BYTES = 4 * 1024 * 1024;
 const RADIO_DIRECTORY_LIMIT = 750;
 const RADIO_CATALOG_MIN_SUCCESSFUL_QUERIES = 5;
 const RADIO_CATALOG_HEALTHY_MIN_STATIONS = Math.ceil(RADIO_DIRECTORY_LIMIT / 2);
-const RADIO_USER_AGENT = 'GodsEyeView/1.0 (Radio Browser directory client)';
+const RADIO_USER_AGENT = 'Meridian/1.0 (Radio Browser directory client)';
 const RADIO_UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const RADIO_FALLBACK_MIRRORS = Object.freeze([
   'https://de1.api.radio-browser.info',
@@ -1351,132 +1296,6 @@ const _aisStreamStatic = new Map();
 const _aisStreamTracks = new Map();
 /** @type {Map<string,{lat:number,lon:number,epochSec:number}>} mmsi -> first fix awaiting second (lazy buffer allocation) */
 const _aisStreamTrackPending = new Map();
-
-/**
- * Obtain a valid OpenSky OAuth2 bearer token, refreshing if needed.
- *
- * Uses the client_credentials grant against the OpenSky Keycloak realm.
- * Concurrent callers share a single in-flight refresh promise so only
- * one token request is issued at a time.
- *
- * @returns {Promise<string|null>} Bearer token string, or null if unavailable.
- */
-async function getOpenSkyToken() {
-  const now = Date.now();
-  // Return cached token if still valid (with 60 s safety margin)
-  if (_openskyToken && now < _openskyTokenExpiry - 60000) return _openskyToken;
-
-  // Coalesce concurrent refresh requests — if a refresh is already in-flight,
-  // return the same promise instead of issuing a duplicate token request
-  if (_openskyTokenPromise) return _openskyTokenPromise;
-
-  const clientId = process.env.OPENSKY_CLIENT_ID;
-  const clientSecret = process.env.OPENSKY_CLIENT_SECRET;
-  if (!clientId || !clientSecret) return null;
-
-  // Wrap the async token fetch in a shared promise stored in _openskyTokenPromise
-  _openskyTokenPromise = (async () => {
-    try {
-      const res = await fetch(
-        'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `grant_type=client_credentials&client_id=${encodeURIComponent(clientId)}&client_secret=${encodeURIComponent(clientSecret)}`,
-        }
-      );
-
-      let data = null;
-      try {
-        data = await res.json();
-      } catch {
-        data = null;
-      }
-
-      const accessToken = data?.access_token;
-      const expiresIn = Number(data?.expires_in);
-      if (!res.ok || !accessToken) {
-        if (!_openskyAuthWarned) {
-          const detail = data?.error_description || data?.error || `HTTP ${res.status}`;
-          console.warn('[OpenSky] OAuth client_credentials failed:', detail);
-          _openskyAuthWarned = true;
-        }
-        _openskyToken = null;
-        _openskyTokenExpiry = 0;
-        return null;
-      }
-
-      _openskyToken = accessToken;
-      // Default to 1800 s (30 min) if expires_in is missing or non-finite
-      _openskyTokenExpiry = Date.now() + (Number.isFinite(expiresIn) ? expiresIn : 1800) * 1000;
-      console.log('[OpenSky] OAuth token refreshed, expires in', Number.isFinite(expiresIn) ? expiresIn : 1800, 's');
-      _openskyAuthWarned = false;
-      return _openskyToken;
-    } catch (err) {
-      if (!_openskyAuthWarned) {
-        console.warn('[OpenSky] OAuth token request failed:', err?.message || String(err));
-        _openskyAuthWarned = true;
-      }
-      _openskyToken = null;
-      _openskyTokenExpiry = 0;
-      return null;
-    } finally {
-      // Clear the shared promise so the next caller can start a fresh refresh
-      _openskyTokenPromise = null;
-    }
-  })();
-
-  return _openskyTokenPromise;
-}
-
-/**
- * Validate and normalize the OPENSKY_AUTH_MODE env value.
- *
- * @param {string} value - Raw env value (e.g. 'basic', 'oauth', 'auto', 'anon').
- * @returns {string} One of the valid mode strings, or the default ('oauth').
- */
-function normalizeOpenSkyAuthMode(value) {
-  const raw = String(value || '').trim().toLowerCase();
-  if (!raw) return OPENSKY_AUTH_MODE_DEFAULT;
-  if (OPENSKY_AUTH_MODE_SET.has(raw)) return raw;
-  if (!_openskyAuthModeWarned) {
-    console.warn(
-      `[OpenSky] Invalid OPENSKY_AUTH_MODE="${raw}", defaulting to "${OPENSKY_AUTH_MODE_DEFAULT}"`
-    );
-    _openskyAuthModeWarned = true;
-  }
-  return OPENSKY_AUTH_MODE_DEFAULT;
-}
-
-/**
- * Build standard response headers for OpenSky proxy responses.
- *
- * Includes diagnostic X-OpenSky-* headers so the client can inspect
- * cache hit/miss status and which auth mode was actually used.
- *
- * @param {object} opts
- * @param {string} opts.cacheStatus - 'HIT', 'MISS', or 'STALE'.
- * @param {string} opts.requestedMode - The auth mode the config requested.
- * @param {string} opts.usedMode - The auth mode actually used for the upstream call.
- * @param {string} opts.reason - Human-readable reason string for diagnostics.
- * @returns {Record<string,string>} Header object.
- */
-function buildOpenSkyHeaders({ cacheStatus, requestedMode, usedMode, reason, staleSeconds, retryAfterSeconds }) {
-  const headers = {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-store',
-    'X-OpenSky-Cache': cacheStatus,
-    'X-OpenSky-Auth': usedMode,
-    'X-OpenSky-Auth-Mode-Requested': requestedMode,
-    'X-OpenSky-Auth-Mode-Used': usedMode,
-    'X-OpenSky-Auth-Reason': reason,
-  };
-  // Credit-governor extras (field-test fix 2026-07-06): the client can show a
-  // STALE cue / countdown without parsing the body.
-  if (Number.isFinite(staleSeconds)) headers['X-OpenSky-Stale-Seconds'] = String(Math.round(staleSeconds));
-  if (Number.isFinite(retryAfterSeconds)) headers['X-OpenSky-Retry-After-Seconds'] = String(Math.round(retryAfterSeconds));
-  return headers;
-}
 
 /**
  * Vite plugin: CelesTrak TLE proxy.
@@ -2827,7 +2646,7 @@ async function fetchAdsbLolPointFallback(req) {
         {
           headers: {
             Accept: 'application/json',
-            'User-Agent': 'gods-eye-view-adsblol-regional-fallback/1.0',
+            'User-Agent': 'meridian-adsblol-flights/1.0',
           },
           signal: controller.signal,
         },
@@ -2855,56 +2674,43 @@ async function fetchAdsbLolPointFallback(req) {
     return { ...record, cacheStatus: request.shared ? 'INFLIGHT' : 'MISS' };
   } catch (error) {
     if (!request.shared && error?.name !== 'AbortError') {
-      console.warn('[adsb.lol Flights Fallback]', error?.message || error);
+      console.warn('[adsb.lol Flights]', error?.message || error);
     }
     return cached ? { ...cached, cacheStatus: 'STALE' } : null;
   }
 }
 
-async function serveAdsbLolPointFallback(req, res, requestedMode, reason) {
-  const fallback = await fetchAdsbLolPointFallback(req);
-  if (!fallback) return false;
+function buildAdsbLolFlightHeaders({ cacheStatus, reason }) {
+  return {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'X-Flight-Source': COMMERCIAL_FLIGHT_SOURCE,
+    'X-Flight-Coverage': `${ADSBLOL_POINT_RADIUS_NM}nm regional`,
+    'X-Flight-Cache': cacheStatus,
+    'X-Flight-Reason': reason,
+  };
+}
+
+async function serveAdsbLolFlightsSnapshot(req, res, reason) {
+  const snapshot = await fetchAdsbLolPointFallback(req);
+  if (!snapshot) return false;
   res.writeHead(200, {
-    ...buildOpenSkyHeaders({
-      cacheStatus: fallback.cacheStatus,
-      requestedMode,
-      usedMode: 'adsblol-regional',
+    ...buildAdsbLolFlightHeaders({
+      cacheStatus: snapshot.cacheStatus,
       reason,
     }),
-    'X-Flight-Source': 'adsb.lol',
-    'X-Flight-Coverage': `${ADSBLOL_POINT_RADIUS_NM}nm regional fallback`,
-    'X-Flight-Count': String(fallback.count),
+    'X-Flight-Count': String(snapshot.count),
   });
-  res.end(fallback.body);
+  res.end(snapshot.body);
   return true;
 }
 
-function openSkySourceEpochMs(body) {
-  try {
-    const seconds = Number(JSON.parse(body)?.time);
-    return Number.isFinite(seconds) && seconds > 0 ? seconds * 1000 : null;
-  } catch {
-    return null;
-  }
-}
-
-function openSkySourceIsStale(sourceEpochMs, now = Date.now()) {
-  return Number.isFinite(sourceEpochMs)
-    && now - sourceEpochMs > OPENSKY_SOURCE_STALE_MS;
-}
-
 /**
- * Vite plugin: OpenSky Network proxy with multi-mode auth and response caching.
+ * Vite plugin: civilian flights proxy.
  *
- * Supports four auth modes controlled by OPENSKY_AUTH_MODE env:
- *   - 'oauth'  (default) — client_credentials bearer token
- *   - 'basic'  — HTTP Basic with OPENSKY_USERNAME / OPENSKY_PASSWORD
- *   - 'auto'   — try OAuth first, fall back to Basic, then anon
- *   - 'anon'   — no credentials
- *
- * Successful responses are cached for OPENSKY_CACHE_MS (~9 s). On
- * upstream failure the proxy serves a stale cached response if available, or
- * a bounded 250 nm adsb.lol point snapshot around the current view anchor.
+ * OpenSky is disabled in this commercial fork. `/api/opensky` is kept as a
+ * compatibility path and serves only a bounded 250 nm adsb.lol snapshot
+ * around the current view anchor. It never fetches opensky-network.org.
  *
  * @returns {import('vite').Plugin}
  */
@@ -2914,292 +2720,28 @@ function openSkyProxy() {
     configureServer(server) {
       server.middlewares.use('/api/opensky', async (req, res) => {
         try {
-          const requestedMode = normalizeOpenSkyAuthMode(process.env.OPENSKY_AUTH_MODE);
-          const now = Date.now();
-          const inCooldown = now < _openskyCooldownUntil;
-          // Fresh-enough cache (adaptive TTL) OR any cache during a 429
-          // cooldown: serve it without touching upstream. Stale-during-cooldown
-          // is deliberate (credit governor): last-good planes beat a dead layer.
-          if (_openskyCacheBody && (now - _openskyCacheTime < _openskyTtlMs || inCooldown)) {
-            if (
-              openSkySourceIsStale(_openskyCacheSourceEpochMs, now)
-              && await serveAdsbLolPointFallback(
-                req,
-                res,
-                requestedMode,
-                'opensky_snapshot_stale_regional_fallback',
-              )
-            ) {
-              return;
-            }
-            const cachedMeta = _openskyCacheMeta || {
-              requestedMode,
-              usedMode: 'unknown',
-              reason: 'cached',
-            };
-            const isStale = now - _openskyCacheTime >= _openskyTtlMs;
-            res.writeHead(
-              _openskyCacheStatus || 200,
-              buildOpenSkyHeaders({
-                cacheStatus: isStale ? 'STALE' : 'HIT',
-                requestedMode: cachedMeta.requestedMode || requestedMode,
-                usedMode: cachedMeta.usedMode || 'unknown',
-                reason: isStale ? 'rate_limited_serving_stale' : (cachedMeta.reason || 'cached'),
-                staleSeconds: isStale ? (now - _openskyCacheTime) / 1000 : undefined,
-                retryAfterSeconds: inCooldown ? (_openskyCooldownUntil - now) / 1000 : undefined,
-              })
-            );
-            res.end(_openskyCacheBody);
-            return;
-          }
-          // Cooling down with nothing cached (cold start into a rate limit):
-          // synthesize the 429 locally — hammering upstream mid-cooldown can't
-          // succeed and just burns goodwill.
-          if (inCooldown) {
-            if (await serveAdsbLolPointFallback(req, res, requestedMode, 'opensky_cooldown_regional_fallback')) return;
-            res.writeHead(429, buildOpenSkyHeaders({
-              cacheStatus: 'COOLDOWN',
-              requestedMode,
-              usedMode: 'none',
-              reason: 'rate_limited',
-              retryAfterSeconds: (_openskyCooldownUntil - now) / 1000,
-            }));
-            res.end(JSON.stringify({ error: 'OpenSky rate limited; proxy cooling down.' }));
-            return;
-          }
-
-          const basicUser = process.env.OPENSKY_USERNAME || '';
-          const basicPass = process.env.OPENSKY_PASSWORD || '';
-          const hasBasicCreds = Boolean(basicUser && basicPass);
-          const headers = { 'Accept': 'application/json' };
-          let usedMode = 'anon';
-          let reason = 'forced_anonymous';
-
-          if (requestedMode === 'basic') {
-            if (hasBasicCreds) {
-              headers.Authorization = `Basic ${Buffer.from(`${basicUser}:${basicPass}`).toString('base64')}`;
-              usedMode = 'basic';
-              reason = 'basic_credentials';
-            } else {
-              reason = 'missing_basic_creds';
-            }
-          } else if (requestedMode === 'oauth') {
-            const token = await getOpenSkyToken();
-            if (token) {
-              headers.Authorization = `Bearer ${token}`;
-              usedMode = 'oauth';
-              reason = 'oauth_token';
-            } else {
-              reason = 'oauth_invalid_or_missing';
-            }
-          } else if (requestedMode === 'auto') {
-            const token = await getOpenSkyToken();
-            if (token) {
-              headers.Authorization = `Bearer ${token}`;
-              usedMode = 'oauth';
-              reason = 'oauth_token';
-            } else if (hasBasicCreds) {
-              headers.Authorization = `Basic ${Buffer.from(`${basicUser}:${basicPass}`).toString('base64')}`;
-              usedMode = 'basic';
-              reason = 'oauth_unavailable_fallback_basic';
-            } else {
-              reason = 'missing_oauth_and_basic_creds';
-            }
-          }
-
-          let upstream = await fetch('https://opensky-network.org/api/states/all?extended=1', { headers });
-          // Auto-mode fallback: if OAuth was rejected, retry with Basic credentials
-          if (
-            (upstream.status === 401 || upstream.status === 403) &&
-            requestedMode === 'auto' &&
-            usedMode === 'oauth' &&
-            hasBasicCreds
-          ) {
-            const retryHeaders = {
-              Accept: 'application/json',
-              Authorization: `Basic ${Buffer.from(`${basicUser}:${basicPass}`).toString('base64')}`,
-            };
-            upstream = await fetch('https://opensky-network.org/api/states/all?extended=1', { headers: retryHeaders });
-            usedMode = 'basic';
-            reason = 'oauth_rejected_fallback_basic';
-          }
-
-          let body = await upstream.text();
-          const sourceEpochMs = upstream.ok ? openSkySourceEpochMs(body) : null;
-          if (
-            upstream.ok
-            && openSkySourceIsStale(sourceEpochMs, now)
-            && await serveAdsbLolPointFallback(
-              req,
-              res,
-              requestedMode,
-              'opensky_snapshot_stale_regional_fallback',
-            )
-          ) {
-            // Keep the last global snapshot available as a fail-soft cache,
-            // but do not label or render it as a fresh live result.
-            _openskyCacheBody = body;
-            _openskyCacheStatus = upstream.status;
-            _openskyCacheTime = now;
-            _openskyCacheSourceEpochMs = sourceEpochMs;
-            _openskyCacheMeta = { requestedMode, usedMode, reason };
-            return;
-          }
-          if (upstream.status === 429) {
-            reason = 'rate_limited';
-            // Credit governor: honor OpenSky's retry-after (bounded 30 s … 30 min;
-            // 2 min when the header is absent) — no upstream attempts until then.
-            const retryAfterSec = Number(upstream.headers.get('x-rate-limit-retry-after-seconds'));
-            const cooldownMs = Math.min(
-              Math.max(Number.isFinite(retryAfterSec) ? retryAfterSec * 1000 : 120_000, 30_000),
-              30 * 60_000
-            );
-            _openskyCooldownUntil = now + cooldownMs;
-            // Serve the last-good body instead of the 429 when we have one —
-            // the layer keeps rendering (STALE-cued) instead of dying.
-            if (_openskyCacheBody && _openskyCacheStatus === 200) {
-              res.writeHead(200, buildOpenSkyHeaders({
-                cacheStatus: 'STALE',
-                requestedMode,
-                usedMode,
-                reason: 'rate_limited_serving_stale',
-                staleSeconds: (now - _openskyCacheTime) / 1000,
-                retryAfterSeconds: cooldownMs / 1000,
-              }));
-              res.end(_openskyCacheBody);
-              return;
-            }
-          }
-
-          if (!upstream.ok && !_openskyCacheBody) {
-            const servedFallback = await serveAdsbLolPointFallback(
-              req,
-              res,
-              requestedMode,
-              `opensky_http_${upstream.status}_regional_fallback`,
-            );
-            if (servedFallback) return;
-          }
-
-          if (upstream.status === 401 || upstream.status === 403) {
-            if (requestedMode === 'basic' && !hasBasicCreds) {
-              body = JSON.stringify({
-                error: 'OpenSky auth missing. Basic mode requires OPENSKY_USERNAME and OPENSKY_PASSWORD.',
-              });
-              reason = 'missing_basic_creds';
-            } else if (requestedMode === 'oauth' && usedMode !== 'oauth') {
-              body = JSON.stringify({
-                error: 'OpenSky auth invalid. OAuth mode requires valid OPENSKY_CLIENT_ID and OPENSKY_CLIENT_SECRET.',
-              });
-              reason = 'oauth_invalid_or_missing';
-            } else if (usedMode === 'basic') {
-              body = JSON.stringify({
-                error: 'OpenSky auth invalid. Username/password were rejected.',
-              });
-              reason = 'basic_invalid_credentials';
-            } else if (usedMode === 'oauth') {
-              body = JSON.stringify({
-                error: 'OpenSky auth invalid. OAuth client credentials were rejected.',
-              });
-              reason = 'oauth_invalid_credentials';
-            } else if (requestedMode === 'auto' && !hasBasicCreds) {
-              body = JSON.stringify({
-                error: 'OpenSky auth missing. Provide basic credentials or valid OAuth client credentials.',
-              });
-              reason = 'missing_oauth_and_basic_creds';
-            } else {
-              body = JSON.stringify({
-                error: 'OpenSky auth required.',
-              });
-              reason = 'auth_required';
-            }
-          }
-
-          // Refine the reason string to reflect the actual outcome
-          if (upstream.ok && reason === 'forced_anonymous') {
-            reason = 'anonymous_ok';
-          } else if (upstream.ok && usedMode === 'basic' && reason === 'basic_credentials') {
-            reason = 'basic_ok';
-          } else if (upstream.ok && usedMode === 'oauth' && reason === 'oauth_token') {
-            reason = 'oauth_ok';
-          }
-
-          // Only cache successful responses — error responses (401/403/429/5xx)
-          // should not be served from cache on subsequent requests
-          if (upstream.ok) {
-            _openskyCacheBody = body;
-            _openskyCacheStatus = upstream.status;
-            _openskyCacheTime = now;
-            _openskyCacheSourceEpochMs = sourceEpochMs;
-            _openskyCacheMeta = {
-              requestedMode,
-              usedMode,
-              reason,
-            };
-            // Credit governor: adapt the cache TTL to the remaining daily
-            // budget so a continuously-open app stretches its polls instead of
-            // exhausting the quota mid-day. Success also clears any cooldown.
-            const remaining = Number(upstream.headers.get('x-rate-limit-remaining'));
-            _openskyTtlMs = openskyAdaptiveTtlMs(remaining);
-            _openskyCooldownUntil = 0;
-          }
-
-          res.writeHead(
-            upstream.status,
-            buildOpenSkyHeaders({
-              cacheStatus: 'MISS',
-              requestedMode,
-              usedMode,
-              reason,
-            })
-          );
-          res.end(body);
+          if (await serveAdsbLolFlightsSnapshot(req, res, 'adsblol_primary')) return;
+          res.writeHead(400, buildAdsbLolFlightHeaders({
+            cacheStatus: 'MISS',
+            reason: 'missing_view_anchor',
+          }));
+          res.end(JSON.stringify({
+            error: 'adsb.lol regional snapshot requires lat and lon query parameters',
+          }));
         } catch (e) {
-          console.error('[OpenSky Proxy]', e.message);
-          if (_openskyCacheBody) {
-            const cachedMeta = _openskyCacheMeta || {
-              requestedMode: normalizeOpenSkyAuthMode(process.env.OPENSKY_AUTH_MODE),
-              usedMode: 'unknown',
-              reason: 'cached_stale',
-            };
-            res.writeHead(
-              _openskyCacheStatus || 200,
-              buildOpenSkyHeaders({
-                cacheStatus: 'STALE',
-                requestedMode: cachedMeta.requestedMode || OPENSKY_AUTH_MODE_DEFAULT,
-                usedMode: cachedMeta.usedMode || 'unknown',
-                reason: cachedMeta.reason || 'cached_stale',
-              })
-            );
-            res.end(_openskyCacheBody);
-            return;
-          }
-          const requestedMode = normalizeOpenSkyAuthMode(process.env.OPENSKY_AUTH_MODE);
-          if (await serveAdsbLolPointFallback(req, res, requestedMode, 'opensky_proxy_error_regional_fallback')) return;
-          res.writeHead(
-            502,
-            buildOpenSkyHeaders({
-              cacheStatus: 'MISS',
-              requestedMode,
-              usedMode: 'error',
-              reason: 'proxy_error',
-            })
-          );
-          res.end(JSON.stringify({ error: 'OpenSky proxy error' }));
+          console.error('[adsb.lol Flights Proxy]', e.message);
+          if (await serveAdsbLolFlightsSnapshot(req, res, 'adsblol_proxy_error')) return;
+          res.writeHead(502, buildAdsbLolFlightHeaders({
+            cacheStatus: 'MISS',
+            reason: 'proxy_error',
+          }));
+          res.end(JSON.stringify({ error: 'adsb.lol flights proxy error' }));
         }
       });
     },
   };
 }
 
-/**
- * Check whether a hostname is in the GBFS allowlist.
- *
- * Also accepts any subdomain of publicbikesystem.net.
- *
- * @param {string} hostname
- * @returns {boolean}
- */
 function isAllowedGbfsHost(hostname) {
   const host = String(hostname || '').trim().toLowerCase();
   if (!host) return false;
@@ -4842,10 +4384,8 @@ function aisLiveProxy() {
 /**
  * Vite plugin: aircraft track-history backfill proxies (PRD WS-F F1/F2).
  *
- * /api/opensky-track?icao24=<hex6> — OpenSky GET /tracks/all (experimental;
- *   own credit bucket, 4 credits per call on the free tier). OAuth via the
- *   shared coalesced token. 60s per-icao cache; 404/429 forwarded so the
- *   client can fall back to its accumulated trail silently.
+ * /api/opensky-track?icao24=<hex6> — disabled in this commercial fork.
+ *   Returns 410 without contacting OpenSky. The client keeps its local trail.
  * /api/adsblol/trace?hex=<hex> — adsb.lol tar1090 readsb trace
  *   (undocumented but live; no browser CORS, hence this proxy). Up to ~24h
  *   of real history per aircraft. Treat as best-effort; data is ODbL —
@@ -4894,28 +4434,13 @@ function trackBackfillProxies() {
   }
 
   function install(middlewares) {
-    middlewares.use('/api/opensky-track', async (req, res) => {
-      try {
-        const incoming = new URL(req.url || '', 'http://localhost');
-        const icao24 = String(incoming.searchParams.get('icao24') || '').trim().toLowerCase();
-        if (!/^[0-9a-f]{6}$/.test(icao24)) {
-          res.statusCode = 400;
-          res.setHeader('Content-Type', 'application/json');
-          res.end(JSON.stringify({ error: 'icao24 must be a 6-char hex string' }));
-          return;
-        }
-        const token = await getOpenSkyToken();
-        await proxyJson(
-          res,
-          `osky:${icao24}`,
-          `https://opensky-network.org/api/tracks/all?icao24=${icao24}&time=0`,
-          token ? { Authorization: `Bearer ${token}` } : {}
-        );
-      } catch (error) {
-        res.statusCode = 502;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'OpenSky track fetch failed' }));
-      }
+    middlewares.use('/api/opensky-track', async (_req, res) => {
+      res.statusCode = 410;
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-store');
+      res.end(JSON.stringify({
+        error: 'OpenSky track backfill is disabled in this commercial build',
+      }));
     });
 
     middlewares.use('/api/adsblol/trace', async (req, res) => {
@@ -4991,7 +4516,7 @@ function openAiRealtimeProxy() {
           body: JSON.stringify({
             model: process.env.OPENAI_HUD_SUMMARY_MODEL || OPENAI_HUD_SUMMARY_MODEL_DEFAULT,
             instructions: [
-              "Write one concise intelligence-HUD summary for God's Eye View.",
+              "Write one concise intelligence-HUD summary for Meridian.",
               'Use only the supplied place, street, nearby-place, and enabled-layer text labels.',
               'Prefer the clearest named place and include a relevant enabled layer only when useful.',
               'Do not infer from coordinates or invent a place.',
@@ -5115,11 +4640,11 @@ function openAiRealtimeProxy() {
             output: { voice },
           },
           instructions: [
-            "You are GEV Voice Control, a concise voice controller for a Cesium geospatial app called God's Eye View.",
+            "You are Meridian Voice Control, a concise voice controller for a Cesium geospatial app called Meridian.",
             'Have a natural spoken conversation with the user while the mic session is active.',
-            'Do not require a wake phrase. Treat direct commands like "zoom into London" or "open datacenters" as GEV control requests.',
+            'Do not require a wake phrase. Treat direct commands like "zoom into London" or "open datacenters" as Meridian control requests.',
             'Only control the app by calling the provided tools. Never invent tool names or arguments.',
-            'Call tools only for clear GEV control, navigation, visual-style, layer, or app-state requests. For ordinary conversation, answer normally without tools.',
+            'Call tools only for clear Meridian control, navigation, visual-style, layer, or app-state requests. For ordinary conversation, answer normally without tools.',
             'For requests to open, show, reveal, or focus a menu/panel, call set_panel_open or show_data_layers_menu. "Open Context" means only set_panel_open{panelId:"global-context-panel",open:true}; it does not activate a Context sub-mode. "Open Contacts" means set_context_mode{mode:"contacts"}; that action expands the parent Context panel before activating Contacts.',
             'For requests like "show me the datacenter layers", open the data layers menu and focus the matching layer row; do not enable the layer unless the user asks to turn it on.',
             'For questions like "what am I looking at?", "what is in view?", "what is this?", "that selected thing", nearby datacenter, dam, cable, ship, or current view contents, call get_entity_context first, then answer from the returned scene/entity context.',
@@ -5155,7 +4680,7 @@ function openAiRealtimeProxy() {
             // Fully expressible with tools that already exist, so
             // GEV_REALTIME_TOOLS is deliberately untouched — deleting this one
             // string is the whole rollback.
-            'NAMED VIEWS are shorthand for tool calls you already have — there is no "mode" tool for them. Treat ONLY these as the shorthand: "infrastructure mode" / "the infrastructure view" / "show me global infrastructure" means three set_layer_visibility calls (local-datacenters, local-dams, telegeography-submarine-cables) plus zoom_to_globe; "environmental mode" / "earth watch" / "active events", said as the name of a view, means set_layer_visibility for local-firms and earthquakes plus zoom_to_globe. Anything vaguer is NOT this shorthand — an open-ended question about the world or the news is an ordinary question: answer it, or use analyst_query over the layers already on. Never switch a whole view on to answer a question nobody asked to see. When you do run one, make every call before speaking, then give one confirmation naming the resulting state; if the fires layer comes back unavailable because no FIRMS key is configured, say so plainly — the earthquakes still loaded. "Live contacts" and "space missions" are NOT this pattern: they stay set_context_mode{mode:"contacts"} and set_context_mode{mode:"space-missions"}.',
+            'NAMED VIEWS are shorthand for tool calls you already have — there is no "mode" tool for them. Treat ONLY these as the shorthand: "infrastructure mode" / "the infrastructure view" / "show me global infrastructure" means two set_layer_visibility calls (local-datacenters, local-dams) plus zoom_to_globe; the submarine-cables layer is a commercial no-op and must not be enabled; "environmental mode" / "earth watch" / "active events", said as the name of a view, means set_layer_visibility for local-firms and earthquakes plus zoom_to_globe. Anything vaguer is NOT this shorthand — an open-ended question about the world or the news is an ordinary question: answer it, or use analyst_query over the layers already on. Never switch a whole view on to answer a question nobody asked to see. When you do run one, make every call before speaking, then give one confirmation naming the resulting state; if the fires layer comes back unavailable because no FIRMS key is configured, say so plainly — the earthquakes still loaded. "Live contacts" and "space missions" are NOT this pattern: they stay set_context_mode{mode:"contacts"} and set_context_mode{mode:"space-missions"}.',
             'For visual filter requests, call set_visual_style with one of the allowed style IDs.',
             'Disambiguation table — basemap vs layer vs style: basemap switching requires an explicit stack name — "Bing aerial" means set_map_stack bing-aerial, "aerial with labels" means bing-labels, "OSM"/"road map" means osm, "Google 3D"/"photorealistic" means photoreal. Any mention of "satellite" or "satellites" ALWAYS means the satellites DATA LAYER via set_layer_visibility, never a basemap. "surveillance"/"night vision"/"thermal" are visual STYLES via set_visual_style.',
             'HUD requests ("hud on/off", "switch to operator/minimal/tactical layout") use set_hud. Detection requests ("detection on", "dense mode", "balanced mode", "sparse mode", "set density to 25", "use weighted allocation") use set_detection. Density snaps to 0/25/50/75/100 and derives Sparse/Balanced/Dense; panoptic is a legacy alias for Dense.',
@@ -5167,7 +4692,7 @@ function openAiRealtimeProxy() {
             'Confirmations echo the RESULTING state, never the request: "HUD operator layout", "Density twenty-five percent", "Bing aerial imagery", "Tracking UAL428", "Framed fourteen aircraft". On ok=false, state the failure plainly: "Nothing matched UAL999", "No ships within 120 kilometers". Never claim an action without ok=true in the tool result.',
             'For destination requests such as "take me to Italy", "go to NYC", or "show me the Eiffel Tower", call fly_to_location. Prefer known city IDs when available; otherwise pass the plain place query.',
             'Navigation-only requests ("take me to X", "go to X", "fly to X") are NOT descriptions: call fly_to_location alone and do NOT also call annotate_map, unless the user explicitly asks to mark the place or you go on to explain specific places there. Never drop a point pin on a region-scale natural feature (a mountain range, desert, sea, or forest) — a single point in the middle of the Rockies is meaningless. If the user explicitly asks to mark such a region, prefer type=area.',
-            'For country and city destinations, omit rangeM so GEV frames the whole country or city in view. For landmarks and buildings, omit rangeM so GEV chooses a close landmark view.',
+            'For country and city destinations, omit rangeM so Meridian frames the whole country or city in view. For landmarks and buildings, omit rangeM so Meridian chooses a close landmark view.',
             'Only supply rangeM when the user asks for a particular numeric height, distance, closer view, or wider view.',
             'For relative requests such as "zoom out a little", "pull back", "zoom in more", or "get closer", always call adjust_camera_zoom. But "globe view", "whole earth", "the whole planet", or "zoom all the way out" is an ABSOLUTE framing: call zoom_to_globe once instead — repeated adjust_camera_zoom calls can never reach the globe. Never claim the camera moved without the tool returning ok=true.',
             'Keep spoken confirmations short, e.g. "Opening datacenters" or "Flying to London".',
@@ -5536,7 +5061,7 @@ const GEV_REALTIME_TOOLS = [
   {
     type: 'function',
     name: 'fly_to_location',
-    description: "Fly the God's Eye View camera to a known city, geocoded country/region/city/landmark, or explicit WGS84 coordinate. Countries/cities frame the whole place; landmarks/buildings use close framing.",
+    description: "Fly the Meridian camera to a known city, geocoded country/region/city/landmark, or explicit WGS84 coordinate. Countries/cities frame the whole place; landmarks/buildings use close framing.",
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -5633,7 +5158,7 @@ const GEV_REALTIME_TOOLS = [
   {
     type: 'function',
     name: 'set_layer_visibility',
-    description: "Enable or disable one registered God's Eye View data layer.",
+    description: "Enable or disable one registered Meridian data layer.",
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -5757,7 +5282,7 @@ const GEV_REALTIME_TOOLS = [
   {
     type: 'function',
     name: 'set_visual_style',
-    description: "Set the active God's Eye View visual filter/style.",
+    description: "Set the active Meridian visual filter/style.",
     parameters: {
       type: 'object',
       additionalProperties: false,
@@ -7032,8 +6557,8 @@ function fetchRegionalPlace(point) {
     });
     const payload = await fetchRegionalJson(`https://nominatim.openstreetmap.org/reverse?${params}`, {
       headers: {
-        'User-Agent': 'GodsEyeView/0.1 (+https://github.com/bilawalsidhu/gods-eye-view)',
-        Referer: 'https://github.com/bilawalsidhu/gods-eye-view',
+        'User-Agent': 'Meridian/0.1 (+https://github.com/johnmatveyev-lab/gods-eye-view)',
+        Referer: 'https://github.com/johnmatveyev-lab/gods-eye-view',
       },
     });
     return normalizeRegionalPlace(payload);
@@ -7045,20 +6570,6 @@ function fetchRegionalPlace(point) {
 async function fetchRegionalNews(place) {
   const query = place?.locality || place?.region || place?.country;
   if (!query) return { status: 'unavailable', query: null, articles: [], source: null };
-  const rssParams = new URLSearchParams({
-    q: String(query).replace(/["\\]/g, ' ').trim(),
-    hl: 'en-US',
-    gl: 'US',
-    ceid: 'US:en',
-  });
-  try {
-    const xml = await fetchRegionalText(`https://news.google.com/rss/search?${rssParams}`, {
-      headers: { 'User-Agent': 'GodsEyeView/0.1' },
-      timeoutMs: 12_000,
-    });
-    const articles = normalizeRssArticles(xml, 5);
-    if (articles.length) return { status: 'ready', query, articles, source: 'Google News RSS' };
-  } catch { /* fall through to the existing free index */ }
   const params = new URLSearchParams({
     query: `"${String(query).replace(/["\\]/g, ' ').trim()}"`,
     mode: 'artlist',
@@ -7069,11 +6580,11 @@ async function fetchRegionalNews(place) {
   });
   try {
     const payload = await fetchRegionalJson(`https://api.gdeltproject.org/api/v2/doc/doc?${params}`, {
-      headers: { 'User-Agent': 'GodsEyeView/0.1' },
+      headers: { 'User-Agent': 'Meridian/0.1' },
       timeoutMs: 12_000,
     });
     const articles = normalizeRegionalArticles(payload, 5);
-    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT fallback' };
+    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT Project' };
   } catch {
     return { status: 'unavailable', query, articles: [], source: null };
   }

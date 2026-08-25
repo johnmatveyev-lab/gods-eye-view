@@ -653,10 +653,10 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   const end = src.indexOf('\n];\n', start);
   const block = src.slice(start, end + 4);
 
-  assert.equal(block.length, 31104, 'tool schema byte length drifted from the frozen baseline');
+  assert.equal(block.length, 31086, 'tool schema byte length drifted from the frozen baseline');
   assert.equal(
     crypto.createHash('sha256').update(block).digest('hex'),
-    '3ace199727934e851902e4899c423d549d34d3f53469dcb56f07fc070d3f9d66',
+    'b420c0d319a897842e73e996c6538d91e81c8eb27b313ce03d2d3a8f726d2f31',
     'the first-run missions must ride EXISTING tools: no schema edit, no cache bust',
   );
 
@@ -672,10 +672,11 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   const mapping = src.slice(src.indexOf('NAMED VIEWS are shorthand'));
   const paragraph = mapping.slice(0, mapping.indexOf("',\n"));
   for (const layerId of [
-    'local-datacenters', 'local-dams', 'telegeography-submarine-cables', 'local-firms', 'earthquakes',
+    'local-datacenters', 'local-dams', 'local-firms', 'earthquakes',
   ]) {
     assert.ok(paragraph.includes(layerId), `mapping must name the existing ${layerId} enum value`);
   }
+  assert.match(paragraph, /submarine-cables layer is a commercial no-op/);
   assert.ok(paragraph.includes('zoom_to_globe'));
   assert.ok(paragraph.includes('set_layer_visibility'));
 });

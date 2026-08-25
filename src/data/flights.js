@@ -1,7 +1,7 @@
 /**
  * @module flights
- * @description Real-time flight tracking layer powered by the OpenSky Network API
- * (authenticated via Vite dev-server proxy at /api/opensky).
+ * @description Real-time flight tracking layer powered by adsb.lol
+ * (ODbL; proxied at /api/opensky for compatibility). OpenSky is disabled.
  *
  * Rendering strategy: all aircraft are drawn as billboards in a single
  * BillboardCollection for GPU-efficient batching (handles 5000+ aircraft).
@@ -269,7 +269,7 @@ const _scratchModelBS = new Cesium.BoundingSphere(new Cesium.Cartesian3(), 1.0);
 /** Last limb taper per billboard, retained across class/ground/cockpit repaints. */
 const _billboardLimbScale = new WeakMap();
 
-/** @constant {string} API_URL - Vite proxy endpoint for OpenSky /states/all */
+/** @constant {string} API_URL - Compatibility path; server serves adsb.lol only. */
 const API_URL = '/api/opensky';
 const SOURCE_STALE_MS = 120_000;
 /** @constant {number} BACKOFF_INTERVAL - Cooldown (ms) after 429 / auth errors */
@@ -318,9 +318,9 @@ function _abortActiveUpdates() {
 /** @type {number|null} HTTP status of the most recent API response */
 let _lastStatus = null;
 /** @type {string} Source used by the latest successful snapshot. */
-let _lastSource = 'OpenSky Network';
+let _lastSource = 'adsb.lol';
 /** @type {string} Completeness boundary for the latest successful snapshot. */
-let _lastCoverage = 'worldwide upstream snapshot';
+let _lastCoverage = '250nm regional snapshot';
 
 function _flightApiUrl(viewer) {
   const cartographic = viewer?.camera?.positionCartographic;
@@ -348,7 +348,7 @@ let _lastTrackingRefreshOutcome = {
   epoch: 0,
   status: 'unavailable',
   ids: new Set(),
-  source: 'OpenSky Network',
+  source: 'adsb.lol',
   coverage: null,
 };
 /** @type {Cesium.Entity|null} Entity used for camera tracking */
@@ -420,7 +420,7 @@ function _contextSubjectMetadata(icao24) {
     id: icao24,
     layerId: 'flights',
     layerName: 'Live Flights',
-    source: 'OpenSky Network',
+    source: 'adsb.lol',
     label: _contactLabel(icao24, _flightData.get(icao24)),
     latitude: described.latitude,
     longitude: described.longitude,
@@ -1044,42 +1044,15 @@ function _contactLabel(icao24, info) {
 }
 
 /**
- * Map OpenSky proxy response headers into a human-readable auth error string.
- * The Vite proxy forwards `x-opensky-auth-mode-used` and `x-opensky-auth-reason`
- * headers so the client can display a meaningful diagnostic.
+ * Map a flights-proxy HTTP failure into a user-visible adsb.lol error.
+ * OpenSky auth headers are ignored — this commercial fork never contacts OpenSky.
  * @param {object} params
- * @param {string} params.detail  - Error body text from the proxy, if any.
- * @param {string} params.authMode - Normalized auth mode header value.
- * @param {string} params.authReason - Normalized auth reason header value.
+ * @param {string} params.detail - Error body text from the proxy, if any.
  * @returns {string} Concise error description for UI display.
  */
-function _deriveOpenSkyAuthError({ detail, authMode, authReason }) {
-  const reason = _toLowerText(authReason);
-  const mode = _toLowerText(authMode);
-
-  if (reason === 'oauth_invalid_or_missing') {
-    return 'OpenSky OAuth client missing/invalid';
-  }
-  if (reason === 'oauth_invalid_credentials') {
-    return 'OpenSky OAuth rejected credentials';
-  }
-  if (reason === 'basic_invalid_credentials') {
-    return 'OpenSky username/password rejected';
-  }
-  if (reason === 'missing_basic_creds' || reason === 'missing_oauth_and_basic_creds') {
-    return 'OpenSky auth missing';
-  }
-  if (reason === 'auth_required') {
-    return 'OpenSky auth required';
-  }
-  if (reason.startsWith('oauth_') || reason.startsWith('basic_')) {
-    return 'OpenSky auth invalid';
-  }
-  if (reason === 'forced_anonymous' || mode === 'anon') {
-    return 'OpenSky auth required';
-  }
-  if (detail) return detail;
-  return 'OpenSky auth failed';
+function _deriveFlightSourceError({ detail }) {
+  const text = typeof detail === 'string' ? detail.trim() : '';
+  return text || 'adsb.lol unavailable';
 }
 
 /**
@@ -3416,7 +3389,7 @@ export function _setTrackedFlightRefreshStateForTest({
 export function _setFlightTrackingRefreshOutcomeForTest({
   status = 'accepted',
   ids = [],
-  source = 'OpenSky Network',
+  source = 'adsb.lol',
   coverage = 'test',
 } = {}) {
   const epoch = ++_trackingRefreshEpoch;
@@ -3887,7 +3860,7 @@ const flightsLayer = {
   id: 'flights',
   name: 'Live Flights',
   icon: '✈️',
-  source: 'OpenSky Network',
+  source: 'adsb.lol',
   // Browser-harness seam: isolates synthetic display-floor scenarios without
   // changing any production lifecycle or cache policy.
   _clearDisplayFloorStateForTest,
@@ -3934,8 +3907,8 @@ const flightsLayer = {
     _retryAt = 0;
     _lastError = null;
     _lastStatus = null;
-    _lastSource = 'OpenSky Network';
-    _lastCoverage = 'worldwide upstream snapshot';
+    _lastSource = 'adsb.lol';
+    _lastCoverage = '250nm regional snapshot';
     _trackedIcao = null;
     _resetTrackedSelectionState();
     _trackedEntity = null;
@@ -4086,23 +4059,17 @@ const flightsLayer = {
       _lastStatus = response.status;
       const responseSource = response.headers.get('x-flight-source');
       const responseCoverage = response.headers.get('x-flight-coverage');
-      const authMode = _toLowerText(
-        response.headers.get('x-opensky-auth-mode-used') || response.headers.get('x-opensky-auth')
-      );
-      const authReason = _toLowerText(response.headers.get('x-opensky-auth-reason'));
 
       if (response.status === 429) {
         console.warn('[Data:Flights] Rate limited, backing off to 30s');
         _backoff = true;
         _retryAt = nowMs + BACKOFF_INTERVAL;
-        _lastError = authMode && authMode !== 'anon'
-          ? 'OpenSky rate limited'
-          : 'OpenSky rate limited (anonymous)';
+        _lastError = 'adsb.lol rate limited';
         return;
       }
 
       if (response.status === 401 || response.status === 403) {
-        console.warn(`[Data:Flights] OpenSky unavailable (${response.status}), backing off`);
+        console.warn(`[Data:Flights] adsb.lol unavailable (${response.status}), backing off`);
         _backoff = true;
         _retryAt = nowMs + BACKOFF_INTERVAL;
         let detail = '';
@@ -4113,10 +4080,8 @@ const flightsLayer = {
         } catch {
           detail = '';
         }
-        _lastError = _deriveOpenSkyAuthError({
+        _lastError = _deriveFlightSourceError({
           detail,
-          authMode,
-          authReason,
         });
         return;
       }
@@ -4133,7 +4098,7 @@ const flightsLayer = {
         } catch {
           detail = '';
         }
-        _lastError = detail || `OpenSky HTTP ${response.status}`;
+        _lastError = detail || `adsb.lol HTTP ${response.status}`;
         return;
       }
 
@@ -4142,7 +4107,7 @@ const flightsLayer = {
       if (!data || !Array.isArray(data.states)) {
         _backoff = true;
         _retryAt = nowMs + ERROR_BACKOFF_INTERVAL;
-        _lastError = 'Malformed OpenSky response';
+        _lastError = 'Malformed adsb.lol response';
         return;
       }
 
@@ -4150,7 +4115,7 @@ const flightsLayer = {
       if (data.states.length > 0 && usableStates.length === 0) {
         _backoff = true;
         _retryAt = nowMs + ERROR_BACKOFF_INTERVAL;
-        _lastError = 'Malformed OpenSky aircraft rows';
+        _lastError = 'Malformed adsb.lol aircraft rows';
         return;
       }
 
@@ -4164,8 +4129,8 @@ const flightsLayer = {
       _lastError = sourceStale
         ? `Source snapshot ${Math.max(2, Math.round(sourceAgeMs / 60_000))} min old`
         : null;
-      _lastSource = responseSource || 'OpenSky Network';
-      _lastCoverage = responseCoverage || 'worldwide upstream snapshot';
+      _lastSource = responseSource || 'adsb.lol';
+      _lastCoverage = responseCoverage || '250nm regional snapshot';
       const currentIcaos = new Set();
       const acceptedSnapshotIcaos = new Set();
       const now = Cesium.JulianDate.now();
@@ -4629,7 +4594,7 @@ const flightsLayer = {
       console.warn('[Data:Flights] Fetch error:', e);
       _backoff = true;
       _retryAt = Date.now() + ERROR_BACKOFF_INTERVAL;
-      _lastError = 'OpenSky network error';
+      _lastError = 'adsb.lol network error';
     } finally {
       _activeUpdateControllers.delete(resourceController);
     }
@@ -5082,7 +5047,7 @@ const flightsLayer = {
     if (outcome.status !== 'accepted') {
       return {
         status: 'source-unavailable',
-        reason: 'OpenSky snapshot unavailable',
+        reason: 'adsb.lol snapshot unavailable',
         refreshEpoch: outcome.epoch,
         source: outcome.source,
         coverage: outcome.coverage,
@@ -5235,6 +5200,7 @@ const flightsLayer = {
       retryInSec,
       source: _lastSource,
       coverage: _lastCoverage,
+      fallback: false,
     };
   },
 };

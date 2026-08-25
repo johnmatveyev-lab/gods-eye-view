@@ -35,7 +35,7 @@ const flightSubject = (id, extra = {}) => ({
   id,
   layerId: 'flights',
   layerName: 'Live Flights',
-  source: 'OpenSky Network',
+  source: 'adsb.lol',
   label: id.toUpperCase(),
   latitude: 30.2672,
   longitude: -97.7431,
