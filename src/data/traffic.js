@@ -41,6 +41,13 @@ import {
   jamVizEffects,
   setJamViz,
 } from './trafficJamViz.js';
+import {
+  getTrafficDensity,
+  getTrafficSpeed,
+  setTrafficDensity,
+  setTrafficSpeed,
+  trafficMotionSliders,
+} from './trafficMotion.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -210,9 +217,9 @@ let _activeFetchAbort = null;
 /** @type {AbortController|null} Dedicated abort for TomTom tile fetches (Sim must not cancel Overpass). */
 let _flowAbort = null;
 /** @type {number} User-adjustable density multiplier (clamped 0.2–2.5) */
-let _densityScale = 1.0;
+let _densityScale = getTrafficDensity();
 /** @type {number} User-adjustable speed multiplier (clamped 0.3–3.0) */
-let _speedScale = 1.0;
+let _speedScale = getTrafficSpeed();
 /** @type {{lat:number,lon:number}|null} Center of last-fetched viewport for shift gating */
 let _lastViewCenter = null;
 /** @type {number|null} camera.percentageChanged value before we overrode it, restored on disable */
@@ -2382,8 +2389,8 @@ const trafficLayer = {
     _lastBounds = null;
     _fetching = false;
     _loadGeneration = 0;
-    _densityScale = 1.0;
-    _speedScale = 1.0;
+    _densityScale = getTrafficDensity();
+    _speedScale = getTrafficSpeed();
     _lastViewCenter = null;
     _flowCoveragePct = 0;
     _flowError = null;
@@ -2521,11 +2528,11 @@ const trafficLayer = {
    * @param {number}  [params.speedScale]   - Dot speed multiplier (clamped 0.3–3.0).
    */
   setParams(params = {}) {
-    if (typeof params.densityScale === 'number') {
-      _densityScale = Math.max(0.2, Math.min(2.5, params.densityScale));
+    if (typeof params.densityScale === 'number' && Number.isFinite(params.densityScale)) {
+      _densityScale = setTrafficDensity(params.densityScale);
     }
-    if (typeof params.speedScale === 'number') {
-      _speedScale = Math.max(0.3, Math.min(3.0, params.speedScale));
+    if (typeof params.speedScale === 'number' && Number.isFinite(params.speedScale)) {
+      _speedScale = setTrafficSpeed(params.speedScale);
     }
     // Live-mode treatment of roads TomTom has no flow data for:
     // 'sim' (default) keeps them as today's white ambient dots — colored =
@@ -2580,9 +2587,10 @@ const trafficLayer = {
 
   /**
    * Street Traffic row chrome. Live | Sim, Uncovered Sim | Hide, and Jam
-   * Density | Heatline | Both | Off are independent chip groups. Jam is
+   * Density | Heatline | Both | Off are independent chip groups. Density
+   * and Speed sliders write only densityScale / speedScale. Jam is
    * live-only. Each group writes only its own setParams key.
-   * @returns {{heading: string, chips: Array<object>}}
+   * @returns {{heading: string, chips: Array<object>, sliders: Array<object>}}
    */
   getRowControls() {
     const source = trafficSourceControls({
@@ -2598,6 +2606,10 @@ const trafficLayer = {
     return {
       heading: source.heading,
       chips: [...source.chips, ...uncovered.chips, ...jam.chips],
+      sliders: trafficMotionSliders({
+        densityScale: _densityScale,
+        speedScale: _speedScale,
+      }),
     };
   },
 

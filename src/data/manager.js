@@ -2301,9 +2301,18 @@ export class DataLayerManager {
         }
       });
       controls.addEventListener('input', (event) => {
-        const input = event.target?.closest?.('.data-toggle-field-input');
-        if (!input || input.disabled) return;
-        this.setLayerParams(layer.id, { callsignPrefixes: input.value }, { origin: 'user' });
+        const field = event.target?.closest?.('.data-toggle-field-input');
+        if (field && !field.disabled) {
+          this.setLayerParams(layer.id, { callsignPrefixes: field.value }, { origin: 'user' });
+          return;
+        }
+        const slider = event.target?.closest?.('.data-toggle-slider-input');
+        if (!slider || slider.disabled) return;
+        const spec = this._rowControlsFor(layer.id)?.sliders
+          ?.find((entry) => entry.id === slider.dataset.sliderId);
+        if (spec?.param) {
+          this.setLayerParams(layer.id, { [spec.param]: Number(slider.value) }, { origin: 'user' });
+        }
       });
       row.appendChild(controls);
       this._syncRowControls(controls, layer);
@@ -2329,7 +2338,7 @@ export class DataLayerManager {
    * misbehaving layer cannot blank the whole panel. Resolved from the registry
    * rather than the `getAll()` projection, which deliberately omits `module`.
    * @param {string} layerId Registered layer id.
-   * @returns {{ chips?: Array<object>, legend?: Array<object>, selects?: Array<object>, picker?: object }|null} Descriptor.
+   * @returns {{ chips?: Array<object>, legend?: Array<object>, selects?: Array<object>, sliders?: Array<object>, picker?: object }|null} Descriptor.
    */
   _rowControlsFor(layerId) {
     const module = this.layers.get(layerId)?.module;
@@ -2365,10 +2374,12 @@ export class DataLayerManager {
     ];
     const legend = layer.enabled ? (declared?.legend || []) : [];
     const selects = layer.enabled ? (declared?.selects || []) : [];
+    const sliders = layer.enabled ? (declared?.sliders || []) : [];
     const headingText = typeof declared?.heading === 'string' ? declared.heading.trim() : '';
     const picker = declared?.picker || null;
     const field = layer.enabled ? (declared?.field || null) : null;
     container.hidden = chips.length === 0 && legend.length === 0 && selects.length === 0
+      && sliders.length === 0
       && !headingText && !picker && !field;
     this._syncRowPicker(container, picker);
     this._syncRowField(container, field);
@@ -2464,6 +2475,8 @@ export class DataLayerManager {
       }
     }
     for (const node of staleSelects.values()) node.remove();
+
+    this._syncRowSliders(container, sliders);
 
     for (const item of legend) {
       const entry = document.createElement('span');
@@ -2599,6 +2612,66 @@ export class DataLayerManager {
     input.disabled = Boolean(field.disabled);
     const focused = typeof document !== 'undefined' && document.activeElement === input;
     if (!focused && input.value !== (field.value || '')) input.value = field.value || '';
+  }
+
+  /**
+   * Reconcile range sliders in place so a drag does not steal focus.
+   * Writes go through setLayerParams using each slider's `param` key.
+   * @param {HTMLElement} container
+   * @param {Array<object>} sliders
+   */
+  _syncRowSliders(container, sliders) {
+    const stale = new Map();
+    for (const node of [...container.children]) {
+      if (node.dataset?.sliderId && String(node.className).split(/\s+/).includes('data-toggle-slider')) {
+        stale.set(node.dataset.sliderId, node);
+      }
+    }
+    for (const spec of sliders) {
+      let wrap = stale.get(spec.id);
+      stale.delete(spec.id);
+      if (!wrap) {
+        wrap = document.createElement('label');
+        wrap.className = 'data-toggle-slider';
+        wrap.dataset.sliderId = spec.id;
+        const caption = document.createElement('span');
+        caption.className = 'data-toggle-slider-label';
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.className = 'data-toggle-slider-input';
+        input.dataset.sliderId = spec.id;
+        const readout = document.createElement('span');
+        readout.className = 'data-toggle-slider-value';
+        wrap.append(caption, input, readout);
+        container.appendChild(wrap);
+      }
+      const caption = [...(wrap.children || [])].find((child) => (
+        String(child.className).split(/\s+/).includes('data-toggle-slider-label')
+      ));
+      const input = [...(wrap.children || [])].find((child) => (
+        String(child.className).split(/\s+/).includes('data-toggle-slider-input')
+      ));
+      const readout = [...(wrap.children || [])].find((child) => (
+        String(child.className).split(/\s+/).includes('data-toggle-slider-value')
+      ));
+      if (caption && caption.textContent !== spec.label) caption.textContent = spec.label;
+      if (input) {
+        input.min = String(spec.min);
+        input.max = String(spec.max);
+        input.step = String(spec.step ?? 0.1);
+        input.disabled = Boolean(spec.disabled);
+        input.title = spec.title || '';
+        input.setAttribute('aria-label', spec.title || spec.label);
+        const focused = typeof document !== 'undefined' && document.activeElement === input;
+        const next = String(spec.value);
+        if (!focused && input.value !== next) input.value = next;
+      }
+      if (readout) {
+        const text = Number(spec.value).toFixed(1);
+        if (readout.textContent !== text) readout.textContent = text;
+      }
+    }
+    for (const node of stale.values()) node.remove();
   }
 
   _refreshTogglePanel() {

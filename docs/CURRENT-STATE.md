@@ -2639,6 +2639,11 @@ easier to meet (detection is now on more often), but does not create it.
   white unless Uncovered is Hide (then they spawn nothing). The Uncovered:
   Sim | Hide control writes the existing `setParams({ uncoveredRoads })`
   (`meridian.uncoveredRoads`, default Sim) and does not change Live | Sim.
+  Density and Speed sliders write the existing `setParams({ densityScale,
+  speedScale })` path (0.2–2.5 and 0.3–3.0, defaults 1.0 / 1.0) and apply
+  on the next camera-driven load. They persist as `meridian.trafficDensity`
+  / `meridian.trafficSpeed` because traffic is still enabled-only. They do
+  not change Live | Sim, Uncovered, or Jam viz, and they add no `/api`.
   Road fetch bounds center on the camera look-at point (`trafficBounds.js`).
 - Development captures opened with `?trafficDebug=1` mint an interaction anchor
   from the exact `camera.changed` event that arms each debounced load, then emit

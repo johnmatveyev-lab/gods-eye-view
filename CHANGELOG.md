@@ -33,6 +33,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Street Traffic has Density and Speed sliders on the existing layer row.
+  Density (0.2–2.5, default 1.0) changes dot spawn; Speed (0.3–3.0,
+  default 1.0) scales ambient/live motion. Both write the existing
+  `setParams({ densityScale, speedScale })` path and apply on the next
+  camera-driven load. Distinct from Live | Sim, Uncovered Sim | Hide, and
+  Jam viz. Prefs persist as `meridian.trafficDensity` /
+  `meridian.trafficSpeed` (traffic is still enabled-only). No extra
+  TomTom/Overpass fetch and no new `/api`.
 - Added an MGRS line next to the camera-center lat,lon readout. It uses the
   existing `mgrs` package on the same `positionCartographic` pair Copy coords
   already shows, updates as the pointer moves, and is included on the existing
