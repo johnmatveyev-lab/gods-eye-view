@@ -86,6 +86,13 @@ import {
   setLaunchSiteFilter,
 } from './launchSiteFilter.js';
 import {
+  DEFAULT_LAUNCH_ROCKET_FILTER,
+  LAUNCH_ROCKET_OTHER_CHIP_ID,
+  normalizeLaunchRocketFilter,
+  resetLaunchRocketFilterForTest,
+  setLaunchRocketFilter,
+} from './launchRocketFilter.js';
+import {
   DEFAULT_LAUNCH_TIME_WINDOW,
   getLaunchTimeWindow,
   resetLaunchTimeWindowForTest,
@@ -775,6 +782,53 @@ test('30d roster matches the current window and 7d hides later missions', () => 
   assert.deepEqual(selected.map((entry) => entry.launch.id).sort(), ['far', 'missing', 'near']);
 });
 
+test('rocket-off roster hides that family and ANDs status, provider, LEO, and site', () => {
+  const rows = [
+    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Falcon 9 Block 5', launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'atlas', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Atlas V 551', launchTime: '2026-07-19T00:00:00Z' },
+    { id: 'gto', status: 'Go', provider: 'SpaceX', orbit: { name: 'GTO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Falcon 9', launchTime: '2026-07-18T00:00:00Z' },
+    { id: 'tbd', status: 'TBD', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Falcon 9', launchTime: '2026-07-17T00:00:00Z' },
+    { id: 'cape', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 39A', rocketName: 'Falcon 9', launchTime: '2026-07-16T00:00:00Z' },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+  }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Atlas V': false,
+    [LAUNCH_ROCKET_OTHER_CHIP_ID]: false,
+  }, ['Atlas V', 'Falcon 9', LAUNCH_ROCKET_OTHER_CHIP_ID]);
+  const entries = missionRosterEntries(rows, {
+    statusFilter: { go: true },
+    siteFilter: { '4E': true },
+    providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
+    orbitFilter: { leo: true },
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
+  });
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['keep']);
+  assert.equal(launchPassesMissionFilters(rows[0], {
+    statusFilter: { go: true },
+    siteFilter: { '4E': true },
+    providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
+    orbitFilter: { leo: true },
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
+  }), true);
+  assert.equal(launchPassesMissionFilters(rows[1], {
+    statusFilter: { go: true },
+    siteFilter: { '4E': true },
+    providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
+    orbitFilter: { leo: true },
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
+  }), false);
+});
+
 test('Status Go + one site still ANDs with the 7d roster window', () => {
   const roster = [
     { id: 'near-go-ksc', status: 'Go', provider: 'SpaceX', launchSite: 'KSC', launchTime: '2026-07-25T00:00:00Z' },
@@ -842,8 +896,29 @@ test('normalizes recent launches and preserves supplied trajectory/orbit data', 
   assert.equal(launches[0].lat, 45.5);
   assert.equal(launches[0].lon, 12.5);
   assert.equal(launches[0].orbit.name, 'LEO');
+  assert.equal(launches[0].rocketName, null);
   assert.equal(launches[0].trajectory.length, 1);
   assert.equal(launches[0].timeline[0].offsetSeconds, 520);
+});
+
+test('keeps rocket.configuration.name (or rocket.name) on the in-memory roster', () => {
+  const fromConfig = normalizeRocketLaunches({ results: [{
+    id: 'falcon',
+    name: 'Falcon 9 Block 5 | Starlink',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+    rocket: { configuration: { name: 'Falcon 9 Block 5' }, name: 'Falcon 9' },
+  }] }, NOW);
+  assert.equal(fromConfig[0].rocketName, 'Falcon 9 Block 5');
+
+  const fromRocket = normalizeRocketLaunches({ results: [{
+    id: 'atlas',
+    name: 'Atlas V | USSF',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.562', longitude: '-80.577', name: 'SLC-41' },
+    rocket: { name: 'Atlas V' },
+  }] }, NOW);
+  assert.equal(fromRocket[0].rocketName, 'Atlas V');
 });
 
 test('uses Launch Library 2 pad latitude/longitude fields', () => {
@@ -1769,6 +1844,9 @@ function createStatusFilterDocument() {
   const providerChips = new FakeNode('div');
   providerChips.className = 'space-mission-provider-chips';
   providerChips.setAttribute('data-mission-provider-chips', '');
+  const rocketChips = new FakeNode('div');
+  rocketChips.className = 'space-mission-rocket-chips';
+  rocketChips.setAttribute('data-mission-rocket-chips', '');
   const siteChips = new FakeNode('div');
   siteChips.className = 'space-mission-site-chips';
   siteChips.setAttribute('data-mission-site-chips', '');
@@ -1795,6 +1873,7 @@ function createStatusFilterDocument() {
   roster.appendChild(windowChips);
   roster.appendChild(chips);
   roster.appendChild(providerChips);
+  roster.appendChild(rocketChips);
   roster.appendChild(siteChips);
   roster.appendChild(orbitChips);
   roster.appendChild(list);
@@ -1810,6 +1889,7 @@ function createStatusFilterDocument() {
     list,
     count,
     providerChips,
+    rocketChips,
     orbitChips,
     windowChips,
     document: {
@@ -1868,6 +1948,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
   resetLaunchProviderFilterForTest();
   resetLaunchOrbitFilterForTest();
   resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
@@ -1912,6 +1993,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
     resetLaunchProviderFilterForTest();
     resetLaunchOrbitFilterForTest();
     resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
@@ -1990,6 +2072,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
   resetLaunchProviderFilterForTest();
   resetLaunchOrbitFilterForTest();
   resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
@@ -2033,6 +2116,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
     resetLaunchProviderFilterForTest();
     resetLaunchOrbitFilterForTest();
     resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
@@ -2148,6 +2232,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
   resetLaunchProviderFilterForTest();
   resetLaunchOrbitFilterForTest();
   resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
@@ -2188,6 +2273,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
     resetLaunchProviderFilterForTest();
     resetLaunchOrbitFilterForTest();
     resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
@@ -2230,6 +2316,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
   resetLaunchProviderFilterForTest();
   resetLaunchOrbitFilterForTest();
   resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
@@ -2271,6 +2358,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
     resetLaunchProviderFilterForTest();
     resetLaunchOrbitFilterForTest();
     resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
@@ -2324,4 +2412,169 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
   assert.equal(dataSource.entities.getById('rocket-launch:far-go').show, false);
   assert.match(list.innerHTML, /NEAR-GO/);
   assert.doesNotMatch(list.innerHTML, /NEAR-TBD|FAR-GO|FAR-TBD/);
+});
+
+function rocketFilterLaunch(id, rocketName, latOffset = 0, extras = {}) {
+  return {
+    id,
+    name: `${id} | Rocket Filter`,
+    net: new Date(Date.now() - (extras.daysAgo ?? 1) * 24 * 60 * 60 * 1000).toISOString(),
+    status: { name: extras.status || 'Go' },
+    launch_service_provider: { name: extras.provider || 'SpaceX' },
+    pad: {
+      latitude: String(28.608 + latOffset),
+      longitude: '-80.604',
+      name: extras.padName || 'Space Launch Complex 39A',
+    },
+    mission: { name: id, orbit: { name: extras.orbit || 'Low Earth Orbit' } },
+    rocket: rocketName
+      ? { configuration: { name: rocketName } }
+      : extras.rocketNameField
+        ? { name: extras.rocketNameField }
+        : {},
+  };
+}
+
+test('rocket chips re-apply the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  resetLaunchProviderFilterForTest();
+  resetLaunchOrbitFilterForTest();
+  resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
+  resetLaunchTimeWindowForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, rocketChips, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  const payload = {
+    results: [
+      rocketFilterLaunch('falcon-go', 'Falcon 9 Block 5', 0),
+      rocketFilterLaunch('atlas-go', 'Atlas V 551', 0.1, { provider: 'ULA' }),
+      rocketFilterLaunch('falcon-tbd', 'Falcon 9', 0.2, { status: 'TBD' }),
+      rocketFilterLaunch('blank-go', null, 0.3, { provider: 'NASA' }),
+    ],
+  };
+  const chipIds = ['Atlas V', 'Falcon 9', LAUNCH_ROCKET_OTHER_CHIP_ID];
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    resetLaunchProviderFilterForTest();
+    resetLaunchOrbitFilterForTest();
+    resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
+    resetLaunchTimeWindowForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  setLaunchStatusFilter(DEFAULT_LAUNCH_STATUS_FILTER);
+  setLaunchRocketFilter(DEFAULT_LAUNCH_ROCKET_FILTER, { chipIds });
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:atlas-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:blank-go').show, true);
+  assert.match(list.innerHTML, /FALCON-GO/);
+  assert.match(list.innerHTML, /ATLAS-GO/);
+  assert.match(list.innerHTML, /BLANK-GO/);
+  assert.match(rocketChips.innerHTML, /Falcon 9/);
+  assert.match(rocketChips.innerHTML, /Atlas V/);
+  assert.match(rocketChips.innerHTML, /Other/);
+  assert.equal(rocketChips.hidden, false);
+
+  const withoutFalcon = normalizeLaunchRocketFilter({
+    'Falcon 9': false,
+    'Atlas V': true,
+    [LAUNCH_ROCKET_OTHER_CHIP_ID]: true,
+  }, chipIds);
+  setLaunchRocketFilter(withoutFalcon, { chipIds });
+  assert.equal(launchFetches, 1, 'chip change must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-tbd').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:atlas-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:blank-go').show, true);
+  assert.doesNotMatch(list.innerHTML, /FALCON-GO|FALCON-TBD/);
+  assert.match(list.innerHTML, /ATLAS-GO/);
+  assert.match(list.innerHTML, /BLANK-GO/);
+
+  const withoutOther = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Atlas V': true,
+    [LAUNCH_ROCKET_OTHER_CHIP_ID]: false,
+  }, chipIds);
+  setLaunchRocketFilter(withoutOther, { chipIds });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:blank-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.doesNotMatch(list.innerHTML, /BLANK-GO/);
+
+  setLaunchRocketFilter(DEFAULT_LAUNCH_ROCKET_FILTER, { chipIds });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.match(list.innerHTML, /FALCON-GO/);
+
+  _setSelectedRocketMissionForTest('falcon-go');
+  setLaunchRocketFilter(withoutFalcon, { chipIds });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true, 'selected Falcon 9 stays visible');
+  assert.match(list.innerHTML, /FALCON-GO/);
+  assert.doesNotMatch(list.innerHTML, /FALCON-TBD/);
+
+  _setSelectedRocketMissionForTest(null);
+  setLaunchStatusFilter({ go: true });
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Atlas V': false,
+    [LAUNCH_ROCKET_OTHER_CHIP_ID]: false,
+  }, chipIds);
+  setLaunchRocketFilter(falconOnly, { chipIds });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-tbd').show, false, 'Go + Falcon 9 still ANDs');
+  assert.equal(dataSource.entities.getById('rocket-launch:atlas-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:blank-go').show, false);
+  assert.match(list.innerHTML, /FALCON-GO/);
+  assert.doesNotMatch(list.innerHTML, /FALCON-TBD|ATLAS-GO|BLANK-GO/);
+
+  setLaunchStatusFilter(DEFAULT_LAUNCH_STATUS_FILTER);
+  setLaunchRocketFilter(withoutFalcon, { chipIds });
+  await rocketLaunchesLayer.update();
+  assert.equal(launchFetches, 2, 'refresh still hits the same /api/launches window');
+  assert.match(rocketChips.innerHTML, /Falcon 9/);
+  assert.match(rocketChips.innerHTML, /Atlas V/);
+  assert.match(rocketChips.innerHTML, /Other/);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:atlas-go').show, true);
+
+  await rocketLaunchesLayer.disable();
+  assert.equal(rocketChips.hidden, true, 'launches layer off hides the rocket chips');
 });
