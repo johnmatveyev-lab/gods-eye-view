@@ -21,7 +21,12 @@ import {
   shouldPauseRadioForVoice,
   shouldHandlePushToTalkKeyDown,
   shouldIgnoreVoiceButtonClick,
+  shouldRetryRealtimeToken,
   shouldStopVoiceAfterRadioTool,
+  applyVoiceMicChrome,
+  describeRealtimeTokenHttpError,
+  voiceGateAction,
+  voiceSessionAllowed,
   readStoredVoiceTier,
   readStoredVoiceLimits,
   writeStoredVoiceTier,
@@ -3245,4 +3250,43 @@ test('a genuinely different refused call still gets its own output', async () =>
   await controller.handleRealtimeEvent(lateToolEvent('resp_old', 'call_one'));
   await controller.handleRealtimeEvent(lateToolItemEvent('resp_old', 'call_two', 'item_two'));
   assert.deepEqual(outputs, ['call_one', 'call_two'], 'each distinct call is answered');
+});
+
+test('hosted Free disables MIC and routes click to upgrade without a token request', () => {
+  const entitlement = { plan: 'free', signedIn: true, voice: false };
+  const account = { config: { hosted: true }, clerk: {}, entitlement };
+  assert.equal(voiceSessionAllowed(entitlement, account), false);
+  assert.equal(voiceGateAction(entitlement, account), 'upgrade');
+  const button = { attributes: {}, className: '', classList: { toggle(name, on) { this[name] = on; } }, setAttribute(name, value) { this.attributes[name] = value; } };
+  applyVoiceMicChrome({ button, root: { dataset: {} } }, entitlement, account);
+  assert.equal(button.attributes['aria-disabled'], 'true');
+});
+
+test('anonymous disables MIC and routes click to sign-in without a token request', () => {
+  const entitlement = { plan: 'anonymous', signedIn: false, voice: false };
+  const account = { config: { hosted: true }, clerk: {}, entitlement };
+  assert.equal(voiceSessionAllowed(entitlement, account), false);
+  assert.equal(voiceGateAction(entitlement, account), 'signin');
+});
+
+test('Pro 404 token failures are a single unavailable message and do not retry', () => {
+  assert.equal(describeRealtimeTokenHttpError(404), 'Voice is not available on this host yet');
+  assert.equal(describeRealtimeTokenHttpError(503), 'Voice is not configured');
+  assert.equal(shouldRetryRealtimeToken(404), false);
+  assert.equal(shouldRetryRealtimeToken(503), false);
+  assert.equal(shouldRetryRealtimeToken(502), true);
+  const entitlement = { plan: 'pro', signedIn: true, voice: true };
+  const account = { config: { hosted: true }, clerk: {}, entitlement };
+  assert.equal(voiceSessionAllowed(entitlement, account), true);
+  assert.equal(voiceGateAction(entitlement, account), 'start');
+});
+
+test('self-host with a key keeps MIC enabled', () => {
+  const entitlement = { plan: 'self_host', signedIn: false, voice: true };
+  const account = { config: { hosted: false }, entitlement };
+  assert.equal(voiceSessionAllowed(entitlement, account), true);
+  assert.equal(voiceGateAction(entitlement, account), 'start');
+  const button = { attributes: {}, classList: { toggle() {} }, setAttribute(name, value) { this.attributes[name] = value; } };
+  applyVoiceMicChrome({ button, root: { dataset: {} } }, entitlement, account);
+  assert.equal(button.attributes['aria-disabled'], 'false');
 });

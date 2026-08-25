@@ -122,6 +122,12 @@ cancellation, hardened Overpass + route proxies. Not much to see by hand (see §
 - ✅ Trail tail stays attached to the plane; nothing pokes out *in front* of the nose; no ~1s lag.
   ❌ *Was:* trail lagged a beat behind.
 
+**1c2 · Trails on/off (Display rail)**
+1. With a plane tracked and Trails on, confirm the fading path is visible.
+2. Toggle **Trails** off. The path hides; the camera still follows.
+3. Reload: Trails stays off. Toggle 3D off as well: tracking still follows.
+4. Stop tracking: the target still clears. Trails off only hid drawing.
+
 **1d · Military layer (same fixes, mirrored)**
 1. Enable the **Military** layer (left column). Track an **amber** plane. Repeat 1a–1c.
 - ✅ Identical smooth behavior.
