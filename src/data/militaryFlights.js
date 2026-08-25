@@ -13,6 +13,7 @@ import {
   subscribeTrailsEnabled,
   trailDrawingVisible,
 } from './trailPreference.js';
+import { isWatchHighlighted, subscribeWatchlist } from './watchlist.js';
 import {
   EMERGENCY_HIGHLIGHT_CSS,
   getEmergencyHighlightEnabled,
@@ -21,6 +22,7 @@ import {
   subscribeEmergencyHighlightEnabled,
 } from './emergencySquawk.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
+import { contactPassesInFlightFilters, normalizeSpeedBand } from './flightSpeedBand.js';
 import {
   screenProjectedRotation,
   stabilizeScreenRotation,
@@ -235,6 +237,9 @@ let _modelEpoch = 0;
  *  light a button the layer has not armed. */
 let _models3dEnabled = true;
 let _models3dMode = 'proximity'; // 'proximity' = nearest MODEL_MAX in view; 'all' = every in-view plane (≤ MODEL_MAX_ALL)
+/** Ground-speed band in knots. Null/null is OFF (show all). */
+let _speedMinKt = null;
+let _speedMaxKt = null;
 let _lastModelCapWarnMs = 0; // throttle the "more planes in view than the cap" console notice
 // The tracked entity's billboard goes transparent (rather than hidden) once the model takes
 // over, so it keeps supplying a bounding sphere for follow-camera framing. We only drop its
@@ -412,6 +417,32 @@ function _militaryBillboardScale(icao24) {
   return BILLBOARD_SCALE * (CLASS_SCALE_2D[meta?.klass] || 1) * (meta?.onGround ? GROUND_SCALE : 1);
 }
 
+function _watchHighlightActive(icao24, info = _flightData.get(icao24)) {
+  return icao24 !== _trackedIcao && isWatchHighlighted({
+    icao24,
+    callsign: info?.callsign,
+  });
+}
+
+function _contactHighlightSize(icao24, info) {
+  return icao24 === _trackedIcao || _watchHighlightActive(icao24, info) ? 24 : 20;
+}
+
+function _contactHighlightColor(icao24, info) {
+  return _contactIconColor(icao24, {
+    tracked: icao24 === _trackedIcao || _watchHighlightActive(icao24, info),
+  });
+}
+
+function _refreshWatchHighlights() {
+  if (!_billboards) return;
+  for (const [icao24, bb] of _billboards) {
+    if (icao24 === _trackedIcao) continue;
+    _applyFleetBillboardPresentation(icao24, bb);
+  }
+}
+subscribeWatchlist(_refreshWatchHighlights);
+
 /** Public emergency squawks 7500/7600/7700 use the existing alert-red token
  *  when Emergency highlight is on. Altitude-band hide still wins. */
 function _contactUsesEmergencyHighlight(icao24) {
@@ -424,7 +455,7 @@ function _contactUsesEmergencyHighlight(icao24) {
 
 function _contactIconColor(icao24, { tracked = false } = {}) {
   if (_contactUsesEmergencyHighlight(icao24)) return EMERGENCY_HIGHLIGHT_COLOR;
-  if (tracked || icao24 === _trackedIcao) return TRACKED_ICON_COLOR;
+  if (tracked || icao24 === _trackedIcao || _watchHighlightActive(icao24)) return TRACKED_ICON_COLOR;
   return MIL_ICON_COLOR;
 }
 
@@ -448,11 +479,11 @@ function _applyFleetBillboardPresentation(icao24, bb) {
 
   const meta = _flightData.get(icao24);
   bb.image = aircraftIcon(_iconKind(icao24, meta?.klass), bb._gevIconLarge ? TRACKED_ICON_PX : undefined);
-  bb.width = icao24 === _trackedIcao ? 24 : 20;
-  bb.height = icao24 === _trackedIcao ? 24 : 20;
+  bb.width = _contactHighlightSize(icao24, meta);
+  bb.height = _contactHighlightSize(icao24, meta);
   bb.scale = _militaryBillboardScale(icao24) * limbScale;
   bb.scaleByDistance = _normalBillboardScaleByDistance();
-  bb.color = _contactIconColor(icao24).withAlpha(bb.color?.alpha ?? 1);
+  bb.color = _contactHighlightColor(icao24, meta).withAlpha(bb.color?.alpha ?? 1);
 }
 
 /** Refresh the AIR-only Cockpit near band independently from model admission. */
@@ -1942,6 +1973,7 @@ function _fleetTick() {
     const cand = [];
     for (const [icao, bb] of _billboards) {
       if (icao === _trackedIcao) continue;
+      if (!_passesInFlightFilters(icao, _flightData.get(icao))) continue;
       // A converted TR-3B renders as a billboard and can never take a model, so
       // it must not occupy a CAP SLOT either (mirror of flights.js) — excluded
       // at selection time, not just at the handoff below.
@@ -1974,6 +2006,14 @@ function _fleetTick() {
   for (const [icao24, bb] of _billboards) {
     if (icao24 === _trackedIcao) continue; // tracked entity owns its own motion
 
+    const info = _flightData.get(icao24);
+    if (!_passesInFlightFilters(icao24, info)) {
+      if (bb.show) bb.show = false;
+      const hiddenModel = _models.get(icao24);
+      if (hiddenModel && hiddenModel.show) hiddenModel.show = false;
+      continue;
+    }
+
     const dr = _deadReckon(icao24, _scratchFleetPos);
     // Gate the write — assigning Billboard.position dirties the whole
     // collection's vertex buffer, so skip sub-meter moves.
@@ -2000,8 +2040,6 @@ function _fleetTick() {
       continue;
     }
 
-    const info = _flightData.get(icao24);
-
     // One sprite-owned write site composes freshness × focus × limb haze and
     // base class/ground scale × limb taper. The locked NearFarScalar remains
     // untouched and multiplicative; there is no cull or zero-alpha path.
@@ -2023,7 +2061,7 @@ function _fleetTick() {
       billboard: bb,
       baseScale: _cockpitContactMode && !isCockpitNear ? 1 : _militaryBillboardScale(icao24),
       baseAlpha: _missingPolls.get(icao24) ? 0.45 : 1,
-      baseColor: _contactIconColor(icao24),
+      baseColor: _contactHighlightColor(icao24, _flightData.get(icao24)),
       focusFactor: focus.factor,
       cameraDistanceM,
       cameraHeightM: camera.positionCartographic?.height,
@@ -2692,6 +2730,28 @@ export function mapAnalystRecord(icao24, info) {
  * plus optional getNearby, getDetectableObjects, and getStats accessors.
  * @type {Object}
  */
+function _passesInFlightFilters(icao24, info) {
+  return contactPassesInFlightFilters(info || {}, {
+    id: icao24,
+    speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
+    trackedId: _trackedIcao,
+    selectedId: _trackedIcao,
+  });
+}
+
+function _applySpeedBandParams(params) {
+  if (!Object.hasOwn(params, 'speedMinKt') && !Object.hasOwn(params, 'speedMaxKt')) return;
+  const band = normalizeSpeedBand({
+    minKt: Object.hasOwn(params, 'speedMinKt') ? params.speedMinKt : _speedMinKt,
+    maxKt: Object.hasOwn(params, 'speedMaxKt') ? params.speedMaxKt : _speedMaxKt,
+  });
+  if (band.minKt === _speedMinKt && band.maxKt === _speedMaxKt) return;
+  _speedMinKt = band.minKt;
+  _speedMaxKt = band.maxKt;
+  _lastFleetTickMs = 0;
+  _lastCamPoseSig = '';
+}
+
 const militaryFlightsLayer = {
   id: 'military',
   name: 'Military Flights',
@@ -3191,15 +3251,15 @@ const militaryFlightsLayer = {
           const bb = _billboardCollection.add({
             position,
             image: aircraftIcon(_iconKind(icao24, meta.klass)),
-            width: isTracked ? 24 : 20,
-            height: isTracked ? 24 : 20,
+            width: _contactHighlightSize(icao24, meta),
+            height: _contactHighlightSize(icao24, meta),
             scale: BILLBOARD_SCALE * (CLASS_SCALE_2D[meta.klass] || 1) * (meta.onGround ? GROUND_SCALE : 1),
             // Screen-projected rotation lands on the next fleet tick.
             rotation: 0,
             alignedAxis: Cesium.Cartesian3.ZERO,
             color: isTracked
               ? _contactIconColor(icao24, { tracked: true })
-              : _contactIconColor(icao24),
+              : _contactHighlightColor(icao24, meta),
             sizeInMeters: false,
             scaleByDistance: _normalBillboardScaleByDistance(),
             // Grounded/near-surface planes sit at/below the photoreal tile
@@ -3453,6 +3513,7 @@ const militaryFlightsLayer = {
       // cold and thermal-reactive variants directly (mirror of flights.js).
       _refreshTr3bForStyle();
     }
+    _applySpeedBandParams(params);
     if (Object.hasOwn(params, 'selectedMilitaryTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedMilitaryTrackingId);
       if (requested === _trackedIcao) {
@@ -3475,6 +3536,8 @@ const militaryFlightsLayer = {
       models3dMode: _models3dMode,
       irBoost: _irBoost,
       selectedMilitaryTrackingId: _trackedIcao,
+      speedMinKt: _speedMinKt,
+      speedMaxKt: _speedMaxKt,
     };
   },
 
@@ -3509,6 +3572,7 @@ const militaryFlightsLayer = {
 
     for (const [icao24, bb] of _billboards) {
       const isTracked = icao24 === _trackedIcao;
+      if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) continue;
       // Keep planes rendered as a 3D model (billboard hidden) so proximity counts
       // don't drop to zero on the 2D→3D handoff; bb.position stays current while hidden.
       if (!aircraftIncludedInNearby({
@@ -3575,6 +3639,7 @@ const militaryFlightsLayer = {
       idx++;
       if (!shouldTake) continue;
       if (_cockpitContactMode && icao24.toLowerCase() === _cockpitSubjectId) continue;
+      if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) continue;
       const isTracked = icao24 === _trackedIcao;
       // Keep planes rendered as a 3D model (billboard hidden) so the detection box
       // doesn't vanish on the 2D→3D handoff; bb.position stays current while hidden.
@@ -3706,11 +3771,12 @@ const militaryFlightsLayer = {
 
     const result = [];
     for (const [icao24, bb] of _billboards) {
+      const info = _flightData.get(icao24);
+      if (!_passesInFlightFilters(icao24, info)) continue;
       const pos = bb.position;
       if (!pos) continue;
       const carto = Cesium.Cartographic.fromCartesian(pos, Cesium.Ellipsoid.WGS84, _scratchCarto);
       if (!carto) continue;
-      const info = _flightData.get(icao24);
       result.push({
         id: icao24, // identity (trackById/Context resolve this)
         // Last surface still reading as the raw hex for a callsign-less
@@ -3739,6 +3805,7 @@ const militaryFlightsLayer = {
     const limit = Number.isFinite(maxCount) ? Math.max(1, Math.floor(maxCount)) : 2000;
     const result = [];
     for (const [icao24, info] of _flightData) {
+      if (!_passesInFlightFilters(icao24, info)) continue;
       result.push(mapAnalystRecord(icao24, info));
       if (result.length >= limit) break;
     }

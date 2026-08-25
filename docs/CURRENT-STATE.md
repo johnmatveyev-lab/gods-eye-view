@@ -2,6 +2,14 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — flight ident watchlist (plan 92)** (`src/data/watchlist.js`,
+> `#watchlist-toggle` / `#watchlist-panel`, `#selected-contact-ident-watch`).
+> Operators pin up to 10 public aircraft idents (callsign or hex already on
+> the selected card). When a watched ident is in the current adsb.lol flights
+> payload it uses the existing track highlight style. Clicking a row tracks
+> if present, otherwise toasts `not in view` and does not invent a position.
+> Persistence is `meridian.watchlist`. No `/api`, person-search, or OpenSky.
+
 > **2026-08-25 — camera crosshair (plan 80)** (`src/cameraCrosshair.js`).
 > DISPLAY-rail Crosshair draws a CSS plus at the canvas center — the hosted
 > aim point for copy-coords (`src/copyCameraCoords.js`, still

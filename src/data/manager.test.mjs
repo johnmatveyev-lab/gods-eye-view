@@ -3323,3 +3323,56 @@ test('a chip group heading wraps a second Sim|Hide pair under the first heading'
     else globalThis.document = originalDocument;
   }
 });
+
+test('a Jam chip group stays independent of Live | Sim and Uncovered', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const paramsCalls = [];
+  mgr.register({
+    id: 'traffic',
+    name: 'Street Traffic',
+    icon: '',
+    source: 'OpenStreetMap',
+    updateInterval: 0,
+    async init() {},
+    enable() {},
+    disable() {},
+    async update() {},
+    getStats() { return { count: 4, lastUpdate: Date.now() }; },
+    setParams(params) { paramsCalls.push({ ...params }); },
+    getParams() { return {}; },
+    getRowControls() {
+      return {
+        heading: 'Traffic',
+        chips: [
+          { id: 'traffic-source-live', label: 'Live', active: true, params: { trafficSource: 'live' } },
+          { id: 'uncovered-sim', label: 'Sim', active: true, group: 'Uncovered', params: { uncoveredRoads: 'sim' } },
+          { id: 'jam-viz-heatline', label: 'Heatline', active: false, group: 'Jam', params: { jamViz: 'heatline' } },
+        ],
+      };
+    },
+  });
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('traffic', true), true);
+    mgr._refreshTogglePanel();
+    const controls = container
+      .querySelector('[data-layer-id="traffic"]')
+      .querySelector('.data-toggle-controls');
+    assert.deepEqual(
+      collectByClass(controls, 'data-toggle-heading').map((node) => node.textContent),
+      ['Traffic', 'Uncovered', 'Jam'],
+    );
+    const heatline = collectByClass(controls, 'data-toggle-chip')
+      .find((chip) => chip.dataset.chipId === 'jam-viz-heatline');
+    controls.listeners.click({ target: heatline });
+    assert.deepEqual(paramsCalls, [{ jamViz: 'heatline' }]);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});

@@ -79,13 +79,14 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         trails (`meridian.trails`), contact labels
  *                         (`meridian.contactLabels`), altitude band
  *                         (`meridian.altBand`), emergency highlight
- *                         (`meridian.emergencyHighlight`). All are defaults or
+ *                         (`meridian.emergencyHighlight`), launch status chips
+ *                         (`meridian.launchStatus`). All are defaults or
  *                         separate durable prefs the visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
  *                         `_setModels3dMode` / `setTrailsEnabled` /
  *                         `_setContactLabelsEnabled` / `setAltitudeBand` /
- *                         `setEmergencyHighlightEnabled`, which would persist a
- *                         display choice nobody made.
+ *                         `setEmergencyHighlightEnabled` / `setLaunchStatusFilter`,
+ *                         which would persist a display choice nobody made.
  *
  * The two Context missions deliberately reuse `styleManager.setContextMode`, the
  * same facade the visible tabs and voice use, so Contacts detection ownership,

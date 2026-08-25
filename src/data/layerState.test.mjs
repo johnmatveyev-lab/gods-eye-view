@@ -258,8 +258,10 @@ test('unknown and forbidden option fields are ignored while missing options use 
     models3dMode: 'all',
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
+    speedMinKt: null,
+    speedMaxKt: null,
   });
-  assert.deepEqual(decoded.options.radio, { filter: 'news', volume: 0.35 });
+  assert.deepEqual(decoded.options.radio, { filter: 'news', volume: 0.35, minBitrate: 'all' });
 
   const raw = normalizeLayerState({
     enabledLayerIds: ['cctv', 'unknown-layer'],
@@ -609,8 +611,18 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
   });
   const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage: memoryStorage() });
   await coordinator.start({ shareLayerState: decoded, shareCreatedAtMs: 1_000 });
-  assert.deepEqual(calls.flights, [{ models3d: false, models3dMode: 'proximity' }]);
-  assert.deepEqual(calls.military, [{ models3d: false, models3dMode: 'proximity' }]);
+  assert.deepEqual(calls.flights, [{
+    models3d: false,
+    models3dMode: 'proximity',
+    speedMinKt: null,
+    speedMaxKt: null,
+  }]);
+  assert.deepEqual(calls.military, [{
+    models3d: false,
+    models3dMode: 'proximity',
+    speedMinKt: null,
+    speedMaxKt: null,
+  }]);
   assert.equal(coordinator.getDurableState().options.flights.models3d, false);
   coordinator.destroy();
 });
@@ -843,6 +855,7 @@ test('absent share payload restores local state without rewriting it', async () 
   assert.deepEqual(manager.getLayerParams('radio'), {
     filter: 'talk',
     volume: 0.42,
+    minBitrate: 'all',
     selectedStationId: 'private-station',
     audioState: 'playing',
     voiceDucked: true,
@@ -1039,6 +1052,8 @@ test('later explicit params during init replace options without cancelling visib
     models3dMode: 'proximity',
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
+    speedMinKt: null,
+    speedMaxKt: null,
   });
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   assert.equal(storage.writes.length, 1);
@@ -1082,6 +1097,8 @@ test('explicit navigation preserves unrelated visibility and option restoration'
   assert.deepEqual(paramsCalls, [{
     models3d: true,
     models3dMode: 'all',
+    speedMinKt: null,
+    speedMaxKt: null,
   }]);
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   coordinator.destroy();
@@ -1141,10 +1158,13 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     models3dMode: 'all',
     irBoost: true,
     selectedFlightsTrackingId: null,
+    speedMinKt: null,
+    speedMaxKt: null,
   });
   assert.deepEqual(manager.getLayerParams('radio'), {
     filter: 'genre:r&b',
     volume: 0.42,
+    minBitrate: 'all',
     selectedStationId: 'private-station',
     audioState: 'playing',
     voiceDucked: true,
@@ -1198,7 +1218,12 @@ test('shared flight selection is deferred until destination refresh and then fol
     onTrackingRestoreStatus: (status) => statuses.push(status),
   });
   await coordinator.start({ shareLayerState: state, shareCreatedAtMs: 1_000 });
-  assert.deepEqual(paramsCalls, [{ models3d: true, models3dMode: 'proximity' }]);
+  assert.deepEqual(paramsCalls, [{
+    models3d: true,
+    models3dMode: 'proximity',
+    speedMinKt: null,
+    speedMaxKt: null,
+  }]);
 
   const result = await coordinator.restoreShareTrackingSelection();
   assert.equal(result.status, 'found');
@@ -1610,7 +1635,7 @@ test('newer explicit tracked target cancels stale shared resolution without clea
 
 test('Radio durable params work before enable and never start playback', () => {
   assert.equal(radioLayer.setParams({ filter: 'news', volume: 0.33 }), true);
-  assert.deepEqual(radioLayer.getParams(), { filter: 'news', volume: 0.33 });
+  assert.deepEqual(radioLayer.getParams(), { filter: 'news', volume: 0.33, minBitrate: 'all' });
   assert.equal(radioLayer.getUIState().audioState, 'stopped');
   assert.equal(radioLayer.getUIState().playingStationId, null);
   radioLayer.setParams({ filter: 'all', volume: 0.8 });

@@ -22,6 +22,9 @@
     <button type="button" id="selected-contact-ident-copy" class="selected-contact-ident-copy" aria-label="Copy ident" title="Copy ident">
       <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
     </button>
+    <button type="button" id="selected-contact-ident-watch" class="selected-contact-ident-watch" hidden aria-label="Watch ident" title="Watch ident">
+      <span class="material-symbols-outlined" aria-hidden="true">bookmark</span>
+    </button>
   </div>
   <div id="world-overlay-actions" class="world-overlay-accessibility" role="region" aria-label="Visible map targets">
     <div id="world-overlay-action-list"></div>
@@ -66,6 +69,17 @@
     >
       <span class="material-symbols-outlined" aria-hidden="true">radar</span>
       <span class="contacts-roster-toggle-label">CONTACTS</span>
+    </button>
+    <button
+      id="watchlist-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="watchlist-panel"
+      aria-label="Watch list — pinned aircraft idents"
+      title="Watch list of pinned aircraft idents"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">visibility</span>
+      <span class="watchlist-toggle-label">WATCH</span>
     </button>
     <button
       id="installations-list-toggle"
@@ -153,6 +167,10 @@
       <span class="material-symbols-outlined" aria-hidden="true">landslide</span>
     </button>
   </nav>
+  <aside id="watchlist-panel" hidden>
+    <div class="watchlist-header">WATCH</div>
+    <div id="watchlist-items" role="list"></div>
+  </aside>
   <div id="measure-readout" hidden>
     <span id="measure-readout-label">Click two globe points</span>
     <button id="measure-clear" type="button">Clear</button>
@@ -637,6 +655,14 @@
           <button class="pp-mode-btn" id="models3d-mode-all" data-mode="all" role="radio" aria-checked="false">All</button>
         </div>
       </div>
+      <div class="pp-slider-row visible" id="speed-band-row">
+        <span class="pp-slider-mini-label">Speed</span>
+        <input type="number" class="pp-speed-band-input" id="speed-band-min" min="0" max="9999" step="10" inputmode="numeric" placeholder="min" aria-label="Minimum ground speed">
+        <span class="speed-band-sep" aria-hidden="true">–</span>
+        <input type="number" class="pp-speed-band-input" id="speed-band-max" min="0" max="9999" step="10" inputmode="numeric" placeholder="max" aria-label="Maximum ground speed">
+        <span class="pp-slider-value" id="speed-band-unit">km/h</span>
+        <button type="button" class="pp-mode-btn" id="speed-band-clear" title="Clear ground-speed band">Clear</button>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true" title="Tracked-target trail — hide the fading path without stopping track">
@@ -1088,6 +1114,13 @@
                 </div>
                 <output data-mission-roster-count>—</output>
               </div>
+              <div class="space-mission-status-chips" role="group" aria-label="Launch status filters">
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="go" aria-pressed="true">Go</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="tbd" aria-pressed="true">TBD</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="hold" aria-pressed="true">Hold</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="in-flight" aria-pressed="true">In Flight</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="other" aria-pressed="true">Other</button>
+              </div>
               <div class="space-mission-roster-list" data-mission-roster-list>
                 <div class="space-mission-roster-empty">LOADING 30-DAY MISSION INDEX</div>
               </div>
@@ -1108,6 +1141,15 @@
               <select id="radio-filter" aria-label="Filter stations by station tag" disabled>
                 <option value="all">All</option>
               </select>
+            </div>
+            <div class="radio-bitrate-row">
+              <span class="radio-filter-label" id="radio-bitrate-label">MIN BITRATE</span>
+              <div id="radio-bitrate-floor" class="radio-bitrate-seg" role="radiogroup" aria-labelledby="radio-bitrate-label">
+                <button type="button" class="pp-mode-btn active" data-radio-bitrate="all" role="radio" aria-checked="true">All</button>
+                <button type="button" class="pp-mode-btn" data-radio-bitrate="64" role="radio" aria-checked="false">64+</button>
+                <button type="button" class="pp-mode-btn" data-radio-bitrate="128" role="radio" aria-checked="false">128+</button>
+                <button type="button" class="pp-mode-btn" data-radio-bitrate="192" role="radio" aria-checked="false">192+</button>
+              </div>
             </div>
             <div class="radio-station-search-wrap">
               <label class="radio-filter-label" for="radio-station-search">SEARCH STATIONS</label>

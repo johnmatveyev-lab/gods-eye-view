@@ -39,6 +39,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   failed `/api/celestrak/starlink` load stays on Core and shows the existing
   feed-unavailable status. The choice persists through the existing layerState
   `catalog` option. Not the Plan 65 core-group picker. No new `/api`.
+- Radio has a client-side min-bitrate floor (All / 64+ / 128+ / 192+ kbps)
+  on the already-fetched Radio Browser directory. Default All keeps the
+  current list. Null bitrate stays visible. A station already playing stays
+  audible until Stop or Next. Genre and search still AND with the floor.
+  Preference persists on the existing radio layer options. No `/api`.
+- Added a Watch list of up to 10 public aircraft idents (callsign or hex
+  already on the selected contact). Add from the selected card; remove from
+  the list. When a watched ident is in the current flights payload it uses
+  the existing track highlight. Clicking a row tracks that contact if
+  present, otherwise toasts `not in view` without inventing a position. The
+  list persists as `meridian.watchlist`. No `/api`, person-search, or OpenSky.
 - Street Traffic has an Uncovered: Sim | Hide control. Sim keeps today's
   white ambient dots on roads TomTom has no flow for. Hide spawns nothing
   on those roads; colored live flow stays. Applies on the next camera-driven
