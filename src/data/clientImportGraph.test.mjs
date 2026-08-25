@@ -45,7 +45,7 @@ function walkClientImportGraph(entryRelative) {
     visited.add(relative);
 
     const absolute = path.join(ROOT, relative);
-    const source = readFileSync(absolute, 'utf8');
+    const source = stripComments(readFileSync(absolute, 'utf8'));
     const dynamicFs = [...source.matchAll(
       /\bimport\s*\(\s*(?:\/\*[\s\S]*?\*\/\s*)?['"]([^'"]+)['"]/g,
     )].map((match) => match[1]).filter((specifier) => NODE_FS_SPECIFIERS.has(specifier));
