@@ -59,6 +59,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
   adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
   terrain, Google Places, and the rest). No Next rewrite and no new vendors.
+- Hosted `/api/terrain/heights` on Vercel via `api/terrain/heights.js`,
+  forwarding the Re:Earth handler extracted to `src/data/terrainHeights.js`
+  / `terrainHeightsProxy.js`. Memory plus optional `/tmp` cache, single-flight,
+  serve-stale. No new elevation vendor. This extract does not wrap
+  `/api/military-installations`.
 - Added `api/opensky.js` for hosted civilian flights. The path stays
   `/api/opensky`; the handler is the extracted 250 nm adsb.lol snapshot
   (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).

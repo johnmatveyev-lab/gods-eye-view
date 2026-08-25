@@ -60,6 +60,9 @@
     },
     "api/radio/[...path].js": {
       "maxDuration": 30
+    },
+    "api/terrain/heights.js": {
+      "maxDuration": 30
     }
   }
 }
