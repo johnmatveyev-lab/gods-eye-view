@@ -170,7 +170,10 @@ test('Vercel api/launches.js forwards to handleLaunchesHttp', () => {
   assert.ok(vercelJson.functions['api/launches.js']);
   assert.equal(vercelJson.functions['api/ais-live.js'], undefined);
   assert.equal(vercelJson.functions['api/google/text-search.js'], undefined);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
 });
 
 test('handler stays Launch Library 2 only; existing credit and MIT line remain', () => {

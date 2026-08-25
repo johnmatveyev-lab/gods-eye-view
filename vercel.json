@@ -25,6 +25,9 @@
     "api/stripe/webhook.js": {
       "maxDuration": 15
     },
+    "api/tomtom/[...path].js": {
+      "maxDuration": 15
+    },
     "api/adsbdb/[...path].js": {
       "maxDuration": 15
     },
@@ -57,6 +60,18 @@
     },
     "api/google/nearby-places.js": {
       "maxDuration": 15
+    },
+    "api/radio/[...path].js": {
+      "maxDuration": 30
+    },
+    "api/terrain/heights.js": {
+      "maxDuration": 30
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/tomtom/flow/:z/:x/:y.pbf",
+      "destination": "/api/tomtom/flow/:z/:x/:y"
+    }
+  ]
 }

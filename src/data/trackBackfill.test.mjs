@@ -190,7 +190,10 @@ test('hosted Node entrypoints forward; ais-live and text-search stay unwrapped',
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/adsblol/trace.js']);
   assert.ok(vercelJson.functions['api/opensky-track.js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
   const functionKeys = Object.keys(vercelJson.functions);
   assert.equal(functionKeys.some((key) => /ais-live|google\/text-search/.test(key)), false);
 });

@@ -93,8 +93,13 @@ test('Vercel live catch-all reuses Node proxies without a Next rewrite', () => {
   assert.ok(vercelJson.functions['api/billing/[...path].js']);
   assert.ok(vercelJson.functions['api/gbfs/[...target].js']);
   assert.ok(vercelJson.functions['api/adsblol/mil.js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  assert.ok(vercelJson.functions['api/tomtom/[...path].js']);
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+    assert.doesNotMatch(rule.destination, /index\.html|ais-live/i);
+  }
 });
 
 test('createLiveApiPlugins registers every live Vite /api proxy', () => {

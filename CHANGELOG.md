@@ -7,6 +7,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
 - Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
 
 ### Added
@@ -14,8 +15,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added a DISPLAY-rail Sun on/off control. On follows the existing Cesium
   clock so the terminator matches real time. Off keeps the well-lit globe
   already used when lighting is disabled. The choice persists as
-  `meridian.liveSun`. UTC/local only changes the HUD clock. WX FX and visual
-  looks stay independent. No new imagery stack and no `/api`.
+  `meridian.liveSun`. The existing UTC | Local HUD toggle only changes the
+  clock display. WX FX and visual looks stay independent. No new imagery
+  stack and no `/api`.
+- Added a filter field at the top of the Data Layers list. It matches the
+  visible layer name plus existing voice common-names (fires, ships, bikes,
+  traffic, cameras, and the rest of that map). Empty query shows the full
+  legal list. TeleGeography cables, OpenSky, and Google News stay off the
+  list; the cables layer remains a registered no-op and is hidden from the
+  panel. UI filter only — no new `/api` routes or data sources.
+- Added a copy control on the selected-contact card for the visible asset
+  ident (aircraft callsign, else registration/hex; vessel name or MMSI;
+  satellite name or NORAD). Clicking the ident or the copy control copies it
+  and toasts `Copied UAL123`. Hidden with no selection. Aircraft, vessels, and
+  satellites only — no person-search and no server route.
+- HUD and cockpit clocks can switch UTC | Local next to the existing time.
+  Local uses the browser timezone. The choice persists as `meridian.clock`
+  (`utc` default). Share URLs, units, compass, and Home are unchanged.
 - Hosted `/api/google/nearby-places` on Vercel via `api/google/nearby-places.js`,
   forwarding the same GET handler extracted to `src/google/nearbyPlaces.js`.
   Reuses `GOOGLE_MAPS_API_KEY` and optional `GEV_RATELIMIT_GOOGLE_PER_MIN`.
@@ -36,6 +52,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Added a Display `km | nm | mi` control that reformats existing range, contact,
+  and HUD altitude labels. The choice persists as `meridian.units`; first visit
+  keeps today's kilometre labels.
 - Hidden tabs and offline windows pause flight/layer poll timers and the HUD
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
@@ -57,10 +76,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
   returns 503/400 with variable names only.
+- Added hosted TomTom traffic tiles: `src/data/tomtom.js` owns the
+  budget-governed proxy, the Vite plugin forwards, and
+  `api/tomtom/[...path].js` serves `/api/tomtom/status` and flow tiles on
+  Vercel (256-tile memory cache, optional `/tmp`, in-isolate daily
+  budget, default 40k). A rewrite sends `*.pbf` tile URLs to the
+  function so they are not a static 404. Keyless installs return 503
+  `{error:'no_key'}` without contacting TomTom. Responses never echo
+  the key or upstream URL. This extract does not wrap `/api/ais-live`;
+  OpenSky stays off.
 - Added Vercel Node catch-all `api/[...path].js` that runs the same live
   `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
   adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
   terrain, Google Places, and the rest). No Next rewrite and no new vendors.
+- Hosted `/api/terrain/heights` on Vercel via `api/terrain/heights.js`,
+  forwarding the Re:Earth handler extracted to `src/data/terrainHeights.js`
+  / `terrainHeightsProxy.js`. Memory plus optional `/tmp` cache, single-flight,
+  serve-stale. No new elevation vendor. This extract does not wrap
+  `/api/military-installations`.
 - Added `api/opensky.js` for hosted civilian flights. The path stays
   `/api/opensky`; the handler is the extracted 250 nm adsb.lol snapshot
   (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).

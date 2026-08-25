@@ -77,6 +77,60 @@ html, body {
   pointer-events: none;
 }
 
+/* Copy control for the selected-contact card ident. Hidden with no selection.
+   Sits on the painted title row; the value button is a transparent hit target
+   over the visible canvas ident, and the copy glyph rides the card's right edge. */
+#selected-contact-ident {
+  position: fixed;
+  z-index: 7;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  pointer-events: none;
+}
+#selected-contact-ident[hidden] { display: none; }
+.selected-contact-ident-value,
+.selected-contact-ident-copy {
+  pointer-events: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: 600 13px "JetBrains Mono", ui-monospace, monospace;
+  color: transparent;
+}
+.selected-contact-ident-value {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+}
+.selected-contact-ident-copy {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(232, 240, 244, 0.92);
+  border-radius: 3px;
+}
+.selected-contact-ident-copy .material-symbols-outlined {
+  font-size: 15px;
+  line-height: 1;
+}
+.selected-contact-ident-value:hover,
+.selected-contact-ident-value:focus-visible,
+.selected-contact-ident-copy:hover,
+.selected-contact-ident-copy:focus-visible {
+  outline: none;
+}
+.selected-contact-ident-copy:hover,
+.selected-contact-ident-copy:focus-visible {
+  color: #fff;
+  background: rgba(107, 232, 255, 0.16);
+}
+
 /* Scope mask — the explicit circular viewport treatment (see
    src/scopeMask.js for the emergent-artifact history). z2 keeps it above
    the WebGL scene but under the z5 detection surface, preserving the old
@@ -1217,6 +1271,14 @@ body.recording-mode #cesium-credits {
   min-width: 200px;
 }
 
+#hud-layout-row.visible {
+  border-radius: 0;
+}
+
+#units-row {
+  min-width: 184px;
+}
+
 /* Map Source tiles live with Visual Presets in the bottom command tray. */
 .map-source-section {
   display: grid;
@@ -2228,40 +2290,7 @@ body.ui-clean-view #scene-runtime.active {
 }
 
 /* ── Aircraft Cockpit View ─────────────────── */
-#cockpit-entry {
-  position: fixed;
-  left: calc(50% + 270px);
-  bottom: 34px;
-  z-index: 151;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  padding: 0 12px;
-  border: 1px solid rgba(0, 220, 255, 0.5);
-  border-radius: 8px;
-  background: rgba(2, 12, 18, 0.9);
-  color: #dceeff;
-  font: 600 10px/1 var(--font-mono);
-  letter-spacing: 0.14em;
-  box-shadow: 0 0 18px rgba(0, 220, 255, 0.14);
-  cursor: pointer;
-}
-
 #cockpit-entry[hidden], #cockpit-hud[hidden] { display: none; }
-#cockpit-entry:hover, #cockpit-entry:focus-visible {
-  border-color: #00dcff;
-  color: #fff;
-  outline: none;
-}
-#cockpit-entry .material-symbols-outlined { color: #00dcff; font-size: 18px; }
-#cockpit-entry kbd {
-  padding: 3px 5px;
-  border: 1px solid rgba(220, 238, 255, 0.25);
-  border-radius: 4px;
-  color: rgba(220, 238, 255, 0.6);
-  font: inherit;
-}
 
 #cockpit-hud {
   --cockpit-accent: #00dcff;
@@ -2846,16 +2875,10 @@ body.cockpit-mode:has(#left-panel-stack > .panel-collapsible:not(.collapsed)) .c
   font-size: 10px;
   letter-spacing: 0.1em;
 }
-#cockpit-clock {
-  appearance: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  letter-spacing: inherit;
-  cursor: pointer;
+.cockpit-clock-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .cockpit-vision-controls {
   display: grid;
@@ -3887,7 +3910,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -3950,7 +3973,6 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
     padding-inline: 9px;
     font-size: 7px;
   }
-  #cockpit-entry { left: auto; right: 16px; bottom: 88px; }
   body.cockpit-mode #left-panel-stack,
   body.cockpit-mode #intel-hud,
   body.cockpit-mode .cockpit-context-window,
@@ -4307,6 +4329,40 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
+.clock-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  overflow: hidden;
+  vertical-align: middle;
+  pointer-events: auto;
+}
+
+.clock-mode-toggle button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  padding: 2px 6px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.clock-mode-toggle button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+
+.cockpit-clock-row .clock-mode-toggle {
+  margin-left: 0;
+}
+
 #hud-rec-dot {
   color: #ff3333;
   text-shadow: 0 0 6px rgba(255, 51, 51, 0.8);
@@ -4480,6 +4536,34 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: flex;
   flex-direction: column;
   min-height: 0;
+}
+
+.data-layer-filter-wrap {
+  flex: 0 0 auto;
+  margin: 0 0 8px;
+}
+
+#data-layer-filter {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+#data-layer-filter::placeholder {
+  color: var(--text-dim);
+}
+
+#data-layer-filter:focus {
+  border-color: rgba(0, 212, 255, 0.45);
 }
 
 .data-toggle-list {
@@ -5322,17 +5406,13 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .context-radio-mini-volume input { width: 100%; }
 .global-context-actions {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   margin: 0 0 8px;
 }
-.global-context-actions:has(#installations-search-btn) { grid-template-columns: minmax(0, 1fr); }
-.global-context-actions:has(#cockpit-entry:not([hidden])) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.global-context-actions:has(#cockpit-entry[hidden]) { grid-template-columns: 1fr; }
 /* TR-3B reclassify toggle rides an `auto` trailing column so the chip never
-   resizes the COCKPIT / SEARCH buttons beside it. */
-.global-context-actions:has(#tr3b-toggle:not([hidden])) { grid-template-columns: repeat(2, minmax(0, 1fr)) auto; }
-.global-context-actions:has(#cockpit-entry[hidden]):has(#tr3b-toggle:not([hidden])) { grid-template-columns: minmax(0, 1fr) auto; }
+   resizes the SEARCH button beside it. */
+.global-context-actions:has(#tr3b-toggle:not([hidden])) { grid-template-columns: minmax(0, 1fr) auto; }
 .tr3b-toggle {
   width: 26px;
   min-height: 30px;
@@ -5457,20 +5537,6 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   padding: 6px 8px;
   font-size: 8px;
 }
-#global-context-panel #cockpit-entry {
-  position: static;
-  z-index: auto;
-  width: 100%;
-  min-height: 30px;
-  padding: 5px 8px;
-  border-radius: 5px;
-  justify-content: center;
-  font-size: 8px;
-  box-shadow: none;
-}
-#global-context-panel #cockpit-entry .material-symbols-outlined { font-size: 15px; }
-#global-context-panel #cockpit-entry kbd { padding: 2px 4px; }
-
 /* ── Radio companion section inside Context ── */
 #radio-panel {
   position: relative;
@@ -6708,6 +6774,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 #control-panel.collapsed .button-grid,
 #data-panel.collapsed .data-toggle-list,
+#data-panel.collapsed .data-layer-filter-wrap,
 #global-context-panel.collapsed #radio-panel,
 #global-context-panel.collapsed #military-awareness-panel,
 #global-context-panel.collapsed .global-context-actions,

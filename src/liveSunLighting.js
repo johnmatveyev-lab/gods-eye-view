@@ -6,17 +6,13 @@
  * clock is left alone so HUD/entity time keep moving.
  *
  * Persistence key is `meridian.liveSun`. This module does not add imagery,
- * styles, weather, or API routes.
+ * styles, weather, or API routes. UTC | Local chrome lives in
+ * `clockPreference.js` and only reformats the HUD clock.
  */
 
 export const LIVE_SUN_STORAGE_KEY = 'meridian.liveSun';
 /** Hosted default is the already-used well-lit globe, not a dark terminator. */
 export const LIVE_SUN_DEFAULT = false;
-
-export const CLOCK_DISPLAY_UTC = 'utc';
-export const CLOCK_DISPLAY_LOCAL = 'local';
-
-let clockDisplayMode = CLOCK_DISPLAY_UTC;
 
 /** Parse a stored live-sun flag. Missing or garbage values keep the well-lit default. */
 export function liveSunEnabledFromStoredValue(value) {
@@ -55,37 +51,6 @@ export function noonDateAtLongitude(lonDeg, now = new Date()) {
   const noonUtcMs = Date.UTC(year, month, day, 12, 0, 0, 0);
   if (!Number.isFinite(lon)) return new Date(noonUtcMs);
   return new Date(noonUtcMs - (lon / 15) * 3_600_000);
-}
-
-export function getClockDisplayMode() {
-  return clockDisplayMode;
-}
-
-export function setClockDisplayMode(mode) {
-  clockDisplayMode = mode === CLOCK_DISPLAY_LOCAL ? CLOCK_DISPLAY_LOCAL : CLOCK_DISPLAY_UTC;
-  return clockDisplayMode;
-}
-
-export function toggleClockDisplayMode() {
-  const next = setClockDisplayMode(
-    clockDisplayMode === CLOCK_DISPLAY_UTC ? CLOCK_DISPLAY_LOCAL : CLOCK_DISPLAY_UTC,
-  );
-  if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') {
-    window.dispatchEvent(new CustomEvent('gev:clock-display-changed', { detail: { mode: next } }));
-  }
-  return next;
-}
-
-/** Format a wall-clock instant for the HUD. Local mode never changes the sun. */
-export function formatHudClock(date, mode = clockDisplayMode) {
-  const instant = date instanceof Date ? date : new Date();
-  if (mode === CLOCK_DISPLAY_LOCAL) {
-    const h = String(instant.getHours()).padStart(2, '0');
-    const m = String(instant.getMinutes()).padStart(2, '0');
-    const s = String(instant.getSeconds()).padStart(2, '0');
-    return `${h}:${m}:${s}`;
-  }
-  return `${instant.toISOString().slice(11, 19)}Z`;
 }
 
 /**

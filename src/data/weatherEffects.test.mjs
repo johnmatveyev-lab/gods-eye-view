@@ -102,7 +102,10 @@ test('hosted weather-effects entry forwards to the shared handler', () => {
   assert.ok(vercelJson.functions['api/weather-effects.js']);
   assert.equal(vercelJson.functions['api/terrain/heights.js'], undefined);
   assert.equal(existsSync(path.join(ROOT, 'api/terrain/heights.js')), false);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
 });
 
 test('weather-effects talks to Open-Meteo only and keeps the registered credit', () => {

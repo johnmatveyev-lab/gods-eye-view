@@ -5,18 +5,19 @@ import { fileURLToPath } from 'node:url';
 import path from 'path';
 
 import {
-  CLOCK_DISPLAY_LOCAL,
-  CLOCK_DISPLAY_UTC,
+  formatChromeClock,
+  formatHudClock,
+  getClockMode,
+  resetClockPreferenceCache,
+  setClockMode,
+} from './clockPreference.js';
+import {
   LIVE_SUN_DEFAULT,
   LIVE_SUN_STORAGE_KEY,
   applyLiveSunLighting,
-  formatHudClock,
-  getClockDisplayMode,
   liveSunEnabledFromStoredValue,
   noonDateAtLongitude,
   readLiveSunPreference,
-  setClockDisplayMode,
-  toggleClockDisplayMode,
   writeLiveSunPreference,
 } from './liveSunLighting.js';
 
@@ -150,10 +151,12 @@ test('noon-at-longitude is solar noon UTC for the camera lon', () => {
 });
 
 test('UTC/local toggle reformats the HUD clock and does not touch sun lighting', () => {
-  setClockDisplayMode(CLOCK_DISPLAY_UTC);
+  const storage = memoryStorage();
+  resetClockPreferenceCache();
   const utcDate = new Date(Date.UTC(2026, 7, 25, 18, 5, 9));
-  assert.equal(formatHudClock(utcDate, CLOCK_DISPLAY_UTC), '18:05:09Z');
-  assert.match(formatHudClock(utcDate, CLOCK_DISPLAY_LOCAL), /^\d{2}:\d{2}:\d{2}$/);
+  assert.equal(formatChromeClock(utcDate, 'utc'), '18:05:09Z');
+  assert.equal(formatHudClock(utcDate, 'utc'), '2026-08-25 18:05:09Z');
+  assert.match(formatChromeClock(utcDate, 'local'), /^\d{2}:\d{2}:\d{2}$/);
 
   const viewer = makeViewer({ enableLighting: true, currentTime: { stamp: 1 } });
   applyLiveSunLighting(viewer, true, { now: viewer.clock.currentTime, clockStep: 'SYSTEM_CLOCK' });
@@ -163,13 +166,13 @@ test('UTC/local toggle reformats the HUD clock and does not touch sun lighting',
     clockStep: viewer.clock.clockStep,
   };
 
-  assert.equal(getClockDisplayMode(), CLOCK_DISPLAY_UTC);
-  assert.equal(toggleClockDisplayMode(), CLOCK_DISPLAY_LOCAL);
-  assert.equal(getClockDisplayMode(), CLOCK_DISPLAY_LOCAL);
+  assert.equal(setClockMode('local', storage), 'local');
+  assert.equal(getClockMode(storage), 'local');
   assert.equal(viewer.scene.globe.enableLighting, before.enableLighting);
   assert.equal(viewer.clock.currentTime, before.currentTime);
   assert.equal(viewer.clock.clockStep, before.clockStep);
-  setClockDisplayMode(CLOCK_DISPLAY_UTC);
+  setClockMode('utc', storage);
+  resetClockPreferenceCache();
 });
 
 test('DISPLAY Sun control is lighting-only and independent of looks, WX, and imagery', () => {
@@ -178,14 +181,16 @@ test('DISPLAY Sun control is lighting-only and independent of looks, WX, and ima
   const lighting = src('liveSunLighting.js');
   const weather = src('cockpitCloudEffects.js');
   const stacks = src('mapStackController.js');
+  const clock = src('clockPreference.js');
 
   assert.match(html, /id="live-sun-toggle"/);
   assert.match(html, /<span class="pp-label">Sun<\/span>/);
-  assert.match(html, /id="cockpit-clock"[^>]*type="button"/);
+  assert.match(html, /id="cockpit-clock"[\s\S]*?data-clock-mode="utc"[\s\S]*?UTC[\s\S]*?data-clock-mode="local"/);
   assert.match(ui, /setLiveSunEnabled/);
   assert.match(ui, /applyLiveSunLighting/);
   assert.match(ui, /LIVE_SUN_STORAGE_KEY/);
-  assert.match(ui, /toggleClockDisplayMode/);
+  assert.match(clock, /meridian\.clock/);
+  assert.doesNotMatch(clock, /enableLighting|applyLiveSunLighting/);
 
   assert.doesNotMatch(lighting, /createWorldImagery|IonWorldImagery|photoreal|setStack\(/);
   assert.doesNotMatch(lighting, /setStyle\(|stages\[|bloom|sharpen|nightVision|thermal/);

@@ -17,14 +17,16 @@ import * as Cesium from 'cesium';
 import { forward as toMGRS } from 'mgrs';
 import { CITY_POIS } from './locations.js';
 import { composeLocalityTag } from './hudLocality.js';
+import {
+  CLOCK_CHANGE_EVENT,
+  bindClockToggle,
+  formatHudClock,
+  getClockMode,
+  syncClockToggleButtons,
+} from './clockPreference.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
-import {
-  CLOCK_DISPLAY_LOCAL,
-  formatHudClock,
-  getClockDisplayMode,
-  toggleClockDisplayMode,
-} from './liveSunLighting.js';
+import { formatHudAltitude, subscribeDistanceUnit } from './units.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -82,6 +84,7 @@ export class IntelHUD {
     this._updateInterval = null;
     this._recBlinkInterval = null;
     this._timestampInterval = null;
+    this._unbindClockToggle = null;
     this._summaryInterval = null;
     this._summaryTypingInterval = null;
     this._latestMetrics = null;
@@ -143,9 +146,22 @@ export class IntelHUD {
     this._orbitNum = 47000 + Math.floor(Math.random() * 1000);
     this._passNum = 100 + Math.floor(Math.random() * 200);
 
+    this._onClockPreference = () => {
+      this._paintTimestamp();
+      syncClockToggleButtons(this._el, getClockMode());
+    };
+
     this._buildDOM();
+    this._unbindClockToggle = bindClockToggle(this._el, {
+      onChange: () => this._paintTimestamp(),
+    });
+    if (typeof window !== 'undefined') {
+      window.addEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+    }
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
+    this._paintTimestamp();
+    this._unitsUnsubscribe = subscribeDistanceUnit(() => this.refreshDisplayUnits());
   }
 
   /**
@@ -179,7 +195,12 @@ export class IntelHUD {
 
       <div class="hud-corner hud-top-right">
         <div class="hud-content" style="text-align:right">
-          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span></div>
+          <div class="hud-rec"><span id="hud-rec-dot">●</span> REC  <span id="hud-timestamp">2026-01-01 00:00:00Z</span>
+            <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
+              <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
+              <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+            </span>
+          </div>
           <div class="hud-orbital">ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
         </div>
         <div class="hud-bracket">┐</div>
@@ -218,23 +239,6 @@ export class IntelHUD {
       </div>
     `;
     this._el.dataset.variant = this._variant;
-    const timestamp = document.getElementById('hud-timestamp');
-    timestamp?.addEventListener('click', () => {
-      toggleClockDisplayMode();
-      this._syncClockDisplay();
-    });
-    this._onClockDisplayChanged = () => this._syncClockDisplay();
-    window.addEventListener('gev:clock-display-changed', this._onClockDisplayChanged);
-    this._syncClockDisplay();
-  }
-
-  _syncClockDisplay() {
-    const local = getClockDisplayMode() === CLOCK_DISPLAY_LOCAL;
-    const el = document.getElementById('hud-timestamp');
-    if (!el) return;
-    el.textContent = this._formatClock();
-    el.title = local ? 'Show UTC time' : 'Show local time';
-    el.style.cursor = 'pointer';
   }
 
   /**
@@ -245,7 +249,7 @@ export class IntelHUD {
   _startTimers() {
     // Timestamp — every second
     this._timestampInterval = setInterval(() => {
-      this._syncClockDisplay();
+      this._paintTimestamp();
     }, 1000);
 
     // REC blink — every 800ms
@@ -330,24 +334,12 @@ export class IntelHUD {
   }
 
   /**
-   * Format the current wall-clock time as a UTC Zulu string.
-   * @returns {string} Timestamp in `YYYY-MM-DD HH:MM:SSZ` format.
+   * Paint the HUD clock from the stored UTC | Local preference.
+   * @returns {void}
    */
-  _formatUTC() {
-    return this._formatClock();
-  }
-
-  /**
-   * HUD clock. UTC/local only changes this readout — not Cesium sun lighting.
-   * @returns {string}
-   */
-  _formatClock() {
-    const now = new Date();
-    const local = getClockDisplayMode() === CLOCK_DISPLAY_LOCAL;
-    const y = local ? now.getFullYear() : now.getUTCFullYear();
-    const mo = String((local ? now.getMonth() : now.getUTCMonth()) + 1).padStart(2, '0');
-    const d = String(local ? now.getDate() : now.getUTCDate()).padStart(2, '0');
-    return `${y}-${mo}-${d} ${formatHudClock(now)}`;
+  _paintTimestamp() {
+    const el = document.getElementById('hud-timestamp');
+    if (el) el.textContent = formatHudClock(new Date(), getClockMode());
   }
 
   /**
@@ -436,7 +428,7 @@ export class IntelHUD {
     const geoidN = this._geoidUndulationM(latDeg, lonDeg);
     const altMslM = ellipsoidalToMslDisplayM(altM, geoidN);
     const sunEl = this._estimateSunElevation(latDeg, lonDeg);
-    if (altEl) altEl.textContent = `ALT: ${Math.round(altMslM)}m   SUN: ${sunEl.toFixed(1)}° EL`;
+    if (altEl) altEl.textContent = `ALT: ${formatHudAltitude(altMslM)}   SUN: ${sunEl.toFixed(1)}° EL`;
 
     // Collection timestamp
     const collEl = document.getElementById('hud-coll');
@@ -675,9 +667,7 @@ export class IntelHUD {
     // together, so they must never disagree. The view band above deliberately
     // keeps the ellipsoidal height: its thresholds were tuned against it.
     const altDisplayM = Number.isFinite(m.altMslM) ? m.altMslM : m.altM;
-    const altTag = altDisplayM >= 1000
-      ? `${(altDisplayM / 1000).toFixed(1)}KM`
-      : `${Math.round(altDisplayM)}M`;
+    const altTag = formatHudAltitude(altDisplayM, { compact: true });
     const winTag = window
       ? `${Math.max(1, Math.round(window.widthKm))}x${Math.max(1, Math.round(window.heightKm))}KM`
       : 'N/A';
@@ -853,6 +843,21 @@ export class IntelHUD {
     }
   }
 
+  /**
+   * Re-print altitude labels after a display-unit change. Uses the last
+   * telemetry sample so the toggle does not invent a new measurement.
+   */
+  refreshDisplayUnits() {
+    const m = this._latestMetrics;
+    if (!m) return;
+    const altEl = document.getElementById('hud-alt');
+    const altDisplayM = Number.isFinite(m.altMslM) ? m.altMslM : m.altM;
+    if (altEl) {
+      altEl.textContent = `ALT: ${formatHudAltitude(altDisplayM)}   SUN: ${m.sunEl.toFixed(1)}° EL`;
+    }
+    if (this._firstMetricsShown) this._setSummaryText(this._composeSummary(), false);
+  }
+
   /** Make the HUD visible and immediately refresh all readouts. */
   show() {
     this._visible = true;
@@ -952,11 +957,15 @@ export class IntelHUD {
     clearInterval(this._timestampInterval);
     this._disarmSummaryInterval();
     clearInterval(this._summaryTypingInterval);
-    this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
-    if (this._onClockDisplayChanged) {
-      window.removeEventListener('gev:clock-display-changed', this._onClockDisplayChanged);
+    this._unbindClockToggle?.();
+    this._unbindClockToggle = null;
+    if (typeof window !== 'undefined' && this._onClockPreference) {
+      window.removeEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
     }
+    this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();
+    this._unitsUnsubscribe?.();
+    this._unitsUnsubscribe = null;
     this._summaryRequest?.abort();
   }
 }

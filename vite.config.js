@@ -3,6 +3,8 @@
  *
  * Live /api proxies live in `src/server/liveApiProxies.js` so Vercel Node
  * functions can reuse the same handlers without bundling Vite or Cesium.
+ * Radio Browser is extracted to `src/data/radio.js` and also served from
+ * `api/radio/[...path].js`.
  *
  * Also exposes Cesium and Google 3D Tiles API keys to the
  * client via `import.meta.env.*` defines.

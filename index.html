@@ -17,6 +17,12 @@
   <div id="world-overlay-root" aria-hidden="true">
     <canvas id="world-overlay-canvas"></canvas>
   </div>
+  <div id="selected-contact-ident" hidden>
+    <button type="button" id="selected-contact-ident-value" class="selected-contact-ident-value"></button>
+    <button type="button" id="selected-contact-ident-copy" class="selected-contact-ident-copy" aria-label="Copy ident" title="Copy ident">
+      <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+    </button>
+  </div>
   <div id="world-overlay-actions" class="world-overlay-accessibility" role="region" aria-label="Visible map targets">
     <div id="world-overlay-action-list"></div>
     <div id="world-overlay-status" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -58,6 +64,9 @@
     </button>
     <button id="home-view" type="button" aria-label="Home view" title="Home view (Home)" aria-keyshortcuts="Home">
       <span class="material-symbols-outlined" aria-hidden="true">home</span>
+    </button>
+    <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
+      <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
@@ -193,7 +202,13 @@
       <div class="cockpit-compass-tape" id="cockpit-compass-tape" aria-hidden="true"></div>
     </div>
     <div class="cockpit-position-readout">
-      <button id="cockpit-clock" type="button" aria-pressed="false" title="Show local time">--:--:--Z</button>
+      <span class="cockpit-clock-row">
+        <span id="cockpit-clock">--:--:--Z</span>
+        <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
+          <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
+          <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+        </span>
+      </span>
       <span id="cockpit-position">--° · --°</span>
     </div>
     <aside id="cockpit-context" class="cockpit-context-window" aria-label="Contact cockpit summary" hidden>
@@ -360,6 +375,10 @@
   </section>
 
   <nav id="view-switcher" aria-label="View switcher">
+    <button id="cockpit-entry" type="button" aria-label="Enter cockpit" title="Enter cockpit" hidden>
+      <span class="material-symbols-outlined" aria-hidden="true">flight</span>
+      <span>ENTER COCKPIT</span>
+    </button>
     <button id="cockpit-reset-globe" type="button" aria-label="Reset cockpit to full globe view" title="Exit cockpit and return to full globe view" hidden>
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
       <span>RESET</span>
@@ -378,9 +397,9 @@
       <button class="panel-collapse-btn pp-collapse-btn" data-collapse-target="pp-toggles" title="Collapse panel">&#x25C0;</button>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="hud-toggle" title="Intelligence HUD (H)">
+      <button class="pp-toggle-btn" id="hud-toggle" title="Intelligence HUD — click to cycle layout (H)" aria-label="HUD layout: tactical" aria-pressed="true">
         <span class="pp-icon">&#x25CE;</span>
-        <span class="pp-label">HUD</span>
+        <span class="pp-label">TACTICAL</span>
       </button>
       <div class="pp-slider-row" id="hud-layout-row">
         <span class="pp-slider-mini-label">Layout</span>
@@ -389,6 +408,14 @@
           <option value="operator">Operator</option>
           <option value="minimal">Minimal</option>
         </select>
+      </div>
+      <div class="pp-slider-row visible" id="units-row">
+        <span class="pp-slider-mini-label">Units</span>
+        <div class="pp-mode-seg" role="radiogroup" aria-label="Distance units">
+          <button class="pp-mode-btn active" id="units-km" data-units="km" role="radio" aria-checked="true">km</button>
+          <button class="pp-mode-btn" id="units-nm" data-units="nm" role="radio" aria-checked="false">nm</button>
+          <button class="pp-mode-btn" id="units-mi" data-units="mi" role="radio" aria-checked="false">mi</button>
+        </div>
       </div>
     </div>
     <div class="pp-toggle-group">
@@ -606,6 +633,17 @@
         <span class="panel-divider"></span>
         <button class="panel-collapse-btn" data-collapse-target="data-panel" title="Collapse panel">+</button>
       </div>
+      <div class="data-layer-filter-wrap">
+        <input
+          type="search"
+          id="data-layer-filter"
+          placeholder="Filter layers…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Filter layers"
+          aria-controls="data-toggles"
+        />
+      </div>
       <div id="data-toggles" class="data-toggle-list"></div>
     </div>
   </div>
@@ -761,10 +799,6 @@
         </div>
         <section id="context-flights-view" class="context-mode-view" role="tabpanel" aria-labelledby="global-context-flights-btn" hidden>
           <div class="global-context-actions" aria-label="Contact Context actions">
-            <button id="cockpit-entry" type="button" hidden>
-              <span class="material-symbols-outlined" aria-hidden="true">flight</span>
-              <span>COCKPIT</span>
-            </button>
             <button id="installations-search-btn" class="panel-layer-toggle" type="button">SEARCH NEARBY SITES</button>
             <button id="tr3b-toggle" class="tr3b-toggle" type="button" aria-pressed="false" hidden aria-label="Reclassify tracked contact as TR-3B" title="Reclassify as TR-3B">🛸</button>
           </div>
