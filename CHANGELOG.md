@@ -25,6 +25,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Sites control that lists mapped installations already returned for
+  the current 10° view. Clicking a row flies to that feature through the
+  existing `focusById` path. Empty bbox stays empty. No new `/api`, person
+  search, or bbox-cap change. Measure mode is independent.
 - Keyboard users can yaw with **Q/E** and pitch with **R / Page Up / Page Down**.
   WASD still pans. Lock tilt blocks the pitch keys. **F** still opens the
   data panel (fullscreen stays the button + Escape). The shortcuts overlay
