@@ -754,6 +754,85 @@ test('orbits on/off stay independent of class chips', () => {
   }
 });
 
+test('STATION off hides the untracked ISS ring and STATION on restores it', () => {
+  const stationOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'station');
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD],
+      orbits: [ISS_NORAD],
+      groups: { [ISS_NORAD]: 'stations' },
+    });
+    assert.equal(_satelliteVisualStateForTest().orbitShows[ISS_NORAD], true);
+
+    satellitesLayer.setParams({ satelliteClassFilter: stationOff });
+    let state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, true);
+    assert.equal(state.orbitShows[ISS_NORAD], false,
+      'untracked ISS + STATION off + ORBITS on hides the default ISS ring');
+    assert.equal(state.pointShows[ISS_NORAD], false);
+
+    satellitesLayer.setParams({ satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER });
+    state = _satelliteVisualStateForTest();
+    assert.equal(state.orbitShows[ISS_NORAD], true, 'STATION on restores the ISS ring');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('tracked ISS keeps its ring when STATION is off', () => {
+  const stationOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'station');
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD],
+      orbits: [ISS_NORAD],
+      groups: { [ISS_NORAD]: 'stations' },
+      trackedNorad: ISS_NORAD,
+    });
+    satellitesLayer.setParams({ satelliteClassFilter: stationOff });
+    const state = _satelliteVisualStateForTest();
+    assert.equal(state.orbitShows[ISS_NORAD], true, 'keep-tracked ISS ring stays');
+    assert.equal(state.pointShows[ISS_NORAD], false, 'entity owns the tracked dot');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('NAV off does not steal the ISS ring; ORBITS off hides it with STATION on', () => {
+  const navOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'nav');
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD, 32222],
+      orbits: [ISS_NORAD],
+      groups: { [ISS_NORAD]: 'stations', [32222]: 'gps-ops' },
+    });
+    satellitesLayer.setParams({ satelliteClassFilter: navOff });
+    let state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, true);
+    assert.equal(state.orbitShows[ISS_NORAD], true, 'NAV off leaves the ISS ring');
+    assert.equal(state.pointShows[ISS_NORAD], true);
+
+    satellitesLayer.setParams({
+      satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER,
+      showOrbits: false,
+    });
+    state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, false);
+    assert.equal(state.orbitShows[ISS_NORAD], false,
+      'ORBITS off + STATION on still hides every ring');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
 test('class chips persist through the existing satellites layerState option', () => {
   assert.equal(
     normalizeLayerState({}).options.satellites.satelliteClassFilter,
