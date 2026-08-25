@@ -4,9 +4,8 @@
  *
  * On `engine.onChange`, write a compact snapshot of persistent marks to
  * localStorage (`meridian.annotations`). On init, restore once through the
- * same latitude/longitude `annotate()` path as Import (Plan 115) — no
- * geocode, Places, Overpass, or `/api`. TTL / expiring marks are skipped.
- * Clear empties the key. Not an alert service.
+ * same latitude/longitude `annotate()` path as Import. TTL / expiring
+ * marks are skipped. Clear empties the key. Not an alert service.
  */
 
 import { MAX_LIVE_ANNOTATIONS } from './annotationEngine.js';

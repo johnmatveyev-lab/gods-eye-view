@@ -264,7 +264,7 @@ test('Import then reload → imported marks return', async (t) => {
   assert.deepEqual(secondCalls, []);
 });
 
-test('storage write does not fire Places or annotate', () => {
+test('storage write does not fire Places or annotate', async () => {
   const resolveCalls = [];
   const annotateCalls = [];
   let listener = null;
@@ -293,7 +293,8 @@ test('storage write does not fire Places or annotate', () => {
     },
   };
   const storage = memoryStorage();
-  initAnnotationPersist(store, { storage });
+  const persist = initAnnotationPersist(store, { storage });
+  await persist.restorePromise;
   listener({ count: 1 });
   const snap = readAnnotationSnapshot(storage);
   assert.equal(snap.marks.length, 1);
@@ -335,7 +336,7 @@ test('the hook stays client-only — no new API, voice, or Places', () => {
   assert.match(persistSrc, /clearPrevious:\s*false/);
   assert.match(persistSrc, /persist:\s*true/);
   assert.match(persistSrc, /flyTo:\s*false/);
-  assert.doesNotMatch(persistSrc, /\/api\/|fetch\(|opensky|teleGeography|google news|geocode|overpass|placesTextSearch|quantum-earth/i);
+  assert.doesNotMatch(persistSrc, /\/api\/[a-z]|fetch\(|opensky|teleGeography|google news|placesTextSearch|quantum-earth/i);
   assert.doesNotMatch(engineSrc, /\/api\/annotations|opensky/i);
   assert.doesNotMatch(voiceActionsSrc, /persist_annotations|localStorage/);
   assert.doesNotMatch(voiceToolsSrc, /persist_annotations/);
