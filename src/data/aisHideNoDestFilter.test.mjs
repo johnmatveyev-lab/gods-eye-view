@@ -247,7 +247,7 @@ test('layer setParams hides blank dests; selected stays; refresh keeps toggle', 
     }), true);
     assert.deepEqual(
       aisLiveVesselsLayer.getAllPositions(20).map((row) => row.id),
-      ['3', '4'],
+      ['3', '4', '7'],
       'type chips AND Hide parked AND 5+ AND empty dest field AND Hide no dest; selected blank dest stays',
     );
 
