@@ -858,14 +858,15 @@ export function missionRosterEntries(launches, options = {}) {
 
 /**
  * PREV/NEXT and the N/M index walk the chip-filtered roster (status AND
- * provider AND orbit). The selected-id visibility exception is excluded so
- * navigation cannot leave that AND set.
+ * provider AND orbit AND site). The selected-id visibility exception is
+ * excluded so navigation cannot leave that AND set.
  * @param {Array<object>} launches Normalized launch records.
  * @param {string|null|undefined} selectedLaunchId
  * @param {{
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
+ *   siteFilter?: unknown,
  * }} [options]
  * @returns {{
  *   entries: Array<{launch: object, index: number}>,
@@ -880,6 +881,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
     statusFilter: options.statusFilter,
     orbitFilter: options.orbitFilter,
     providerFilter: options.providerFilter,
+    siteFilter: options.siteFilter,
     selectedLaunchId: null,
   });
   const current = selectedLaunchId
@@ -903,6 +905,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
+ *   siteFilter?: unknown,
  * }} [options]
  * @returns {{launch: object, index: number}|null}
  */

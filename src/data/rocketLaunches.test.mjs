@@ -709,6 +709,31 @@ test('site-off roster hides that pad and ANDs status, provider, and LEO', () => 
   }), false);
 });
 
+test('site-off PREV/NEXT stays inside the status AND provider AND LEO AND site set', () => {
+  const rows = [
+    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'cape', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 39A', launchTime: '2026-07-19T00:00:00Z' },
+    { id: 'keep-2', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', launchTime: '2026-07-18T00:00:00Z' },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+  }, ['SpaceX']);
+  const andOptions = {
+    statusFilter: { go: true },
+    siteFilter: { '4E': true },
+    providerFilter: spaceXOnly,
+    orbitFilter: { leo: true },
+  };
+  const keep = missionRosterNavState(rows, 'keep', andOptions);
+  assert.equal(keep.indexLabel, '1 / 2');
+  assert.deepEqual(keep.entries.map((entry) => entry.launch.id), ['keep', 'keep-2']);
+  assert.equal(selectAdjacentMission(rows, 'keep', 1, andOptions)?.launch.id, 'keep-2');
+  assert.notEqual(selectAdjacentMission(rows, 'keep', 1, andOptions)?.launch.id, 'cape');
+  const selectedCape = missionRosterNavState(rows, 'cape', andOptions);
+  assert.equal(selectedCape.current, -1);
+  assert.equal(selectAdjacentMission(rows, 'cape', 1, andOptions), null);
+});
+
 test('prioritizes data-rich missions before newer sparse records', () => {
   const entries = missionRosterEntries([
     { id: 'rich', launchTime: '2026-07-01T00:00:00Z', provider: 'Agency', mission: 'Detailed mission', orbit: { name: 'LEO' }, payloads: [{ name: 'Payload' }], timeline: [{ name: 'Liftoff' }] },
