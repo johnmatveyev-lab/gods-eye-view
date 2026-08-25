@@ -314,7 +314,7 @@ test('unknown and forbidden option fields are ignored while missing options use 
   });
   const serialized = `${encode(raw)} ${serializeStoredLayerState(raw)}`;
   for (const forbidden of [
-    'private-camera', 'calibration', 'autoHopSec', 'irBoost', 'showPoints',
+    'private-camera', 'calibration', 'autoHopSec', 'irBoost',
     'private-station', 'audioState', 'voiceDucked', 'secret',
   ]) assert.equal(serialized.includes(forbidden), false, forbidden);
 });
@@ -479,6 +479,7 @@ test('compact URL omits absent-meaning option state and still resolves to it', (
   assert.deepEqual(roundTrip.options.flights.selectedMilitaryTrackingId, null);
   assert.equal(roundTrip.options.satellites.catalog, 'core');
   assert.equal(roundTrip.options.satellites.showOrbits, true);
+  assert.equal(roundTrip.options.satellites.showPoints, true);
   assert.deepEqual(roundTrip.options.satellites.selectedSatTrackingId, null);
 });
 
@@ -519,6 +520,50 @@ test('satellite orbit rings persist through share links and local reload', async
   await restored.start();
   assert.equal(restored.getDurableState().options.satellites.showOrbits, false);
   assert.equal(reloaded.getLayerParams('satellites').showOrbits, false);
+  assert.equal(reloaded.getLayerParams('satellites').catalog, 'core');
+  restored.destroy();
+});
+
+test('satellite points persist through share links and local reload', async () => {
+  assert.equal(createDefaultLayerState().options.satellites.showPoints, true);
+
+  const off = normalizeLayerState({
+    enabledLayerIds: ['satellites'],
+    options: { satellites: { catalog: 'dense', showPoints: false } },
+  });
+  assert.equal(off.options.satellites.catalog, 'dense');
+  assert.equal(off.options.satellites.showPoints, false);
+  const encoded = encode(off);
+  assert.match(encoded, /s\.c\.d/);
+  assert.match(encoded, /s\.p\.0/);
+  const shared = decodeLayerStateParams(new URLSearchParams(encoded));
+  assert.equal(shared.options.satellites.catalog, 'dense');
+  assert.equal(shared.options.satellites.showPoints, false);
+  assert.equal(shared.options.satellites.showOrbits, true, 'orbits stay independent');
+
+  const stored = serializeStoredLayerState(off);
+  assert.match(stored, /"showPoints":false/);
+  assert.equal(parseStoredLayerState(stored).options.satellites.showPoints, false);
+
+  const storage = memoryStorage();
+  const manager = productionManager();
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage });
+  await coordinator.start();
+  await manager.setEnabled('satellites', true, { origin: 'user' });
+  assert.equal(manager.setLayerParams('satellites', { showPoints: false }, { origin: 'user' }), true);
+  assert.equal(coordinator.getDurableState().options.satellites.showPoints, false);
+  assert.equal(coordinator.getDurableState().options.satellites.showOrbits, true,
+    'writing showPoints does not flip showOrbits');
+  assert.equal(coordinator.getDurableState().options.satellites.catalog, 'core');
+  coordinator.destroy();
+
+  const reloaded = productionManager();
+  const restored = new LayerStateCoordinator(reloaded, shareSink(), {
+    storage: memoryStorage(storage.getItem(LAYER_STATE_STORAGE_KEY)),
+  });
+  await restored.start();
+  assert.equal(restored.getDurableState().options.satellites.showPoints, false);
+  assert.equal(reloaded.getLayerParams('satellites').showPoints, false);
   assert.equal(reloaded.getLayerParams('satellites').catalog, 'core');
   restored.destroy();
 });

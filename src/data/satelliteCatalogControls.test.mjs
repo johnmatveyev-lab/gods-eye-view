@@ -267,6 +267,50 @@ test('explicit Core | Dense writes persist through the existing layerState catal
   assert.doesNotMatch(coreParams.get('lo') || '', /s\.c\./);
 });
 
+test('POINTS on/off stays independent of Core | Dense and does not refetch', async () => {
+  const originalFetch = globalThis.fetch;
+  const fetched = [];
+  try {
+    globalThis.fetch = async (url) => {
+      fetched.push(String(url));
+      return { ok: true, text: async () => DENSE_TLE };
+    };
+    _setDenseCatalogStateForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      coreSats: [{ noradId: ISS_NORAD, name: 'ISS (ZARYA)', group: 'stations' }],
+      trackedNorad: ISS_NORAD,
+    });
+    assert.equal(catalogChip('catalog-dense').active, false);
+    satellitesLayer.setParams({ catalog: 'dense' }, { origin: 'user' });
+    const settled = await settleDense();
+    assert.equal(settled.active, true);
+    fetched.length = 0;
+
+    const points = satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'points');
+    const orbits = satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'orbits');
+    assert.ok(points, 'POINTS sits on the same row as Core | Dense');
+    assert.ok(orbits, 'ORBITS stays on the same row');
+    assert.equal(points.active, true);
+    assert.deepEqual(points.params, { showPoints: false });
+
+    satellitesLayer.setParams({ showPoints: false }, { origin: 'user' });
+    assert.equal(fetched.length, 0, 'Points toggle does not refetch CelesTrak when cached');
+    assert.equal(satellitesLayer.getParams().catalog, 'dense');
+    assert.equal(satellitesLayer.getParams().showOrbits, true);
+    assert.equal(satellitesLayer.getParams().selectedSatTrackingId, ISS_NORAD);
+    assert.equal(catalogChip('catalog-core').active, false);
+    assert.equal(catalogChip('catalog-dense').active, true);
+    assert.equal(satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'points').active, false);
+    assert.equal(satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'orbits').active, true);
+    assert.ok((satellitesLayer.getRowControls().legend || []).length >= 0);
+  } finally {
+    globalThis.fetch = originalFetch;
+    _clearDenseCatalogStateForTest();
+  }
+});
+
 test('no new endpoints — Dense reuses /api/celestrak/starlink', () => {
   const satellites = readFileSync(path.join(ROOT, 'src/data/satellites.js'), 'utf8');
   const controls = readFileSync(path.join(ROOT, 'src/data/satelliteCatalogControls.js'), 'utf8');
