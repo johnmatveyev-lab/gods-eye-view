@@ -2392,6 +2392,7 @@ export class StyleManager {
     this._cctvMeta = document.getElementById('cctv-meta');
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
+    this._copyViewLinkBtn = document.getElementById('copy-view-link');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
@@ -2673,6 +2674,7 @@ export class StyleManager {
     this._initGlobalContextPanel();
     this._initLocationBar();
     this._initShareButton();
+    this._initCopyViewLinkButton();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
     this._initResetGlobeButton();
@@ -9924,6 +9926,14 @@ export class StyleManager {
     this._shareBtn.addEventListener('click', async () => {
       const success = await this.shareLinkManager.copyLink();
       this._showToast(success ? 'Link copied!' : 'Copy failed');
+    });
+  }
+
+  /** Wire Copy view link — current share URL, no copy-time timestamp. */
+  _initCopyViewLinkButton() {
+    this._copyViewLinkBtn?.addEventListener('click', async () => {
+      const success = await this.shareLinkManager.copyViewLink();
+      this._showToast(success ? 'Link copied' : 'Copy failed');
     });
   }
 
