@@ -1291,6 +1291,7 @@ function installAudio({ replace = false } = {}) {
   const previousAudio = _audio;
   _audio = null;
   if (previousAudio) {
+    try { previousAudio.muted = true; } catch { /* already stopped */ }
     try { previousAudio.pause(); } catch { /* already stopped */ }
     try { previousAudio.removeAttribute('src'); } catch { /* no source */ }
     try { previousAudio.load(); } catch { /* detached media */ }
@@ -1773,6 +1774,7 @@ export async function playSelectedRadio({ origin = 'programmatic', attemptId = n
   // attempt remain bound to the discarded element and cannot mutate this one.
   installAudio({ replace: true });
   if (!_audio) return false;
+  _audio.muted = false;
 
   const generation = ++_playGeneration;
   const ownedAttemptId = attemptId || `radio-play-${++_playAttemptSequence}`;
@@ -1901,6 +1903,7 @@ export function stopRadioPlayback({ origin = 'programmatic', attemptId = null } 
   _playFallbackAttemptId = null;
   _activePlaybackAttempt = null;
   if (_audio) {
+    _audio.muted = true;
     _audio.pause();
     _audio.removeAttribute('src');
     _audio.load();
