@@ -33,6 +33,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites row has an **ORBITS** on/off chip over the existing
+  `setParams({ showOrbits })` path (default ON). Off hides orbit rings;
+  ISS / core / dense points stay. The choice persists in layer-state /
+  share links (`s.o.0` when off). It does not change catalog core|dense,
+  the CelesTrak group picker, or add an `/api` route.
 - Emergency highlight paints contacts whose current public ADS-B squawk is
   7500, 7600, or 7700 using the existing annotation alert-red token. DISPLAY
   **Emergency** defaults on and persists as `meridian.emergencyHighlight`.
