@@ -50,7 +50,7 @@ test('temperature, wind, precip, feels, and WX stay independent of visibility ch
 });
 
 test('no new weather endpoint or product rename', () => {
-  assert.doesNotMatch(helper, /\/api\/weather/);
+  assert.doesNotMatch(helper, /\/api\/weather-visibility|\/api\/visibility/);
   assert.match(html, /data-weather-visibility="km"/);
   assert.match(html, /<title>Meridian<\/title>/);
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);

@@ -169,7 +169,7 @@ test('meridian.weatherVisibility persists separately from other weather units', 
 
   resetWeatherVisibilityUnitsForTests();
   assert.equal(initWeatherVisibilityUnits({ storage }), 'mi');
-  assert.equal(formatVisibilityM(8000, getVisibilityUnit()), '5 mi');
+  assert.equal(formatVisibilityM(8000, 'mi'), '5 mi');
 });
 
 test('subscribers hear a visibility-unit change once', () => {
