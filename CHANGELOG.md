@@ -47,6 +47,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   The choice persists as `meridian.power`. Data polls, the idle render
   governor, and required credits are unchanged. Clean view still keeps
   Google Maps and Data attribution on screen.
+- Added a DISPLAY Zoom to pointer control. On, the wheel zooms about the
+  globe pick under the cursor so a city stays under the pointer. Off keeps
+  today's center zoom. No pick falls back to center. Invert scroll still
+  only flips direction. The choice persists as `meridian.zoomToPointer`
+  and defaults off.
 - Added a camera-center lat,lon copy control next to Copy view link. It shows
   the pose already computed from `positionCartographic` (same source as the
   share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept
