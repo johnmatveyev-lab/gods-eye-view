@@ -29,6 +29,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the current 10° view. Clicking a row flies to that feature through the
   existing `focusById` path. Empty bbox stays empty. No new `/api`, person
   search, or bbox-cap change. Measure mode is independent.
+- Added a DISPLAY-rail Keep above ground control. After the camera moves, if
+  `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
+  below terrain plus a small margin, the camera is lifted. The preference
+  persists as `meridian.keepAbove` and defaults on. Cockpit interior still
+  owns the camera. A terrain 503 skips the lift. No new API.
 - Added a Clean view control on the globe chrome that toggles the existing
   `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
   Google Maps and Data attribution stay on. No new hide system and no `/api`.
