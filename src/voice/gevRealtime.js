@@ -2313,7 +2313,14 @@ function isNearlyBlackFrame(ctx, width, height) {
  */
 async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
   const url = `${TOKEN_URL}?tier=${encodeURIComponent(resolveVoiceModel(tier).tier)}`;
-  const response = await fetch(url, { cache: 'no-store' });
+  const headers = {};
+  try {
+    const token = await window.__meridianAccount?.getAccessToken?.();
+    if (token) headers.Authorization = `Bearer ${token}`;
+  } catch {
+    /* hosted auth is optional on self-host */
+  }
+  const response = await fetch(url, { cache: 'no-store', headers });
   const data = await response.json().catch(() => null);
   // Server echo first (authoritative, always present); the minted session
   // config is the fallback when a proxy strips headers.

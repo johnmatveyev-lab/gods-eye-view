@@ -29,6 +29,19 @@
     <p class="subtitle">NO PLACE LEFT BEHIND</p>
   </div>
 
+  <aside id="account-bar" aria-label="Account and plan">
+    <div class="account-kicker">ACCOUNT</div>
+    <div id="account-plan">GUEST</div>
+    <div id="account-budget">Loading plan…</div>
+    <div class="account-actions">
+      <button type="button" id="account-sign-in">Sign in</button>
+      <button type="button" id="account-upgrade">Upgrade to Pro</button>
+      <button type="button" id="account-manage" hidden>Manage plan</button>
+      <button type="button" id="account-saved-views" hidden>Saved views</button>
+      <div id="account-user" hidden></div>
+    </div>
+  </aside>
+
   <!-- Style indicator -->
   <div id="style-indicator">
     <span class="indicator-label">ACTIVE STYLE</span>
@@ -879,8 +892,28 @@
     </div>
     <!-- Kept out of the footer row: it swaps to mission progress and errors, and
          a live region that also holds layout makes the row jump as it speaks. -->
-    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: the Meridian MIC button in the dock lets you talk to the map.</p>
+    <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: sign in for a Free demo. Voice is a Pro feature on hosted Meridian.</p>
   </aside>
+
+  <p id="meridian-terms">Meridian is independent, based on the MIT-licensed God's Eye View project. It is not affiliated with Bilawal Sidhu or the God's Eye View series.</p>
+
+  <div id="billing-exhausted" hidden>
+    <div class="billing-exhausted-card">
+      <strong>Daily demo used</strong>
+      <p data-billing-exhausted-copy></p>
+      <button type="button" data-billing-upgrade>Upgrade to Pro</button>
+    </div>
+  </div>
+
+  <div id="billing-modal" hidden>
+    <div class="billing-modal-card" role="dialog" aria-modal="true" aria-labelledby="billing-modal-title">
+      <button type="button" class="billing-modal-close" data-billing-close aria-label="Close">×</button>
+      <h2 id="billing-modal-title" data-billing-title>Account</h2>
+      <p data-billing-body></p>
+      <div data-clerk-sign-in hidden></div>
+      <button type="button" class="billing-modal-primary" data-billing-primary>Continue</button>
+    </div>
+  </div>
 
   <!-- Intelligence HUD Overlay -->
   <div id="intel-hud"></div>

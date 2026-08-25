@@ -658,9 +658,16 @@ export class IntelHUD {
     const timeout = window.setTimeout(() => controller.abort(), 5000);
     this._summaryRequest = controller;
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      try {
+        const token = await window.__meridianAccount?.getAccessToken?.();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch {
+        /* self-host has no Clerk session */
+      }
       const response = await fetch(HUD_SUMMARY_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(context),
         signal: controller.signal,
       });

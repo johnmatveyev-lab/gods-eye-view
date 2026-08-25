@@ -32,8 +32,10 @@ import {
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
+import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
 
 initLogoGaze();
+const meridianAccountReady = initMeridianAccount();
 
 /**
  * Extract a human-readable error message from any thrown value.
@@ -325,6 +327,7 @@ async function init() {
       requestRender: governorRequestRender,
     };
     window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
+    void meridianAccountReady.then((account) => attachVoiceGate(window.__godsEyeView.voiceCommands, account));
 
   } catch (error) {
     console.error('Meridian initialization failed:', error);

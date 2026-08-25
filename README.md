@@ -58,6 +58,33 @@ The dev server binds to **localhost** — your keys stay on your machine.
 
 ---
 
+## Hosted billing (Clerk + Stripe)
+
+Meridian can run as a **hosted service**: users sign in, get a capped Free demo, and upgrade to Pro through Stripe Checkout. This is hosted access to the console, not a data resale.
+
+Leave the billing keys unset for self-host / BYOK. The globe still works when `GOOGLE_MAPS_API_KEY` is set, and voice still works when `OPENAI_API_KEY` is set.
+
+| Plan | What you get |
+|------|----------------|
+| **Free** (signed in) | Globe works. No voice. Hard daily cap: **15 minutes** of session time and a request budget. Remaining budget is shown in the account chip. |
+| **Pro** ($29/mo) | Voice (OpenAI Realtime via the **server** `OPENAI_API_KEY`, never a ChatGPT consumer subscription). Higher daily cap (8 hours). Saved-views placeholder. |
+
+Setup:
+
+1. Create a Clerk application and set `CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY`. `VITE_CLERK_PUBLISHABLE_KEY` is also accepted.
+2. In Stripe, create a **subscription Price** for Pro and put its `price_...` ID in `STRIPE_PRICE_PRO`. Do not invent products in code.
+3. Set `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`.
+4. Point a Stripe webhook at `https://<host>/api/stripe/webhook` for `checkout.session.completed`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+5. Keep `OPENAI_API_KEY` on the server. The browser only receives a short-lived Realtime session token, and only after the account is Pro.
+
+If Stripe keys are missing, the Upgrade button explains that Checkout is not configured instead of failing silently. Unit tests mock Stripe and Clerk — they do not need live keys.
+
+Optional: `MERIDIAN_BILLING_STORE_PATH=.meridian-billing/accounts.json` persists plan + daily usage across process restarts (in-memory otherwise).
+
+If you charge US or EU customers, consider enabling [Stripe Tax](https://docs.stripe.com/billing/taxes/collect-taxes) and complete a registration first. Do not turn on `automatic_tax` in Checkout until that registration is active.
+
+---
+
 ## Keys & costs
 
 | | Cost reality |

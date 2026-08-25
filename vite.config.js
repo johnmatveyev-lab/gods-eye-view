@@ -53,6 +53,8 @@ import {
 } from './src/data/regionalBrief.js';
 import { normalizeAdsbLolPointResponse } from './src/data/adsbLolFallback.js';
 import { createAisStreamAdapter, isRecognizedAisEnvelope } from './src/data/aisStreamAdapter.js';
+import { meridianBillingPlugin } from './src/billing/plugin.js';
+import { rejectIfVoiceForbidden } from './src/billing/http.js';
 import { parseSilenceTimeoutEnv } from './src/data/aisWatchdog.js';
 import {
   fetchTerrainChunkWithRetry,
@@ -4503,6 +4505,7 @@ function openAiRealtimeProxy() {
         res.end(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }));
         return;
       }
+      if (await rejectIfVoiceForbidden(req, res)) return;
 
       try {
         const body = await readRequestBody(req, 64 * 1024);
@@ -4586,6 +4589,7 @@ function openAiRealtimeProxy() {
         res.end(JSON.stringify({ error: 'OPENAI_API_KEY is not set' }));
         return;
       }
+      if (await rejectIfVoiceForbidden(req, res)) return;
 
       // Voice model tier, requested by the client as ?tier=standard|mini.
       // resolveVoiceModel is total: an unknown, empty, or hostile value
@@ -6877,6 +6881,7 @@ export default defineConfig(({ mode }) => {
       trackBackfillProxies(),
       openAiRealtimeProxy(),
       googlePlacesContextProxy(),
+      meridianBillingPlugin(),
     ]),
     server: {
       host,
@@ -6893,6 +6898,9 @@ export default defineConfig(({ mode }) => {
     define: {
       'import.meta.env.GOOGLE_MAPS_API_KEY': JSON.stringify(env.GOOGLE_MAPS_API_KEY),
       'import.meta.env.CESIUM_ION_TOKEN': JSON.stringify(env.CESIUM_ION_TOKEN),
+      'import.meta.env.CLERK_PUBLISHABLE_KEY': JSON.stringify(
+        env.CLERK_PUBLISHABLE_KEY || env.VITE_CLERK_PUBLISHABLE_KEY || '',
+      ),
     },
     build: {
       // The Cesium engine bundle is inherently large; raise the warning ceiling

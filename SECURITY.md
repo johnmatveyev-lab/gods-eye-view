@@ -17,8 +17,11 @@ The golden rule: **secret-bearing API keys stay on the server side.** The dev/pr
 
 | Key | Where it lives | How the browser uses it |
 |-----|----------------|--------------------------|
-| `OPENAI_API_KEY` | Server only | Browser fetches a short-lived **ephemeral** Realtime session token from `/api/realtime/token`; the real key never ships |
+| `OPENAI_API_KEY` | Server only | Browser fetches a short-lived **ephemeral** Realtime session token from `/api/realtime/token`; the real key never ships. Hosted Pro is required when Clerk is configured. |
 | `AISSTREAM_API_KEY` | Server only | Server holds the AISStream websocket; browser polls the same-origin `/api/ais-live` cache |
+| `CLERK_SECRET_KEY` | Server only | Verifies session JWTs for `/api/billing/*` and hosted voice |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Server only | Creates Checkout sessions and verifies `/api/stripe/webhook` |
+| `CLERK_PUBLISHABLE_KEY` | Client (injected) | Clerk sign-in UI only — not a secret, but restrict the Clerk instance to this origin |
 
 ### Two deliberately client-side keys — restrict them
 
@@ -27,7 +30,7 @@ These are designed to be used directly in the browser (like a Mapbox public toke
 1. **Google Maps API key** — loads the Photorealistic 3D Tiles in the browser. **Restrict it** (HTTP referrer + API restriction to the Map Tiles API) in the Google Cloud Console. An unrestricted key in a public deployment can be abused and billed to you.
 2. **Cesium ion token** (`CESIUM_ION_TOKEN`, optional — only for the Bing world-imagery map stacks) — used as `Cesium.Ion.defaultAccessToken` client-side. Use a public **`assets:read`** token with **URL restrictions** for any hosted deployment.
 
-> The Vite `define` block in `vite.config.js` controls exactly what reaches the client: only these two keys plus two non-secret CCTV feature flags. Everything else stays server-side.
+> The Vite `define` block in `vite.config.js` controls exactly what reaches the client: Google Maps, Cesium ion, the Clerk publishable key, plus two non-secret CCTV feature flags. Stripe, Clerk secret, OpenAI, and other provider secrets stay server-side.
 
 Never commit real keys. `.env` is gitignored; only `.env.example` (placeholder names) is tracked. On macOS the launcher reads keys from the Keychain; on other platforms use env vars or a local `.env`.
 
