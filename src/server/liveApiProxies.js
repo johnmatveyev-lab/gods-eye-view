@@ -847,7 +847,7 @@ async function fetchOverpassPayload(body, maxResponseBytes = OVERPASS_MAX_RESPON
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'gods-eye-view-overpass-proxy/1.0',
+          'User-Agent': 'Meridian-overpass-proxy/1.0',
         },
         body,
         signal: controller.signal,

@@ -12,6 +12,11 @@ import {
   clampBloomIntensity,
   decodeBloomIntensity,
 } from './bloom.js';
+import {
+  ALL_OFF_ARIA_LABEL,
+  ALL_OFF_BUSY_ARIA_LABEL,
+  allOffLiveLayers,
+} from './allOffLayers.js';
 import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
@@ -20,6 +25,7 @@ import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNo
 import { handleKeyboardPanKeyDown } from './keyboardPan.js';
 import { handleLookKeyDown } from './cameraLookKeys.js';
 import {
+  bindKeyboardShortcutsToggle,
   handleShortcutsOverlayKeyDown,
   isKeyboardShortcutsOverlayOpen,
   renderKeyboardShortcutsOverlay,
@@ -280,6 +286,13 @@ import {
   subscribeDistanceUnit,
 } from './units.js';
 import {
+  clearMeasure,
+  destroyMeasure,
+  initMeasure,
+  isMeasureActive,
+  setMeasureActive,
+} from './measure.js';
+import {
   getPowerMode as readViewerPowerMode,
   installPowerMode,
   setPowerMode as writeViewerPowerMode,
@@ -392,6 +405,13 @@ import {
   slewHeading,
   speedRulerTicks,
 } from './cockpitMath.js';
+import {
+  hasPanelPrefix,
+  layoutResetNotifiedSuffix,
+  prefKey,
+  readPrefKey,
+  writePrefKey,
+} from './prefStorage.js';
 import {
   peekModelsPreference,
   writeModelsPreference,
@@ -508,6 +528,7 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -559,6 +580,7 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -2686,6 +2708,10 @@ export class StyleManager {
     this._shareBtn = document.getElementById('share-btn');
     this._northUpCompassBtn = document.getElementById('north-up-compass');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._measureToggleBtn = document.getElementById('measure-toggle');
+    this._measureReadout = document.getElementById('measure-readout');
+    this._measureReadoutLabel = document.getElementById('measure-readout-label');
+    this._measureClearBtn = document.getElementById('measure-clear');
     this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
@@ -2988,6 +3014,9 @@ export class StyleManager {
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
     });
+    initMeasure(viewer, {
+      onChange: (state) => this._syncMeasureUi(state),
+    });
     initCameraCoords({
       viewer,
       showToast: (text) => this._showToast(text),
@@ -3009,6 +3038,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initMeasureButton();
     this._initFullscreenButton();
     this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
@@ -3745,6 +3775,7 @@ export class StyleManager {
     // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Q/E heading,
     // R/PageUp/PageDown pitch (not F), ? overlay, Escape
     renderKeyboardShortcutsOverlay();
+    bindKeyboardShortcutsToggle();
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
@@ -3765,6 +3796,7 @@ export class StyleManager {
 
       const look = handleLookKeyDown(e, this.viewer, {
         cockpitActive: this.cockpitView?.active,
+        tiltLocked: this._lockTiltEnabled === true,
         storage: globalThis.localStorage,
       });
       if (look) {
@@ -4669,7 +4701,8 @@ export class StyleManager {
 
   /**
    * On boot, clamp or reset leftover/current panelPos keys that would restore
-   * a panel off-screen. Does not rename leftover godsEyeView.* keys.
+   * a panel off-screen. Leftover godsEyeView.* keys copy onto meridian.*
+   * once and stay in place; leftover versions are not rewritten to v8.
    * @returns {void}
    */
   _sanitizeRestoredPanelPositions() {
@@ -4800,11 +4833,10 @@ export class StyleManager {
    */
   _maybeNotifyLayoutReset() {
     try {
-      const marker = `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.layoutResetNotified`;
-      if (localStorage.getItem(marker)) return;
-      localStorage.setItem(marker, '1');
-      const hadOldPositions = Object.keys(localStorage)
-        .some((key) => key.startsWith('godsEyeView.v6.panelPos.'));
+      const marker = prefKey(layoutResetNotifiedSuffix(PANEL_POSITION_STORAGE_VERSION));
+      if (readPrefKey(localStorage, marker)) return;
+      writePrefKey(localStorage, marker, '1');
+      const hadOldPositions = hasPanelPrefix(localStorage, 'v6.panelPos.');
       if (hadOldPositions) {
         this._showToast('Panel layout updated — positions reset to new defaults');
       }
@@ -7620,7 +7652,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelStorageKey(panelId) {
-    return `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`;
+    return prefKey(`${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`);
   }
 
   /**
@@ -7629,7 +7661,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelCollapseStorageKey(panelId) {
-    return `godsEyeView.${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`;
+    return prefKey(`${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`);
   }
 
   /**
@@ -7645,7 +7677,7 @@ export class StyleManager {
     let stored = null;
     if (allowStored) {
       try {
-        stored = localStorage.getItem(this._panelCollapseStorageKey(panelId));
+        stored = readPrefKey(localStorage, this._panelCollapseStorageKey(panelId));
         if (stored === '1') collapsed = true;
         if (stored === '0') collapsed = false;
       } catch {
@@ -7673,7 +7705,7 @@ export class StyleManager {
    */
   _savePanelCollapsedState(panelId, collapsed) {
     try {
-      localStorage.setItem(this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
+      writePrefKey(localStorage, this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
     } catch {
       // storage unavailable
     }
@@ -8459,8 +8491,8 @@ export class StyleManager {
       );
       if (!resolved?.pos) return;
       // Clamp leftover or current coords: a position saved at one window size
-      // would otherwise land off-screen at another. Same-key leftovers are
-      // not renamed this cycle.
+      // would otherwise land off-screen at another. Leftover versions stay on
+      // their version; only the prefix copies onto meridian.*.
       const clamped = this._clampToViewport(
         Math.round(resolved.pos.left),
         Math.round(resolved.pos.top),
@@ -8508,7 +8540,7 @@ export class StyleManager {
   _savePanelPosition(panelId, panelEl) {
     const rect = panelEl.getBoundingClientRect();
     try {
-      localStorage.setItem(this._panelStorageKey(panelId), JSON.stringify({
+      writePrefKey(localStorage, this._panelStorageKey(panelId), JSON.stringify({
         left: Math.round(rect.left),
         top: Math.round(rect.top),
       }));
@@ -10960,11 +10992,20 @@ export class StyleManager {
     });
   }
 
-  /** Wire the top-center action that clears only manager-owned data layers. */
+  /** Wire the top-center panic All off control. Does not move the camera. */
   _initClearSelectedLayersButton() {
     if (!this._clearSelectedLayersBtn) return;
-    this._clearSelectedLayersHandler = () => { void this.clearSelectedLayers(); };
+    this._clearSelectedLayersHandler = () => { void this.allOff(); };
     this._clearSelectedLayersBtn.addEventListener('click', this._clearSelectedLayersHandler);
+  }
+
+  /**
+   * Panic All off: disable every live data layer. Globe, credits, camera, and
+   * lastView stay. Next enable is manual.
+   * @returns {Promise<object>} Aggregate manager lifecycle truth for the batch.
+   */
+  allOff() {
+    return this.clearSelectedLayers();
   }
 
   /**
@@ -10994,25 +11035,25 @@ export class StyleManager {
     this._setContactsRosterControlsDisabled(true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     this._clearSelectedLayersBtn.disabled = true;
-    this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clearing selected data layers');
+    this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_BUSY_ARIA_LABEL);
 
-    const managerOperation = this._dataManager.clearSelectedLayers({
+    const managerOperation = allOffLiveLayers(this._dataManager, {
       origin: 'user',
       notificationToken,
     });
     this._clearSelectedLayersManagerPromise = managerOperation;
     const operation = managerOperation.then((result) => {
       if (result.targetIds.length === 0) {
-        this._showToast('No selected data layers');
+        this._showToast('All off — no live layers were on');
       } else if (result.notClearedIds.length > 0) {
-        this._showToast(`${result.notClearedIds.length} data layer${result.notClearedIds.length === 1 ? '' : 's'} could not be cleared`);
+        this._showToast(`${result.notClearedIds.length} live layer${result.notClearedIds.length === 1 ? '' : 's'} could not be turned off`);
       } else {
-        this._showToast(`Cleared ${result.clearedIds.length} data layer${result.clearedIds.length === 1 ? '' : 's'}`);
+        this._showToast('All off');
       }
       return result;
     }).catch((error) => {
-      console.warn('[Data] clear selected layers failed', error);
-      this._showToast('Selected data layers could not be cleared');
+      console.warn('[Data] All off failed', error);
+      this._showToast('All off could not finish');
       return {
         targetIds: [],
         items: [],
@@ -11029,7 +11070,7 @@ export class StyleManager {
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
       }
       this._clearSelectedLayersBtn.disabled = false;
-      this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clear selected data layers');
+      this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_ARIA_LABEL);
       this._preservePanelStateDuringLayerClear = false;
       this._clearSelectedLayersManagerPromise = null;
       this._clearSelectedLayersPromise = null;
@@ -11143,6 +11184,37 @@ export class StyleManager {
       const success = await this.shareLinkManager.copyViewLink();
       this._showToast(success ? 'Link copied' : 'Copy failed');
     });
+  }
+
+  /** Wire two-click geodesic Measure. Does not call /api/route. */
+  _initMeasureButton() {
+    this._measureToggleBtn?.addEventListener('click', () => {
+      setMeasureActive(!isMeasureActive());
+    });
+    this._measureClearBtn?.addEventListener('click', () => {
+      clearMeasure();
+    });
+    this._syncMeasureUi();
+  }
+
+  /**
+   * Keep the Measure button and readout in sync with the current pair.
+   * @param {{active?: boolean, prompt?: string}|null} [state]
+   * @returns {void}
+   */
+  _syncMeasureUi(state = null) {
+    const active = state?.active ?? isMeasureActive();
+    const prompt = state?.prompt || 'Click two globe points';
+    if (this._measureToggleBtn) {
+      this._measureToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      this._measureToggleBtn.classList.toggle('active', active);
+    }
+    if (this._measureReadout) {
+      this._measureReadout.hidden = !active;
+    }
+    if (this._measureReadoutLabel) {
+      this._measureReadoutLabel.textContent = prompt;
+    }
   }
 
   /**
@@ -11673,6 +11745,7 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    destroyMeasure();
     this._keepAboveDispose?.();
     this._keepAboveDispose = null;
     this._unbindZoomToPointer?.();

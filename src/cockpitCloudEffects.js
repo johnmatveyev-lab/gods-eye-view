@@ -232,7 +232,7 @@ export class CockpitCloudEffectsController {
   setEnabled(enabled) {
     const next = !!enabled;
     this.enabled = next;
-    writeWxPreference(next);
+    writeWxPreference(next, localStorage);
     if (!next) {
       this.stop();
     } else if (document.body.classList.contains('cockpit-mode')) {

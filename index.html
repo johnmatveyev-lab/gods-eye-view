@@ -89,8 +89,15 @@
       <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
       <span class="launches-panel-toggle-label">LAUNCHES</span>
     </button>
-    <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
+    <button
+      id="clear-selected-layers"
+      type="button"
+      data-all-off
+      aria-label="All off — disable every live data layer"
+      title="All off — live layers off, camera stays"
+    >
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
+      <span class="all-off-layers-label">ALL OFF</span>
     </button>
     <button id="clear-annotations" type="button" aria-label="Clear annotations" title="Erase whiteboard marks" disabled>
       <span class="material-symbols-outlined" aria-hidden="true">ink_eraser</span>
@@ -113,6 +120,9 @@
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
+    <button id="measure-toggle" type="button" aria-label="Measure distance" title="Measure distance" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">straighten</span>
+    </button>
     <div id="camera-coords">
       <button type="button" id="camera-coords-value" class="camera-coords-value" aria-label="Copy camera coordinates" title="Copy lat,lon">—, —</button>
       <button type="button" id="camera-coords-copy" class="camera-coords-copy" aria-label="Copy lat,lon" title="Copy lat,lon">
@@ -132,6 +142,10 @@
       <span class="material-symbols-outlined" aria-hidden="true">landslide</span>
     </button>
   </nav>
+  <div id="measure-readout" hidden>
+    <span id="measure-readout-label">Click two globe points</span>
+    <button id="measure-clear" type="button">Clear</button>
+  </div>
   <aside id="installations-viewport-list" hidden aria-label="Mapped installations in the current view">
     <div class="installations-viewport-list-header">
       <div>
@@ -185,6 +199,7 @@
 
   <div id="keyboard-shortcuts-overlay" hidden role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="keyboard-shortcuts-title">
     <h2 id="keyboard-shortcuts-title">Keyboard shortcuts</h2>
+    <p class="keyboard-shortcuts-note">Pitch is R / Page Up / Page Down. F opens the data panel. Fullscreen is the button + Escape.</p>
     <dl id="keyboard-shortcuts-list"></dl>
   </div>
 

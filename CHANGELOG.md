@@ -7,6 +7,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Voice token mint and HUD summary fail closed unless Clerk is configured and
+  the signed-in user is Pro. An unset Clerk env no longer mints an unauthenticated
+  Realtime secret or HUD call.
 - Hosted MIC stays locked for Free, anonymous, and exhausted sessions and
   reuses the existing upgrade / sign-in / budget modal. A 404/503 token
   response shows “Voice is not available on this host yet” or
@@ -37,14 +40,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   visibility still hides out-of-band contacts even when the squawk is
   emergency. Client-side current payload only — not an alert service and
   not a verified emergency. No `/api`.
+- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
+  a row to fly to that event (cap 50). Empty or failed feed shows
+  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
+- Added a two-click Measure mode on the globe: two terrain picks draw a
+  geodesic line and show the distance in the current `km | nm | mi` units.
+  Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
+  points only — no person-search, OpenSky, Google News, or TeleGeography.
 - Hosted Data Layers now list in-view OSM dams from the existing bundled
   payload (cap 50). Clicking a row flies to those coords using the layer's
   current stem-click camera. Empty or off yields an empty list. The
   datacenter roster stays independent. No new Overpass fetch. © OpenStreetMap
   credit is unchanged.
-- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
-  a row to fly to that event (cap 50). Empty or failed feed shows
-  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
 - Flights layer has a client-side altitude band (All / Surface / &lt;10k /
   10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
   the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
@@ -64,9 +71,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   existing `focusById` path. Empty bbox stays empty. No new `/api`, person
   search, or bbox-cap change. Measure mode is independent.
 - Keyboard users can yaw with **Q/E** and pitch with **R / Page Up / Page Down**.
-  WASD still pans. Lock tilt blocks the pitch keys. **F** still opens the
-  data panel (fullscreen stays the button + Escape). The shortcuts overlay
-  (`?`) lists these keys.
+  WASD still pans. Lock tilt (the DISPLAY control flag) blocks the pitch
+  keys. **F** still opens the data panel (fullscreen stays the button +
+  Escape). The shortcuts overlay (`?` and the chrome keyboard button) lists
+  these keys.
 - Added a DISPLAY-rail Lock tilt control. When on, user rotate changes
   heading only and pitch stays (keep horizon). Unlock restores free tumble.
   The choice persists as `meridian.lockTilt` and defaults off. Home and
@@ -134,6 +142,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   control calls the existing untrack/clear-target action and leaves the camera
   where it is. Hidden when nothing is tracked. Home still does the full
   default pose reset. Roster click still tracks. No `/api`.
+- Added a panic **All off** control on the existing Clear Layers chrome.
+  It disables every live data layer and keeps the globe, credits, and
+  camera. `meridian.lastView` is not cleared. The next enable is manual.
+  First-visit layer defaults still apply only on a fresh profile. Banned
+  layers stay off. No `/api`.
 - Added a city/provider filter on the CCTV panel list. It uses `city`,
   `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
   isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.
@@ -294,6 +307,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “Google News” / “news RSS” is refused with “Google News RSS is
   disabled”. Cockpit headlines stay GDELT with citation and never fetch
   news.google.com. No Google News source picker.
+
+### Changed
+
+- Remaining runtime preference keys now write `meridian.*`. A first read of a
+  known `godsEyeView.*` layout or settings key copies it once and leaves the
+  older key in place. Proxy User-Agents identify as Meridian; the window
+  handle is `window.__meridian`. LICENSE credit and the UI title are unchanged.
 
 ### Fixed
 

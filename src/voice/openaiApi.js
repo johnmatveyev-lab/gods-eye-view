@@ -1,5 +1,4 @@
 import { getBillingRuntime, rejectIfVoiceForbidden } from '../billing/http.js';
-import { BILLING_CODES } from '../billing/entitlements.js';
 import { isKnownVoiceTier, resolveVoiceModel, VOICE_MODELS } from './voiceCost.js';
 import { realtimeInstructions } from './realtimeInstructions.js';
 import { GEV_REALTIME_TOOLS } from './realtimeTools.js';
@@ -67,19 +66,10 @@ export async function handleRealtimeToken(req, res, {
 }
 
 /**
- * Fail closed on hosted/Vercel spend: no ephemeral token or HUD call unless
- * Clerk is configured. Local self-host without Clerk keeps BYOK.
+ * Fail closed: no ephemeral token or HUD call unless Clerk is configured
+ * and rejectIfVoiceForbidden allows a Pro session.
  */
 export async function rejectIfRealtimeSpendForbidden(req, res, runtime = getBillingRuntime()) {
-  const config = runtime?.config || {};
-  const hostedSpend = Boolean(config.vercel || config.hostedIntent);
-  if (hostedSpend && !config.clerkConfigured) {
-    writeJson(res, 401, {
-      error: 'Sign in required for voice.',
-      code: BILLING_CODES.AUTH_REQUIRED,
-    });
-    return true;
-  }
   return rejectIfVoiceForbidden(req, res, runtime);
 }
 

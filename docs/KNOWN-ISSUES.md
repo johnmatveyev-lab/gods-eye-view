@@ -36,15 +36,15 @@ Status: Closed — boot clamp (2026-08-25)
 
 Context:
 - Leftover `godsEyeView.v6` / `v7` (and current `v8`) `panelPos` values could restore a panel off-screen.
-- Boot now clamps those coordinates in place, or resets that panel's pos/collapsed keys when the payload is unreadable. No console workaround.
+- Boot now copies those keys onto `meridian.*`, clamps the coordinates, or resets that panel's pos/collapsed keys when the payload is unreadable. No console workaround. Leftover `godsEyeView.*` keys stay in place.
 
 Validation target:
-- `src/panelPosition.js`, `src/ui.js` (`_sanitizeRestoredPanelPositions`, `_clampRestoredPanelsOnScreen`)
+- `src/panelPosition.js`, `src/ui.js` (`_sanitizeRestoredPanelPositions`, `_restorePanelPosition`)
 
-Related keys (unchanged this cycle — leftovers are not renamed):
-- Panel positions: `godsEyeView.v8.panelPos.<panel-id>` (legacy `v6` / `v7` still read)
-- Panel collapsed state: `godsEyeView.v6.panelCollapsed.<panel-id>`
-- CCTV calibration: `godsEyeView.cctv.calibration.v2`
+Related keys:
+- Panel positions: `meridian.v8.panelPos.<panel-id>` (legacy `v6` / `v7` still read; leftover `godsEyeView.*` copies once)
+- Panel collapsed state: `meridian.v6.panelCollapsed.<panel-id>`
+- CCTV calibration: `meridian.cctv.calibration.v2`
 
 ---
 
