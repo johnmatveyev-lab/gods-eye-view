@@ -188,6 +188,10 @@ import {
 } from './data/issPassReadout.js';
 import cctvLayer from './data/cctv.js';
 import { attachFirmsListPanel } from './data/firmsListPanel.js';
+import {
+  firmsSensorFilterFlags,
+  toggleFirmsSensor,
+} from './data/firmsSensorFilter.js';
 import radioLayer, {
   buildRadioTunerTicks,
   radioTunerCommitSlot,
@@ -2747,6 +2751,7 @@ export class StyleManager {
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._firesPanel = document.getElementById('fires-panel');
+    this._firmsSensorChips = document.getElementById('fires-sensor-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -3247,6 +3252,7 @@ export class StyleManager {
     this._initResetGlobeButton();
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
+    this._initFirmsSensorChips();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initZoomToPointer();
@@ -5323,6 +5329,7 @@ export class StyleManager {
       dataManager: this._dataManager,
       setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
     });
+    this._syncFirmsSensorChips();
     this._datacenterInViewList?.refresh();
     this._damsInViewList?.refresh();
     this._updateTrafficSyncChip();
@@ -5351,6 +5358,9 @@ export class StyleManager {
         }
         if (change?.layerId === 'satellites') {
           syncIssPassReadout({ recompute: true });
+        }
+        if (change?.layerId === 'local-firms') {
+          this._syncFirmsSensorChips();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -11425,6 +11435,32 @@ export class StyleManager {
       chip.classList.toggle('active', active);
       chip.setAttribute('aria-pressed', String(active));
     }
+  }
+
+  _syncFirmsSensorChips() {
+    const layer = this._dataManager?.layers?.get('local-firms')?.module;
+    const flags = firmsSensorFilterFlags(layer?.getParams?.()?.sensors);
+    const chips = this._firmsSensorChips?.querySelectorAll?.('[data-firms-sensor]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = flags[chip.dataset.firmsSensor] === true;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsSensorChips() {
+    if (!this._firmsSensorChips) return;
+    this._firmsSensorChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-sensor]');
+      if (!chip || !this._firmsSensorChips.contains(chip)) return;
+      const layer = this._dataManager?.layers?.get('local-firms')?.module;
+      const current = layer?.getParams?.()?.sensors;
+      const next = toggleFirmsSensor(current, chip.dataset.firmsSensor);
+      this._dataManager?.setLayerParams?.('local-firms', { sensors: next }, { origin: 'user' });
+      this._syncFirmsSensorChips();
+    });
+    this._syncFirmsSensorChips();
   }
 
   _initEarthquakeDepthChips() {

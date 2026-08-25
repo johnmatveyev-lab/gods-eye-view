@@ -31,6 +31,13 @@ import {
   fireMeetsDayNight,
   firmsDayNightChipModels,
 } from './firmsDayNightFilter.js';
+import {
+  DEFAULT_FIRMS_SENSOR_FILTER,
+  filterFiresBySensor,
+  fireMatchesFirmsSensorFilter,
+  firmsSensorChipModels,
+  normalizeFirmsSensorFilter,
+} from './firmsSensorFilter.js';
 import { fireAnchorHeight, warmFireAnchorFloors } from './fireAnchors.js';
 import { horizonOccluder } from './iconOrientation.js';
 import {
@@ -159,6 +166,20 @@ export function filterFiresByConfidenceFloor(fires, floor) {
 }
 
 /**
+ * AND the operator FRP floor with the sensor chips. Later FIRMS floors
+ * (confidence / day-night / age) compose here the same way.
+ * @param {Array<object>|null|undefined} fires
+ * @param {{frpFloor?: unknown, sensors?: unknown}} [options]
+ * @returns {Array<object>}
+ */
+export function filterVisibleFires(fires, {
+  frpFloor = 'all',
+  sensors = DEFAULT_FIRMS_SENSOR_FILTER,
+} = {}) {
+  return filterFiresBySensor(filterFiresByFrpFloor(fires, frpFloor), sensors);
+}
+
+/**
  * LOD bands keyed by camera height. `cells` bands render aggregated
  * ground-clamped heat rectangles; `detections` bands (< ~750km plus the
  * local band) render individual fire detections as glow-sprite billboards.
@@ -271,6 +292,7 @@ export function createFirmsHeatmapLayer({
   let _showDay = true;
   let _showNight = true;
   let _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
+  let _sensors = DEFAULT_FIRMS_SENSOR_FILTER;
   let _rowControlsListener = null;
   let _count = 0;
   let _cellCount = 0;
@@ -401,6 +423,7 @@ export function createFirmsHeatmapLayer({
       _showDay = true;
       _showNight = true;
       _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
+      _sensors = DEFAULT_FIRMS_SENSOR_FILTER;
       _rowControlsListener = null;
       _cellCacheByGrid.clear();
       _count = 0;
@@ -563,23 +586,28 @@ export function createFirmsHeatmapLayer({
 
     /**
      * FIRMS floors for the data-panel chips. Re-filters in-memory `_fires`
-     * — never hits /api/firms. Age, FRP, confidence, and Day | Night AND.
-     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number }} [params]
+     * — never hits /api/firms. Age, FRP, confidence, Day | Night, and
+     * sensor chips AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
+      if (!params || typeof params !== 'object') return false;
       const hasFrp = Object.hasOwn(params, 'frpFloor');
       const hasConf = Object.hasOwn(params, 'confidenceFloor');
       const hasDay = Object.hasOwn(params, 'showDay');
       const hasNight = Object.hasOwn(params, 'showNight');
       const hasAge = Object.hasOwn(params, 'ageWindow');
-      if (!hasFrp && !hasConf && !hasDay && !hasNight && !hasAge) return true;
+      const hasSensors = Object.hasOwn(params, 'sensors');
+      if (!hasFrp && !hasConf && !hasDay && !hasNight && !hasAge && !hasSensors) return true;
+      if (hasSensors && normalizeFirmsSensorFilter(params.sensors) == null) return false;
       return applyVisibleFloors({
         frpFloor: hasFrp ? params.frpFloor : undefined,
         confidenceFloor: hasConf ? params.confidenceFloor : undefined,
         showDay: hasDay ? params.showDay : undefined,
         showNight: hasNight ? params.showNight : undefined,
         ageWindow: hasAge ? params.ageWindow : undefined,
+        sensors: hasSensors ? params.sensors : undefined,
       });
     },
 
@@ -590,6 +618,7 @@ export function createFirmsHeatmapLayer({
      *   showDay: boolean,
      *   showNight: boolean,
      *   ageWindow: '6'|'12'|'24',
+     *   sensors: string,
      * }}
      */
     getParams() {
@@ -599,6 +628,7 @@ export function createFirmsHeatmapLayer({
         showDay: _showDay,
         showNight: _showNight,
         ageWindow: _ageWindow,
+        sensors: _sensors,
       };
     },
 
@@ -613,6 +643,7 @@ export function createFirmsHeatmapLayer({
             group: 'FRP',
             params: { frpFloor: chip.id },
           })),
+          ...firmsSensorChipModels(_sensors),
           ...FIRMS_CONFIDENCE_FLOOR_CHIPS.map((chip) => ({
             id: `conf-${chip.id}`,
             label: chip.label,
@@ -733,36 +764,40 @@ export function createFirmsHeatmapLayer({
     return _fires.find((fire) => fireDetectionKey(fire) === key) || null;
   }
 
-  /** Rebuild the FRP-sorted visible index from last-good `_fires`. */
+  /** Rebuild the operator-filtered FRP-sorted index from last-good `_fires`. */
   function applyVisibleIndex() {
-    const visible = filterFiresByAgeWindow(
-      filterFiresByDayNight(
-        filterFiresByConfidenceFloor(
-          filterFiresByFrpFloor(_fires, _frpFloor),
-          _confidenceFloor,
+    const visible = filterFiresBySensor(
+      filterFiresByAgeWindow(
+        filterFiresByDayNight(
+          filterFiresByConfidenceFloor(
+            filterFiresByFrpFloor(_fires, _frpFloor),
+            _confidenceFloor,
+          ),
+          { showDay: _showDay, showNight: _showNight },
         ),
-        { showDay: _showDay, showNight: _showNight },
+        _ageWindow,
+        Date.now(),
       ),
-      _ageWindow,
-      Date.now(),
+      _sensors,
     );
     _firesByFrp = visible.sort((a, b) => b.frp - a.frp);
     _count = visible.length;
   }
 
-  /** True when the detection clears FRP, confidence, Day | Night, and the age window. */
+  /** True when the detection clears FRP, confidence, Day | Night, age, and sensor. */
   function fireMeetsVisibleFloors(fire) {
     const minMw = frpFloorThresholdMw(_frpFloor);
     if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
     if (!fireMeetsConfidenceFloor(fire, _confidenceFloor)) return false;
     if (!fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight })) return false;
-    return fireMeetsAgeWindow(fire, _ageWindow, Date.now());
+    if (!fireMeetsAgeWindow(fire, _ageWindow, Date.now())) return false;
+    return fireMatchesFirmsSensorFilter(fire, _sensors);
   }
 
   /**
-   * Change FRP, confidence, Day | Night, and/or age and re-render from memory.
-   * Never fetches.
-   * @param {{ frpFloor?: *, confidenceFloor?: *, showDay?: *, showNight?: *, ageWindow?: * }} next
+   * Change FRP, confidence, Day | Night, age, and/or sensor and re-render
+   * from memory. Never fetches.
+   * @param {{ frpFloor?: *, confidenceFloor?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: * }} next
    * @returns {boolean}
    */
   function applyVisibleFloors(next = {}) {
@@ -791,6 +826,12 @@ export function createFirmsHeatmapLayer({
       const window = normalizeAgeWindow(next.ageWindow);
       if (window !== _ageWindow) changed = true;
       _ageWindow = window;
+    }
+    if (next.sensors !== undefined) {
+      const sensors = normalizeFirmsSensorFilter(next.sensors);
+      if (sensors == null) return false;
+      if (sensors !== _sensors) changed = true;
+      _sensors = sensors;
     }
     applyVisibleIndex();
     _cellCacheByGrid.clear();

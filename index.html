@@ -1037,6 +1037,11 @@
         <span class="panel-divider"></span>
         <button class="panel-collapse-btn" data-collapse-target="fires-panel" title="Collapse panel">+</button>
       </div>
+      <div id="fires-sensor-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS sensor">
+        <button type="button" class="fires-sensor-chip active" data-firms-sensor="viirs" aria-pressed="true" title="Show VIIRS detections">VIIRS</button>
+        <button type="button" class="fires-sensor-chip active" data-firms-sensor="modis" aria-pressed="true" title="Show MODIS detections">MODIS</button>
+        <button type="button" class="fires-sensor-chip active" data-firms-sensor="other" aria-pressed="true" title="Show detections from other named sensors">Other</button>
+      </div>
       <div id="fires-list-meta" class="fires-list-meta">Enable FIRMS Active Fires to list nearby detections.</div>
       <ol id="fires-list" class="fires-list" aria-label="Nearby NASA FIRMS fires"></ol>
       <p id="fires-list-ack" class="fires-list-ack">We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Earth Observing System Data and Information System (EOSDIS).</p>

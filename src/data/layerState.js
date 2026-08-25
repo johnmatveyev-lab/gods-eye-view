@@ -17,6 +17,12 @@ import {
   encodeSatelliteClassFilter,
   normalizeSatelliteClassFilter,
 } from './satelliteClassFilter.js';
+import {
+  DEFAULT_FIRMS_SENSOR_FILTER,
+  decodeFirmsSensorFilter,
+  encodeFirmsSensorFilter,
+  normalizeFirmsSensorFilter,
+} from './firmsSensorFilter.js';
 
 const VALID_DISPOSITIONS = new Set([
   'enabled-only',
@@ -365,6 +371,17 @@ const OPTION_GROUPS = Object.freeze({
       6: '6',
       12: '1',
       24: '2',
+    }),
+    Object.freeze({
+      key: 'sensors',
+      token: 's',
+      defaultValue: DEFAULT_FIRMS_SENSOR_FILTER,
+      normalize: (value) => {
+        if (value === undefined || value === null) return null;
+        return normalizeFirmsSensorFilter(value);
+      },
+      encode: encodeFirmsSensorFilter,
+      decode: decodeFirmsSensorFilter,
     }),
   ]),
 });

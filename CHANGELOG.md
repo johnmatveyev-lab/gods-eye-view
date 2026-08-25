@@ -42,6 +42,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- FIRMS row chips filter already-fetched detections by sensor
+  (`VIIRS` | `MODIS` | `Other`, default all on) next to the FRP floor.
+  Missing/blank sensor stays visible; a non-empty unknown token is Other.
+  Cells, sprites, overlay cards, and the Plan 70 FIRES list AND this with
+  the existing FRP, confidence, Day | Night, and age floors without a new
+  NASA fetch. The choice persists on `local-firms` (`w.s.*`). Same VIIRS
+  proxy, quota, and TTL. Not an alert service.
 - A first hosted visit with no lastView, share-URL layers, or saved layer
   prefs now starts with the globe plus civilian flights only. Returning
   lastView / share URLs that include layers, and saved `gev:layer-state:v2`
