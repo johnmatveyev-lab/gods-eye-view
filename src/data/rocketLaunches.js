@@ -45,6 +45,21 @@ import {
   subscribeLaunchOrbitFilter,
   toggleLaunchOrbitFilter,
 } from './launchOrbitFilter.js';
+import {
+  compactLaunchSiteName,
+  DEFAULT_LAUNCH_SITE_FILTER,
+  getLaunchSiteFilter,
+  hydrateLaunchSiteFilter,
+  launchPassesSiteFilter,
+  launchSiteChipIdsFromLaunches,
+  launchSiteChipLabel,
+  launchSiteFilterFlags,
+  setLaunchSiteFilter,
+  subscribeLaunchSiteFilter,
+  toggleLaunchSiteFilter,
+} from './launchSiteFilter.js';
+
+export { compactLaunchSiteName };
 
 const WINDOW_DAYS = 30;
 const API_URL = '/api/launches';
@@ -129,6 +144,7 @@ const _missionOrbitPrimitives = new Map();
 let _statusFilterUnsubscribe = null;
 let _providerFilterUnsubscribe = null;
 let _orbitFilterUnsubscribe = null;
+let _siteFilterUnsubscribe = null;
 
 const REPLAY_ASCENT_FALLBACK_SEC = 12;
 const REPLAY_ASCENT_MIN_SEC = 8;
@@ -522,19 +538,6 @@ function shortMissionLabel(name, maxLength = 24) {
 }
 
 /**
- * Reduce generic launch-complex names to their identifying pad or area suffix.
- * @param {string|null} launchSite Launch Library pad name.
- * @returns {string|null} Compact launch-site identifier.
- */
-export function compactLaunchSiteName(launchSite) {
-  const text = String(launchSite || '').replace(/\s+/g, ' ').trim();
-  if (!text || /^(unknown|unavailable|n\/a)$/i.test(text)) return null;
-  const genericPrefix = /^(?:orbital\s+launch\s+pad|space\s+launch\s+complex|launch\s+(?:area|complex|pad|site))\s*[-·:]?\s*/i;
-  const compact = text.replace(genericPrefix, '').trim();
-  return compact || null;
-}
-
-/**
  * Build the source-owned launch-site marker presentation. Overview markers
  * compete in the bounded ambient-label domain; the selected mission moves to
  * the protected selected lane and gains the former launch-site detail line.
@@ -793,14 +796,15 @@ export function missionDataCompleteness(launch = {}) {
 }
 
 /**
- * Status, provider, and orbit chips AND together. A selected mission stays
- * visible even when any of its chips is off. Pad-site markers use this same
- * predicate.
- * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string}|null|undefined} launch
+ * Status, provider, orbit, and site chips AND together. A selected mission
+ * stays visible even when any of its chips is off. Pad-site markers use this
+ * same predicate.
+ * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, launchSite?: unknown}|null|undefined} launch
  * @param {{
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
+ *   siteFilter?: unknown,
  *   selectedLaunchId?: string|null,
  * }} [options]
  * @returns {boolean}
@@ -811,9 +815,11 @@ export function launchPassesMissionFilters(launch, options = {}) {
   const statusFilter = options.statusFilter ?? DEFAULT_LAUNCH_STATUS_FILTER;
   const providerFilter = options.providerFilter ?? DEFAULT_LAUNCH_PROVIDER_FILTER;
   const orbitFilter = options.orbitFilter ?? DEFAULT_LAUNCH_ORBIT_FILTER;
+  const siteFilter = options.siteFilter ?? DEFAULT_LAUNCH_SITE_FILTER;
   return launchPassesStatusFilter(launch, statusFilter, null)
     && launchPassesProviderFilter(launch, providerFilter, null)
-    && launchPassesOrbitFilter(launch, orbitFilter, null);
+    && launchPassesOrbitFilter(launch, orbitFilter, null)
+    && launchPassesSiteFilter(launch, siteFilter, null);
 }
 
 /**
@@ -824,6 +830,7 @@ export function launchPassesMissionFilters(launch, options = {}) {
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
+ *   siteFilter?: unknown,
  *   selectedLaunchId?: string|null,
  * }} [options]
  * @returns {Array<{launch: object, index: number}>}
@@ -836,6 +843,7 @@ export function missionRosterEntries(launches, options = {}) {
       statusFilter: options.statusFilter,
       orbitFilter: options.orbitFilter,
       providerFilter: options.providerFilter,
+      siteFilter: options.siteFilter,
       selectedLaunchId,
     }))
     .sort((a, b) => {
@@ -1179,17 +1187,10 @@ function syncMissionOverlayEntries() {
   _missionOverlayHost.clearSource(ROCKET_MISSION_SELECTED_OVERLAY_SOURCE_ID);
   _missionOverlayHost.setVisible(ROCKET_MISSION_SELECTED_OVERLAY_SOURCE_ID, false);
   _selectedMissionOverlayTimeText = null;
-  const statusFilter = getLaunchStatusFilter();
-  const providerFilter = getLaunchProviderFilter();
-  const orbitFilter = getLaunchOrbitFilter();
+  const filters = currentMissionFilterOptions(_selectedLaunchId);
   const entries = selectRocketMissionMarkerOverlayCohort(
     Array.from(_missionOverlayRecords.values(), (record) => {
-      if (!launchPassesMissionFilters(record.launch, {
-        statusFilter,
-        providerFilter,
-        orbitFilter,
-        selectedLaunchId: _selectedLaunchId,
-      })) return null;
+      if (!launchPassesMissionFilters(record.launch, filters)) return null;
       const entry = createRocketMissionMarkerOverlayEntry(
         record.launch,
         record.anchorPosition,
@@ -2495,11 +2496,29 @@ function syncLaunchOrbitChips() {
   );
 }
 
+function renderLaunchSiteChips() {
+  if (!_missionRoster) return;
+  const host = _missionRoster.querySelector('[data-mission-site-chips]');
+  if (!host) return;
+  const chipIds = launchSiteChipIdsFromLaunches(_launches);
+  const flags = launchSiteFilterFlags(getLaunchSiteFilter(), chipIds);
+  host.innerHTML = chipIds.map((id) => {
+    const active = flags[id] === true;
+    const label = launchSiteChipLabel(id);
+    return `<button type="button" class="space-mission-site-chip${active ? ' active' : ''}" data-mission-site-chip="${escapeMissionText(id)}" aria-pressed="${String(active)}">${escapeMissionText(label)}</button>`;
+  }).join('');
+}
+
+function syncLaunchSiteChips() {
+  renderLaunchSiteChips();
+}
+
 function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
   return {
     statusFilter: getLaunchStatusFilter(),
     providerFilter: getLaunchProviderFilter(),
     orbitFilter: getLaunchOrbitFilter(),
+    siteFilter: getLaunchSiteFilter(),
     selectedLaunchId,
   };
 }
@@ -2533,6 +2552,7 @@ function applyLaunchFilterPresentation() {
   syncMissionOverlayEntries();
   syncLaunchStatusChips();
   syncLaunchProviderChips();
+  syncLaunchSiteChips();
   syncLaunchOrbitChips();
   renderMissionPanel();
 }
@@ -2750,6 +2770,14 @@ function createMissionPanel() {
   if (_missionRoster) {
     _missionRoster.onclick = (event) => {
       const target = event.target instanceof Element ? event.target : null;
+      const statusChip = target?.closest('[data-mission-status-chip]');
+      if (statusChip) {
+        setLaunchStatusFilter(toggleLaunchStatusFilter(
+          getLaunchStatusFilter(),
+          statusChip.dataset.missionStatusChip || statusChip.getAttribute('data-mission-status-chip'),
+        ));
+        return;
+      }
       const providerChip = target?.closest('[data-mission-provider-chip]');
       if (providerChip) {
         setLaunchProviderFilter(toggleLaunchProviderFilter(
@@ -2760,11 +2788,13 @@ function createMissionPanel() {
         ));
         return;
       }
-      const statusChip = target?.closest('[data-mission-status-chip]');
-      if (statusChip) {
-        setLaunchStatusFilter(toggleLaunchStatusFilter(
-          getLaunchStatusFilter(),
-          statusChip.dataset.missionStatusChip || statusChip.getAttribute('data-mission-status-chip'),
+      const siteChip = target?.closest('[data-mission-site-chip]');
+      if (siteChip) {
+        const chipIds = launchSiteChipIdsFromLaunches(_launches);
+        setLaunchSiteFilter(toggleLaunchSiteFilter(
+          getLaunchSiteFilter(),
+          siteChip.dataset.missionSiteChip || siteChip.getAttribute('data-mission-site-chip'),
+          chipIds,
         ));
         return;
       }
@@ -3690,6 +3720,7 @@ const rocketLaunchesLayer = {
     hydrateLaunchStatusFilter();
     hydrateLaunchProviderFilter();
     hydrateLaunchOrbitFilter();
+    hydrateLaunchSiteFilter();
     if (!_statusFilterUnsubscribe) {
       _statusFilterUnsubscribe = subscribeLaunchStatusFilter(applyLaunchFilterPresentation);
     }
@@ -3698,6 +3729,9 @@ const rocketLaunchesLayer = {
     }
     if (!_orbitFilterUnsubscribe) {
       _orbitFilterUnsubscribe = subscribeLaunchOrbitFilter(applyLaunchFilterPresentation);
+    }
+    if (!_siteFilterUnsubscribe) {
+      _siteFilterUnsubscribe = subscribeLaunchSiteFilter(applyLaunchFilterPresentation);
     }
     createMissionPanel();
     createReplayVehicleOverlay();
@@ -3851,6 +3885,8 @@ const rocketLaunchesLayer = {
     _providerFilterUnsubscribe = null;
     _orbitFilterUnsubscribe?.();
     _orbitFilterUnsubscribe = null;
+    _siteFilterUnsubscribe?.();
+    _siteFilterUnsubscribe = null;
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },

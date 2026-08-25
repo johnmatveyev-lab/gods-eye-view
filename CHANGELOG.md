@@ -60,6 +60,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster now has launch-site chips derived from the cached
+  30-day Launch Library 2 window via `compactLaunchSiteName(launchSite)`,
+  plus Other for blank or unknown pads. Default all on. Filters the
+  roster, pad markers, and ambient overlay from cache and ANDs with
+  status, provider, and orbit class. Selected mission stays visible when
+  its site chip is off. No extra `/api/launches` fetch and no new endpoint.
 - CCTV panel has client-only High | Medium | Low heading-confidence chips
   next to the city/source filter. Default all on. Unchecking Low hides
   low-confidence headings and keeps high/medium; missing/unknown
