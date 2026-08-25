@@ -19,7 +19,7 @@ const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
 const css = fs.readFileSync(new URL('../style.css', import.meta.url), 'utf8');
 const hud = fs.readFileSync(new URL('./hud.js', import.meta.url), 'utf8');
 const voice = fs.readFileSync(new URL('./voice/gevActions.js', import.meta.url), 'utf8');
-const vite = fs.readFileSync(new URL('../vite.config.js', import.meta.url), 'utf8');
+const liveApi = fs.readFileSync(new URL('./server/liveApiProxies.js', import.meta.url), 'utf8');
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -194,8 +194,8 @@ test('voice set_hud still writes StyleManager HUD state, not a second store', ()
 
 test('HUD summary API and the five-word model stay unchanged', () => {
   assert.match(hud, /const HUD_SUMMARY_URL = '\/api\/openai\/hud-summary';/);
-  assert.match(vite, /const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';/);
-  assert.match(vite, /middlewares\.use\('\/api\/openai\/hud-summary'/);
+  assert.match(liveApi, /const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';/);
+  assert.match(liveApi, /middlewares\.use\('\/api\/openai\/hud-summary'/);
 });
 
 test('clean view + HUD off still leaves #cesium-credits on', () => {
