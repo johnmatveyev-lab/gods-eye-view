@@ -246,6 +246,7 @@ export function readCameraGridView(camera, math = {}) {
 export function attachGridOverlay(host, { storage } = {}) {
   let enabled = readGridPreference(storage) === 'on';
   let stopCamera = null;
+  let paintTimer = null;
 
   function paint() {
     if (!enabled) {
@@ -261,12 +262,24 @@ export function attachGridOverlay(host, { storage } = {}) {
     host?.requestRender?.();
   }
 
+  function schedulePaint() {
+    if (paintTimer != null) return;
+    paintTimer = setTimeout(() => {
+      paintTimer = null;
+      paint();
+    }, 0);
+  }
+
   function listen() {
     if (stopCamera || !enabled || typeof host?.onCameraChanged !== 'function') return;
-    stopCamera = host.onCameraChanged(() => paint()) || null;
+    stopCamera = host.onCameraChanged(() => schedulePaint()) || null;
   }
 
   function unlisten() {
+    if (paintTimer != null) {
+      clearTimeout(paintTimer);
+      paintTimer = null;
+    }
     try { stopCamera?.(); } catch { /* already detached */ }
     stopCamera = null;
   }
@@ -329,20 +342,19 @@ export function createCesiumGridHost(viewer, Cesium, requestRender) {
       const col = ensureCollection();
       if (!col) return;
       col.removeAll();
-      const color = Cesium.Color.fromCssColorString('#8fd4e8').withAlpha(0.45);
-      const material = Cesium.Material.fromType('Color', { color });
-      for (const line of lines || []) {
-        const degrees = [];
-        for (const point of line.positions || []) {
-          degrees.push(point.lon, point.lat);
-        }
-        if (degrees.length < 4) continue;
-        col.add({
-          positions: Cesium.Cartesian3.fromDegreesArray(degrees),
-          width: 1.25,
-          material,
-        });
-      }
+          const color = Cesium.Color.fromCssColorString('#8fd4e8').withAlpha(0.45);
+          for (const line of lines || []) {
+            const degrees = [];
+            for (const point of line.positions || []) {
+              degrees.push(point.lon, point.lat);
+            }
+            if (degrees.length < 4) continue;
+            col.add({
+              positions: Cesium.Cartesian3.fromDegreesArray(degrees),
+              width: 1.25,
+              material: Cesium.Material.fromType('Color', { color }),
+            });
+          }
     },
     setVisible(visible) {
       if (!collection && !visible) return;
@@ -353,9 +365,13 @@ export function createCesiumGridHost(viewer, Cesium, requestRender) {
       requestRender?.();
     },
     onCameraChanged(fn) {
-      const remove = viewer?.camera?.changed?.addEventListener?.(fn);
-      return typeof remove === 'function' ? remove : () => {
-        viewer?.camera?.changed?.removeEventListener?.(fn);
+      const removeChanged = viewer?.camera?.changed?.addEventListener?.(fn);
+      const removeMoveEnd = viewer?.camera?.moveEnd?.addEventListener?.(fn);
+      return () => {
+        if (typeof removeChanged === 'function') removeChanged();
+        else viewer?.camera?.changed?.removeEventListener?.(fn);
+        if (typeof removeMoveEnd === 'function') removeMoveEnd();
+        else viewer?.camera?.moveEnd?.removeEventListener?.(fn);
       };
     },
     destroy() {

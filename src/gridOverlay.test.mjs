@@ -9,6 +9,7 @@ import {
   MAX_GRID_LINES,
   attachGridOverlay,
   buildGridPolylines,
+  createCesiumGridHost,
   describeGridLines,
   gridStepDegrees,
   normalizeGridPreference,
@@ -194,7 +195,7 @@ test('Grid on draws lines; Grid off removes them', () => {
   overlay.destroy();
 });
 
-test('camera zoom rebuilds a readable step and off stays gone', () => {
+test('camera zoom rebuilds a readable step and off stays gone', async () => {
   const { host, state, moveCamera } = makeHost({ heightM: 20_000_000 });
   const overlay = attachGridOverlay(host, { storage: memoryStorage() });
   overlay.setEnabled(true);
@@ -208,6 +209,7 @@ test('camera zoom rebuilds a readable step and off stays gone', () => {
     eastDeg: 0.2,
     northDeg: 51.7,
   });
+  await new Promise((resolve) => setTimeout(resolve, 0));
   const closeCount = state.lines.length;
   assert.ok(closeCount > 0);
   assert.ok(closeCount < planetCount, 'zooming in must drop the planet-scale line set');
@@ -215,10 +217,50 @@ test('camera zoom rebuilds a readable step and off stays gone', () => {
 
   overlay.setEnabled(false);
   moveCamera({ heightM: 20_000_000, westDeg: -180, southDeg: -90, eastDeg: 180, northDeg: 90 });
+  await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(state.visible, false);
   assert.equal(state.lines.length, 0);
   overlay.destroy();
   assert.equal(state.cameraListeners, 0);
+});
+
+test('Cesium host mints a fresh material so rebuilds do not reuse a destroyed one', () => {
+  const collection = {
+    show: false,
+    items: [],
+    add(item) { this.items.push(item); },
+    removeAll() {
+      for (const item of this.items) item.material?.destroy?.();
+      this.items = [];
+    },
+  };
+  const Cesium = {
+    PolylineCollection: function PolylineCollection() { return collection; },
+    Color: { fromCssColorString: () => ({ withAlpha: () => ({}) }) },
+    Material: {
+      fromType() {
+        return {
+          destroyed: false,
+          destroy() { this.destroyed = true; },
+        };
+      },
+    },
+    Cartesian3: { fromDegreesArray: (degrees) => degrees },
+    Math: { toDegrees: (rad) => rad * 180 / Math.PI },
+  };
+  const host = createCesiumGridHost({
+    scene: { primitives: { add() {} } },
+    camera: {
+      positionCartographic: { height: 20_000_000 },
+      computeViewRectangle() { return null; },
+      changed: { addEventListener() {} },
+    },
+  }, Cesium, () => {});
+  const line = { positions: [{ lat: 0, lon: 0 }, { lat: 10, lon: 0 }] };
+  host.setLines([line]);
+  host.setLines([line]);
+  assert.equal(collection.items.length, 1);
+  assert.equal(collection.items[0].material.destroyed, false);
 });
 
 test('readCameraGridView uses cartographic height and the view rectangle', () => {
