@@ -55,7 +55,7 @@ const DIRECTION_SCRATCH = Array.from({ length: 3 }, () => new Cesium.Cartesian3(
 const SUBJECT_CARTOGRAPHIC_SCRATCH = new Cesium.Cartographic();
 const TARGET_CARTOGRAPHIC_SCRATCH = Array.from({ length: 3 }, () => new Cesium.Cartographic());
 const SOURCE_LABEL = {
-  flights: 'OpenSky',
+  flights: 'adsb.lol',
   military: 'adsb.lol',
   'ais-live-vessels': 'AISStream',
   'military-installations': 'OpenStreetMap',

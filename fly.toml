@@ -1,4 +1,4 @@
-# fly.toml — God's Eye View
+# fly.toml — Meridian
 # Deploy: fly launch --copy-config --yes && fly secrets set GOOGLE_MAPS_API_KEY=... && fly deploy
 
 app = "gods-eye-view"

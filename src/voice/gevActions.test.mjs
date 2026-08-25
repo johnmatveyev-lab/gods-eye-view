@@ -263,8 +263,8 @@ test('nearest-aircraft voice action refreshes an already-enabled viewport layer 
     styleManager.runImmediateNavigation('location', navigate)
   );
   const flights = {
-    source: 'OpenSky Network',
-    getStats: () => ({ source: 'OpenSky Network', count: 1, lastUpdate: Date.now() }),
+    source: 'adsb.lol',
+    getStats: () => ({ source: 'adsb.lol', count: 1, lastUpdate: Date.now() }),
     getAnalystRecords: () => [
       { id: 'DUPLICATE', icao24: 'fresh-austin', callsign: 'DUPLICATE', lat: 30.28, lon: -97.74, altitudeM: 1800, onGround: false },
     ],

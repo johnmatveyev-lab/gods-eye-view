@@ -176,7 +176,6 @@ const CREDIT_EXPECTATIONS = {
   'local-datacenters': /OpenStreetMap/i,
   'local-dams': /OpenStreetMap/i,
   'local-firms': /FIRMS/i,
-  'telegeography-submarine-cables': /TeleGeography/i,
   'local-neighborhoods': /DataSF|San Francisco/i,
   'weather-effects': /Open-Meteo/i,
 };
@@ -189,6 +188,7 @@ const CREDIT_EXEMPT_LAYERS = {
   'military-awareness': 'derived view over other layers; it ships no data of its own and its sources carry their own credits',
   detection: 'a rendering treatment over already-credited layers, not a data source',
   annotations: 'user-drawn marks; no third-party data',
+  'telegeography-submarine-cables': 'TeleGeography CC BY-NC-SA data was removed from this commercial fork; the registered layer is a no-op and ships no cable data',
 };
 
 /** @returns {{regex: RegExp}|{exempt: string}|null} null = unmapped (fails closed). */

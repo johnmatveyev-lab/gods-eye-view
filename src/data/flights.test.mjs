@@ -27,7 +27,7 @@ import {
   initTrackedReadout,
 } from './trackedReadout.js';
 
-test('share-Follow absence requires an accepted OpenSky snapshot', async () => {
+test('share-Follow absence requires an accepted adsb.lol snapshot', async () => {
   _setFlightTrackingRefreshOutcomeForTest({ status: 'source-unavailable' });
   assert.equal(
     (await flightsLayer.resolveTrackingRestoreTarget('abc123')).status,
@@ -141,7 +141,7 @@ test('flights first update forwards caller cancellation into the feed request', 
   }
 });
 
-test('nonempty OpenSky payload with zero usable rows cannot prove share target absence', async () => {
+test('nonempty adsb.lol payload with zero usable rows cannot prove share target absence', async () => {
   _setTrackedFlightRefreshStateForTest({
     icao24: 'abc123',
     entity: { gevLabelModel: { title: 'WARM', details: [] } },
@@ -161,7 +161,7 @@ test('nonempty OpenSky payload with zero usable rows cannot prove share target a
     await flightsLayer.update({ camera: { positionCartographic: null }, scene: {} });
     const resolution = await flightsLayer.resolveTrackingRestoreTarget('abc123');
     assert.equal(resolution.status, 'source-unavailable');
-    assert.match(flightsLayer.getStats().error, /Malformed OpenSky aircraft rows/);
+    assert.match(flightsLayer.getStats().error, /Malformed adsb.lol aircraft rows/);
     assert.equal(flightsLayer.getAnalystRecords().length, 1, 'warm aircraft data is preserved');
   } finally {
     globalThis.fetch = realFetch;

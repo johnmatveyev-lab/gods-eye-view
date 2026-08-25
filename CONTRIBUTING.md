@@ -1,13 +1,13 @@
-# Contributing to God's Eye View
+# Contributing to Meridian
 
-Thanks for being here. God's Eye View is an open foundation for live spatial intelligence in the browser, and it gets better when more people run it, break it, and extend it.
+Thanks for being here. Meridian is an independent commercial product based on the MIT-licensed God's Eye View project. It is not affiliated with Bilawal Sidhu or the God's Eye View series.
 
 ## Getting set up
 
 Use Node.js 24.14.x or 26.x (also enforced by `package.json`).
 
 ```bash
-git clone https://github.com/bilawalsidhu/gods-eye-view.git
+git clone https://github.com/johnmatveyev-lab/gods-eye-view.git
 cd gods-eye-view
 nvm install 24.14.0
 nvm use 24.14.0
@@ -15,7 +15,7 @@ npm install
 ./scripts/dev-fresh.sh        # or: GOOGLE_MAPS_API_KEY="…" npm run dev
 ```
 
-You need a **Google Maps API key** with the Map Tiles API enabled (see the [README](README.md#-api-keys)). Most data layers work with no other accounts. On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
+You need a **Google Maps API key** with the Map Tiles API enabled (see the [README](README.md)). Most data layers work with no other accounts. On macOS the launcher pulls keys from the Keychain; on any platform you can pass them as env vars or use a `.env` (copy `.env.example`).
 
 Open `http://localhost:4173`. Before sending a PR run `npm run build`, `npm test`, and `npm run test:track` (dev server must be up) — **all three must stay green.**
 

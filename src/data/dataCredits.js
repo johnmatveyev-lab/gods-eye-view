@@ -6,8 +6,8 @@ import * as Cesium from 'cesium';
  * Legal requirement (see DATA_SOURCES.md, findings H10/H11 in
  * every third-party data layer this app can
  * display carries its own license and required attribution — ODbL (OSM
- * datacenters/dams, adsb.lol, Overpass roads), CC BY-NC-SA (TeleGeography
- * cables), NASA FIRMS, CelesTrak, USGS, City of Austin, GBFS operators, OpenSky.
+ * datacenters/dams, adsb.lol, Overpass roads), NASA FIRMS, CelesTrak, USGS,
+ * City of Austin, GBFS operators.
  * The MIT code license does NOT cover this data.
  *
  * These credits are registered ONCE at init as STATIC credits with
@@ -28,17 +28,9 @@ import * as Cesium from 'cesium';
 export const DATA_CREDITS = [
   // ── Live sources ────────────────────────────────────────────────
   {
-    key: 'opensky',
-    html:
-      'Flights: OpenSky Network — Schäfer et al., ' +
-      '“Bringing Up OpenSky”, IPSN 2014 · ' +
-      '<a href="https://opensky-network.org" target="_blank" rel="noopener">opensky-network.org</a> ' +
-      '(non-commercial)',
-  },
-  {
     key: 'adsblol',
     html:
-      'Military flights, aircraft traces &amp; bounded regional flight fallback: ' +
+      'Live flights, military flights &amp; aircraft traces: ' +
       '<a href="https://adsb.lol" target="_blank" rel="noopener">adsb.lol</a> ' +
       '(ODbL 1.0)',
   },
@@ -95,18 +87,11 @@ export const DATA_CREDITS = [
       '(CC BY 4.0)',
   },
   {
-    key: 'google-news-rss',
-    html:
-      'Cockpit regional headlines: ' +
-      '<a href="https://policies.google.com/terms" target="_blank" rel="noopener">Google News RSS</a> ' +
-      '(location-matched article links; publisher terms apply)',
-  },
-  {
     key: 'gdelt',
     html:
       'Cockpit regional headlines: ' +
       '<a href="https://www.gdeltproject.org/about.html" target="_blank" rel="noopener">GDELT Project</a> ' +
-      '(location-matched article links; publisher terms apply)',
+      '(location-matched article links; citation required; publisher terms apply)',
   },
   {
     key: 'austin-cctv',
@@ -167,13 +152,6 @@ export const DATA_CREDITS = [
       'from NASA’s Fire Information for Resource Management System ' +
       '(<a href="https://earthdata.nasa.gov/firms" target="_blank" rel="noopener">earthdata.nasa.gov/firms</a>), ' +
       'part of NASA’s Earth Observing System Data and Information System (EOSDIS)',
-  },
-  {
-    key: 'telegeography',
-    html:
-      'Submarine cables: © TeleGeography — ' +
-      '<a href="https://www.submarinecablemap.com" target="_blank" rel="noopener">submarinecablemap.com</a> ' +
-      '(CC BY-NC-SA 3.0 — NonCommercial)',
   },
 ];
 

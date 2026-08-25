@@ -2424,7 +2424,7 @@ test('the contacts window reports exactly the counts the panel renders', () => {
     evaluatedAt: Date.now(),
     radiusM: AWARENESS_RADIUS_M,
     cohorts: [
-      { id: 'flights', label: 'Flights', source: 'OpenSky', summary: { relationship: 'nearby', count: 42, reason: 'observed', nearest: [] } },
+      { id: 'flights', label: 'Flights', source: 'adsb.lol', summary: { relationship: 'nearby', count: 42, reason: 'observed', nearest: [] } },
       { id: 'military', label: 'Military flights', source: 'adsb.lol', summary: { relationship: 'nearby', count: 13, reason: 'observed', nearest: [] } },
       { id: 'ais-live-vessels', label: 'AIS vessels', source: 'AISStream', summary: { relationship: 'unknown', count: null, reason: 'feed unavailable', nearest: [] } },
     ],
