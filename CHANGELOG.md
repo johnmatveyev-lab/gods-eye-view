@@ -41,6 +41,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Earthquake depth chips — Shallow | Intermediate | Deep — sit next to the
+  existing magnitude floor. Default all on, same buckets as the disc colors
+  (shallow <70 km, intermediate 70–300, deep ≥300). Chip changes re-filter
+  the cached USGS `all_day` GeoJSON; no new fetch and no `/api`. AND with the
+  magnitude floor. The hosted Quakes list shows only selected depths.
 - Added a Go-to field next to the camera-center readout. Operators paste
   an MGRS grid (`mgrs.toPoint`) or decimal `lat, lon` and the existing
   Home/share `camera.flyTo` helper centers on that point, keeping the

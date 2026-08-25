@@ -7,8 +7,10 @@ import {
 
 /**
  * USGS earthquake discs — last 24 hours, operator floor 2.5+ / 4.0+ / 5.0+ / 6.0+
- * (default 2.5+, the historic hard-skip). Floor chips re-filter the last
- * all_day GeoJSON in memory; they do not change the USGS product.
+ * (default 2.5+, the historic hard-skip) and Shallow | Intermediate | Deep
+ * chips (default all on, same buckets as depthColor). Floor and depth chips
+ * re-filter the last all_day GeoJSON in memory; they do not change the USGS
+ * product.
  *
  * Ellipse axes are STATIC (plain numbers), redefined only when a poll brings
  * new data. They must never become a `CallbackProperty` again: every entity
@@ -34,6 +36,32 @@ const API_URL = USGS_ALL_DAY_URL;
 export const DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR = 2.5;
 export const EARTHQUAKE_MAGNITUDE_FLOORS = Object.freeze([2.5, 4.0, 5.0, 6.0]);
 
+/** Same buckets `depthColor()` already uses for disc fill. */
+export const EARTHQUAKE_DEPTH_BANDS = Object.freeze(['shallow', 'intermediate', 'deep']);
+export const EARTHQUAKE_DEPTH_BAND_CODES = Object.freeze({
+  shallow: 'S',
+  intermediate: 'I',
+  deep: 'D',
+});
+export const EARTHQUAKE_DEPTH_BAND_LABELS = Object.freeze({
+  shallow: 'Shallow',
+  intermediate: 'Intermediate',
+  deep: 'Deep',
+});
+export const EARTHQUAKE_DEPTH_BAND_TITLES = Object.freeze({
+  shallow: 'Show shallow earthquakes (shallower than 70 km)',
+  intermediate: 'Show intermediate earthquakes (70–300 km)',
+  deep: 'Show deep earthquakes (300 km and deeper)',
+});
+/** Canonical token when every depth chip is on — current unfiltered depth view. */
+export const DEFAULT_EARTHQUAKE_DEPTH_BANDS = 'SID';
+
+const DEPTH_CODE_TO_BAND = Object.freeze(
+  Object.fromEntries(
+    Object.entries(EARTHQUAKE_DEPTH_BAND_CODES).map(([band, code]) => [code, band]),
+  ),
+);
+
 /** Same cutoff the discs already use for the heavier stroke / fill. */
 export function isSignificantEarthquake(mag) {
   return mag >= 5.0;
@@ -52,6 +80,157 @@ export function filterEarthquakeFeaturesByMagnitudeFloor(
 ) {
   if (!Array.isArray(features)) return [];
   return features.filter((feature) => !(feature?.properties?.mag < floor));
+}
+
+/**
+ * Same buckets as `depthColor()`: shallow <70 km, intermediate 70–300,
+ * deep ≥300. Missing/non-finite depth matches the draw path (`depthKm || 0`).
+ * @param {unknown} depthKm
+ * @returns {'shallow'|'intermediate'|'deep'}
+ */
+export function earthquakeDepthBand(depthKm) {
+  const km = Number(depthKm);
+  const depth = Number.isFinite(km) ? km : 0;
+  if (depth < 70) return 'shallow';
+  if (depth < 300) return 'intermediate';
+  return 'deep';
+}
+
+/**
+ * Canonical chip-code token. Invalid input returns null so setParams can refuse.
+ * @param {unknown} value
+ * @returns {string|null}
+ */
+export function normalizeEarthquakeDepthBands(value) {
+  if (value == null || value === '' || value === true || value === 'all') {
+    return DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim().toUpperCase();
+    if (!trimmed) return DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+    if (trimmed === '0' || trimmed === 'NONE') return '0';
+    if (trimmed === DEFAULT_EARTHQUAKE_DEPTH_BANDS || trimmed === 'ALL') {
+      return DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+    }
+    const seen = new Set();
+    for (const character of trimmed) {
+      const band = DEPTH_CODE_TO_BAND[character];
+      if (!band) return null;
+      seen.add(band);
+    }
+    if (!seen.size) return '0';
+    const codes = EARTHQUAKE_DEPTH_BANDS
+      .filter((band) => seen.has(band))
+      .map((band) => EARTHQUAKE_DEPTH_BAND_CODES[band])
+      .join('');
+    return codes === DEFAULT_EARTHQUAKE_DEPTH_BANDS ? DEFAULT_EARTHQUAKE_DEPTH_BANDS : codes;
+  }
+  if (Array.isArray(value)) {
+    const seen = new Set();
+    for (const raw of value) {
+      const band = String(raw || '').trim().toLowerCase();
+      if (!EARTHQUAKE_DEPTH_BANDS.includes(/** @type {'shallow'|'intermediate'|'deep'} */ (band))) {
+        return null;
+      }
+      seen.add(band);
+    }
+    if (!seen.size) return '0';
+    return normalizeEarthquakeDepthBands(
+      Object.fromEntries(EARTHQUAKE_DEPTH_BANDS.map((band) => [band, seen.has(band)])),
+    );
+  }
+  if (typeof value === 'object') {
+    const seen = new Set();
+    let sawKnown = false;
+    for (const band of EARTHQUAKE_DEPTH_BANDS) {
+      if (!Object.hasOwn(value, band)) continue;
+      sawKnown = true;
+      if (value[band] === true) seen.add(band);
+    }
+    if (!sawKnown) return null;
+    if (!seen.size) return '0';
+    const codes = EARTHQUAKE_DEPTH_BANDS
+      .filter((band) => seen.has(band))
+      .map((band) => EARTHQUAKE_DEPTH_BAND_CODES[band])
+      .join('');
+    return codes === DEFAULT_EARTHQUAKE_DEPTH_BANDS ? DEFAULT_EARTHQUAKE_DEPTH_BANDS : codes;
+  }
+  return null;
+}
+
+/**
+ * @param {unknown} value
+ * @returns {Record<'shallow'|'intermediate'|'deep', boolean>}
+ */
+export function earthquakeDepthBandFlags(value) {
+  const token = normalizeEarthquakeDepthBands(value) ?? DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+  if (token === '0') {
+    return Object.fromEntries(EARTHQUAKE_DEPTH_BANDS.map((band) => [band, false]));
+  }
+  return Object.fromEntries(
+    EARTHQUAKE_DEPTH_BANDS.map((band) => [band, token.includes(EARTHQUAKE_DEPTH_BAND_CODES[band])]),
+  );
+}
+
+/**
+ * Flip one depth chip. Last-off becomes the empty token `0`.
+ * @param {unknown} current
+ * @param {unknown} band
+ * @returns {string}
+ */
+export function toggleEarthquakeDepthBand(current, band) {
+  const id = String(band || '').trim().toLowerCase();
+  if (!EARTHQUAKE_DEPTH_BANDS.includes(/** @type {'shallow'|'intermediate'|'deep'} */ (id))) {
+    return normalizeEarthquakeDepthBands(current) ?? DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+  }
+  const token = normalizeEarthquakeDepthBands(current) ?? DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+  const enabled = new Set(
+    token === '0'
+      ? []
+      : [...token].map((code) => DEPTH_CODE_TO_BAND[code]).filter(Boolean),
+  );
+  if (enabled.has(id)) enabled.delete(id);
+  else enabled.add(id);
+  return normalizeEarthquakeDepthBands(
+    Object.fromEntries(EARTHQUAKE_DEPTH_BANDS.map((name) => [name, enabled.has(name)])),
+  ) ?? DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+}
+
+/**
+ * Keep events whose depth falls in an enabled band. Same buckets as discs.
+ * @param {Array<object>|null|undefined} features USGS GeoJSON features.
+ * @param {unknown} [bands=DEFAULT_EARTHQUAKE_DEPTH_BANDS]
+ * @returns {Array<object>}
+ */
+export function filterEarthquakeFeaturesByDepthBands(
+  features,
+  bands = DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+) {
+  if (!Array.isArray(features)) return [];
+  const token = normalizeEarthquakeDepthBands(bands) ?? DEFAULT_EARTHQUAKE_DEPTH_BANDS;
+  if (token === DEFAULT_EARTHQUAKE_DEPTH_BANDS) return features.slice();
+  if (token === '0') return [];
+  const enabled = new Set([...token].map((code) => DEPTH_CODE_TO_BAND[code]));
+  return features.filter((feature) => {
+    const depthKm = feature?.geometry?.coordinates?.[2];
+    return enabled.has(earthquakeDepthBand(depthKm));
+  });
+}
+
+/**
+ * AND the operator magnitude floor with the depth chips.
+ * @param {Array<object>|null|undefined} features
+ * @param {{magnitudeFloor?: number, depthBands?: unknown}} [options]
+ * @returns {Array<object>}
+ */
+export function filterEarthquakeFeatures(features, {
+  magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
+  depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+} = {}) {
+  return filterEarthquakeFeaturesByDepthBands(
+    filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
+    depthBands,
+  );
 }
 
 export const EARTHQUAKE_OVERLAY_SOURCE_ID = 'earthquakes';
@@ -156,14 +335,15 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _enabled = false;
   let _listRecords = [];
   let _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
+  let _depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS;
   let _lastGeojson = null;
 
   function applyCachedGeojson() {
     if (!_dataSource || !_lastGeojson) return;
-    const features = filterEarthquakeFeaturesByMagnitudeFloor(
-      _lastGeojson.features,
-      _magnitudeFloor,
-    );
+    const features = filterEarthquakeFeatures(_lastGeojson.features, {
+      magnitudeFloor: _magnitudeFloor,
+      depthBands: _depthBands,
+    });
     _dataSource.entities.removeAll();
     let count = 0;
     const overlayEntries = [];
@@ -240,7 +420,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
     _count = count;
     _listRecords = listRecords;
-    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+)`);
+    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands})`);
   }
 
   const layer = {
@@ -323,32 +503,59 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _listRecords = [];
     _lastGeojson = null;
     _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
+    _depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS;
   },
 
   getParams() {
-    return { magnitudeFloor: _magnitudeFloor };
+    return { magnitudeFloor: _magnitudeFloor, depthBands: _depthBands };
   },
 
   setParams(params = {}) {
     if (!params || typeof params !== 'object') return false;
-    if (!Object.hasOwn(params, 'magnitudeFloor')) return true;
-    const floor = Number(params.magnitudeFloor);
-    if (!EARTHQUAKE_MAGNITUDE_FLOORS.includes(floor)) return false;
-    if (floor === _magnitudeFloor) return true;
-    _magnitudeFloor = floor;
+    const hasFloor = Object.hasOwn(params, 'magnitudeFloor');
+    const hasDepth = Object.hasOwn(params, 'depthBands');
+    if (!hasFloor && !hasDepth) return true;
+
+    let nextFloor = _magnitudeFloor;
+    if (hasFloor) {
+      const floor = Number(params.magnitudeFloor);
+      if (!EARTHQUAKE_MAGNITUDE_FLOORS.includes(floor)) return false;
+      nextFloor = floor;
+    }
+
+    let nextDepth = _depthBands;
+    if (hasDepth) {
+      const bands = normalizeEarthquakeDepthBands(params.depthBands);
+      if (bands == null) return false;
+      nextDepth = bands;
+    }
+
+    if (nextFloor === _magnitudeFloor && nextDepth === _depthBands) return true;
+    _magnitudeFloor = nextFloor;
+    _depthBands = nextDepth;
     applyCachedGeojson();
     return true;
   },
 
   getRowControls() {
     return {
-      chips: EARTHQUAKE_MAGNITUDE_FLOORS.map((floor) => ({
-        id: `floor-${floor.toFixed(1)}`,
-        label: `${floor.toFixed(1)}+`,
-        active: _magnitudeFloor === floor,
-        title: `Show M${floor.toFixed(1)}+ earthquakes from the last 24 hours`,
-        params: { magnitudeFloor: floor },
-      })),
+      chips: [
+        ...EARTHQUAKE_MAGNITUDE_FLOORS.map((floor) => ({
+          id: `floor-${floor.toFixed(1)}`,
+          label: `${floor.toFixed(1)}+`,
+          active: _magnitudeFloor === floor,
+          title: `Show M${floor.toFixed(1)}+ earthquakes from the last 24 hours`,
+          params: { magnitudeFloor: floor },
+        })),
+        ...EARTHQUAKE_DEPTH_BANDS.map((band) => ({
+          id: `depth-${band}`,
+          label: EARTHQUAKE_DEPTH_BAND_LABELS[band],
+          active: earthquakeDepthBandFlags(_depthBands)[band] === true,
+          group: 'Depth',
+          title: EARTHQUAKE_DEPTH_BAND_TITLES[band],
+          params: { depthBands: toggleEarthquakeDepthBand(_depthBands, band) },
+        })),
+      ],
       legend: [],
     };
   },
@@ -389,8 +596,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   /**
    * Snapshot for the hosted Quakes list. Same USGS features the discs
    * already parsed — no second fetch — and already clipped to the operator
-   * magnitude floor. A failed feed returns [] so the list can show
-   * UNAVAILABLE instead of stale rows or a hang.
+   * magnitude floor AND depth chips. A failed feed returns [] so the list
+   * can show UNAVAILABLE instead of stale rows or a hang.
    * @returns {Array<Object>}
    */
   getListRecords() {
