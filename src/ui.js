@@ -323,6 +323,16 @@ import {
   writeLiveSunPreference,
 } from './liveSunLighting.js';
 import {
+  LOCK_TILT_DEFAULT,
+  LOCK_TILT_STORAGE_KEY,
+  applyLockTiltToController,
+  bindLockTiltUserRotate,
+  captureControllerEvents,
+  holdLockedPitch,
+  readLockTiltPreference,
+  writeLockTiltPreference,
+} from './lockTilt.js';
+import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -2524,6 +2534,10 @@ export class StyleManager {
       Cesium.CameraEventType.WHEEL,
     );
     this._unbindInvertScroll = bindInvertScrollToggle(this._invertScrollBtn);
+    this._lockTiltBtn = document.getElementById('lock-tilt-toggle');
+    this._lockTiltEnabled = LOCK_TILT_DEFAULT;
+    this._lockTiltControllerSnapshot = null;
+    this._unbindLockTiltUserRotate = null;
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -2962,6 +2976,7 @@ export class StyleManager {
     this._initKeepAboveToggle();
     this._initLiveSunToggle();
     this._initScaleBar();
+    this._initLockTiltToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -3914,6 +3929,58 @@ export class StyleManager {
     }
     governorRequestRender('live-sun');
     return { ok: true, liveSun: next };
+  }
+
+  _initLockTiltToggle() {
+    this._lockTiltBtn?.addEventListener('click', () => {
+      this.setLockTiltEnabled(!this._lockTiltEnabled);
+    });
+    let stored = LOCK_TILT_DEFAULT;
+    try {
+      stored = readLockTiltPreference(window.localStorage);
+    } catch {
+      stored = LOCK_TILT_DEFAULT;
+    }
+    this.setLockTiltEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Lock user rotate to heading-only. Pitch stays until unlock.
+   * Home and cockpit still set their own pitch. Wheel zoom is unchanged.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, lockTilt: boolean}}
+   */
+  setLockTiltEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._lockTiltEnabled = next;
+    const controller = this.viewer?.scene?.screenSpaceCameraController;
+    if (controller && !this._lockTiltControllerSnapshot) {
+      this._lockTiltControllerSnapshot = captureControllerEvents(controller);
+    }
+    applyLockTiltToController(controller, next, {
+      snapshot: this._lockTiltControllerSnapshot,
+    });
+    if (next && this.viewer?.camera) {
+      holdLockedPitch(this.viewer.camera, this.viewer.camera.pitch);
+    }
+    if (!this._unbindLockTiltUserRotate && this.viewer) {
+      this._unbindLockTiltUserRotate = bindLockTiltUserRotate(this.viewer, {
+        getLocked: () => this._lockTiltEnabled,
+      });
+    }
+    this._lockTiltBtn?.classList.toggle('active', next);
+    this._lockTiltBtn?.setAttribute('aria-pressed', String(next));
+    if (this._lockTiltBtn) {
+      this._lockTiltBtn.title = next
+        ? 'Lock tilt on — rotate changes heading only'
+        : 'Lock tilt off — free tumble';
+    }
+    if (persist) {
+      try { writeLockTiltPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    this.viewer?.scene?.requestRender?.();
+    return { ok: true, lockTilt: next };
   }
 
   /**
@@ -11476,6 +11543,8 @@ export class StyleManager {
     this._unbindInvertScroll = null;
     this._removeInvertScrollZoom?.();
     this._removeInvertScrollZoom = null;
+    this._unbindLockTiltUserRotate?.();
+    this._unbindLockTiltUserRotate = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
