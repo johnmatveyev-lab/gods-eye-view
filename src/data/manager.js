@@ -2232,6 +2232,15 @@ export class DataLayerManager {
             ?.find((entry) => entry.id === button.dataset.chipId);
           if (chip?.params) this.setLayerParams(layer.id, chip.params, { origin: 'user' });
         });
+        controls.addEventListener('change', (event) => {
+          const select = event.target?.closest?.('.data-toggle-picker-select');
+          if (!select || select.disabled) return;
+          const module = this.layers.get(layer.id)?.module;
+          if (typeof module?.setSelectedSystem === 'function') {
+            module.setSelectedSystem(select.value);
+            this._refreshTogglePanel();
+          }
+        });
         row.appendChild(controls);
         this._syncRowControls(controls, layer);
       }
@@ -2246,7 +2255,7 @@ export class DataLayerManager {
    * misbehaving layer cannot blank the whole panel. Resolved from the registry
    * rather than the `getAll()` projection, which deliberately omits `module`.
    * @param {string} layerId Registered layer id.
-   * @returns {{ chips?: Array<object>, legend?: Array<object> }|null} Descriptor.
+   * @returns {{ chips?: Array<object>, legend?: Array<object>, picker?: object }|null} Descriptor.
    */
   _rowControlsFor(layerId) {
     const module = this.layers.get(layerId)?.module;
@@ -2274,11 +2283,13 @@ export class DataLayerManager {
    */
   _syncRowControls(container, layer) {
     if (!container) return;
-    const controls = layer.enabled ? this._rowControlsFor(layer.id) : null;
-    const chips = controls?.chips || [];
-    const legend = controls?.legend || [];
-    const headingText = typeof controls?.heading === 'string' ? controls.heading.trim() : '';
-    container.hidden = chips.length === 0 && legend.length === 0 && !headingText;
+    const declared = this._rowControlsFor(layer.id);
+    const chips = layer.enabled ? (declared?.chips || []) : [];
+    const legend = layer.enabled ? (declared?.legend || []) : [];
+    const headingText = typeof declared?.heading === 'string' ? declared.heading.trim() : '';
+    const picker = declared?.picker || null;
+    container.hidden = chips.length === 0 && legend.length === 0 && !headingText && !picker;
+    this._syncRowPicker(container, picker);
 
     let heading = container.querySelector?.('.data-toggle-heading');
     if (headingText) {
@@ -2332,6 +2343,61 @@ export class DataLayerManager {
       entry.append(swatch, text);
       container.appendChild(entry);
     }
+  }
+
+  /**
+   * Reconcile an allowlisted-system <select> in place so a refresh does not
+   * steal focus. Picker changes call setSelectedSystem — never setLayerParams.
+   * @param {HTMLElement} container
+   * @param {object|null} picker
+   */
+  _syncRowPicker(container, picker) {
+    let wrap = null;
+    for (const node of container.children) {
+      if (String(node.className).split(/\s+/).includes('data-toggle-picker')) {
+        wrap = node;
+        break;
+      }
+    }
+    if (!picker) {
+      wrap?.remove();
+      return;
+    }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'data-toggle-picker';
+      const label = document.createElement('label');
+      label.className = 'data-toggle-picker-label';
+      const select = document.createElement('select');
+      select.className = 'data-toggle-picker-select';
+      wrap.append(label, select);
+      if (typeof container.insertBefore === 'function' && container.firstChild) {
+        container.insertBefore(wrap, container.firstChild);
+      } else {
+        container.appendChild(wrap);
+      }
+    }
+    const label = wrap.children[0];
+    const select = wrap.children[1];
+    const selectId = `data-toggle-picker-${picker.id || 'system'}`;
+    select.id = selectId;
+    label.setAttribute('for', selectId);
+    if (label.textContent !== (picker.label || 'SYSTEM')) {
+      label.textContent = picker.label || 'SYSTEM';
+    }
+    select.setAttribute('aria-label', picker.ariaLabel || picker.label || 'System');
+    select.disabled = Boolean(picker.disabled);
+    const nextIds = (picker.options || []).map((option) => option.value).join('\0');
+    if (select.dataset.optionIds !== nextIds) {
+      select.replaceChildren(...(picker.options || []).map((option) => {
+        const node = document.createElement('option');
+        node.value = option.value;
+        node.textContent = option.label;
+        return node;
+      }));
+      select.dataset.optionIds = nextIds;
+    }
+    if (select.value !== picker.value) select.value = picker.value || '';
   }
 
   _refreshTogglePanel() {

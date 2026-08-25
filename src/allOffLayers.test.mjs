@@ -264,7 +264,7 @@ describe('First-visit default still only applies on a fresh profile', () => {
     const coordinator = new LayerStateCoordinator(manager, null, { storage });
     await coordinator.start();
     assert.equal(coordinator.source, 'defaults');
-    await manager.setEnabled('flights', true, { origin: 'user' });
+    assert.equal(manager.isEnabled('flights'), true, 'PLAN 89 first-visit default arms flights once');
     await manager.setEnabled('local-firms', true, { origin: 'user' });
     await manager.setEnabled('cctv', true, { origin: 'user' });
     await allOffLiveLayers(manager);
@@ -282,7 +282,7 @@ describe('First-visit default still only applies on a fresh profile', () => {
     assert.equal(again.source, 'local');
     assert.equal(shouldApplyFirstVisitLayerDefault(storage), false);
     assert.deepEqual(again.getDurableState().enabledLayerIds, []);
-    assert.equal(reloaded.isEnabled('flights'), false);
+    assert.equal(reloaded.isEnabled('flights'), false, 'All off must not re-apply the first-visit flights default');
     assert.equal(reloaded.isEnabled('local-firms'), false);
     assert.equal(reloaded.isEnabled('cctv'), false);
 

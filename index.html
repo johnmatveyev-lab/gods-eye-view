@@ -68,6 +68,17 @@
       <span class="contacts-roster-toggle-label">CONTACTS</span>
     </button>
     <button
+      id="launches-panel-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="launches-panel"
+      aria-label="Launches — upcoming launch list"
+      title="Launches — show upcoming Launch Library 2 missions"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
+      <span class="launches-panel-toggle-label">LAUNCHES</span>
+    </button>
+    <button
       id="clear-selected-layers"
       type="button"
       data-all-off
@@ -83,19 +94,51 @@
     <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
+    <button id="north-up-compass" type="button" aria-label="Set heading north-up" title="North-up (N)" aria-keyshortcuts="N">
+      <span class="north-up-compass-rose" aria-hidden="true">
+        <span class="north-up-needle">N</span>
+      </span>
+    </button>
     <button id="home-view" type="button" aria-label="Home view" title="Home view (Home)" aria-keyshortcuts="Home">
       <span class="material-symbols-outlined" aria-hidden="true">home</span>
+    </button>
+    <button id="stop-tracking" type="button" hidden aria-label="Stop tracking" title="Stop tracking and leave the camera where it is">
+      <span class="material-symbols-outlined" aria-hidden="true">location_disabled</span>
+      Stop tracking
     </button>
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
+    <div id="camera-coords">
+      <button type="button" id="camera-coords-value" class="camera-coords-value" aria-label="Copy camera coordinates" title="Copy lat,lon">—, —</button>
+      <button type="button" id="camera-coords-copy" class="camera-coords-copy" aria-label="Copy lat,lon" title="Copy lat,lon">
+        <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+      </button>
+    </div>
     <button id="fullscreen-view" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
       <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
+    </button>
+    <button id="clean-view-chrome" type="button" aria-label="Clean view" title="Clean view" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">visibility_off</span>
     </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
   </nav>
+  <aside id="launches-panel" hidden aria-label="Upcoming launches">
+    <div class="launches-panel-inner">
+      <div class="launches-panel-header">
+        <div>
+          <strong>LAUNCHES</strong>
+          <span>Launch Library 2 — The Space Devs</span>
+        </div>
+        <output id="launches-panel-count">—</output>
+      </div>
+      <div id="launches-panel-list" class="launches-panel-list">
+        <div class="launches-panel-empty">LOADING 30-DAY MISSION INDEX</div>
+      </div>
+    </div>
+  </aside>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
     <span id="global-loading-detail"></span>
@@ -232,6 +275,10 @@
           <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
           <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
         </span>
+        <span class="wx-mode-toggle" role="group" aria-label="Weather effects">
+          <button type="button" data-wx-mode="off" aria-pressed="true">WX OFF</button>
+          <button type="button" data-wx-mode="on" aria-pressed="false">WX ON</button>
+        </span>
       </span>
       <span id="cockpit-position">--° · --°</span>
     </div>
@@ -275,6 +322,7 @@
           id="cockpit-weather-toggle"
           class="cockpit-context-weather"
           type="button"
+          data-wx-toggle
           aria-label="Enable cockpit weather effects"
           aria-pressed="false"
           title="Enable cockpit weather effects"
@@ -444,6 +492,12 @@
       </div>
     </div>
     <div class="pp-toggle-group">
+      <button class="pp-toggle-btn active" id="scale-bar-toggle" title="Scale bar — on-globe distance in the current unit" aria-pressed="true">
+        <span class="pp-icon" aria-hidden="true">▬</span>
+        <span class="pp-label">Scale</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="detection-toggle" title="Detection Overlay (D)" aria-label="Detection overlay" aria-pressed="false">
         <span class="pp-icon">&#x25A3;</span>
         <span class="pp-label">DETECT</span>
@@ -484,6 +538,10 @@
         <input type="range" class="pp-slider" id="detection-opacity-slider" min="0" max="100" step="1" value="1" aria-label="Detection opacity outside the keyhole" title="World-overlay label and card opacity beyond the fade distance" />
         <span class="pp-slider-value" id="detection-opacity-value">1%</span>
       </div>
+      <button class="pp-toggle-btn active" id="contact-labels-toggle" title="Contact labels — hide callsign billboards without changing detections" aria-label="Contact labels" aria-pressed="true">
+        <span class="pp-icon">Aa</span>
+        <span class="pp-label">Labels</span>
+      </button>
     </div>
     <!-- The one shared preset-parameter surface is inserted here at runtime. -->
     <div id="param-slider-panel">
@@ -535,6 +593,12 @@
       </div>
     </div>
     <div class="pp-toggle-group">
+      <button class="pp-toggle-btn active" id="keep-above-toggle" aria-pressed="true" title="Keep camera above ground — lift if a zoom or tilt clips into the mesh">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">vertical_align_top</span>
+        <span class="pp-label">Above</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="celestial-toggle" title="Celestial ring — reveal the full globe" aria-pressed="false">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">flare</span>
         <span class="pp-label">Celestial</span>
@@ -546,6 +610,12 @@
         <span class="pp-label">Sun</span>
       </button>
     </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="grid-toggle" type="button" title="Lat/lon grid" aria-pressed="false" aria-label="Lat/lon grid">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">grid_on</span>
+        <span class="pp-label">Grid</span>
+      </button>
+    </div>
     <button class="pp-toggle-btn" id="clean-view-toggle" title="Hide UI chrome">
       <span class="pp-icon">&#x25A1;</span>
       <span class="pp-label">Clean UI</span>
@@ -554,6 +624,36 @@
       <button class="pp-toggle-btn" id="reduce-motion-toggle" type="button" title="Reduce decorative motion" aria-pressed="false" aria-label="Reduce decorative motion">
         <span class="pp-icon" aria-hidden="true">&#x23F8;</span>
         <span class="pp-label">Still</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="invert-scroll-toggle" type="button" title="Invert scroll zoom" aria-pressed="false" aria-label="Invert scroll zoom">
+        <span class="pp-icon" aria-hidden="true">&#x2195;</span>
+        <span class="pp-label">Invert scroll</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="lock-tilt-toggle" type="button" title="Lock tilt — rotate heading only" aria-pressed="false" aria-label="Lock tilt">
+        <span class="pp-icon" aria-hidden="true">&#x29BF;</span>
+        <span class="pp-label">Lock tilt</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <!-- Render pacing only. Low writes Cesium targetFrameRate = 30;
+           Normal restores the current 60 default. Persist meridian.power.
+           Still (reduce-motion) is decoration; this is the frame budget. -->
+      <div class="pp-slider-row visible" id="power-row">
+        <span class="pp-slider-mini-label">Power</span>
+        <div class="pp-mode-seg" role="radiogroup" aria-label="Power">
+          <button class="pp-mode-btn active" id="power-normal" data-power="normal" role="radio" aria-checked="true">Normal</button>
+          <button class="pp-mode-btn" id="power-low" data-power="low" role="radio" aria-checked="false">Low</button>
+        </div>
+      </div>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="zoom-to-pointer-toggle" type="button" title="Zoom toward the globe under the cursor" aria-pressed="false" aria-label="Zoom to pointer">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">center_focus_strong</span>
+        <span class="pp-label">Zoom to pointer</span>
       </button>
     </div>
     <div class="pp-toggle-group">
@@ -697,6 +797,14 @@
         />
       </div>
       <div id="data-toggles" class="data-toggle-list"></div>
+      <div id="datacenter-in-view" class="in-view-site-list" hidden>
+        <div class="in-view-site-list-header">
+          <strong>DATACENTERS IN VIEW</strong>
+          <output id="datacenter-in-view-count" aria-live="polite">0</output>
+        </div>
+        <div id="datacenter-in-view-items" class="in-view-site-list-items" role="list"></div>
+        <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
+      </div>
     </div>
   </div>
 
@@ -1044,6 +1152,16 @@
       <div data-clerk-sign-in hidden></div>
       <button type="button" class="billing-modal-primary" data-billing-primary>Continue</button>
     </div>
+  </div>
+
+  <!-- Local scale bar. Sits next to #cesium-credits, including clean view. -->
+  <div id="scale-bar" class="scale-bar" role="img" aria-label="Scale" hidden>
+    <div class="scale-bar-track" aria-hidden="true">
+      <span class="scale-bar-tick"></span>
+      <span class="scale-bar-shaft"></span>
+      <span class="scale-bar-tick"></span>
+    </div>
+    <span class="scale-bar-label">—</span>
   </div>
 
   <!-- Intelligence HUD Overlay -->

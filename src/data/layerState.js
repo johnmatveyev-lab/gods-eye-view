@@ -392,6 +392,14 @@ export function shouldApplyFirstVisitLayerDefault(storage) {
   return !hasStoredLayerProfile(storage);
 }
 
+/**
+ * First hosted visit only: globe is already on, and civilian flights are the
+ * one live layer that starts armed. Everything else stays off until the
+ * operator, a share URL, lastView, or saved layer prefs say otherwise.
+ * Cables remain unselectable; OpenSky and Google News stay absent.
+ */
+export const FIRST_VISIT_ENABLED_LAYER_IDS = Object.freeze(['flights']);
+
 /** Produce the complete durable default state. */
 export function createDefaultLayerState() {
   return {
@@ -402,6 +410,13 @@ export function createDefaultLayerState() {
       defaultsForOwner(ownerId),
     ])),
   };
+}
+
+/** Layer snapshot applied on a clean boot with no lastView / share / prefs. */
+export function createFirstVisitLayerState() {
+  return normalizeLayerState({
+    enabledLayerIds: [...FIRST_VISIT_ENABLED_LAYER_IDS],
+  });
 }
 
 /** Sanitize and canonicalize an externally supplied layer-state object. */
@@ -628,6 +643,12 @@ export class LayerStateCoordinator {
       // the exact legacy default-layer behavior. It must not inherit an
       // unrelated recipient's saved local layer preferences.
       this._source = 'legacy-share';
+    }
+    // Clean boot only. lastView and share URLs arrive as shareLayerState;
+    // gev:layer-state:v2 arrives as stored local prefs. Neither is rewritten
+    // to the first-visit set.
+    if (!selected && this._source === 'defaults' && shouldApplyFirstVisitLayerDefault(this.storage)) {
+      selected = createFirstVisitLayerState();
     }
     this._durableState = selected || createDefaultLayerState();
     // First-visit defaults may run only when nothing was stored. All off

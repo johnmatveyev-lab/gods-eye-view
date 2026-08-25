@@ -376,6 +376,60 @@ body.recording-mode #cesium-credits {
   pointer-events: auto !important;
 }
 
+/* Local scale bar. Lives next to the required credit line and stays up in
+   clean-view / recording so operators can still eyeball 1 km vs 1 nmi. */
+.scale-bar {
+  position: fixed;
+  left: 36px;
+  bottom: 68px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: rgba(232, 234, 237, 0.78);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.scale-bar[hidden] {
+  display: none;
+}
+
+.scale-bar-track {
+  display: flex;
+  align-items: stretch;
+  height: 8px;
+}
+
+.scale-bar-tick {
+  width: 1px;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-shaft {
+  width: 96px;
+  height: 2px;
+  margin: auto 0 0;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-label {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.ui-clean-view #scale-bar,
+body.recording-mode #scale-bar {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 #gev-voice-control {
   position: fixed;
   right: 36px;
@@ -1121,6 +1175,11 @@ body.recording-mode #cesium-credits {
   display: flex;
 }
 
+.pp-toggle-group > .pp-slider-row.visible:first-child:last-child {
+  border-top: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+
 .pp-toggle-group .pp-toggle-btn {
   transition: all var(--transition-fast), border-radius var(--transition-fast);
 }
@@ -1128,6 +1187,12 @@ body.recording-mode #cesium-credits {
 .pp-toggle-group .pp-slider-row.visible ~ .pp-toggle-btn,
 .pp-toggle-group:has(.pp-slider-row.visible) .pp-toggle-btn {
   border-radius: 8px 8px 0 0;
+}
+
+/* Labels/declutter sits under Detection sliders as its own chip. */
+.pp-toggle-group .pp-slider-row.visible ~ .pp-toggle-btn {
+  border-radius: 8px;
+  margin-top: 6px;
 }
 
 .pp-slider {
@@ -1502,6 +1567,7 @@ body.ui-clean-view #clean-view-exit {
 body.ui-clean-view #title-bar,
 body.ui-clean-view #style-indicator,
 body.ui-clean-view #top-center-actions,
+body.ui-clean-view #launches-panel,
 body.ui-clean-view #global-loading-status,
 body.ui-clean-view #traffic-sync-chip,
 body.ui-clean-view #cctv-sync-chip,
@@ -2020,7 +2086,8 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 18px;
 }
 
-#contacts-roster-toggle {
+#contacts-roster-toggle,
+#launches-panel-toggle {
   width: auto;
   min-width: 36px;
   padding: 0 10px;
@@ -2032,7 +2099,8 @@ body.ui-clean-view #scene-runtime.active {
   letter-spacing: 0.08em;
 }
 
-#contacts-roster-toggle .contacts-roster-toggle-label {
+#contacts-roster-toggle .contacts-roster-toggle-label,
+#launches-panel-toggle .launches-panel-toggle-label {
   line-height: 1;
 }
 
@@ -2053,10 +2121,225 @@ body.ui-clean-view #scene-runtime.active {
 }
 
 #contacts-roster-toggle.active,
-#contacts-roster-toggle[aria-pressed="true"] {
+#contacts-roster-toggle[aria-pressed="true"],
+#launches-panel-toggle.active,
+#launches-panel-toggle[aria-pressed="true"] {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
   background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+}
+
+#launches-panel {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  z-index: 100;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(52vh, 480px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+#launches-panel[hidden] {
+  display: none;
+}
+
+#launches-panel .launches-panel-inner {
+  display: grid;
+  min-height: 0;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid rgba(98, 181, 255, .2);
+  border-radius: 7px;
+  background: rgba(4, 17, 31, .82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+#launches-panel .launches-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 1px 3px 7px;
+  border-bottom: 1px solid rgba(34, 230, 230, .14);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+#launches-panel .launches-panel-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+#launches-panel .launches-panel-header strong {
+  color: #8fcfff;
+  font-size: 9px;
+  letter-spacing: .16em;
+}
+
+#launches-panel .launches-panel-header span {
+  color: rgba(190, 230, 230, .46);
+  font-size: 7px;
+  letter-spacing: .1em;
+}
+
+#launches-panel .launches-panel-header output {
+  flex: 0 0 auto;
+  color: #22e6e6;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+#launches-panel .launches-panel-list {
+  display: grid;
+  max-height: min(43vh, 400px);
+  gap: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-color: rgba(34, 230, 230, .38) transparent;
+  scrollbar-width: thin;
+}
+
+#launches-panel .launches-panel-item {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid rgba(98, 181, 255, .13);
+  border-radius: 4px;
+  color: #d8ffff;
+  background: rgba(42, 113, 171, .045);
+  font-family: 'JetBrains Mono', monospace;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+#launches-panel .launches-panel-item:hover,
+#launches-panel .launches-panel-item:focus-visible,
+#launches-panel .launches-panel-item.selected,
+#launches-panel .launches-panel-item[aria-pressed="true"] {
+  border-color: rgba(34, 230, 230, .58);
+  outline: none;
+  background: rgba(34, 230, 230, .09);
+}
+
+#launches-panel .launches-panel-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+#launches-panel .launches-panel-copy strong,
+#launches-panel .launches-panel-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#launches-panel .launches-panel-copy strong {
+  color: #d8ffff;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .07em;
+}
+
+#launches-panel .launches-panel-copy small {
+  color: rgba(190, 230, 230, .48);
+  font-size: 7px;
+  letter-spacing: .035em;
+}
+
+#launches-panel .launches-panel-empty {
+  padding: 18px 10px;
+  color: rgba(190, 230, 230, .48);
+  font: 8px/1.5 'JetBrains Mono', monospace;
+  letter-spacing: .09em;
+  text-align: center;
+}
+
+#top-center-actions #stop-tracking {
+  width: auto;
+  min-width: 36px;
+  padding: 0 12px 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#top-center-actions #stop-tracking[hidden] {
+  display: none;
+}
+
+#north-up-compass .north-up-compass-rose {
+  display: block;
+  width: 18px;
+  height: 18px;
+  transform: rotate(var(--north-up-heading, 0deg));
+  transition: transform 80ms linear;
+}
+
+#north-up-compass .north-up-needle {
+  display: block;
+  color: #ff8a80;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Camera-center lat,lon readout. Coordinates only — no height, so no units toggle. */
+#camera-coords {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#top-center-actions #camera-coords-value,
+#top-center-actions #camera-coords-copy {
+  width: auto;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transform: none;
+}
+#top-center-actions #camera-coords-value {
+  padding: 0 4px;
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+#top-center-actions #camera-coords-copy {
+  width: 28px;
+  flex: 0 0 28px;
+  color: var(--text-secondary);
+}
+#top-center-actions #camera-coords-value:hover,
+#top-center-actions #camera-coords-value:focus-visible,
+#top-center-actions #camera-coords-copy:hover,
+#top-center-actions #camera-coords-copy:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  transform: none;
+  color: var(--text-primary, #e8f0f4);
+}
+#top-center-actions #camera-coords-copy .material-symbols-outlined {
+  font-size: 16px;
 }
 
 #global-loading-status {
@@ -4007,12 +4290,12 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-help span { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
-  #title-bar, #style-indicator, #top-center-actions, #traffic-sync-chip, #cctv-sync-chip,
+  #title-bar, #style-indicator, #top-center-actions, #launches-panel, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #copy-view-link, #fullscreen-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -4431,7 +4714,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
-.clock-mode-toggle {
+.clock-mode-toggle,
+.wx-mode-toggle {
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
@@ -4442,7 +4726,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   pointer-events: auto;
 }
 
-.clock-mode-toggle button {
+.clock-mode-toggle button,
+.wx-mode-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -4456,12 +4741,14 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.55;
 }
 
-.clock-mode-toggle button[aria-pressed="true"] {
+.clock-mode-toggle button[aria-pressed="true"],
+.wx-mode-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
 
-.cockpit-clock-row .clock-mode-toggle {
+.cockpit-clock-row .clock-mode-toggle,
+.cockpit-clock-row .wx-mode-toggle {
   margin-left: 0;
 }
 
@@ -6198,6 +6485,82 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: none;
 }
 
+/* Existing OSM datacenter payload — in-view list + fly-to. */
+#datacenter-in-view.in-view-site-list {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#datacenter-in-view[hidden] {
+  display: none;
+}
+
+#datacenter-in-view .in-view-site-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#datacenter-in-view .in-view-site-list-header strong {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+#datacenter-in-view .in-view-site-list-header output {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+#datacenter-in-view .in-view-site-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#datacenter-in-view .in-view-site-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#datacenter-in-view .in-view-site-list-item:hover,
+#datacenter-in-view .in-view-site-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--text-primary);
+}
+
+#datacenter-in-view .in-view-site-list-empty {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 2px 6px;
+}
+
+#datacenter-in-view .in-view-site-list-credit {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+
 .data-toggle-chip {
   padding: 2px 7px;
   font-family: var(--font-mono);
@@ -6276,6 +6639,51 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
      hairline ring so a near-black class still reads on the panel glass. */
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
   flex: none;
+}
+
+/* Allowlisted-system picker (bikeshare). A compact select of known feeds —
+   not Radio search and not a layer-filter chip. */
+.data-toggle-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 168px;
+}
+
+.data-toggle-picker-label {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.data-toggle-picker-select {
+  min-width: 0;
+  flex: 1;
+  max-width: 100%;
+  padding: 3px 18px 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+}
+
+.data-toggle-picker-select:hover,
+.data-toggle-picker-select:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.data-toggle-picker-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ── CCTV Panel ─────────────────────────────── */
@@ -7023,6 +7431,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 body.recording-mode #title-bar,
 body.recording-mode #style-indicator,
 body.recording-mode #top-center-actions,
+body.recording-mode #launches-panel,
 body.recording-mode #global-loading-status,
 body.recording-mode #traffic-sync-chip,
 body.recording-mode #cctv-sync-chip,
@@ -7048,7 +7457,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view) {
   display: none !important;
 }
 
