@@ -12,6 +12,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Street Traffic has a Traffic: Live | Sim control. Live uses the existing
+  `/api/tomtom` tiles when `status.hasKey`; Sim is the built-in model and
+  does not request tiles. Without a key, Live stays disabled. A 429 budget
+  stop still leaves Sim available. "Traffic flow data © TomTom" is credited
+  only after Live actually painted a tile. No extra `/api` route.
 - Added a filter field at the top of the Data Layers list. It matches the
   visible layer name plus existing voice common-names (fires, ships, bikes,
   traffic, cameras, and the rest of that map). Empty query shows the full

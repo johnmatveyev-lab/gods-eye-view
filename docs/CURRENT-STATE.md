@@ -2520,10 +2520,12 @@ easier to meet (detection is now on more often), but does not create it.
   `MAX_DOTS` allocator and 0.35 km center-shift gate are unchanged; prefetch
   does not add an API route or a traffic vendor.
 - Traffic feed state is honest about simulation. `getStats().mode` is the
-  CONFIGURED source ('live' = a TomTom key is present, 'sim' = keyless), NOT
-  this instant's health — health rides on `error`. Keyless reads FALLBACK with
+  CONFIGURED source ('live' = a TomTom key is present and Live is selected,
+  'sim' = keyless or an explicit Sim click), NOT this instant's health —
+  health rides on `error`. Keyless reads FALLBACK with
   `SIMULATED — add TomTom key for live` in both the sync chip and the panel
-  meta line; an unreachable `/api/tomtom/status` reads
+  meta line; a keyed host forced to Sim reads `SIMULATED — using built-in traffic`;
+  an unreachable `/api/tomtom/status` reads
   `SIMULATED — traffic service unreachable`; a total flow-fetch failure in live
   mode sets `error` (DEGRADED · `SIMULATED — <reason>`) and zeroes the stale
   coverage number. `stats.loading` covers outstanding flow work as well as the
@@ -2531,7 +2533,9 @@ easier to meet (detection is now on more often), but does not create it.
   shared loading batch as LOAD FAILED. Harnesses must gate on `!stats.error`,
   never on `mode === 'live'` alone.
 - Traffic runs in `sim` mode (white dots, hardcoded speeds) unless `TOMTOM_API_KEY`
-  is configured (env or Keychain `tomtom-api`/`api-key`), which enables `live` mode:
+  is configured (env or Keychain `tomtom-api`/`api-key`) and the Street Traffic
+  Live | Sim control is on Live. A keyed host can force Sim (no tile
+  requests) when the daily budget is exhausted. Live mode uses:
   TomTom flow vector tiles via the budget-governed `/api/tomtom` proxy
   (`src/data/tomtom.js`: 256-tile memory cache, optional `.gev-cache/tomtom`
   or `/tmp/tomtom`, in-isolate `TOMTOM_DAILY_TILE_BUDGET` default 40k/day,
