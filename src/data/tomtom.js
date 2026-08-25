@@ -188,7 +188,7 @@ export function createTomTomRuntime({
         return;
       }
 
-      const match = urlPath.match(/^\/api\/tomtom\/flow\/(\d+)\/(\d+)\/(\d+)\.pbf$/);
+      const match = urlPath.match(/^\/api\/tomtom\/flow\/(\d+)\/(\d+)\/(\d+)(?:\.pbf)?$/);
       if (!match) {
         sendJson(404, { error: 'not_found' });
         return;

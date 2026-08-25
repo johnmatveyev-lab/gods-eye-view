@@ -91,7 +91,11 @@ test('Vercel Node entry forwards to handleTomTomHttp; ais-live is not wrapped', 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/tomtom/[...path].js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  assert.ok(Array.isArray(vercelJson.rewrites));
+  assert.ok(vercelJson.rewrites.some((rule) => (
+    rule.source === '/api/tomtom/flow/:z/:x/:y.pbf'
+    && rule.destination === '/api/tomtom/flow/:z/:x/:y'
+  )));
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html|ais-live|opensky/i);
 
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
@@ -133,6 +137,9 @@ test('GET /api/tomtom/flow/6/18/25.pbf without key → 503 {error:no_key}, no To
   const res = await dispatch(rt, { url: '/api/tomtom/flow/6/18/25.pbf' });
   assert.equal(res.status, 503);
   assert.deepEqual(res.json, { error: 'no_key' });
+  const stripped = await dispatch(rt, { url: '/api/tomtom/flow/6/18/25' });
+  assert.equal(stripped.status, 503);
+  assert.deepEqual(stripped.json, { error: 'no_key' });
   assert.equal(calls.length, 0);
   assertNoSecrets(JSON.stringify(res.json));
 });

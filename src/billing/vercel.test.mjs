@@ -96,8 +96,12 @@ test('Vercel Node entrypoints forward to handleBillingHttp', () => {
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/billing/[...path].js']);
   assert.ok(vercelJson.functions['api/stripe/webhook.js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+    assert.doesNotMatch(rule.destination, /index\.html|ais-live|opensky/i);
+  }
 });
 
 test('GET /api/billing/config → 200 JSON, pro.priceUsd=29, no secrets', async () => {

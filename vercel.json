@@ -11,5 +11,11 @@
     "api/tomtom/[...path].js": {
       "maxDuration": 15
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/tomtom/flow/:z/:x/:y.pbf",
+      "destination": "/api/tomtom/flow/:z/:x/:y"
+    }
+  ]
 }
