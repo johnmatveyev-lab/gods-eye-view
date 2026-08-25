@@ -41,6 +41,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `frame`/`media`). Helpers live in `src/data/cctvProxy.js`; Vite still
   forwards the same plugin. Does not wrap AIS or Google text-search.
 
+### Changed
+
+- TeleGeography submarine cables stay registered as a commercial no-op and are
+  now unselectable: the Data Layers panel hides the enable control, manager
+  enable is a no-op, and voice `set_layer` refuses undersea/submarine cables
+  with “layer is a commercial no-op”. No cable geometry is fetched.
+- Voice “OpenSky” is refused with “OpenSky is disabled”. Civilian flights stay
+  labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
+  compatibility path and never contacts opensky-network.org.
+
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).

@@ -981,6 +981,9 @@ export class DataLayerManager {
     const entry = this.layers.get(layerId);
     if (!entry) return { intentEpoch: null, promise: Promise.resolve() };
     const desiredState = Boolean(shouldEnable);
+    if (desiredState === true && entry.module.selectable === false) {
+      return { intentEpoch: null, promise: Promise.resolve(false) };
+    }
     if (entry.destroying) {
       return { intentEpoch: null, promise: Promise.resolve(desiredState === false) };
     }
@@ -1922,7 +1925,8 @@ export class DataLayerManager {
         name: entry.module.name,
         icon: entry.module.icon,
         source: entry.module.source,
-        showInTogglePanel: entry.module.showInTogglePanel !== false,
+        showInTogglePanel: entry.module.showInTogglePanel !== false
+          && entry.module.selectable !== false,
         enabled: entry.enabled,
         lifecycleState: entry.lifecycleState,
         lifecycleUncertain: entry.lifecycleUncertain,

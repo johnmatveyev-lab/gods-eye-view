@@ -145,6 +145,9 @@ const LAYER_ALIASES = new Map([
   ['flights', 'flights'],
   ['planes', 'flights'],
   ['aircraft', 'flights'],
+  ['opensky', 'opensky'],
+  ['open sky', 'opensky'],
+  ['open-sky', 'opensky'],
   ['military', 'military'],
   ['military flights', 'military'],
   ['earthquakes', 'earthquakes'],
@@ -171,6 +174,9 @@ const LAYER_ALIASES = new Map([
   ['data centres', 'local-datacenters'],
   ['dams', 'local-dams'],
   ['submarine cables', 'telegeography-submarine-cables'],
+  ['submarine cable', 'telegeography-submarine-cables'],
+  ['undersea cables', 'telegeography-submarine-cables'],
+  ['undersea cable', 'telegeography-submarine-cables'],
   ['cables', 'telegeography-submarine-cables'],
   ['telegeography', 'telegeography-submarine-cables'],
   ['firms', 'local-firms'],
@@ -318,6 +324,24 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
       const layerId = normalizeLayerId(args.layerId);
       if (!layerId) {
         throw new Error(`Unknown data layer: ${args.layerId || 'missing'}`);
+      }
+      if (layerId === 'telegeography-submarine-cables') {
+        return {
+          ok: false,
+          action: 'set_layer_visibility',
+          layerId,
+          error: 'The submarine-cables layer is a commercial no-op',
+          ...readLayerLifecycleSummary(dataManager, layerId),
+        };
+      }
+      if (layerId === 'opensky') {
+        return {
+          ok: false,
+          action: 'set_layer_visibility',
+          layerId,
+          error: 'OpenSky is disabled',
+          ...readLayerLifecycleSummary(dataManager, layerId, { fallbackEnabled: false }),
+        };
       }
       if (!dataManager.layers.has(layerId)) {
         if (layerId === 'radio') {

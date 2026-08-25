@@ -35,6 +35,38 @@ test('production proxies never fetch OpenSky or Google News RSS', () => {
   assert.match(proxies, /api\.gdeltproject\.org/);
 });
 
+test('outbound proxy list has no TeleGeography URL', () => {
+  const outboundFiles = [
+    'src/server/liveApiProxies.js',
+    'src/server/openskyFlights.js',
+    'src/data/gbfs.js',
+    'vite.config.js',
+    'src/data/telegeographySubmarineCables.js',
+  ];
+  const urls = [];
+  for (const relative of outboundFiles) {
+    const source = readFileSync(path.join(ROOT, relative), 'utf8');
+    for (const match of source.matchAll(/https:\/\/[^\s'"`,)]+/g)) {
+      urls.push(match[0]);
+    }
+  }
+  assert.ok(urls.length > 0, 'outbound URL list must be non-empty');
+  assert.equal(
+    urls.filter((url) => /telegeography|submarinecablemap/i.test(url)).length,
+    0,
+    'TeleGeography hosts must not appear in the outbound list',
+  );
+});
+
+test('layer list has no OpenSky enable control', () => {
+  assert.equal(flightsLayer.id, 'flights');
+  assert.equal(flightsLayer.name, 'Live Flights');
+  assert.equal(flightsLayer.source, 'adsb.lol');
+  assert.doesNotMatch(flightsLayer.name, /opensky/i);
+  const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.doesNotMatch(html, /OpenSky/);
+});
+
 test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   const keys = DATA_CREDITS.map((credit) => credit.key);
   assert.ok(!keys.includes('opensky'));

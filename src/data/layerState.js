@@ -289,11 +289,27 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   Object.freeze({ id: 'radio', token: 'r', disposition: 'enabled+options', optionOwner: 'radio' }),
   Object.freeze({ id: 'rocket-launches', token: 'x', disposition: 'enabled-only' }),
   Object.freeze({ id: 'satellites', token: 's', disposition: 'enabled+options', optionOwner: 'satellites' }),
-  Object.freeze({ id: 'telegeography-submarine-cables', token: 'u', disposition: 'enabled-only' }),
+  Object.freeze({
+    id: 'telegeography-submarine-cables',
+    token: 'u',
+    disposition: 'enabled-only',
+    selectable: false,
+  }),
   Object.freeze({ id: 'traffic', token: 't', disposition: 'enabled-only' }),
 ]);
 
 export const REGISTERED_LAYER_IDS = Object.freeze(LAYER_STATE_REGISTRY.map((entry) => entry.id));
+
+/**
+ * Whether operators or voice may enable this registered layer.
+ * Cables stay registered for share-token compatibility but are unselectable.
+ * @param {string} layerId
+ * @returns {boolean}
+ */
+export function isLayerSelectable(layerId) {
+  const entry = REGISTRY_BY_ID.get(layerId);
+  return !entry || entry.selectable !== false;
+}
 
 const REGISTRY_BY_ID = new Map(LAYER_STATE_REGISTRY.map((entry) => [entry.id, entry]));
 const REGISTRY_BY_TOKEN = new Map(LAYER_STATE_REGISTRY.map((entry) => [entry.token, entry]));
@@ -373,7 +389,9 @@ export function normalizeLayerState(candidate) {
   const requestedEnabled = new Set(
     Array.isArray(input.enabledLayerIds) ? input.enabledLayerIds.map(String) : [],
   );
-  const enabledLayerIds = REGISTERED_LAYER_IDS.filter((id) => requestedEnabled.has(id));
+  const enabledLayerIds = REGISTERED_LAYER_IDS.filter((id) => (
+    requestedEnabled.has(id) && isLayerSelectable(id)
+  ));
   const enabled = new Set(enabledLayerIds);
   const options = Object.fromEntries(OPTION_OWNER_IDS.map((ownerId) => [
     ownerId,
