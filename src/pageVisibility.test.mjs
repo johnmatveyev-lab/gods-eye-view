@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { DataLayerManager } from './data/manager.js';
@@ -68,6 +68,7 @@ function makeFetchLayer(id, { updateInterval = 1000 } = {}) {
   };
 }
 
+describe('page visibility scheduler', { concurrency: 1 }, () => {
 test('isDocumentHidden follows visibilityState and document.hidden', () => {
   const env = installVisibilityDocument({ hidden: false });
   try {
@@ -175,12 +176,26 @@ test('an active voice session does not keep layer poll handles running while hid
   const env = installVisibilityDocument();
   const previousVoice = globalThis.window.__godsEyeView;
   globalThis.window.__godsEyeView = { voiceCommands: { isActive: () => true } };
-  const layer = makeFetchLayer('flights', { updateInterval: 5000 });
+  const layer = {
+    module: {
+      id: 'flights',
+      name: 'flights',
+      icon: '',
+      source: 'test',
+      updateInterval: 5000,
+      async init() {},
+      enable() {},
+      disable() {},
+      async update() { return true; },
+      getStats() { return { count: 0, lastUpdate: null }; },
+    },
+  };
   const mgr = new DataLayerManager({});
   try {
+    assert.equal(isDocumentHidden(), false, 'test starts on a visible document');
     mgr.register(layer.module);
     await mgr.setEnabled('flights', true);
-    assert.notEqual(mgr.layers.get('flights').intervalId, null);
+    assert.notEqual(mgr.layers.get('flights').intervalId, null, 'visible tab still arms the poll handle');
     env.setHidden(true);
     assert.equal(mgr.layers.get('flights').intervalId, null, 'voice mid-call still pauses poll handles');
     assert.equal(isVoiceSessionActive(), true);
@@ -267,4 +282,5 @@ test('scheduled OpenAI and Google Places call sites defer on the client schedule
   assert.match(manager, /subscribePageVisibility/);
   assert.match(manager, /_pausePollHandles/);
   assert.match(manager, /_resumePollHandles/);
+});
 });
