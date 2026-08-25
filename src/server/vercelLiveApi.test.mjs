@@ -198,6 +198,18 @@ test('GET /api/cctv/sources reaches the CCTV handler', async () => {
   assert.ok(Array.isArray(json.sources));
 });
 
+test('GET /api/military-installations reaches the extracted handler, never a platform 404', async () => {
+  const missing = await dispatch(liveApiHandler, { url: '/api/military-installations' });
+  assert.equal(missing.status, 400);
+  assert.notEqual(missing.status, 404);
+  assert.match(missing.json.error, /bbox|10 degrees/i);
+  assert.doesNotMatch(JSON.stringify(missing.json), /x-vercel-error|NOT_FOUND/);
+
+  const leftover = await dispatch(liveApiHandler, { url: '/military-installations' });
+  assert.equal(leftover.status, 400);
+  assert.match(leftover.json.error, /bbox|10 degrees/i);
+});
+
 test('GET /api/opensky never contacts OpenSky and is not a platform 404', async () => {
   const { status, json } = await dispatch(liveApiHandler, { url: '/api/opensky' });
   assert.equal(status, 400);
