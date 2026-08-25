@@ -150,6 +150,12 @@ import {
 } from './rightRailPolicy.js';
 import { applyContactsRosterToggle } from './data/contactsRosterToggle.js';
 import {
+  applyInstallationViewportList,
+  flyToInstallationFromList,
+  listViewportInstallations,
+  nextInstallationListOpen,
+} from './data/installationsViewportList.js';
+import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
   resolveLeftStackBottomBoundary,
@@ -2450,6 +2456,9 @@ export class StyleManager {
     this._radioStationHomepage = document.getElementById('radio-station-homepage');
     this._globalContextFlightsBtn = document.getElementById('global-context-flights-btn');
     this._contactsRosterToggle = document.getElementById('contacts-roster-toggle');
+    this._installationsListToggle = document.getElementById('installations-list-toggle');
+    this._installationsListPanel = document.getElementById('installations-viewport-list');
+    this._installationsListOpen = false;
     this._globalContextMissionsBtn = document.getElementById('global-context-missions-btn');
     this._contextModeStandby = document.getElementById('context-mode-standby');
     this._contextFlightsView = document.getElementById('context-flights-view');
@@ -4605,6 +4614,9 @@ export class StyleManager {
         if (String(change?.type || '').startsWith('visibility')) {
           this._handleContextLayerChange(change);
         }
+        if (this._installationsListOpen && change?.layerId === 'military-installations') {
+          this._syncInstallationsViewportList();
+        }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
       });
@@ -4846,6 +4858,27 @@ export class StyleManager {
     showAfterStartupCover();
   }
 
+  _toggleInstallationsViewportList() {
+    this._installationsListOpen = nextInstallationListOpen(this._installationsListOpen);
+    this._syncInstallationsViewportList();
+  }
+
+  _syncInstallationsViewportList() {
+    const records = this._dataManager?.layers?.get('military-installations')?.module?.getViewportRecords()
+      || militaryInstallationsLayer.getViewportRecords()
+      || [];
+    applyInstallationViewportList({
+      open: this._installationsListOpen,
+      toggle: this._installationsListToggle,
+      panel: this._installationsListPanel,
+      rows: listViewportInstallations(records),
+    });
+  }
+
+  _flyToListedInstallation(id) {
+    return flyToInstallationFromList(militaryInstallationsLayer, id);
+  }
+
   _setContactsRosterControlsDisabled(disabled) {
     const value = Boolean(disabled);
     this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = value);
@@ -4892,6 +4925,14 @@ export class StyleManager {
     }));
     this._contactsRosterToggle?.addEventListener('click', () => {
       this._toggleContactsRoster();
+    });
+    this._installationsListToggle?.addEventListener('click', () => {
+      this._toggleInstallationsViewportList();
+    });
+    this._installationsListPanel?.addEventListener('click', (event) => {
+      const target = event.target?.closest?.('[data-installation-id]');
+      if (!target) return;
+      this._flyToListedInstallation(target.dataset.installationId);
     });
     this._globalContextFlightsBtn?.addEventListener('click', () => {
       this._toggleContactsRoster();

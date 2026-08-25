@@ -67,6 +67,17 @@
       <span class="material-symbols-outlined" aria-hidden="true">radar</span>
       <span class="contacts-roster-toggle-label">CONTACTS</span>
     </button>
+    <button
+      id="installations-list-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="installations-viewport-list"
+      aria-label="Sites — mapped installations in view"
+      title="Sites — list mapped installations already loaded for this view"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">location_away</span>
+      <span class="installations-list-toggle-label">SITES</span>
+    </button>
     <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>
@@ -89,6 +100,16 @@
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
   </nav>
+  <aside id="installations-viewport-list" hidden aria-label="Mapped installations in the current view">
+    <div class="installations-viewport-list-header">
+      <div>
+        <strong>MAPPED SITES</strong>
+        <span>Current view · public mapped features</span>
+      </div>
+      <output data-installations-list-count>—</output>
+    </div>
+    <div class="installations-viewport-list-body" data-installations-list></div>
+  </aside>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
     <span id="global-loading-detail"></span>
