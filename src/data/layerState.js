@@ -486,6 +486,9 @@ const OPTION_GROUPS = Object.freeze({
       encode: encodeAisDestination,
       decode: decodeAisDestination,
     }),
+    // PLAN 175: hide no dest default OFF. Omitted `n` keeps the current
+    // view — there was no prior blank-dest filter, so absent === default.
+    booleanOption('hideNoDestination', 'n', false),
   ]),
 });
 

@@ -80,7 +80,7 @@ function paramsForLayer(id) {
     return { installationClassFilter: 'all', footprintsOnly: false };
   }
   if (id === 'ais-live-vessels') {
-    return { vesselTypeFilter: 'all', hideParked: false, minSpeed: 'all', destination: '' };
+    return { vesselTypeFilter: 'all', hideParked: false, minSpeed: 'all', destination: '', hideNoDestination: false };
   }
   if (id === 'radio') {
     return {
@@ -524,6 +524,25 @@ test('AIS min-speed chips persist on ais-live-vessels and default All', () => {
   const tenParams = encodeLayerStateParams(new URLSearchParams('v=2'), ten);
   assert.match(tenParams.get('lo'), /a\.s\.t/);
   assert.equal(decodeLayerStateParams(tenParams).options['ais-live-vessels'].minSpeed, '10');
+});
+
+test('AIS Hide no dest persists on ais-live-vessels and defaults off', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['ais-live-vessels'].hideNoDestination, false);
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=a'));
+  assert.equal(omitted.options['ais-live-vessels'].hideNoDestination, false,
+    'existing a links keep blank destinations visible');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['ais-live-vessels'],
+    options: { 'ais-live-vessels': { hideNoDestination: true } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /a\.n\.1/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['ais-live-vessels'].hideNoDestination, true);
+  assert.equal(layerOptionsForRestore(decoded, 'ais-live-vessels').hideNoDestination, true);
 });
 
 test('AIS destination field persists on ais-live-vessels and defaults empty', () => {
