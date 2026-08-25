@@ -123,6 +123,16 @@ import {
   sourceMatchesFeedTypeFilter,
   writeCctvFeedTypeFilter,
 } from './cctvFeedTypeFilter.js';
+import {
+  DEFAULT_CCTV_CAL_SOURCE_FILTER,
+  deriveCalBadge,
+  normalizeCctvCalBadgeFilter,
+  readCctvCalBadgeFilter,
+  sourceMatchesCalBadge,
+  writeCctvCalBadgeFilter,
+} from './cctvCalBadgeFilter.js';
+
+export { deriveCalBadge };
 
 // ---------------------------------------------------------------------------
 // API endpoints
@@ -310,6 +320,8 @@ let _showProjection = true;
 let _autoHop = false;
 let _hideNoFeed = false;
 let _headingConfidence = { high: true, medium: true, low: true };
+/** Calibrated | Curated | Raw chips. Default all on matches the current catalog. */
+let _calSourceFilter = { ...DEFAULT_CCTV_CAL_SOURCE_FILTER };
 // An explicit empty-space deselect keeps AUTO HOP configured but prevents its
 // timer from silently choosing a replacement. A later explicit activation or
 // AUTO HOP toggle-on releases the hold.
@@ -793,27 +805,6 @@ function loadCalibrationStore() {
 /** Persists the in-memory calibration entries (values + provenance) to the v2 store. */
 function saveCalibrationStore() {
   writeCalibrationStoreV2(_calibrationById);
-}
-
-/**
- * Derives the panel CAL badge state for a camera (design §3b, as amended by
- * the LOCKED §9.2 — panel-only, no in-world tint).
- *
- * Three states:
- *  - 'calibrated' — a human explicitly saved a v2 calibration (`source:'manual'`).
- *  - 'curated'    — no manual save, but the catalog entry was hand-authored
- *                   (`poseSource:'curated'`, file/env sources only).
- *  - 'raw-prior'  — everything else (all Austin Open Data today).
- *
- * Pure — no scoring math, no raycasts. `confidenceFromScore` and score-based
- * quality seeding are retired; this replaces them.
- * @param {{calSource?: string|null, poseSource?: string|null}} camera
- * @returns {'calibrated'|'curated'|'raw-prior'}
- */
-export function deriveCalBadge(camera) {
-  if (camera?.calSource === 'manual') return 'calibrated';
-  if (camera?.poseSource === 'curated') return 'curated';
-  return 'raw-prior';
 }
 
 /**
@@ -2806,6 +2797,7 @@ function catalogRecordVisible(record, { keepActive = true } = {}) {
   const selectedId = keepActive ? _activeCameraId : null;
   return sourceMatchesHideNoFeed(record?.camera, _hideNoFeed, { selectedId })
     && sourceMatchesHeadingConfidence(record?.camera, _headingConfidence, { selectedId })
+    && sourceMatchesCalBadge(record?.camera, _calSourceFilter, { selectedId })
     && cctvRecordMatchesFeedType(record, { keepActive });
 }
 
@@ -3576,6 +3568,7 @@ function getPublicCameraState(record, activeId = null) {
     // Panel-only trust signal (design §3b, amended by LOCKED §9.2/§9.3): no
     // in-world rendering reads this, no score-based quality math backs it.
     calBadge: deriveCalBadge(camera),
+    calSource: camera.calSource || null,
     headingConfidence: camera.headingConfidence || null,
     feedConfigured: camera.feedConfigured === true,
     poseSource: camera.poseSource || null,
@@ -3603,6 +3596,7 @@ function uiState() {
     autoHop: _autoHop,
     hideNoFeed: _hideNoFeed,
     headingConfidence: { ..._headingConfidence },
+    calSource: { ..._calSourceFilter },
     autoHopSuspended: _autoHopSuspended,
     autoHopSec: _autoHopSec,
     count: _count,
@@ -4151,6 +4145,7 @@ function clearRuntimeState() {
  * @param {'off'|'on'|'viewshed'} [options.coverageMode='on'] Coverage mode.
  * @param {boolean} [options.showProjection=false] Projection visibility.
  * @param {object} [options.feedTypes] Image | MJPEG | Video chip map.
+ * @param {object} [options.calSource] Calibrated | Curated | Raw chip map.
  * @returns {void}
  */
 export function _setCctvCoverageStateForTest({
@@ -4162,6 +4157,7 @@ export function _setCctvCoverageStateForTest({
   showProjection = false,
   hideNoFeed = false,
   headingConfidence = undefined,
+  calSource = undefined,
   feedTypes,
 } = {}) {
   _viewer = viewer;
@@ -4182,6 +4178,9 @@ export function _setCctvCoverageStateForTest({
   if (typeof hideNoFeed === 'boolean') _hideNoFeed = hideNoFeed;
   if (headingConfidence != null) {
     _headingConfidence = normalizeCctvHeadingConfidenceFilter(headingConfidence);
+  }
+  if (calSource != null) {
+    _calSourceFilter = normalizeCctvCalBadgeFilter(calSource);
   }
   if (feedTypes !== undefined) {
     _feedTypeFilter = normalizeCctvFeedTypeFilter(feedTypes);
@@ -4372,6 +4371,11 @@ const cctvLayer = {
       _headingConfidence = readCctvHeadingConfidenceFilter(globalThis.localStorage);
     } catch {
       _headingConfidence = { high: true, medium: true, low: true };
+    }
+    try {
+      _calSourceFilter = readCctvCalBadgeFilter(globalThis.localStorage);
+    } catch {
+      _calSourceFilter = { ...DEFAULT_CCTV_CAL_SOURCE_FILTER };
     }
     applyPersistedCctvFeedTypes();
 
@@ -4751,6 +4755,7 @@ const cctvLayer = {
    * @param {number} [params.focusDurationSec] - Fly-to duration.
    * @param {boolean} [params.hideUnhealthy] - Hide cameras marked unhealthy in the health map.
    * @param {object} [params.headingConfidence] - High | Medium | Low heading-confidence chips.
+   * @param {object} [params.calSource] - Calibrated | Curated | Raw calibration-source chips.
    */
   setParams(params = {}) {
     if (typeof params.showCoverage === 'boolean') {
@@ -4862,6 +4867,22 @@ const cctvLayer = {
         applyCatalogVisibility();
       }
     }
+    if (params.calSource != null) {
+      const next = normalizeCctvCalBadgeFilter(params.calSource);
+      if (
+        next.calibrated !== _calSourceFilter.calibrated
+        || next.curated !== _calSourceFilter.curated
+        || next['raw-prior'] !== _calSourceFilter['raw-prior']
+      ) {
+        _calSourceFilter = next;
+        try {
+          writeCctvCalBadgeFilter(globalThis.localStorage, _calSourceFilter);
+        } catch {
+          // Fail open: the in-memory catalog still applies.
+        }
+        applyCatalogVisibility();
+      }
+    }
     if (params.feedTypes != null || params.feedTypeFilter != null) {
       setCctvFeedTypes(params.feedTypes ?? params.feedTypeFilter, undefined, { notify: false });
     }
@@ -4895,6 +4916,7 @@ const cctvLayer = {
       autoHop: _autoHop,
       hideNoFeed: _hideNoFeed,
       headingConfidence: { ..._headingConfidence },
+      calSource: { ..._calSourceFilter },
       autoHopSec: _autoHopSec,
       hideUnhealthy: _hideUnhealthy,
       selectedCameraId: active?.camera.id || null,
