@@ -11,12 +11,14 @@
 
 import { promises as fsp } from 'node:fs';
 import path from 'node:path';
+import { CELESTRAK_GROUP_RE } from './celestrakGroup.js';
+
+export { CELESTRAK_GROUP_RE };
 
 export const CELESTRAK_TTL_MS = 6 * 3600_000;
 export const CELESTRAK_UPSTREAM = 'https://celestrak.org/NORAD/elements/gp.php';
 export const CELESTRAK_USER_AGENT =
   'Meridian-celestrak-proxy/1.0 (+https://github.com/johnmatveyev-lab/gods-eye-view)';
-export const CELESTRAK_GROUP_RE = /^[a-z0-9-]+$/i;
 export const CELESTRAK_API_PREFIX = '/api/celestrak';
 
 export const config = {

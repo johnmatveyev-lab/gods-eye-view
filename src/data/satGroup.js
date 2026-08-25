@@ -9,7 +9,7 @@
  * `meridian.satGroup` and is never written into share URLs.
  */
 
-import { CELESTRAK_GROUP_RE } from './celestrak.js';
+import { CELESTRAK_GROUP_RE } from './celestrakGroup.js';
 
 export const SAT_GROUP_STORAGE_KEY = 'meridian.satGroup';
 export const DEFAULT_SAT_GROUP = 'stations';

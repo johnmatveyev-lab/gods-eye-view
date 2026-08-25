@@ -12,8 +12,9 @@
  * PURE data module — no Cesium imports, node-testable. The packs are lazy-
  * loaded on first lookup and cached in module scope (bbox/area computed once
  * at load). In the browser Vite bundles the JSON via dynamic import; under
- * node the same files are read from disk. A failed load is retried on the
- * next lookup rather than cached (see `createRetryableLoader`).
+ * Node the same files are read from disk through a server-only entry so the
+ * client graph never sees `node:fs`. A failed load is retried on the next
+ * lookup rather than cached (see `createRetryableLoader`).
  */
 
 import { createRetryableLoader } from './retryableLoad.js';
@@ -118,7 +119,9 @@ const isNode = typeof process !== 'undefined' && !!process.versions?.node
 
 async function loadPackFile(base) {
   if (isNode) {
-    const { readFileSync } = await import(/* @vite-ignore */ 'node:fs');
+    // Builtin access keeps Node I/O off Vite's import graph and avoids a
+    // user-module dynamic import that mock-timer tests can starve.
+    const { readFileSync } = process.getBuiltinModule('node:fs');
     const url = new URL(`./local_data/natural_earth/${base}.json`, import.meta.url);
     return JSON.parse(readFileSync(url, 'utf8'));
   }
