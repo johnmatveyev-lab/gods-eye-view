@@ -91,6 +91,7 @@ test('Vercel live catch-all reuses Node proxies without a Next rewrite', () => {
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/[...path].js']);
   assert.ok(vercelJson.functions['api/billing/[...path].js']);
+  assert.ok(vercelJson.functions['api/gbfs/[...target].js']);
   assert.equal(Array.isArray(vercelJson.rewrites), false);
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
 });
