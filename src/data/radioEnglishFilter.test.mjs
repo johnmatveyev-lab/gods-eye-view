@@ -199,6 +199,13 @@ test('English-only keeps en/eng/english and hides other languages', () => {
   assert.equal(isEnglishRadioStation(DIRECTORY[3]), false);
   assert.equal(isEnglishRadioStation(DIRECTORY[4]), true);
   assert.equal(isEnglishRadioStation({ languages: ['english (us)'] }), true);
+  assert.equal(isEnglishRadioStation({ languages: ['american english'] }), true);
+  assert.equal(isEnglishRadioStation({ languages: ['british english'] }), true);
+  assert.equal(isEnglishRadioStation({ languages: ['canadian english'] }), true);
+  assert.equal(isEnglishRadioStation({ languages: ['spanish'] }), false);
+  assert.equal(isEnglishRadioStation({ languages: ['german'] }), false);
+  assert.equal(isEnglishRadioStation({ languages: [''] }), false);
+  assert.equal(isEnglishRadioStation({ languages: [] }), false);
   assert.deepEqual(
     filterRadioStationsByEnglish(DIRECTORY, true).map((station) => station.id),
     ['en-news', 'eng-news', 'en-code'],
@@ -206,6 +213,41 @@ test('English-only keeps en/eng/english and hides other languages', () => {
   assert.equal(stationMatchesRadioEnglishFilter(DIRECTORY[1], true), false);
   assert.equal(stationMatchesRadioEnglishFilter(DIRECTORY[0], true), true);
   assert.equal(stationMatchesRadioEnglishFilter(DIRECTORY[1], false), true);
+});
+
+const DIALECT_DIRECTORY = Object.freeze([
+  {
+    id: '87e3c4fa-7037-48a8-b083-3d81e1cea592',
+    name: 'KLVZ Legends 810AM/95.3 FM - Denver, CO',
+    languages: ['american english'],
+  },
+  {
+    id: 'f4896119-5e73-42be-8c07-bc1e7e79e815',
+    name: 'HPR1: Traditional Classic Country',
+    languages: ['american english'],
+  },
+  {
+    id: 'es-hide',
+    name: 'Spanish Talk',
+    languages: ['spanish'],
+  },
+]);
+
+test('English-only keeps Radio Browser dialect tags such as american english', () => {
+  assert.equal(isEnglishRadioStation(DIALECT_DIRECTORY[0]), true);
+  assert.equal(isEnglishRadioStation(DIALECT_DIRECTORY[1]), true);
+  assert.equal(isEnglishRadioStation(DIALECT_DIRECTORY[2]), false);
+  assert.deepEqual(
+    filterRadioStationsByEnglish(DIALECT_DIRECTORY, true).map((station) => station.id),
+    [
+      '87e3c4fa-7037-48a8-b083-3d81e1cea592',
+      'f4896119-5e73-42be-8c07-bc1e7e79e815',
+    ],
+  );
+  assert.deepEqual(
+    filterRadioStationsByEnglish(DIALECT_DIRECTORY, false).map((station) => station.id),
+    DIALECT_DIRECTORY.map((station) => station.id),
+  );
 });
 
 test('a playing non-English station stays visible when English-only is on but is not walkable', () => {
