@@ -1191,11 +1191,7 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     models3dMode: 'all',
     hideStale: false,
     irBoost: true,
-<<<<<<< HEAD
     headingSectors: 'NESW',
-=======
-    aircraftClassFilter: 'all',
->>>>>>> 4036b43 (Tighten PLAN 98 tests after the class-filter wiring.)
     selectedFlightsTrackingId: null,
     speedMinKt: null,
     speedMaxKt: null,
