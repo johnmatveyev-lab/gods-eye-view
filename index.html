@@ -843,6 +843,20 @@
 
   <div id="scene-runtime"></div>
 
+  <!-- First-visit responsible-use notice. Dismissible; never a hard wall over the
+       globe. Surfaces existing MERIDIAN_TERMS and the Cesium Data attribution
+       control. See src/responsibleUseNotice.js. -->
+  <aside id="responsible-use-notice" role="region" aria-labelledby="responsible-use-title" hidden>
+    <h2 id="responsible-use-title">Meridian</h2>
+    <p id="responsible-use-copy">This view uses public and third-party data. It can be delayed or wrong, and it is not for navigation or emergencies.</p>
+    <p class="responsible-use-terms" data-responsible-use-terms></p>
+    <div class="responsible-use-actions">
+      <a href="#meridian-terms">Terms</a>
+      <button type="button" data-responsible-use-attribution>Data attribution</button>
+      <button type="button" data-responsible-use-dismiss>Got it</button>
+    </div>
+  </aside>
+
   <!-- Explicit mission choice on a fresh session. Live feeds are not auto-enabled
        until the visitor asks; shared links skip this surface entirely. It returns
        every session until "Don't show this again" is ticked — see
