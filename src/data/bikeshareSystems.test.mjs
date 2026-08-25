@@ -6,6 +6,7 @@ import {
   BIKESHARE_HIDE_EMPTY_STORAGE_KEY,
   BIKESHARE_HIDE_FULL_STORAGE_KEY,
   BIKESHARE_MIN_AVAILABLE_STORAGE_KEY,
+  BIKESHARE_MIN_DOCKS_STORAGE_KEY,
   BIKESHARE_PICKER_ALLOWED_HOSTS,
   BIKESHARE_SYSTEM_STORAGE_KEY,
   DEFAULT_BIKESHARE_SYSTEM_ID,
@@ -21,11 +22,13 @@ import {
   readPersistedBikeshareHideEmpty,
   readPersistedBikeshareHideFull,
   readPersistedBikeshareMinAvailable,
+  readPersistedBikeshareMinDocks,
   readPersistedBikeshareSystem,
   writePersistedBikeshareHideClosed,
   writePersistedBikeshareHideEmpty,
   writePersistedBikeshareHideFull,
   writePersistedBikeshareMinAvailable,
+  writePersistedBikeshareMinDocks,
   writePersistedBikeshareSystem,
 } from './bikeshareSystems.js';
 import { listBikeshareSystems } from './bikeshare.js';
@@ -101,4 +104,11 @@ test('proxy URL builder stays on /api/gbfs and persists only allowlisted ids', (
   assert.equal(writePersistedBikeshareMinAvailable('all', store), 'all');
   assert.equal(readPersistedBikeshareMinAvailable(store), 'all');
   assert.equal(writePersistedBikeshareMinAvailable('nope', store), null);
+  assert.equal(writePersistedBikeshareMinDocks('3', store), '3');
+  assert.equal(storage.get(BIKESHARE_MIN_DOCKS_STORAGE_KEY), '3');
+  assert.equal(readPersistedBikeshareMinDocks(store), '3');
+  assert.equal(writePersistedBikeshareMinDocks('all', store), 'all');
+  assert.equal(readPersistedBikeshareMinDocks(store), 'all');
+  assert.equal(writePersistedBikeshareMinDocks('nope', store), null);
+  assert.equal(storage.get(BIKESHARE_MIN_AVAILABLE_STORAGE_KEY), 'all');
 });
