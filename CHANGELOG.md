@@ -30,6 +30,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   below terrain plus a small margin, the camera is lifted. The preference
   persists as `meridian.keepAbove` and defaults on. Cockpit interior still
   owns the camera. A terrain 503 skips the lift. No new API.
+- DISPLAY Grid toggle draws a local lat/lon graticule (`meridian.grid`,
+  default off). The step coarsens when zoomed out so a planet view stays
+  readable. Clean view may keep the lines; required credits stay on. Not a
+  data layer and no `/api`.
+- Added a Launches panel that lists the existing Launch Library 2 results
+  the globe already fetches (`/api/launches`). Clicking a row flies to the
+  pad when coordinates are present, otherwise the row is only selected.
+  Empty or failed payloads use the existing unavailable/empty language and
+  do not hang. No new vendor or `/api`.
 - Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
   Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
   The choice persists as `meridian.power`. Data polls, the idle render
