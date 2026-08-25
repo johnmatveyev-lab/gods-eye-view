@@ -43,6 +43,11 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.ok(keys.includes('gdelt'));
   assert.ok(keys.includes('open-meteo'));
   assert.ok(keys.includes('tfl-cctv'));
+  assert.ok(keys.includes('osrm'));
+  const osrm = DATA_CREDITS.find((credit) => credit.key === 'osrm');
+  assert.match(osrm.html, /OSRM/);
+  assert.match(osrm.html, /OpenStreetMap contributors/);
+  assert.match(osrm.html, /ODbL/);
 });
 
 test('TeleGeography cable GeoJSON is not present on disk', () => {
