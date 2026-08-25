@@ -12,6 +12,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- CCTV panel can filter the existing source list by city or provider
+  (`city`, `cityId`, `provider` already on each source). Last city persists
+  as `meridian.cctvCity`. Selecting a camera still uses `/api/cctv/frame`.
+  No new camera networks and no extra `/api`.
 - Added a copy control on the selected-contact card for the visible asset
   ident (aircraft callsign, else registration/hex; vessel name or MMSI;
   satellite name or NORAD). Clicking the ident or the copy control copies it

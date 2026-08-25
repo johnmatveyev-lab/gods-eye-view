@@ -71,6 +71,15 @@ import militaryFlightsLayer from './data/militaryFlights.js';
 import { isTr3b, toggleTr3b } from './data/tr3bRegistry.js';
 import satellitesLayer from './data/satellites.js';
 import cctvLayer from './data/cctv.js';
+import {
+  CCTV_CITY_FILTER_ALL,
+  cycleFilteredCctvSources,
+  filterCctvSources,
+  listCctvCityFilters,
+  normalizeCctvCityFilter,
+  readLastCctvCity,
+  writeLastCctvCity,
+} from './data/cctvSourceFilter.js';
 import radioLayer, {
   buildRadioTunerTicks,
   radioTunerCommitSlot,
@@ -2375,6 +2384,8 @@ export class StyleManager {
     this._cctvPrevBtn = document.getElementById('cctv-prev-btn');
     this._cctvNextBtn = document.getElementById('cctv-next-btn');
     this._cctvSelect = document.getElementById('cctv-camera-select');
+    this._cctvCityFilter = document.getElementById('cctv-city-filter');
+    this._cctvCityFilterKey = readLastCctvCity(globalThis.localStorage);
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
     this._cctvCoverageBtn = document.getElementById('cctv-coverage-btn');
     this._cctvAutoHopBtn = document.getElementById('cctv-auto-hop-btn');
@@ -6209,7 +6220,7 @@ export class StyleManager {
     this._cctvPrevBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(-1),
+        () => this._cycleFilteredCctvCamera(-1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
     });
@@ -6217,9 +6228,15 @@ export class StyleManager {
     this._cctvNextBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(1),
+        () => this._cycleFilteredCctvCamera(1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
+    });
+
+    this._cctvCityFilter?.addEventListener('change', () => {
+      this._cctvCityFilterKey = this._cctvCityFilter.value || CCTV_CITY_FILTER_ALL;
+      writeLastCctvCity(this._cctvCityFilterKey, globalThis.localStorage);
+      this._renderCctvState(this._cctvState);
     });
 
     this._cctvSelect?.addEventListener('change', async () => {
@@ -6302,6 +6319,57 @@ export class StyleManager {
    */
   _activeCctvCameraId() {
     return this._cctvState?.activeCameraId || this._cctvSelect?.value || '';
+  }
+
+  /**
+   * Cycles PREV/NEXT inside the city-filtered list, not the full catalog.
+   * @param {number} step
+   * @returns {string|null}
+   */
+  _cycleFilteredCctvCamera(step) {
+    const nextId = cycleFilteredCctvSources(
+      this._cctvState?.cameras || [],
+      this._activeCctvCameraId(),
+      step,
+      this._cctvCityFilterKey,
+    );
+    return nextId && cctvLayer.selectCamera(nextId) ? nextId : null;
+  }
+
+  /**
+   * Rebuilds the city/provider filter from the live catalog and restores
+   * the last city when it is still present.
+   * @param {object[]} cameras
+   * @returns {object[]}
+   */
+  _visibleCctvCameras(cameras) {
+    const catalog = Array.isArray(cameras) ? cameras : [];
+    const options = listCctvCityFilters(catalog);
+    const keys = options.map((option) => option.key);
+    this._cctvCityFilterKey = normalizeCctvCityFilter(this._cctvCityFilterKey, keys);
+    if (this._cctvCityFilter) {
+      const shouldRebuild = this._cctvCityFilter.options.length !== options.length + 1
+        || Array.from(this._cctvCityFilter.options).some((option, idx) => {
+          if (idx === 0) return option.value !== CCTV_CITY_FILTER_ALL;
+          return option.value !== options[idx - 1]?.key;
+        });
+      if (shouldRebuild) {
+        this._cctvCityFilter.innerHTML = '';
+        const all = document.createElement('option');
+        all.value = CCTV_CITY_FILTER_ALL;
+        all.textContent = 'All cities';
+        this._cctvCityFilter.appendChild(all);
+        for (const option of options) {
+          const el = document.createElement('option');
+          el.value = option.key;
+          el.textContent = option.label;
+          this._cctvCityFilter.appendChild(el);
+        }
+      }
+      this._cctvCityFilter.value = this._cctvCityFilterKey;
+      this._cctvCityFilter.disabled = catalog.length === 0;
+    }
+    return filterCctvSources(catalog, this._cctvCityFilterKey);
   }
 
   /**
@@ -6588,7 +6656,7 @@ export class StyleManager {
    */
   _renderCctvState(state) {
     this._cctvState = state || null;
-    const cameras = state?.cameras || [];
+    const cameras = this._visibleCctvCameras(state?.cameras || []);
     const enabled = !!state?.enabled && !!this._dataManager?.isEnabled('cctv');
     const activeId = state?.activeCameraId || '';
     const activeCamera = state?.activeCamera || null;

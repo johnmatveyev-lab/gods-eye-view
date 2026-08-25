@@ -6252,6 +6252,16 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.45;
 }
 
+.cctv-city-filter-label {
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
+  font: 7px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  flex: none;
+}
+
+#cctv-city-filter,
 #cctv-camera-select {
   flex: 1;
   min-width: 0;
@@ -6265,6 +6275,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   outline: none;
 }
 
+#cctv-city-filter:disabled,
 #cctv-camera-select:disabled {
   opacity: 0.45;
 }
