@@ -138,7 +138,15 @@ import bikeshareLayer from './data/bikeshare.js';
 import aisLiveVesselsLayer from './data/aisLiveVessels.js';
 import militaryAwarenessLayer from './data/militaryAwareness.js';
 import militaryInstallationsLayer from './data/militaryInstallations.js';
-import rocketLaunchesLayer from './data/rocketLaunches.js';
+import rocketLaunchesLayer, { flyToExistingLaunchPad } from './data/rocketLaunches.js';
+import {
+  applyLaunchesPanelToggle,
+  launchesPanelLoadingPresentation,
+  launchesPanelRowAction,
+  loadLaunchesPanelPayload,
+  nextLaunchesPanelOpen,
+  renderLaunchesPanelList,
+} from './data/launchesPanel.js';
 import {
   aggregateLayerLoading,
   canPresentDeferredStatusNotice,
@@ -2586,6 +2594,14 @@ export class StyleManager {
     this._globalLoadingLabel = document.getElementById('global-loading-label');
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
     this._homeViewBtn = document.getElementById('home-view');
+    this._launchesPanelToggle = document.getElementById('launches-panel-toggle');
+    this._launchesPanel = document.getElementById('launches-panel');
+    this._launchesPanelList = document.getElementById('launches-panel-list');
+    this._launchesPanelCount = document.getElementById('launches-panel-count');
+    this._launchesPanelOpen = false;
+    this._launchesPanelRows = [];
+    this._launchesPanelSelectedId = null;
+    this._launchesPanelLoadToken = 0;
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._stopTrackingBtn = document.getElementById('stop-tracking');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
@@ -2876,6 +2892,7 @@ export class StyleManager {
     this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
+    this._initLaunchesPanel();
     this._initStopTrackingButton();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
@@ -10350,6 +10367,76 @@ export class StyleManager {
     this._homeViewBtn?.addEventListener('click', () => this.goHome());
   }
 
+  /** Wire the hosted Launches panel that lists the existing LL2 payload. */
+  _initLaunchesPanel() {
+    if (!this._launchesPanelToggle || !this._launchesPanel) return;
+    this._launchesPanelToggle.addEventListener('click', () => {
+      this._toggleLaunchesPanel();
+    });
+    this._launchesPanelList?.addEventListener('click', (event) => {
+      const button = event.target.closest?.('[data-launch-id]');
+      if (!button) return;
+      this._activateLaunchesPanelRow(button.dataset.launchId);
+    });
+  }
+
+  _toggleLaunchesPanel() {
+    const open = nextLaunchesPanelOpen(this._launchesPanelOpen);
+    this._launchesPanelOpen = open;
+    applyLaunchesPanelToggle({
+      open,
+      toggle: this._launchesPanelToggle,
+      panel: this._launchesPanel,
+    });
+    if (open) void this._loadLaunchesPanel();
+  }
+
+  _renderLaunchesPanelPresentation(presentation) {
+    if (this._launchesPanelList) {
+      this._launchesPanelList.innerHTML = renderLaunchesPanelList(
+        presentation,
+        this._launchesPanelSelectedId,
+      );
+    }
+    if (this._launchesPanelCount) {
+      this._launchesPanelCount.textContent = Number.isFinite(presentation?.count)
+        ? `${presentation.count}`
+        : '—';
+    }
+  }
+
+  async _loadLaunchesPanel() {
+    const token = ++this._launchesPanelLoadToken;
+    this._renderLaunchesPanelPresentation(launchesPanelLoadingPresentation());
+    const presentation = await loadLaunchesPanelPayload({
+      cachedPayload: rocketLaunchesLayer.getPayload?.() || null,
+    });
+    if (token !== this._launchesPanelLoadToken || this._disposed) return;
+    this._launchesPanelRows = presentation.rows || [];
+    this._renderLaunchesPanelPresentation(presentation);
+  }
+
+  _activateLaunchesPanelRow(launchId) {
+    const row = this._launchesPanelRows.find((item) => item.id === launchId);
+    if (!row) return;
+    const action = launchesPanelRowAction(row);
+    this._launchesPanelSelectedId = action.selectedId;
+    this._renderLaunchesPanelPresentation({
+      kind: 'ready',
+      hang: false,
+      reason: '',
+      count: this._launchesPanelRows.length,
+      rows: this._launchesPanelRows,
+    });
+    if (action.kind === 'fly-to' && action.flyTo) {
+      this._stopOrbit();
+      if (this.viewer) {
+        this.viewer.trackedEntity = undefined;
+        flyToExistingLaunchPad(this.viewer, action.flyTo);
+      }
+    }
+  }
+
   /**
    * Fly to the default first-load camera. Does not delete lastView;
    * moveEnd overwrites the slot after the flight.
@@ -11075,6 +11162,7 @@ export class StyleManager {
       this.viewer?.canvas?.removeEventListener('wheel', this._initialShareGestureHandler);
       this._initialShareGestureHandler = null;
     }
+    this._launchesPanelLoadToken += 1;
     this._datacenterListMoveEndRemove?.();
     this._datacenterListMoveEndRemove = null;
     this._datacenterInViewList?.destroy();
