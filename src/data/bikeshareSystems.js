@@ -1,0 +1,119 @@
+/**
+ * @module bikeshareSystems
+ * @description Allowlisted bike-share system picker helpers.
+ *
+ * The hosted picker can only name systems the client already ships: the GBFS
+ * city registry plus the existing host allowlist from `gbfs.js`. It does not
+ * add hosts or open the `/api/gbfs` proxy. Last system is persisted locally —
+ * not as a layer filter and not through Radio's search path.
+ */
+
+import { GBFS_ALLOWED_HOSTS } from './gbfs.js';
+
+/** localStorage key for the last picked allowlisted system. */
+export const BIKESHARE_SYSTEM_STORAGE_KEY = 'meridian.bikeshare.system';
+
+/** Default system: the app's first-run city. */
+export const DEFAULT_BIKESHARE_SYSTEM_ID = 'austin-capmetro';
+
+/**
+ * Explicit GBFS hosts the picker may show. Same set as the proxy allowlist
+ * literals — no extras, no wildcard expansion into unknown systems.
+ */
+export const BIKESHARE_PICKER_ALLOWED_HOSTS = Object.freeze([...GBFS_ALLOWED_HOSTS]);
+
+const PICKER_ALLOWED_HOST_SET = new Set(BIKESHARE_PICKER_ALLOWED_HOSTS);
+
+/**
+ * Whether a hostname is allowed to appear in the system picker.
+ * @param {string} host
+ * @returns {boolean}
+ */
+export function isBikesharePickerHostAllowed(host) {
+  return PICKER_ALLOWED_HOST_SET.has(String(host || '').trim().toLowerCase());
+}
+
+/**
+ * Convert an upstream GBFS URL into the existing `/api/gbfs` proxy path.
+ * @param {string} upstreamUrl
+ * @returns {string}
+ */
+export function buildGbfsProxyUrl(upstreamUrl) {
+  return `/api/gbfs/${encodeURIComponent(String(upstreamUrl || ''))}`;
+}
+
+/**
+ * @param {string} id
+ * @param {Array<{id: string}>} systems
+ * @returns {string|null}
+ */
+export function normalizeBikeshareSystemId(id, systems) {
+  const normalized = String(id || '').trim().toLowerCase();
+  if (!normalized || !Array.isArray(systems)) return null;
+  return systems.some((system) => system.id === normalized) ? normalized : null;
+}
+
+/**
+ * Public picker rows from a city registry. Drops any entry whose hosts are
+ * not on the picker allowlist so a disallowed host can never appear.
+ * @param {Array<object>} systems
+ * @returns {Array<object>}
+ */
+export function listPickerSystems(systems) {
+  const rows = [];
+  for (const system of Array.isArray(systems) ? systems : []) {
+    const hosts = Array.isArray(system?.hosts) ? system.hosts : [];
+    if (hosts.length === 0 || !hosts.every(isBikesharePickerHostAllowed)) continue;
+    rows.push({
+      id: system.id,
+      city: system.city,
+      provider: system.provider,
+      hosts: [...hosts],
+      stationInformationUrl: system.stationInformationUrl,
+      stationStatusUrl: system.stationStatusUrl,
+    });
+  }
+  return rows.sort((a, b) => String(a.city).localeCompare(String(b.city)));
+}
+
+/**
+ * @param {{getItem?: Function}|null} storage
+ * @param {Array<{id: string}>} systems
+ * @returns {string|null}
+ */
+export function readPersistedBikeshareSystem(storage, systems) {
+  if (!storage || typeof storage.getItem !== 'function') return null;
+  try {
+    return normalizeBikeshareSystemId(storage.getItem(BIKESHARE_SYSTEM_STORAGE_KEY), systems);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {string} id
+ * @param {{setItem?: Function}|null} storage
+ * @param {Array<{id: string}>} systems
+ * @returns {string|null} Persisted id, or null when rejected / storage failed.
+ */
+export function writePersistedBikeshareSystem(id, storage, systems) {
+  const normalized = normalizeBikeshareSystemId(id, systems);
+  if (!normalized || !storage || typeof storage.setItem !== 'function') return null;
+  try {
+    storage.setItem(BIKESHARE_SYSTEM_STORAGE_KEY, normalized);
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {{city?: string, provider?: string}} system
+ * @returns {string}
+ */
+export function bikeshareSystemPickerLabel(system) {
+  const city = String(system?.city || '').trim();
+  const provider = String(system?.provider || '').trim();
+  if (city && provider) return `${city} · ${provider}`;
+  return city || provider || 'GBFS';
+}

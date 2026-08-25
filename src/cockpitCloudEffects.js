@@ -1,13 +1,19 @@
 import * as Cesium from 'cesium';
 import { isReduceMotionEnabled, subscribeReduceMotion } from './reduceMotion.js';
 import { deriveWeatherEffectProfile, weatherAltitudeFactors } from './weatherEffectsMath.js';
+import {
+  WX_TOGGLE_EVENT,
+  getWxEnabled,
+  weatherEffectsShouldRender,
+  writeWxPreference,
+  wxEnabledFromStoredValue,
+} from './weatherChrome.js';
 
 const WEATHER_REFRESH_MS = 5 * 60_000;
 const CLOUD_FRAME_MS = 1000 / 12;
 const MAX_RENDER_WIDTH = 520;
 const MAX_RENDER_HEIGHT = 320;
 const WEATHER_MOVE_REFRESH_M = 25_000;
-const WEATHER_ENABLED_STORAGE_KEY = 'godsEyeView.cockpitWeatherEffects.enabled';
 
 const VERTEX_SHADER = `
   attribute vec2 position;
@@ -158,7 +164,7 @@ export function cockpitCloudRenderSize(width, height) {
 
 /** Resolve the persisted cockpit-weather preference; missing values default off. */
 export function cockpitWeatherEnabledFromStoredValue(value) {
-  return value === '1';
+  return wxEnabledFromStoredValue(value);
 }
 
 /**
@@ -209,18 +215,12 @@ export class CockpitCloudEffectsController {
     };
     window.addEventListener('resize', this.onResize);
     window.addEventListener('gev:cockpit-mode-changed', this.onCockpitMode);
-    window.addEventListener('gev:cockpit-weather-toggle', this.onEnabledChange);
+    window.addEventListener(WX_TOGGLE_EVENT, this.onEnabledChange);
     this.emitEnabledState();
   }
 
   readEnabledPreference() {
-    try {
-      return cockpitWeatherEnabledFromStoredValue(
-        localStorage.getItem(WEATHER_ENABLED_STORAGE_KEY),
-      );
-    } catch {
-      return false;
-    }
+    return getWxEnabled();
   }
 
   emitEnabledState() {
@@ -232,9 +232,7 @@ export class CockpitCloudEffectsController {
   setEnabled(enabled) {
     const next = !!enabled;
     this.enabled = next;
-    try {
-      localStorage.setItem(WEATHER_ENABLED_STORAGE_KEY, next ? '1' : '0');
-    } catch { /* best effort */ }
+    writeWxPreference(next);
     if (!next) {
       this.stop();
     } else if (document.body.classList.contains('cockpit-mode')) {
@@ -315,7 +313,13 @@ export class CockpitCloudEffectsController {
   }
 
   start() {
-    if (this.destroyed || !this.enabled || this.frame !== null || this.suspended) return;
+    if (this.frame !== null) return;
+    if (!weatherEffectsShouldRender({
+      enabled: this.enabled,
+      cockpitActive: document.body.classList.contains('cockpit-mode'),
+      suspended: this.suspended,
+      destroyed: this.destroyed,
+    })) return;
     if (!this.gl) {
       this.initializeRenderer();
       this.resize();
@@ -355,8 +359,12 @@ export class CockpitCloudEffectsController {
   }
 
   async refresh() {
-    if (this.destroyed || !this.enabled || this.pending || this.suspended
-      || !document.body.classList.contains('cockpit-mode')) {
+    if (this.pending || !weatherEffectsShouldRender({
+      enabled: this.enabled,
+      cockpitActive: document.body.classList.contains('cockpit-mode'),
+      suspended: this.suspended,
+      destroyed: this.destroyed,
+    })) {
       return this.pending;
     }
     const point = this.cameraPoint();
@@ -420,7 +428,11 @@ export class CockpitCloudEffectsController {
   }
 
   tick(timeMs) {
-    if (this.destroyed || !this.enabled || !document.body.classList.contains('cockpit-mode')) {
+    if (!weatherEffectsShouldRender({
+      enabled: this.enabled,
+      cockpitActive: document.body.classList.contains('cockpit-mode'),
+      destroyed: this.destroyed,
+    })) {
       this.stop();
       return;
     }
@@ -525,7 +537,7 @@ export class CockpitCloudEffectsController {
     this._unsubReduceMotion = null;
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('gev:cockpit-mode-changed', this.onCockpitMode);
-    window.removeEventListener('gev:cockpit-weather-toggle', this.onEnabledChange);
+    window.removeEventListener(WX_TOGGLE_EVENT, this.onEnabledChange);
     if (this.program && this.gl) this.gl.deleteProgram(this.program);
     this.canvas.remove();
   }

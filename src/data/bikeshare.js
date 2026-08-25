@@ -19,6 +19,23 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
+import {
+  DEFAULT_BIKESHARE_SYSTEM_ID,
+  bikeshareSystemPickerLabel,
+  buildGbfsProxyUrl,
+  listPickerSystems,
+  normalizeBikeshareSystemId,
+  readPersistedBikeshareSystem,
+  writePersistedBikeshareSystem,
+} from './bikeshareSystems.js';
+
+export {
+  BIKESHARE_PICKER_ALLOWED_HOSTS,
+  BIKESHARE_SYSTEM_STORAGE_KEY,
+  DEFAULT_BIKESHARE_SYSTEM_ID,
+  buildGbfsProxyUrl,
+  isBikesharePickerHostAllowed,
+} from './bikeshareSystems.js';
 
 export const BIKESHARE_SELECTED_OVERLAY_SOURCE_ID = 'bikeshare-selected';
 export const BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS = Object.freeze({
@@ -463,6 +480,14 @@ const GBFS_CITY_REGISTRY = (() => {
 /** Lookup map from city id to its normalized registry entry. */
 const CITY_BY_ID = new Map(GBFS_CITY_REGISTRY.map((entry) => [entry.id, entry]));
 
+/**
+ * Systems the hosted picker may show: existing city list, allowlisted hosts only.
+ * @returns {Array<{id: string, city: string, provider: string, hosts: string[], stationInformationUrl: string, stationStatusUrl: string}>}
+ */
+export function listBikeshareSystems() {
+  return listPickerSystems(GBFS_CITY_REGISTRY);
+}
+
 // ---------------------------------------------------------------------------
 // Module-level mutable state
 // ---------------------------------------------------------------------------
@@ -515,8 +540,16 @@ let _loading = false;
 let _loadingOps = 0;
 /** Most recent error message string, or null. */
 let _error = null;
+/** Whether the selected system's feed is empty or otherwise unavailable. */
+let _unavailable = false;
 /** Whether the MAX_TOTAL_POINTS cap warning has already been logged. */
 let _limitWarned = false;
+/** Currently selected allowlisted system id. */
+let _selectedSystemId = DEFAULT_BIKESHARE_SYSTEM_ID;
+/** Optional storage override for picker persistence tests. */
+let _storageOverride = null;
+/** Manager callback when picker state changes. */
+let _rowControlsListener = null;
 
 /**
  * Convert an upstream GBFS URL into a local proxy URL.
@@ -525,7 +558,95 @@ let _limitWarned = false;
  * @returns {string} Relative proxy URL.
  */
 function toProxyUrl(upstreamUrl) {
-  return `/api/gbfs/${encodeURIComponent(upstreamUrl)}`;
+  return buildGbfsProxyUrl(upstreamUrl);
+}
+
+function safeBikeshareStorage() {
+  if (_storageOverride) return _storageOverride;
+  try {
+    return globalThis.localStorage || null;
+  } catch {
+    return null;
+  }
+}
+
+function notifyRowControlsChanged() {
+  try {
+    _rowControlsListener?.();
+  } catch {
+    // no-op
+  }
+}
+
+/**
+ * Fetch station information and status for one allowlisted system via `/api/gbfs`.
+ * @param {string} systemId
+ * @param {Object} [options]
+ * @param {typeof fetch} [options.fetchImpl]
+ * @param {AbortSignal} [options.signal]
+ * @returns {Promise<{cityId: string|null, stations: Map<string, Object>, status: Map<string, Object>, unavailable: boolean, error: string|null, proxyUrls: string[]}>}
+ */
+export async function loadBikeshareSystemStations(systemId, { fetchImpl, signal } = {}) {
+  const systems = listBikeshareSystems();
+  const cityId = normalizeBikeshareSystemId(systemId, systems);
+  if (!cityId) {
+    return {
+      cityId: null,
+      stations: new Map(),
+      status: new Map(),
+      unavailable: true,
+      error: 'unknown system',
+      proxyUrls: [],
+    };
+  }
+
+  const city = CITY_BY_ID.get(cityId);
+  const proxyUrls = [
+    toProxyUrl(city.stationInformationUrl),
+    toProxyUrl(city.stationStatusUrl),
+  ];
+
+  try {
+    const infoPayload = await fetchGbfsJson(city.stationInformationUrl, { signal, fetchImpl });
+    const stations = parseStationInformation(infoPayload);
+    if (stations.size === 0) {
+      return {
+        cityId,
+        stations,
+        status: new Map(),
+        unavailable: true,
+        error: null,
+        proxyUrls,
+      };
+    }
+
+    let status = new Map();
+    try {
+      const statusPayload = await fetchGbfsJson(city.stationStatusUrl, { signal, fetchImpl });
+      status = parseStationStatus(statusPayload);
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error;
+    }
+
+    return {
+      cityId,
+      stations,
+      status,
+      unavailable: false,
+      error: null,
+      proxyUrls,
+    };
+  } catch (error) {
+    if (error?.name === 'AbortError') throw error;
+    return {
+      cityId,
+      stations: new Map(),
+      status: new Map(),
+      unavailable: true,
+      error: 'GBFS fetch error',
+      proxyUrls,
+    };
+  }
 }
 
 /** Increment the loading reference count and mark loading state active. */
@@ -681,6 +802,42 @@ function computeInRangeCities(center) {
 }
 
 /**
+ * The picker is the source of truth: only the selected allowlisted system loads.
+ * Camera proximity no longer activates neighboring feeds.
+ * @returns {Set<string>}
+ */
+function computeSelectedCities() {
+  const active = new Set();
+  const selected = normalizeBikeshareSystemId(_selectedSystemId, listBikeshareSystems());
+  if (selected) active.add(selected);
+  return active;
+}
+
+function flyToSelectedSystem({ onComplete } = {}) {
+  const city = CITY_BY_ID.get(_selectedSystemId);
+  if (!city || typeof _viewer?.camera?.flyTo !== 'function') {
+    onComplete?.();
+    return;
+  }
+
+  const center = getCameraCenterLatLon(_viewer);
+  const altitude = getCameraAltitude(_viewer);
+  if (center && Number.isFinite(altitude) && altitude <= ACTIVATION_ENTER_ALTITUDE_M) {
+    const distance = haversineKm(center.lat, center.lon, city.centerLat, city.centerLon);
+    if (distance <= 25) {
+      onComplete?.();
+      return;
+    }
+  }
+
+  _viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(city.centerLon, city.centerLat, 12000),
+    duration: 1.6,
+    complete: () => onComplete?.(),
+  });
+}
+
+/**
  * Extract the stations array from a GBFS JSON payload.
  * Handles multiple response shapes: { data: { stations: [...] } },
  * { data: [...] }, and nested objects with a stations sub-key.
@@ -772,8 +929,9 @@ function parseStationStatus(payload) {
  * @returns {Promise<Object>} Parsed JSON payload.
  * @throws {Error} On non-OK HTTP status or malformed JSON.
  */
-async function fetchGbfsJson(upstreamUrl, { signal } = {}) {
-  const response = await fetch(toProxyUrl(upstreamUrl), {
+async function fetchGbfsJson(upstreamUrl, { signal, fetchImpl } = {}) {
+  const request = fetchImpl || fetch;
+  const response = await request(toProxyUrl(upstreamUrl), {
     method: 'GET',
     headers: { Accept: 'application/json' },
     signal,
@@ -836,10 +994,9 @@ async function loadCityStationInfo(cityId, generation) {
     try {
       const payload = await fetchGbfsJson(city.stationInformationUrl, { signal: controller.signal });
       const stationMap = parseStationInformation(payload);
-      if (stationMap.size === 0) {
-        throw new Error(`No station information for ${city.city}`);
+      if (stationMap.size > 0) {
+        _stationInfoCache.set(cityId, stationMap);
       }
-      _stationInfoCache.set(cityId, stationMap);
       return stationMap;
     } finally {
       endLoading();
@@ -1361,6 +1518,16 @@ async function activateCity(cityId, generation) {
     // Bail if context changed during fetch
     if (!_enabled || !_activeCityIds.has(cityId) || generation !== _proximityGeneration) return;
 
+    if (stationMap.size === 0) {
+      _unavailable = true;
+      _error = null;
+      removeCityPoints(cityId);
+      _count = 0;
+      notifyRowControlsChanged();
+      return;
+    }
+
+    _unavailable = false;
     ensureCityPoints(cityId, stationMap);
 
     // Apply any cached status immediately for snappier initial rendering
@@ -1402,11 +1569,7 @@ async function runProximityCheck() {
     return;
   }
 
-  const center = getCameraCenterLatLon(_viewer);
-  if (!center) return;
-
-  // Diff active set against newly computed in-range set
-  const nextActive = computeInRangeCities(center);
+  const nextActive = computeSelectedCities();
   for (const cityId of _activeCityIds) {
     if (!nextActive.has(cityId)) {
       deactivateCity(cityId);
@@ -1492,7 +1655,12 @@ const bikeshareLayer = {
     _loading = false;
     _loadingOps = 0;
     _error = null;
+    _unavailable = false;
     _limitWarned = false;
+    const systems = listBikeshareSystems();
+    _selectedSystemId = readPersistedBikeshareSystem(safeBikeshareStorage(), systems)
+      || DEFAULT_BIKESHARE_SYSTEM_ID;
+    writePersistedBikeshareSystem(_selectedSystemId, safeBikeshareStorage(), systems);
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -1523,6 +1691,7 @@ const bikeshareLayer = {
       _cameraChangedAttached = true;
     }
 
+    flyToSelectedSystem({ onComplete: () => { void runProximityCheck(); } });
     void runProximityCheck();
     restoreSpriteOrder(viewer);
   },
@@ -1560,6 +1729,7 @@ const bikeshareLayer = {
     _count = 0;
     _loading = false;
     _loadingOps = 0;
+    _unavailable = false;
   },
 
   /**
@@ -1603,18 +1773,80 @@ const bikeshareLayer = {
    * @returns {{ count: number, lastUpdate: number|null, loading: boolean, loadingLabel?: string, error?: string }}
    */
   getStats() {
+    const selected = CITY_BY_ID.get(_selectedSystemId);
     const stats = {
       count: _count,
       lastUpdate: _lastUpdate,
       loading: _loading,
     };
     if (_loading) {
-      stats.loadingLabel = _activeCityIds.size > 0
-        ? `syncing ${_activeCityIds.size} city feeds...`
-        : 'scanning nearby systems...';
+      stats.loadingLabel = selected
+        ? `syncing ${selected.city}...`
+        : 'syncing selected system...';
+    }
+    if (_unavailable) {
+      stats.unavailable = true;
+      stats.status = 'unavailable';
     }
     if (_error) stats.error = _error;
     return stats;
+  },
+
+  /**
+   * Picker of allowlisted systems. Not a Radio search and not a layer-state filter.
+   * Visible while the layer is off so hosted users can choose before enabling.
+   * @returns {{ picker: object }}
+   */
+  getRowControls() {
+    const systems = listBikeshareSystems();
+    return {
+      picker: {
+        id: 'system',
+        label: 'SYSTEM',
+        value: _selectedSystemId,
+        options: systems.map((system) => ({
+          value: system.id,
+          label: bikeshareSystemPickerLabel(system),
+        })),
+        ariaLabel: 'Bike-share system',
+      },
+    };
+  },
+
+  setRowControlsListener(listener) {
+    _rowControlsListener = typeof listener === 'function' ? listener : null;
+  },
+
+  getSelectedSystem() {
+    return _selectedSystemId;
+  },
+
+  /**
+   * Switch the active allowlisted system. Hits `/api/gbfs` through the existing
+   * URL builder only; persists the last valid choice.
+   * @param {string} systemId
+   * @returns {boolean}
+   */
+  setSelectedSystem(systemId) {
+    const systems = listBikeshareSystems();
+    const next = normalizeBikeshareSystemId(systemId, systems);
+    if (!next) return false;
+    if (next === _selectedSystemId) return true;
+
+    _selectedSystemId = next;
+    writePersistedBikeshareSystem(next, safeBikeshareStorage(), systems);
+    _unavailable = false;
+    _error = null;
+    _proximityGeneration++;
+    abortAllInFlight();
+    deactivateAllCities();
+    notifyRowControlsChanged();
+
+    if (_enabled) {
+      flyToSelectedSystem({ onComplete: () => { void runProximityCheck(); } });
+      void runProximityCheck();
+    }
+    return true;
   },
 
   /** Permanently release primitives, handlers, and the selected host source. */
@@ -1671,6 +1903,28 @@ export function _selectBikeshareStationForTest(key) {
 export function _clearBikeshareSelectionForTest() {
   _clearSelection();
   _overlayHost = DEFAULT_OVERLAY_HOST;
+}
+
+export function _setBikeshareSystemStorageForTest(storage) {
+  _storageOverride = storage || null;
+}
+
+export function _resetBikeshareSystemPickerForTest() {
+  _selectedSystemId = DEFAULT_BIKESHARE_SYSTEM_ID;
+  _unavailable = false;
+  _error = null;
+  _enabled = false;
+  _activeCityIds = new Set();
+  _stationInfoCache = new Map();
+  _statusCache = new Map();
+  _count = 0;
+  _lastUpdate = null;
+  _loading = false;
+  _loadingOps = 0;
+  _storageOverride = null;
+  _rowControlsListener = null;
+  _proximityGeneration = 0;
+  abortAllInFlight();
 }
 
 export default bikeshareLayer;
