@@ -7,6 +7,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Look control that cycles the existing sensor styles — CRT, NVG,
+  FLIR, Noir, Snow, then default — through the same setter the share URL and
+  voice already use. No new looks.
 - Hosted cockpit regional brief now shares one Node handler between Vite and
   Vercel (`api/regional-brief.js`). GET and POST return 200 JSON with place
   and/or weather and/or GDELT news — never a platform `NOT_FOUND`. Google News

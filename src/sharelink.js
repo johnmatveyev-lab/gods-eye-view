@@ -427,6 +427,7 @@ export class ShareLinkManager {
   onStyleChange(styleName) {
     this._currentStyle = styleName;
     this._scheduleUpdate();
+    this._scheduleLastViewPersist();
   }
 
   onToggleChange(bloom, sharpen, extras = {}) {

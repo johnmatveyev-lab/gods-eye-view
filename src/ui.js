@@ -21,6 +21,7 @@ import {
 } from './cockpitTracking.js';
 import { IntelHUD } from './hud.js';
 import { ShareLinkManager } from './sharelink.js';
+import { cycleSensorLook, sensorLookLabel } from './sensorLookPolicy.js';
 import {
   isExplicitLayerStateOrigin,
   LayerStateCoordinator,
@@ -2383,6 +2384,7 @@ export class StyleManager {
     this._poiRow = document.getElementById('poi-row');
     this._locationBarDivider = document.getElementById('location-bar-divider');
     this._styleMiniValue = document.getElementById('style-mini-value');
+    this._lookCycleBtn = document.getElementById('look-cycle-btn');
     this._locationMiniCity = document.getElementById('location-mini-city');
     this._locationMiniPoi = document.getElementById('location-mini-poi');
     this._safeFrameOverlay = document.getElementById('safe-frame-overlay');
@@ -3337,6 +3339,11 @@ export class StyleManager {
     // Style buttons
     document.querySelectorAll('.style-btn').forEach(btn => {
       btn.addEventListener('click', () => this.setStyle(btn.dataset.style));
+    });
+    this._lookCycleBtn?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.cycleLook();
     });
 
     // Keyboard shortcuts: 1-7, H, Escape
@@ -8981,6 +8988,15 @@ export class StyleManager {
   // ── Style switching ───────────────────────────
 
   /**
+   * Cycles hosted sensor looks: CRT → NVG → FLIR → Noir → Snow → default.
+   * Uses setStyle so share URL, lastView, and voice stay on the same style id.
+   * @returns {string} The style id now active.
+   */
+  cycleLook() {
+    return cycleSensorLook(this);
+  }
+
+  /**
    * Switches the active visual style. Handles full lifecycle:
    * 1. Crossfades the previous shader stage intensity to 0.
    * 2. Crossfades the new shader stage intensity to 1.
@@ -9563,8 +9579,13 @@ export class StyleManager {
    * @returns {void}
    */
   _updateStyleMiniStatus(styleName = this.activeStyle) {
-    if (!this._styleMiniValue) return;
-    this._styleMiniValue.textContent = STYLE_STATUS_LABELS[styleName] || String(styleName || 'normal').toUpperCase();
+    const label = sensorLookLabel(styleName)
+      || STYLE_STATUS_LABELS[styleName]
+      || String(styleName || 'normal').toUpperCase();
+    if (this._styleMiniValue) this._styleMiniValue.textContent = label;
+    if (this._lookCycleBtn) {
+      this._lookCycleBtn.setAttribute('aria-label', `Look ${label}. Cycle sensor look.`);
+    }
   }
 
   // ── Orbit Mode ──────────────────────────────
