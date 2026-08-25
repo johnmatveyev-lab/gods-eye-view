@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GBFS_ALLOWED_HOSTS } from './gbfs.js';
 import {
+  BIKESHARE_HIDE_CLOSED_STORAGE_KEY,
   BIKESHARE_HIDE_EMPTY_STORAGE_KEY,
   BIKESHARE_HIDE_FULL_STORAGE_KEY,
   BIKESHARE_PICKER_ALLOWED_HOSTS,
@@ -11,12 +12,15 @@ import {
   buildGbfsProxyUrl,
   isBikesharePickerHostAllowed,
   listPickerSystems,
+  normalizeBikeshareHideClosed,
   normalizeBikeshareHideEmpty,
   normalizeBikeshareHideFull,
   normalizeBikeshareSystemId,
+  readPersistedBikeshareHideClosed,
   readPersistedBikeshareHideEmpty,
   readPersistedBikeshareHideFull,
   readPersistedBikeshareSystem,
+  writePersistedBikeshareHideClosed,
   writePersistedBikeshareHideEmpty,
   writePersistedBikeshareHideFull,
   writePersistedBikeshareSystem,
@@ -82,4 +86,10 @@ test('proxy URL builder stays on /api/gbfs and persists only allowlisted ids', (
   assert.equal(readPersistedBikeshareHideFull(store), true);
   assert.equal(writePersistedBikeshareHideFull(false, store), false);
   assert.equal(readPersistedBikeshareHideFull(store), false);
+  assert.equal(normalizeBikeshareHideClosed(undefined), null);
+  assert.equal(writePersistedBikeshareHideClosed(true, store), true);
+  assert.equal(storage.get(BIKESHARE_HIDE_CLOSED_STORAGE_KEY), '1');
+  assert.equal(readPersistedBikeshareHideClosed(store), true);
+  assert.equal(writePersistedBikeshareHideClosed(false, store), false);
+  assert.equal(readPersistedBikeshareHideClosed(store), false);
 });
