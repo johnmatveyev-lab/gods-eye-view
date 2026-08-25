@@ -20,6 +20,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Emergency highlight paints contacts whose current public ADS-B squawk is
+  7500, 7600, or 7700 using the existing annotation alert-red token. DISPLAY
+  **Emergency** defaults on and persists as `meridian.emergencyHighlight`.
+  Off removes the special paint only; click still tracks. Altitude-band
+  visibility still hides out-of-band contacts even when the squawk is
+  emergency. Client-side current payload only — not an alert service and
+  not a verified emergency. No `/api`.
 - Hosted `/api/military-installations` on Vercel through the existing live
   catch-all (`api/[...path].js`), forwarding the GET handler extracted to
   `src/data/militaryInstallationsHttp.js`. Keeps the non-dateline ≤10° bbox

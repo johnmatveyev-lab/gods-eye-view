@@ -70,6 +70,10 @@ import {
   hydrateTrailsEnabled,
   setTrailsEnabled,
 } from './data/trailPreference.js';
+import {
+  hydrateEmergencyHighlightEnabled,
+  setEmergencyHighlightEnabled,
+} from './data/emergencySquawk.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -2788,6 +2792,10 @@ export class StyleManager {
     // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
     // existing tracked-target trail renderer without stopping track.
     this._trailsEnabled = true;
+    this._emergencyHighlightBtn = document.getElementById('emergency-highlight-toggle');
+    // DISPLAY-rail Emergency highlight. Default ON (`meridian.emergencyHighlight`);
+    // paints public squawk 7500/7600/7700. Click still tracks.
+    this._emergencyHighlightEnabled = true;
 
     // The shared world-overlay host must own its one postRender lane before
     // detection and tracked-readout initialize. It stays transparent until a
@@ -2832,6 +2840,7 @@ export class StyleManager {
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initTrailsToggle();
+    this._initEmergencyHighlightToggle();
     this._initLiveSunToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
@@ -10643,6 +10652,24 @@ export class StyleManager {
   _syncTrailsButtonState() {
     this._trailsBtn?.classList.toggle('active', this._trailsEnabled);
     this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
+  }
+
+  /**
+   * Wires the DISPLAY-rail Emergency highlight toggle.
+   * Off removes the special paint only. Click-to-track is unchanged.
+   */
+  _initEmergencyHighlightToggle() {
+    this._emergencyHighlightEnabled = hydrateEmergencyHighlightEnabled();
+    this._emergencyHighlightBtn?.addEventListener('click', () => {
+      this._emergencyHighlightEnabled = setEmergencyHighlightEnabled(!this._emergencyHighlightEnabled);
+      this._syncEmergencyHighlightButtonState();
+    });
+    this._syncEmergencyHighlightButtonState();
+  }
+
+  _syncEmergencyHighlightButtonState() {
+    this._emergencyHighlightBtn?.classList.toggle('active', this._emergencyHighlightEnabled);
+    this._emergencyHighlightBtn?.setAttribute('aria-pressed', String(this._emergencyHighlightEnabled));
   }
 
   _initHUDToggle() {
