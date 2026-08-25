@@ -492,6 +492,9 @@ const OPTION_GROUPS = Object.freeze({
     // PLAN 180: hide unnamed default OFF. Omitted `u` keeps the current
     // view — there was no prior unnamed filter, so absent === default.
     booleanOption('hideUnnamed', 'u', false),
+    // PLAN 189: hide no IMO default OFF. Omitted `i` keeps the current
+    // view — there was no prior IMO filter, so absent === default.
+    booleanOption('hideNoImo', 'i', false),
   ]),
 });
 

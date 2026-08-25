@@ -2,6 +2,16 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — AIS hide no IMO (plan 189)** (`src/data/aisHideNoImoFilter.js`).
+> **Hide no IMO** next to Hide unnamed, default **off**. Filters already-
+> fetched AISStream rows by `imo` (`String(row.imo || '')`). On hides
+> missing, empty, or whitespace-only IMO (trim first). Filled IMO stays.
+> Selected vessel stays. AND with type chips, Hide parked, min-speed,
+> destination, Hide no dest, and Hide unnamed. Re-applies from the
+> in-memory roster — no extra AISStream fetch. Persists
+> `meridian.aisHideNoImo` and `ais-live-vessels.hideNoImo` (`a.i.1`).
+> Hidden when the AIS layer is off. Client-only; no `/api`.
+
 > **2026-08-25 — satellite launch-year chips (plan 182)** (`src/data/satelliteLaunchYearFilter.js`).
 > Exclusive **All | 2020s | 2010s | older** chips on the Satellites DATA
 > LAYERS row, next to eccentricity chips. Default **All** is the current

@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has a client-only **Hide no IMO** toggle next to Hide unnamed.
+  Default off matches the current harbor view. On skips in-memory vessels
+  whose `imo` is missing, empty, or whitespace-only (trim first). Vessels
+  with an IMO stay. A selected vessel stays even if it would be filtered.
+  Chip changes re-filter already fetched AIS rows and AND with Tanker |
+  Cargo | Passenger | Fishing | Service | Other, Hide parked, min-speed,
+  destination, Hide no dest, and Hide unnamed — no extra AISStream fetch
+  and no `/api`. Preference persists as `meridian.aisHideNoImo` and
+  `ais-live-vessels.hideNoImo` (`a.i.1`). Hidden when the AIS layer is
+  off. Feed refresh keeps the toggle. Existing AIS layer only.
 - Satellites row has client-only **All | 2020s | 2010s | older** launch-year
   chips next to eccentricity chips. Default All matches the current catalog.
   The chips filter already-fetched CelesTrak satrecs by `satrec.intldesg`

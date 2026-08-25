@@ -80,7 +80,7 @@ function paramsForLayer(id) {
     return { installationClassFilter: 'all', footprintsOnly: false };
   }
   if (id === 'ais-live-vessels') {
-    return { vesselTypeFilter: 'all', hideParked: false, minSpeed: 'all', destination: '', hideNoDestination: false, hideUnnamed: false };
+    return { vesselTypeFilter: 'all', hideParked: false, minSpeed: 'all', destination: '', hideNoDestination: false, hideUnnamed: false, hideNoImo: false };
   }
   if (id === 'radio') {
     return {
@@ -524,6 +524,25 @@ test('AIS min-speed chips persist on ais-live-vessels and default All', () => {
   const tenParams = encodeLayerStateParams(new URLSearchParams('v=2'), ten);
   assert.match(tenParams.get('lo'), /a\.s\.t/);
   assert.equal(decodeLayerStateParams(tenParams).options['ais-live-vessels'].minSpeed, '10');
+});
+
+test('AIS Hide no IMO persists on ais-live-vessels and defaults off', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['ais-live-vessels'].hideNoImo, false);
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=a'));
+  assert.equal(omitted.options['ais-live-vessels'].hideNoImo, false,
+    'existing a links keep no-IMO vessels visible');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['ais-live-vessels'],
+    options: { 'ais-live-vessels': { hideNoImo: true } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /a\.i\.1/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['ais-live-vessels'].hideNoImo, true);
+  assert.equal(layerOptionsForRestore(decoded, 'ais-live-vessels').hideNoImo, true);
 });
 
 test('AIS Hide unnamed persists on ais-live-vessels and defaults off', () => {
