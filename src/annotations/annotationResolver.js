@@ -3,6 +3,7 @@ import { lookupNeighborhoodRing } from '../data/neighborhoodPolygons.js';
 import { lookupNaturalRegionOutline, findNaturalRegion } from '../data/naturalEarthRegions.js';
 import { registerDynamicCredit, NATURAL_EARTH_CREDIT } from '../data/dataCredits.js';
 import { isPickedWorldPosition } from '../data/scenePick.js';
+import { shouldDeferBackgroundNetwork } from '../pageVisibility.js';
 
 /**
  * Annotation target resolver.
@@ -676,6 +677,7 @@ async function placesTextSearch(query, centerLat, centerLon, radiusM, signal) {
   const cacheKey = `${q.toLowerCase()}|${centerLat.toFixed(3)},${centerLon.toFixed(3)}|${radiusM}`;
   const cached = cacheRead(placesCache, cacheKey);
   if (cached !== undefined) return cached;
+  if (shouldDeferBackgroundNetwork()) return null;
 
   const params = new URLSearchParams({
     q,

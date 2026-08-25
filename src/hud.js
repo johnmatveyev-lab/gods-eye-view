@@ -19,6 +19,7 @@ import { CITY_POIS } from './locations.js';
 import { composeLocalityTag } from './hudLocality.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import { isDocumentHidden, subscribePageVisibility } from './pageVisibility.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -77,6 +78,8 @@ export class IntelHUD {
     this._recBlinkInterval = null;
     this._timestampInterval = null;
     this._summaryInterval = null;
+    this._summaryPollPaused = false;
+    this._unsubscribePageVisibility = null;
     this._summaryTypingInterval = null;
     this._latestMetrics = null;
     this._dataManager = null;
@@ -132,6 +135,8 @@ export class IntelHUD {
     this._buildDOM();
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
+    this._unsubscribePageVisibility = subscribePageVisibility(() => this._syncSummaryPoll());
+    this._syncSummaryPoll();
   }
 
   /**
@@ -231,11 +236,44 @@ export class IntelHUD {
       this._updateCameraData();
     }, 250);
 
-    // Semantic summary refresh cadence
+    this._armSummaryInterval();
+  }
+
+  _armSummaryInterval() {
+    if (this._summaryInterval) return;
+    if (isDocumentHidden()) {
+      this._summaryPollPaused = true;
+      return;
+    }
     this._summaryInterval = setInterval(() => {
-      if (!this._visible) return;
+      if (!this._visible || isDocumentHidden()) return;
       void this._updateSummary(true);
     }, HUD_SUMMARY_INTERVAL_MS);
+  }
+
+  _syncSummaryPoll() {
+    if (isDocumentHidden()) {
+      this._pauseSummaryInterval();
+      return;
+    }
+    this._resumeSummaryInterval();
+  }
+
+  _pauseSummaryInterval() {
+    if (this._summaryInterval != null) {
+      clearInterval(this._summaryInterval);
+      this._summaryInterval = null;
+    }
+    this._summaryPollPaused = true;
+  }
+
+  _resumeSummaryInterval() {
+    const shouldRefresh = this._summaryPollPaused || this._summaryInterval == null;
+    this._summaryPollPaused = false;
+    if (shouldRefresh && this._visible && !isDocumentHidden()) {
+      void this._updateSummary(true, true);
+    }
+    this._armSummaryInterval();
   }
 
   /**
@@ -619,6 +657,7 @@ export class IntelHUD {
    *   by character; otherwise sets it instantly.
    */
   async _updateSummary(animate = false, force = false) {
+    if (isDocumentHidden()) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
@@ -848,6 +887,8 @@ export class IntelHUD {
 
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
+    this._unsubscribePageVisibility?.();
+    this._unsubscribePageVisibility = null;
     clearInterval(this._updateInterval);
     clearInterval(this._recBlinkInterval);
     clearInterval(this._timestampInterval);

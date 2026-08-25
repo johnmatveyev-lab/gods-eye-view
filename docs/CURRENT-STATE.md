@@ -1,7 +1,14 @@
 # Meridian Current State
 
-Updated: August 24, 2026
+Updated: August 25, 2026
 
+> **2026-08-25 — hidden-tab live polls.** When `document.visibilityState` is
+> `hidden`, the client scheduler stops the existing flight/layer poll handles
+> and the HUD summary interval. It does not start new OpenAI HUD-summary or
+> Google Places calls. An active voice session is not hung up. On return the
+> paused handles refresh once immediately, then resume their normal cadence.
+> No `/api` changes and no new sources.
+>
 > **2026-08-23 — first-run mission launcher** (`src/firstRunExperience.js`,
 > `#first-run-launcher`, styles at the tail of `style.css`). After startup
 > settles, a fresh session gets one card offering **Live Contacts · Space
@@ -2172,7 +2179,7 @@ silently demoting every later lookup for the session.
 
 ### AI HUD Summary (June 2026)
 
-- HUD `SUMMARY` readout requests a five-word intelligence-style summary from `/api/openai/hud-summary` (model `OPENAI_HUD_SUMMARY_MODEL`, default `gpt-5-nano`, minimal reasoning).
+- HUD `SUMMARY` readout requests a five-word intelligence-style summary from `/api/openai/hud-summary` (model `OPENAI_HUD_SUMMARY_MODEL`, default `gpt-5-nano`, minimal reasoning). The summary interval is paused while the tab is hidden and resumes with one refresh on return.
 - Input is the live basemap label context (place/street/nearby-place labels + enabled layers) — the model is instructed not to infer from coordinates.
 - Output is sanitized to exactly five words; falls back to the deterministic telemetry summary on error/timeout (5s abort); typewriter animation on update.
 
