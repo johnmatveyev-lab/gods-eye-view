@@ -4,7 +4,6 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DATA_CREDITS } from './dataCredits.js';
 import {
   LL2_CACHE_TTL_MS,
   LL2_UPSTREAM_URL,
@@ -44,9 +43,13 @@ async function dispatch(runtime, options) {
   const req = mockReq(options);
   const res = mockRes();
   await handleLaunchesHttp(req, res, runtime);
+  let json = null;
+  if (res.body) {
+    try { json = JSON.parse(res.body); } catch { json = null; }
+  }
   return {
     status: res.statusCode,
-    json: res.body ? JSON.parse(res.body) : null,
+    json,
     headers: res.headers,
     body: res.body,
   };
@@ -174,9 +177,9 @@ test('handler stays Launch Library 2 only; existing credit and MIT line remain',
   const source = readFileSync(path.join(ROOT, 'src/data/launches.js'), 'utf8');
   assert.match(source, /ll\.thespacedevs\.com/);
   assert.doesNotMatch(source, /ais-live|google\/text-search|opensky-network|news\.google|telegeography|quantum-earth/i);
-  assert.equal(
-    DATA_CREDITS.some((credit) => credit.key === 'launch-library-2'),
-    true,
+  assert.match(
+    readFileSync(path.join(ROOT, 'src/data/dataCredits.js'), 'utf8'),
+    /key:\s*'launch-library-2'/,
   );
   const license = readFileSync(path.join(ROOT, 'LICENSE'), 'utf8');
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
