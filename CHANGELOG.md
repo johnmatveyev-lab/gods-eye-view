@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Earthquake **All | 100+ | 300+ | 600+** significance chips sit next to the
+  network row. Default **All** matches the current USGS all_day discs. Chips
+  filter cached `properties.sig` (0–1000 composite of mag + felt + MMI +
+  impact). **100+** hides events whose finite sig is below 100. **300+**
+  is stricter. **600+** is USGS's own significant cutoff. Missing or
+  non-finite sig stays visible. A selected event stays. Chip changes
+  re-filter in memory and AND with mag / depth / time / tsunami / PAGER /
+  reviewed / type / felt / network — no extra USGS fetch and no `/api`.
+  Preference persists as `meridian.earthquakeSigFloor`. Hidden when the
+  Earthquakes layer is off. Refresh keeps the chip set. Distinct from
+  `isSignificantEarthquake` (mag >= 5.0).
 - Space Missions roster has a client-only **Hide unknown site** toggle next
   to the probability chips. Default off matches the current 30-day roster.
   On hides missions whose normalized `launchSite` is missing, whitespace

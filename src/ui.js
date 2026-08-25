@@ -247,6 +247,7 @@ import {
   normalizeEarthquakeTsunamiOnly,
   normalizeEarthquakeReviewedOnly,
   normalizeEarthquakeFeltOnly,
+  normalizeEarthquakeSigFloor,
   toggleEarthquakeDepthBand,
   toggleEarthquakeEventType,
   toggleEarthquakeNetwork,
@@ -3006,6 +3007,7 @@ export class StyleManager {
     this._earthquakePagerChips = document.getElementById('earthquake-pager-chips');
     this._earthquakeTypeChips = document.getElementById('earthquake-type-chips');
     this._earthquakeNetworkChips = document.getElementById('earthquake-network-chips');
+    this._earthquakeSigChips = document.getElementById('earthquake-sig-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -5484,6 +5486,7 @@ export class StyleManager {
           this._syncEarthquakePagerChips();
           this._syncEarthquakeTypeChips();
           this._syncEarthquakeNetworkChips();
+          this._syncEarthquakeSigChips();
         }
         if (change?.layerId === 'satellites') {
           syncIssPassReadout({ recompute: true });
@@ -12295,6 +12298,35 @@ export class StyleManager {
     this._syncEarthquakeNetworkChips();
   }
 
+  _syncEarthquakeSigChips() {
+    const enabled = this._dataManager?.isEnabled?.('earthquakes') === true;
+    if (this._earthquakeSigChips) {
+      this._earthquakeSigChips.hidden = !enabled;
+    }
+    const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+    const floor = normalizeEarthquakeSigFloor(layer?.getParams?.()?.sigFloor) ?? 'all';
+    const chips = this._earthquakeSigChips?.querySelectorAll?.('[data-earthquake-sig]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.earthquakeSig === floor;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initEarthquakeSigChips() {
+    if (!this._earthquakeSigChips) return;
+    this._earthquakeSigChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-sig]');
+      if (!chip || !this._earthquakeSigChips.contains(chip)) return;
+      const next = normalizeEarthquakeSigFloor(chip.dataset.earthquakeSig);
+      if (next == null) return;
+      this._dataManager?.setLayerParams?.('earthquakes', { sigFloor: next }, { origin: 'user' });
+      this._syncEarthquakeSigChips();
+    });
+    this._syncEarthquakeSigChips();
+  }
+
   _initEarthquakeListControl() {
     this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
@@ -12304,6 +12336,7 @@ export class StyleManager {
     this._initEarthquakePagerChips();
     this._initEarthquakeTypeChips();
     this._initEarthquakeNetworkChips();
+    this._initEarthquakeSigChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,
       panel: this._earthquakeListPanel,
