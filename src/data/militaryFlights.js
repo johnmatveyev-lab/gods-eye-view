@@ -27,13 +27,6 @@ import { contactPassesInFlightFilters, normalizeSpeedBand } from './flightSpeedB
 import * as inFlightFilters from './inFlightFilters.js';
 import { passesAirborneOnlyFilter } from './flightOperatorFilters.js';
 import {
-  getIdentifiedOnlyEnabled,
-  hydrateIdentifiedOnlyEnabled,
-  passesIdentifiedOnlyFilter,
-  setIdentifiedOnlyEnabled,
-  subscribeIdentifiedOnlyEnabled,
-} from './flightIdentifiedFilter.js';
-import {
   screenProjectedRotation,
   stabilizeScreenRotation,
   horizonOccluder,
@@ -111,6 +104,15 @@ import {
   hydrateAltitudeBand,
   subscribeAltitudeBand,
 } from './flightAltitudeBand.js';
+import {
+  getMilitaryFlightsIdentifiedOnly,
+  hydrateMilitaryFlightsIdentifiedOnly,
+  militaryIdentifiedOnlyChipModel,
+  passesMilitaryIdentifiedOnlyFilter,
+  resetMilitaryFlightsIdentifiedOnlyForTest,
+  setMilitaryFlightsIdentifiedOnly,
+  subscribeMilitaryFlightsIdentifiedOnly,
+} from './militaryFlightIdentifiedFilter.js';
 
 /**
  * @module militaryFlights
@@ -293,12 +295,11 @@ function _airborneOnlyMatcher(contact) {
   });
 }
 
-/** PLAN 188 — same contact shape as civil; no military-only chip. */
 function _identifiedOnlyMatcher(contact) {
-  return passesIdentifiedOnlyFilter({
+  return passesMilitaryIdentifiedOnlyFilter({
     callsign: contact?.callsign,
     registration: contact?.registration,
-    identifiedOnly: getIdentifiedOnlyEnabled(),
+    identifiedOnly: getMilitaryFlightsIdentifiedOnly(),
   });
 }
 
@@ -1075,6 +1076,7 @@ export function _setTrackedMilitaryRefreshStateForTest({
   _backoff = false;
   _retryAt = 0;
   _airborneOnly = false;
+  resetMilitaryFlightsIdentifiedOnlyForTest();
   _speedMinKt = null;
   _speedMaxKt = null;
   _showClimb = true;
@@ -1118,8 +1120,8 @@ function _applyInFlightFilterVisibility() {
 onHeadingSectorsChange(_applyInFlightFilterVisibility);
 hydrateAltitudeBand();
 subscribeAltitudeBand(_applyInFlightFilterVisibility);
-hydrateIdentifiedOnlyEnabled();
-subscribeIdentifiedOnlyEnabled(_applyInFlightFilterVisibility);
+hydrateMilitaryFlightsIdentifiedOnly();
+subscribeMilitaryFlightsIdentifiedOnly(_applyInFlightFilterVisibility);
 
 /** Apply the live operator visibility gate (airborne-only + sibling AND). */
 export function _applyOperatorContactVisibilityForTest() {
@@ -3772,9 +3774,8 @@ const militaryFlightsLayer = {
       _airborneOnly = params.airborneOnly;
       _applyOperatorContactVisibility();
     }
-    if (typeof params.identifiedOnly === 'boolean' && params.identifiedOnly !== getIdentifiedOnlyEnabled()) {
-      setIdentifiedOnlyEnabled(params.identifiedOnly);
-      _applyInFlightFilterVisibility();
+    if (typeof params.identifiedOnly === 'boolean' && params.identifiedOnly !== getMilitaryFlightsIdentifiedOnly()) {
+      setMilitaryFlightsIdentifiedOnly(params.identifiedOnly);
     }
     if (Object.hasOwn(params, 'selectedMilitaryTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedMilitaryTrackingId);
@@ -3805,7 +3806,7 @@ const militaryFlightsLayer = {
       models3d: _models3dEnabled,
       models3dMode: _models3dMode,
       airborneOnly: _airborneOnly,
-      identifiedOnly: getIdentifiedOnlyEnabled(),
+      identifiedOnly: getMilitaryFlightsIdentifiedOnly(),
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),
@@ -3824,6 +3825,7 @@ const militaryFlightsLayer = {
       chips: [
         ...headingSectorChipModels(getHeadingSectors()),
         ..._hideStaleRowControls().chips,
+        militaryIdentifiedOnlyChipModel(getMilitaryFlightsIdentifiedOnly()),
       ],
       field: callsignPrefixRowField(),
     };
