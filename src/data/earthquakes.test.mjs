@@ -22,9 +22,11 @@ import {
   filterEarthquakeFeaturesByDepthBands,
   filterEarthquakeFeaturesByMagnitudeFloor,
   filterEarthquakeFeaturesByTimeWindow,
+  filterEarthquakeFeaturesByTsunamiFlag,
   isSignificantEarthquake,
   mapAnalystRecord,
   normalizeEarthquakeTimeWindowHours,
+  normalizeEarthquakeTsunamiOnly,
   selectEarthquakeOverlayCohort,
   toggleEarthquakeDepthBand,
 } from './earthquakes.js';
@@ -1109,6 +1111,245 @@ test('earthquake time chips default 24h and sit next to mag/depth with no new en
     );
     assert.equal(layer.setParams({ timeWindowHours: 12 }), false);
     assert.equal(layer.getParams().timeWindowHours, 1);
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 150: tsunami-flagged toggle (client-side, same USGS all_day) ─────────
+
+function tsunamiFeature(id, mag, tsunami, depthKm = 8.2) {
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties: { mag, place: String(id), time: 1_753_600_000_000, tsunami },
+  };
+}
+
+const MIXED_TSUNAMI_DAY = Object.freeze({
+  features: Object.freeze([
+    tsunamiFeature('flagged-lo', 3.1, 1),
+    tsunamiFeature('flagged-sig', 5.4, 1, 80),
+    tsunamiFeature('flagged-deep', 4.8, 1, 410),
+    tsunamiFeature('plain-zero', 4.2, 0),
+    tsunamiFeature('plain-missing', 3.6),
+    {
+      id: 'plain-null',
+      geometry: { coordinates: [-122.4, 37.79, 12] },
+      properties: { mag: 4.1, place: 'plain-null', time: 1_753_600_000_000, tsunami: null },
+    },
+    tsunamiFeature('micro-flagged', 2.4, 1),
+  ]),
+});
+
+test('Tsunami only defaults off and matches the current mag/depth/time view', async () => {
+  assert.equal(normalizeEarthquakeTsunamiOnly(undefined), false);
+  assert.equal(normalizeEarthquakeTsunamiOnly(false), false);
+  assert.equal(normalizeEarthquakeTsunamiOnly(true), true);
+  assert.equal(normalizeEarthquakeTsunamiOnly('1'), true);
+  assert.equal(normalizeEarthquakeTsunamiOnly('bogus'), null);
+
+  const current = filterEarthquakeFeatures(MIXED_TSUNAMI_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    timeWindowHours: 24,
+  }).map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByTsunamiFlag(MIXED_TSUNAMI_DAY.features, false).map((feature) => feature.id),
+    MIXED_TSUNAMI_DAY.features.map((feature) => feature.id),
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_TSUNAMI_DAY.features, {
+      magnitudeFloor: 2.5,
+      tsunamiOnly: false,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_TSUNAMI_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Tsunami only keeps tsunami===1 and hides 0 or missing', async () => {
+  const flagged = filterEarthquakeFeaturesByTsunamiFlag(MIXED_TSUNAMI_DAY.features, true)
+    .map((feature) => feature.id);
+  assert.deepEqual(flagged, ['flagged-lo', 'flagged-sig', 'flagged-deep', 'micro-flagged']);
+  assert.ok(!flagged.includes('plain-zero'));
+  assert.ok(!flagged.includes('plain-missing'));
+  assert.ok(!flagged.includes('plain-null'));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_TSUNAMI_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ tsunamiOnly: true }), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['flagged-deep', 'flagged-lo', 'flagged-sig']);
+    assert.ok(!entityIds(viewer._dataSources[0]).includes('plain-zero'));
+    assert.ok(!entityIds(viewer._dataSources[0]).includes('plain-missing'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('selected event stays visible when Tsunami only hides its flag', async () => {
+  assert.deepEqual(
+    filterEarthquakeFeaturesByTsunamiFlag(MIXED_TSUNAMI_DAY.features, true, {
+      selectedId: 'plain-zero',
+    }).map((feature) => feature.id),
+    ['flagged-lo', 'flagged-sig', 'flagged-deep', 'plain-zero', 'micro-flagged'],
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_TSUNAMI_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ selectedId: 'plain-zero', tsunamiOnly: true }), true);
+    assert.deepEqual(
+      entityIds(viewer._dataSources[0]),
+      ['flagged-deep', 'flagged-lo', 'flagged-sig', 'plain-zero'],
+    );
+    assert.ok(layer.getListRecords().some((row) => row.id === 'plain-zero'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Tsunami only ANDs with mag/depth/time and redraws from cached geojson', async () => {
+  const anded = filterEarthquakeFeatures(MIXED_TSUNAMI_DAY.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 24,
+    tsunamiOnly: true,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, []);
+
+  const shallowFlagged = filterEarthquakeFeatures(MIXED_TSUNAMI_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: 'S',
+    tsunamiOnly: true,
+  }).map((feature) => feature.id);
+  assert.deepEqual(shallowFlagged, ['flagged-lo']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_TSUNAMI_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({ tsunamiOnly: true, depthBands: 'S' }), true);
+    assert.equal(feed.fetches, 1, 'tsunami chip must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['flagged-lo']);
+    assert.equal(layer.setParams({ magnitudeFloor: 4.0 }), true);
+    assert.equal(feed.fetches, 1);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), []);
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('USGS refresh keeps Tsunami only applied to the new payload', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const first = stubUsgs(MIXED_TSUNAMI_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ tsunamiOnly: true }), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['flagged-deep', 'flagged-lo', 'flagged-sig']);
+    first.restore();
+    const second = stubUsgs({
+      features: [
+        tsunamiFeature('fresh-flagged', 3.3, 1),
+        tsunamiFeature('fresh-plain', 4.4, 0),
+        tsunamiFeature('flagged-lo', 3.1, 1),
+      ],
+    });
+    try {
+      assert.equal(await layer.update(viewer), true);
+      assert.equal(layer.getParams().tsunamiOnly, true);
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['flagged-lo', 'fresh-flagged']);
+      assert.ok(!entityIds(viewer._dataSources[0]).includes('fresh-plain'));
+    } finally {
+      second.restore();
+    }
+  } finally {
+    first.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Tsunami only chip sits next to mag/depth/time, persists, and hides with the layer', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('./earthquakeTsunamiFlag.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /data-earthquake-tsunami="only"/);
+  assert.match(html, /Tsunami only/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(ui, /earthquake-tsunami-chips|data-earthquake-tsunami/);
+  assert.match(css, /earthquake-tsunami-chip/);
+  assert.match(helper, /properties\.tsunami === 1/);
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+  assert.doesNotMatch(helper, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const tsunami = chips.filter((chip) => chip.id.startsWith('tsunami-'));
+    assert.deepEqual(tsunami.map((chip) => chip.label), ['Tsunami only']);
+    assert.equal(tsunami[0].active, false);
+    assert.equal(tsunami[0].params.tsunamiOnly, true);
+    assert.equal(layer.setParams({ tsunamiOnly: true }), true);
+    assert.equal(
+      layer.getRowControls().chips.find((chip) => chip.id === 'tsunami-only')?.active,
+      true,
+    );
+    assert.equal(layer.getRowControls().chips.find((chip) => chip.id === 'tsunami-only')?.params.tsunamiOnly, false);
+    assert.equal(layer.setParams({ tsunamiOnly: 'nope' }), false);
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(layer.getParams().timeWindowHours, 24);
   } finally {
     layer.destroy(viewer);
   }
