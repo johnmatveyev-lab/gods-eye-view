@@ -98,6 +98,12 @@ import {
   passesHeadingSectorFilter,
   setHeadingSectors,
 } from './inFlightFilters.js';
+import {
+  aircraftMatchesAltitudeBand,
+  getAltitudeBand,
+  hydrateAltitudeBand,
+  subscribeAltitudeBand,
+} from './flightAltitudeBand.js';
 
 /**
  * @module militaryFlights
@@ -1094,6 +1100,8 @@ function _applyInFlightFilterVisibility() {
   }
 }
 onHeadingSectorsChange(_applyInFlightFilterVisibility);
+hydrateAltitudeBand();
+subscribeAltitudeBand(_applyInFlightFilterVisibility);
 
 /** Apply the live operator visibility gate (airborne-only + sibling AND). */
 export function _applyOperatorContactVisibilityForTest() {
@@ -2913,11 +2921,23 @@ export function mapAnalystRecord(icao24, info) {
  * plus optional getNearby, getDetectableObjects, and getStats accessors.
  * @type {Object}
  */
+function _inAltitudeBand(icao24, info = _flightData.get(icao24)) {
+  return aircraftMatchesAltitudeBand({
+    altitudeM: Number.isFinite(info?.altitudeFt) ? info.altitudeFt * 0.3048 : null,
+    onGround: info?.onGround === true,
+  }, getAltitudeBand());
+}
+
+/** PLAN 93 altitude matcher — honors the existing band module, no reimplementation. */
+function _altitudeAndMatcher(contact) {
+  return _inAltitudeBand(contact?.icao24 || contact?.id, contact);
+}
+
 function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
   });
 }
 
@@ -2927,7 +2947,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
   });
 }
 

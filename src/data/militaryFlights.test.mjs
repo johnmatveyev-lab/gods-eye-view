@@ -7,11 +7,13 @@ import * as Cesium from 'cesium';
 import militaryFlightsLayer, {
   _addMilitaryTrackingCandidateForTest,
   _applyPendingMilitaryTrackingRestoreForTest,
+  _clearMilitaryFilterFixturesForTest,
   _pendingMilitaryTrackingRestoreForTest,
   _setMilitaryTrackingRefreshOutcomeForTest,
   _setTrackedMilitaryRefreshStateForTest,
   mapAnalystRecord,
 } from './militaryFlights.js';
+import { resetAltitudeBandForTest, setAltitudeBand } from './flightAltitudeBand.js';
 import {
   _setTrackedOverlayHostForTest,
   destroyTrackedReadout,
@@ -530,6 +532,31 @@ test('a registration never outranks another contact’s exact callsign', () => {
     'ae0bb2',
     'and a separator-free registration still resolves',
   );
+});
+
+test('shared Alt chips hide a 5,000 ft military row; All restores it', () => {
+  resetAltitudeBandForTest();
+  const low = { show: true };
+  _addMilitaryTrackingCandidateForTest({
+    icao24: 'ae5000',
+    meta: {
+      callsign: 'RCH500',
+      altitudeFt: 5000,
+      onGround: false,
+      klass: 'fastjet',
+    },
+    billboard: low,
+  });
+  try {
+    setAltitudeBand('gt30k', { persist: false });
+    assert.equal(low.show, false, 'gt30k does not keep a 5,000 ft alt_baro row');
+    setAltitudeBand('all', { persist: false });
+    assert.equal(low.show, true, 'All restores the 5,000 ft military row');
+  } finally {
+    setAltitudeBand('all', { persist: false });
+    resetAltitudeBandForTest();
+    _clearMilitaryFilterFixturesForTest();
+  }
 });
 
 test('two contacts matching at the same strength resolve deterministically', () => {
