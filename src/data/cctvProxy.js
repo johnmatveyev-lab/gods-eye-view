@@ -1151,6 +1151,7 @@ export function cctvProxy() {
                 sourceKind: source.sourceKind || (source.url ? 'configured' : 'fallback'),
                 poseSource: source.poseSource,
                 license: source.license,
+                feedConfigured: Boolean(source.url?.trim()),
               })),
             };
             res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
