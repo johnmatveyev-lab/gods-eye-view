@@ -84,6 +84,8 @@ test('normalization keeps only healthy geolocated public HTTPS MP3/AAC streams',
   assert.equal(normalized.country, 'United States');
   assert.equal(normalized.countryCode, 'US');
   assert.equal(normalized.metadataTrust, 'untrusted-community');
+  assert.equal(normalized.lastCheckOk, true);
+  assert.equal(normalizeRadioBrowserStation(station({ lastcheckok: true })).lastCheckOk, true);
   const franceByName = normalizeRadioBrowserStation(station({ country: 'France', countrycode: '' }));
   assert.equal(franceByName.country, 'France');
   assert.equal(franceByName.countryCode, 'FR');
@@ -108,7 +110,9 @@ test('catalog endpoint stations are reconstructed from the public field allowlis
   assert.deepEqual(Object.keys(publicStation), [
     'id', 'name', 'lat', 'lon', 'streamUrl', 'homepage', 'tags', 'languages',
     'state', 'country', 'countryCode', 'metadataTrust', 'codec', 'bitrate',
+    'lastCheckOk',
   ]);
+  assert.equal(publicStation.lastCheckOk, true);
   assert.equal('clickCount' in publicStation, false);
   assert.equal('internalExtension' in publicStation, false);
   assert.equal(publicStation.metadataTrust, 'untrusted-community');
