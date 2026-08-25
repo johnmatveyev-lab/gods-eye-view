@@ -196,6 +196,9 @@ import {
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
 import {
+  toggleFirmsSatellite,
+} from './data/firmsSatelliteFilter.js';
+import {
   installationClassFilterFlags,
   toggleInstallationClassFilter,
 } from './data/militaryInstallationClassFilter.js';
@@ -2808,6 +2811,7 @@ export class StyleManager {
     this._dataPanel = document.getElementById('data-panel');
     this._firesPanel = document.getElementById('fires-panel');
     this._firmsSensorChips = document.getElementById('fires-sensor-chips');
+    this._firmsSatelliteChips = document.getElementById('fires-satellite-chips');
     this._firmsBrightnessChips = document.getElementById('fires-brightness-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
@@ -3324,6 +3328,7 @@ export class StyleManager {
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
     this._initFirmsSensorChips();
+    this._initFirmsSatelliteChips();
     this._initFirmsBrightnessChips();
     this._initInstallationClassChips();
     this._initAisTypeChips();
@@ -5406,6 +5411,7 @@ export class StyleManager {
       setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
     });
     this._syncFirmsSensorChips();
+    this._syncFirmsSatelliteChips();
     this._syncInstallationClassChips();
     this._syncAisTypeChips();
     this._syncAisParkedChip();
@@ -5446,6 +5452,7 @@ export class StyleManager {
         }
         if (change?.layerId === 'local-firms') {
           this._syncFirmsSensorChips();
+          this._syncFirmsSatelliteChips();
           this._syncFirmsBrightnessChips();
         }
         if (change?.layerId === 'ais-live-vessels') {
@@ -11630,6 +11637,57 @@ export class StyleManager {
       this._syncFirmsSensorChips();
     });
     this._syncFirmsSensorChips();
+  }
+
+  _syncFirmsSatelliteChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    const root = this._firmsSatelliteChips;
+    if (root) root.hidden = !enabled;
+    if (!root) return;
+    const layer = this._dataManager?.layers?.get('local-firms')?.module;
+    const models = (layer?.getRowControls?.()?.chips || [])
+      .filter((chip) => chip?.group === 'Sat' && chip?.params?.satelliteFilter != null);
+    const existing = [...root.querySelectorAll('[data-firms-satellite]')];
+    const sameSet = existing.length === models.length
+      && existing.every((node, index) => node.dataset.firmsSatellite === models[index].id.replace(/^sat-/, ''));
+    if (!sameSet) {
+      root.replaceChildren();
+      for (const model of models) {
+        const chipId = String(model.id || '').replace(/^sat-/, '');
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'fires-sensor-chip';
+        button.dataset.firmsSatellite = chipId;
+        button.textContent = model.label;
+        if (model.title) button.title = model.title;
+        root.appendChild(button);
+      }
+    }
+    const flags = Object.fromEntries(models.map((model) => [
+      String(model.id || '').replace(/^sat-/, ''),
+      model.active === true,
+    ]));
+    for (const chip of root.querySelectorAll('[data-firms-satellite]')) {
+      const active = flags[chip.dataset.firmsSatellite] === true;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsSatelliteChips() {
+    if (!this._firmsSatelliteChips) return;
+    this._firmsSatelliteChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-satellite]');
+      if (!chip || !this._firmsSatelliteChips.contains(chip)) return;
+      const layer = this._dataManager?.layers?.get('local-firms')?.module;
+      const current = layer?.getParams?.()?.satelliteFilter;
+      const chipIds = [...this._firmsSatelliteChips.querySelectorAll('[data-firms-satellite]')]
+        .map((node) => node.dataset.firmsSatellite);
+      const next = toggleFirmsSatellite(current, chip.dataset.firmsSatellite, chipIds);
+      this._dataManager?.setLayerParams?.('local-firms', { satelliteFilter: next }, { origin: 'user' });
+      this._syncFirmsSatelliteChips();
+    });
+    this._syncFirmsSatelliteChips();
   }
 
   _syncFirmsBrightnessChips() {

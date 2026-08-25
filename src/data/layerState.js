@@ -24,6 +24,12 @@ import {
   normalizeFirmsSensorFilter,
 } from './firmsSensorFilter.js';
 import {
+  DEFAULT_FIRMS_SATELLITE_FILTER,
+  decodeFirmsSatelliteFilter,
+  encodeFirmsSatelliteFilter,
+  normalizeFirmsSatelliteFilter,
+} from './firmsSatelliteFilter.js';
+import {
   DEFAULT_INSTALLATION_CLASS_FILTER,
   decodeInstallationClassFilter,
   encodeInstallationClassFilter,
@@ -399,6 +405,19 @@ const OPTION_GROUPS = Object.freeze({
       },
       encode: encodeFirmsSensorFilter,
       decode: decodeFirmsSensorFilter,
+    }),
+    // PLAN 163: spacecraft chips default ALL ON. Omitted `t` keeps every
+    // bird visible — there was no prior satellite filter, so absent === default.
+    Object.freeze({
+      key: 'satelliteFilter',
+      token: 't',
+      defaultValue: DEFAULT_FIRMS_SATELLITE_FILTER,
+      normalize: (value) => {
+        if (value === undefined || value === null) return null;
+        return normalizeFirmsSatelliteFilter(value);
+      },
+      encode: encodeFirmsSatelliteFilter,
+      decode: decodeFirmsSatelliteFilter,
     }),
   ]),
   'military-installations': Object.freeze([
