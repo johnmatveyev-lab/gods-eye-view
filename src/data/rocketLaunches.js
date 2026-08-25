@@ -849,6 +849,63 @@ export function missionRosterEntries(launches, options = {}) {
 }
 
 /**
+ * PREV/NEXT and the N/M index walk the chip-filtered roster (status AND
+ * provider AND orbit). The selected-id visibility exception is excluded so
+ * navigation cannot leave that AND set.
+ * @param {Array<object>} launches Normalized launch records.
+ * @param {string|null|undefined} selectedLaunchId
+ * @param {{
+ *   statusFilter?: unknown,
+ *   orbitFilter?: unknown,
+ *   providerFilter?: unknown,
+ * }} [options]
+ * @returns {{
+ *   entries: Array<{launch: object, index: number}>,
+ *   current: number,
+ *   indexLabel: string,
+ *   prevDisabled: boolean,
+ *   nextDisabled: boolean,
+ * }}
+ */
+export function missionRosterNavState(launches, selectedLaunchId, options = {}) {
+  const entries = missionRosterEntries(launches, {
+    statusFilter: options.statusFilter,
+    orbitFilter: options.orbitFilter,
+    providerFilter: options.providerFilter,
+    selectedLaunchId: null,
+  });
+  const current = selectedLaunchId
+    ? entries.findIndex((entry) => entry.launch.id === selectedLaunchId)
+    : -1;
+  return {
+    entries,
+    current,
+    indexLabel: current >= 0 ? `${current + 1} / ${entries.length}` : `— / ${entries.length}`,
+    prevDisabled: current <= 0,
+    nextDisabled: current < 0 || current >= entries.length - 1,
+  };
+}
+
+/**
+ * Step ±1 through `missionRosterEntries`, not the unfiltered `_launches` array.
+ * @param {Array<object>} launches
+ * @param {string|null|undefined} selectedLaunchId
+ * @param {number} delta
+ * @param {{
+ *   statusFilter?: unknown,
+ *   orbitFilter?: unknown,
+ *   providerFilter?: unknown,
+ * }} [options]
+ * @returns {{launch: object, index: number}|null}
+ */
+export function selectAdjacentMission(launches, selectedLaunchId, delta, options = {}) {
+  const { entries, current } = missionRosterNavState(launches, selectedLaunchId, options);
+  if (current < 0) return null;
+  const next = entries[current + delta];
+  return next || null;
+}
+
+/**
  * Preserve the user's globe scale for roster previews while avoiding an
  * accidental surface-level fly-to when the list is opened from a close view.
  * @param {number} cameraHeight Current camera height above the ellipsoid.
@@ -2336,7 +2393,6 @@ function setMissionPanelField(selector, value, title = '') {
 function renderMissionPanel() {
   if (!_missionPanel) return;
   const launch = _launches.find((item) => item.id === _selectedLaunchId);
-  const index = launch ? _launches.indexOf(launch) : -1;
   _missionPanel.hidden = !launch;
   if (!launch) return;
   _missionPanel.querySelector('[data-mission-title]').textContent = shortMissionLabel(launch.name, 32).toUpperCase();
@@ -2389,9 +2445,10 @@ function renderMissionPanel() {
   const stageSection = _missionPanel.querySelector('[data-mission-stages-section]');
   if (stageSection) stageSection.hidden = stageRows.length === 0;
   updateMissionTelemetry(true);
-  _missionPanel.querySelector('[data-mission-index]').textContent = `${index + 1} / ${_launches.length}`;
-  _missionPanel.querySelector('[data-mission-prev]').disabled = index <= 0;
-  _missionPanel.querySelector('[data-mission-next]').disabled = index < 0 || index >= _launches.length - 1;
+  const nav = missionRosterNavState(_launches, _selectedLaunchId, currentMissionFilterOptions(null));
+  _missionPanel.querySelector('[data-mission-index]').textContent = nav.indexLabel;
+  _missionPanel.querySelector('[data-mission-prev]').disabled = nav.prevDisabled;
+  _missionPanel.querySelector('[data-mission-next]').disabled = nav.nextDisabled;
   syncReplayButton();
   const panelScroller = _missionPanel.closest('.global-context-panel-inner');
   if (panelScroller) panelScroller.scrollTop = 0;
@@ -2477,6 +2534,7 @@ function applyLaunchFilterPresentation() {
   syncLaunchStatusChips();
   syncLaunchProviderChips();
   syncLaunchOrbitChips();
+  renderMissionPanel();
 }
 
 function renderMissionRoster() {
@@ -2542,6 +2600,17 @@ function selectMissionAt(index) {
   if (!launch) return;
   setSelectedMission(launch.id, true);
   focusMission(launch);
+}
+
+function selectAdjacentMissionAt(delta) {
+  const next = selectAdjacentMission(
+    _launches,
+    _selectedLaunchId,
+    delta,
+    currentMissionFilterOptions(null),
+  );
+  if (!next) return;
+  selectMissionAt(next.index);
 }
 
 function clearMissionRosterHover() {
@@ -2743,8 +2812,8 @@ function createMissionPanel() {
     </div>`,
   );
   host.appendChild(_missionPanel);
-  _missionPanel.querySelector('[data-mission-prev]').addEventListener('click', () => selectMissionAt(_launches.findIndex((item) => item.id === _selectedLaunchId) - 1));
-  _missionPanel.querySelector('[data-mission-next]').addEventListener('click', () => selectMissionAt(_launches.findIndex((item) => item.id === _selectedLaunchId) + 1));
+  _missionPanel.querySelector('[data-mission-prev]').addEventListener('click', () => selectAdjacentMissionAt(-1));
+  _missionPanel.querySelector('[data-mission-next]').addEventListener('click', () => selectAdjacentMissionAt(1));
   _missionPanel.querySelector('[data-mission-close]').addEventListener('click', () => setSelectedMission(null));
   _missionPanel.querySelector('[data-mission-show-all]').addEventListener('click', () => setSelectedMission(null));
   _missionPanel.querySelector('[data-mission-focus]').addEventListener('click', () => {
