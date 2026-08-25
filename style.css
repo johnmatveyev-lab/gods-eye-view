@@ -5796,6 +5796,40 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: none;
 }
 
+.ais-destination-wrap {
+  display: grid;
+  gap: 4px;
+  margin: 0 10px 8px;
+}
+
+.ais-destination-wrap[hidden] {
+  display: none;
+}
+
+.ais-destination-label {
+  font: 8px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+#ais-destination {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 5px 8px;
+  border: 1px solid var(--glass-border);
+  border-radius: 5px;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+  font: 10px/1.2 var(--font-mono);
+  outline: none;
+}
+
+#ais-destination::placeholder { color: var(--text-dim); }
+#ais-destination:focus { border-color: var(--glass-border-hover); }
+#ais-destination:disabled { opacity: .42; cursor: not-allowed; }
+
 .ais-type-chip,
 .ais-parked-chip,
 .ais-min-speed-chip {
@@ -5830,7 +5864,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 #data-panel.collapsed .ais-type-chips,
 #data-panel.collapsed .ais-parked-chips,
-#data-panel.collapsed .ais-min-speed-chips {
+#data-panel.collapsed .ais-min-speed-chips,
+#data-panel.collapsed .ais-destination-wrap {
   display: none;
 }
 

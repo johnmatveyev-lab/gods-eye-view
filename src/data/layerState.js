@@ -41,6 +41,12 @@ import {
   encodeVesselTypeFilter,
   normalizeVesselTypeFilter,
 } from './vesselTypeFilter.js';
+import {
+  DEFAULT_AIS_DESTINATION,
+  decodeAisDestination,
+  encodeAisDestination,
+  normalizeAisDestination,
+} from './aisDestinationFilter.js';
 
 const VALID_DISPOSITIONS = new Set([
   'enabled-only',
@@ -458,6 +464,19 @@ const OPTION_GROUPS = Object.freeze({
       all: 'a',
       5: '5',
       10: 't',
+    }),
+    // PLAN 170: destination default empty (all). Omitted `d` keeps the current
+    // view — there was no prior destination field, so absent === default.
+    Object.freeze({
+      key: 'destination',
+      token: 'd',
+      defaultValue: DEFAULT_AIS_DESTINATION,
+      normalize: (value) => {
+        if (value === undefined || value === null) return null;
+        return normalizeAisDestination(value);
+      },
+      encode: encodeAisDestination,
+      decode: decodeAisDestination,
     }),
   ]),
 });

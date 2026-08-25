@@ -1051,6 +1051,17 @@
         <button type="button" class="ais-min-speed-chip" data-ais-min-speed="5" aria-pressed="false" title="Hide vessels slower than 5 knots">5+</button>
         <button type="button" class="ais-min-speed-chip" data-ais-min-speed="10" aria-pressed="false" title="Hide vessels slower than 10 knots">10+</button>
       </div>
+      <div class="ais-destination-wrap" id="ais-destination-wrap" hidden>
+        <label class="ais-destination-label" for="ais-destination">DEST</label>
+        <input
+          type="search"
+          id="ais-destination"
+          placeholder="All destinations"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Filter vessels by destination"
+        />
+      </div>
       <div id="data-toggles" class="data-toggle-list"></div>
       <div id="iss-pass-readout-park" hidden>
         <output id="iss-pass-readout" class="iss-pass-readout" hidden aria-live="polite" title="Next ISS pass at the camera location. Not an alert service.">UNAVAILABLE</output>
