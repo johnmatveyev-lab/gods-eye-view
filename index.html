@@ -511,7 +511,18 @@
               </div>
               <small>OPEN-METEO</small>
             </div>
-            <div><span>WIND</span><strong id="cockpit-local-wind">—</strong><small id="cockpit-local-wind-direction">—</small></div>
+            <div>
+              <span>WIND</span>
+              <div class="cockpit-local-wind-readout">
+                <strong id="cockpit-local-wind">—</strong>
+                <span class="wind-unit-toggle" id="cockpit-wind-units" role="radiogroup" aria-label="Wind speed units">
+                  <button type="button" data-wind-unit="kmh" role="radio" aria-checked="true" aria-pressed="true">km/h</button>
+                  <button type="button" data-wind-unit="mph" role="radio" aria-checked="false" aria-pressed="false">mph</button>
+                  <button type="button" data-wind-unit="kt" role="radio" aria-checked="false" aria-pressed="false">kt</button>
+                </span>
+              </div>
+              <small id="cockpit-local-wind-direction">—</small>
+            </div>
             <div><span>SKY</span><strong id="cockpit-local-condition">UNKNOWN</strong><small id="cockpit-local-cloud">—</small></div>
             <div><span>PRECIP</span><strong id="cockpit-local-precipitation">—</strong><small>MM</small></div>
           </div>

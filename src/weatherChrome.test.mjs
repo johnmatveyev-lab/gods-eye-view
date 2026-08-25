@@ -270,6 +270,13 @@ test('Local Info briefing still fetches weather and shows Open-Meteo credit when
   assert.match(paint[1], /formatTemperatureC\(weather\?\.temperatureC\)/);
   assert.doesNotMatch(paint[1], /getWxEnabled|weatherToggle|cockpitWeather|WX_/);
   assert.match(html, /id="cockpit-local-temperature"[\s\S]*?data-weather-units="C"[\s\S]*?°C[\s\S]*?data-weather-units="F"[\s\S]*?°F/);
+
+  const windHelper = readFileSync(path.join(ROOT, 'src', 'data', 'weatherWindUnits.js'), 'utf8');
+  const windUi = ui.match(/bindWindUnitToggle\(this\.windUnitToggle, \{([\s\S]*?)\n    \}\)/);
+  assert.ok(windUi, 'wind unit chips must stay on Local Info');
+  assert.doesNotMatch(windUi[1], /setWxEnabled|getWxEnabled|WX_/);
+  assert.doesNotMatch(windHelper, /setWxEnabled|getWxEnabled|WX_STORAGE_KEY|weatherEffectsShouldRender/);
+  assert.match(html, /id="cockpit-wind-units"[\s\S]*?data-wx-mode|data-wx-mode[\s\S]*?id="cockpit-wind-units"/);
 });
 
 test('share URLs, annotations, and trails stay off this chrome', () => {

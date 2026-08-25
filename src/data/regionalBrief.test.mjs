@@ -8,6 +8,7 @@ import {
   weatherCodeLabel,
 } from './regionalBrief.js';
 import { formatTemperatureC } from './weatherUnits.js';
+import { formatWindSpeed } from './weatherWindUnits.js';
 
 test('normalizes a regional place with stable locality fallback', () => {
   assert.deepEqual(normalizeRegionalPlace({ address: {
@@ -43,7 +44,12 @@ test('normalizes weather values and labels WMO conditions', () => {
   assert.equal(formatTemperatureC(weather.temperatureC, 'F'), '71°F');
   assert.equal(formatTemperatureC(weather.apparentTemperatureC, 'C'), '21°C');
   assert.equal(formatTemperatureC(weather.apparentTemperatureC, 'F'), '69°F');
+  assert.equal(weather.windKph, 18.2);
+  assert.equal(weather.windDirectionDeg, 270);
   assert.equal(weather.visibilityM, 18000);
+  assert.equal(formatWindSpeed(weather.windKph, 'kmh'), '18 KM/H');
+  assert.equal(formatWindSpeed(weather.windKph, 'mph'), '11 MPH');
+  assert.equal(formatWindSpeed(weather.windKph, 'kt'), '10 KT');
   assert.equal(weatherCodeLabel(weather.weatherCode), 'PARTLY CLOUDY');
   assert.equal(normalizeRegionalWeather({ current: {} }), null);
 });
