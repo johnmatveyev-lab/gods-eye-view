@@ -31,6 +31,8 @@ function hostedRuntime(overrides = {}) {
     now: () => Date.parse('2026-08-25T12:00:00.000Z'),
     store,
     verifyToken: async () => ({ sub: 'user_abc', email: 'ops@example.com' }),
+    getUserRecord: async () => null,
+    updateUserMetadata: async () => {},
     createStripe: () => ({
       checkout: {
         sessions: {

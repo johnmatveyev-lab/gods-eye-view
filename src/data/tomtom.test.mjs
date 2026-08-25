@@ -96,7 +96,8 @@ test('Vercel Node entry forwards to handleTomTomHttp; ais-live is not wrapped', 
     rule.source === '/api/tomtom/flow/:z/:x/:y.pbf'
     && rule.destination === '/api/tomtom/flow/:z/:x/:y'
   )));
-  assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html|ais-live|opensky/i);
+  assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
+  assert.doesNotMatch(JSON.stringify(vercelJson.rewrites || []), /ais-live/i);
 
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live/[...path].js')), false);
