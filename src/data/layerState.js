@@ -245,6 +245,14 @@ const OPTION_GROUPS = Object.freeze({
       decode: (value) => (/^\d{1,3}$/.test(value) ? normalizeVolume(Number(value) / 100) : null),
     }),
   ]),
+  'local-firms': Object.freeze([
+    enumOption('frpFloor', 'f', 'all', ['all', '10', '50', '100'], {
+      all: 'a',
+      10: '1',
+      50: '5',
+      100: 'c',
+    }),
+  ]),
 });
 
 const TRACKING_OPTION_KEY_BY_LAYER = Object.freeze({
@@ -286,7 +294,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   Object.freeze({ id: 'flights', token: 'f', disposition: 'enabled+options', optionOwner: 'flights' }),
   Object.freeze({ id: 'local-dams', token: 'q', disposition: 'enabled-only' }),
   Object.freeze({ id: 'local-datacenters', token: 'd', disposition: 'enabled-only' }),
-  Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled-only' }),
+  Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled+options', optionOwner: 'local-firms' }),
   Object.freeze({ id: 'military', token: 'm', disposition: 'enabled+mirrored-options', optionOwner: 'flights' }),
   Object.freeze({ id: 'military-awareness', token: 'g', disposition: 'enabled-only' }),
   Object.freeze({ id: 'military-installations', token: 'i', disposition: 'enabled-only' }),

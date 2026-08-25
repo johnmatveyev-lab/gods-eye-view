@@ -33,6 +33,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS row chips filter already-fetched detections by FRP floor
+  (`All` | `10+` | `50+` | `100+ MW`, default All). Cells, sprites, overlay
+  cards, and the Plan 70 FIRES list hide below the floor without a new NASA
+  fetch. Failed/stale last-good still filters. The choice persists on
+  `local-firms` (`w.f.*`). Same VIIRS proxy, quota, and TTL.
 - Satellites row has an **ORBITS** on/off chip over the existing
   `setParams({ showOrbits })` path (default ON). Off hides orbit rings;
   ISS / core / dense points stay. The choice persists in layer-state /

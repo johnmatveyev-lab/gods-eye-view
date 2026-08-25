@@ -45,6 +45,7 @@ function paramsForLayer(id) {
       calibration: { cameraId: 'secret-camera', values: { heading: 12 } },
     };
   }
+  if (id === 'local-firms') return { frpFloor: 'all' };
   if (id === 'radio') {
     return {
       filter: 'all',
@@ -286,6 +287,22 @@ test('unknown and forbidden option fields are ignored while missing options use 
     'private-camera', 'calibration', 'autoHopSec', 'irBoost', 'showPoints',
     'private-station', 'audioState', 'voiceDucked', 'secret',
   ]) assert.equal(serialized.includes(forbidden), false, forbidden);
+});
+
+test('FIRMS FRP floor is a cheap local-firms enum that defaults to All', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].frpFloor, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].frpFloor, 'all', 'existing w links stay All');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { frpFloor: '50' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  assert.equal(decodeLayerStateParams(params).options['local-firms'].frpFloor, '50');
 });
 
 test('Radio genre ids with spaces and ampersands round-trip through v2', () => {
