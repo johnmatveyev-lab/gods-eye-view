@@ -23,6 +23,11 @@ import {
   setOverlayEntries,
 } from '../overlays/worldOverlay.js';
 import { DETECTION_THEME_MAP } from '../overlays/worldOverlayTokens.js';
+import {
+  getContactLabelsEnabled,
+  resetContactLabelsForTest,
+  setContactLabelsEnabled,
+} from '../contactLabels.js';
 
 test('detection diagnostics count rendered fading rows instead of absent selected identities', () => {
   assert.equal(countFadingRenderEntries([
@@ -255,6 +260,7 @@ function installEnvironment({ width = 800, height = 600, dpr = 2, search = '' } 
     advance(ms) { currentTime += ms; },
     setPerformanceStep(ms) { performanceStep = ms; },
     cleanup() {
+      resetContactLabelsForTest();
       destroyDetection();
       destroyWorldOverlay();
       Date.now = originalDateNow;
@@ -480,6 +486,74 @@ test('detection lifecycle re-hosts unchanged painters behind the sole host liste
     assert.equal(env.document.getElementById('world-overlay-canvas'), null);
     assert.equal(env.document.getElementById('world-overlay-detection-surface'), null);
   } finally {
+    env.cleanup();
+  }
+});
+
+test('labels off hides callsign glyphs; selected-style cards and density stay independent', () => {
+  const env = installEnvironment();
+  const callsigns = () => env.ctx.calls.filter(([name, text]) => (
+    name === 'fillText' && /^TEST\d$/.test(String(text))
+  ));
+  const selectedIdents = () => env.ctx.calls.filter(([name, text]) => (
+    name === 'fillText' && text === 'SELECTED-IDENT'
+  ));
+  try {
+    resetContactLabelsForTest();
+    assert.equal(getContactLabelsEnabled(), true);
+    initWorldOverlay(env.viewer);
+    initDetection(env.viewer, [detectableLayer()], () => {});
+    setOverlayEntries('flights', [{
+      id: 'selected-flight',
+      position: new Cesium.Cartesian3(0, 0, 6_356_752),
+      variant: 'selected',
+      title: 'SELECTED-IDENT',
+      selected: true,
+      protected: true,
+      horizonCull: false,
+      edgeFade: 'none',
+    }]);
+    setMode('DENSE');
+    setDetectionTuning({ densityPct: 100 });
+    settleFrame(env);
+    assert.ok(callsigns().length > 0, 'labels on must paint ambient callsigns');
+    assert.ok(selectedIdents().length > 0, 'selected card shows ident while labels are on');
+    assert.ok(env.detectionCtx.calls.some(([name, path]) => name === 'stroke' && path instanceof MockPath2D));
+    const denseObservations = getDetectionDiagnostics().observationCount;
+    assert.equal(denseObservations, 2);
+
+    setContactLabelsEnabled(false);
+    env.ctx.calls.length = 0;
+    env.detectionCtx.calls.length = 0;
+    settleFrame(env);
+    assert.equal(callsigns().length, 0, 'labels off must not pile up callsigns');
+    assert.ok(selectedIdents().length > 0, 'selected contact card still shows ident');
+    assert.ok(
+      env.detectionCtx.calls.some(([name, path]) => name === 'stroke' && path instanceof MockPath2D),
+      'dots/brackets stay while labels are off',
+    );
+    assert.equal(getDetectionDiagnostics().observationCount, denseObservations);
+    assert.equal(getDetectionDiagnostics().densityPct, 100);
+
+    setDetectionTuning({ densityPct: 25 });
+    env.ctx.calls.length = 0;
+    env.detectionCtx.calls.length = 0;
+    settleFrame(env);
+    assert.equal(getDetectionDiagnostics().densityPct, 25);
+    assert.equal(getDetectionDiagnostics().profile, 'SPARSE');
+    assert.equal(getDetectionDiagnostics().observationCount, denseObservations);
+    assert.equal(callsigns().length, 0, 'density must not restore hidden callsigns');
+    assert.ok(selectedIdents().length > 0);
+    assert.ok(env.detectionCtx.calls.some(([name, path]) => name === 'stroke' && path instanceof MockPath2D));
+
+    setContactLabelsEnabled(true);
+    env.ctx.calls.length = 0;
+    settleFrame(env);
+    assert.ok(callsigns().length > 0, 'labels on restores ambient callsigns');
+    assert.ok(selectedIdents().length > 0);
+    assert.equal(getDetectionDiagnostics().densityPct, 25, 'turning labels on must not reset density');
+  } finally {
+    resetContactLabelsForTest();
     env.cleanup();
   }
 });

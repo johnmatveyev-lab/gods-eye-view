@@ -117,6 +117,10 @@ import {
   persistDetectionDensity,
   readPersistedDetectionDensity,
 } from './detectionDensityChrome.js';
+import {
+  getContactLabelsEnabled,
+  setContactLabelsEnabled,
+} from './contactLabels.js';
 import trafficLayer from './data/traffic.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
@@ -2449,6 +2453,7 @@ export class StyleManager {
     this._detectionOpacityRow = document.getElementById('detection-opacity-row');
     this._detectionOpacitySlider = document.getElementById('detection-opacity-slider');
     this._detectionOpacityValue = document.getElementById('detection-opacity-value');
+    this._contactLabelsBtn = document.getElementById('contact-labels-toggle');
     let storedDetectionAllocation = 'ELASTIC';
     try {
       storedDetectionAllocation = localStorage.getItem(DETECTION_ALLOCATION_STORAGE_KEY) || 'ELASTIC';
@@ -10899,6 +10904,10 @@ export class StyleManager {
       cycleDetectionMode();
       this._syncShareState();
     });
+    this._contactLabelsBtn?.addEventListener('click', () => {
+      this._setContactLabelsEnabled(!getContactLabelsEnabled());
+    });
+    this._syncContactLabelsButtonState();
     this._cockpitDisplayToggleBtn?.addEventListener('click', () => {
       const open = this._cockpitDisplayToggleBtn.getAttribute('aria-expanded') === 'true';
       this._setCockpitDisclosure?.('display', !open);
@@ -11018,6 +11027,25 @@ export class StyleManager {
       this._hudLayoutRow.classList.toggle('visible', hudState.visible);
     }
     this._scheduleAdaptivePanelLayout({ settle: true });
+  }
+
+  /**
+   * Persist and apply the Labels on/off preference. Density is unchanged.
+   * @param {boolean} enabled Whether ambient contact billboard text is shown.
+   * @returns {void}
+   */
+  _setContactLabelsEnabled(enabled) {
+    setContactLabelsEnabled(enabled !== false);
+    this._syncContactLabelsButtonState();
+    this.viewer?.scene?.requestRender?.();
+  }
+
+  _syncContactLabelsButtonState() {
+    const enabled = getContactLabelsEnabled();
+    this._contactLabelsBtn?.classList.toggle('active', enabled);
+    this._contactLabelsBtn?.setAttribute('aria-pressed', String(enabled));
+    const label = this._contactLabelsBtn?.querySelector('.pp-label');
+    if (label) label.textContent = enabled ? 'Labels' : 'Declutter';
   }
 
   /**

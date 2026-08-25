@@ -46,6 +46,10 @@ import {
   viewScaleForAltitude,
 } from './detectionPolicy.js';
 import { detectionBracketOpacity } from './detectionPresentation.js';
+import {
+  CONTACT_LABELS_CHANGED_EVENT,
+  getContactLabelsEnabled,
+} from '../contactLabels.js';
 
 /**
  * @module detection
@@ -265,6 +269,7 @@ let _charWidth = 0;
 let _cockpitActive = false;
 /** @type {((event: CustomEvent) => void)|null} */
 let _cockpitModeListener = null;
+let _contactLabelsListener = null;
 
 /**
  * Initializes detection inside the shared world-overlay host and stores
@@ -274,8 +279,13 @@ let _cockpitModeListener = null;
  * @param {Function} onModeChange - Callback invoked with the new mode label string on mode changes.
  */
 export function initDetection(viewer, layers, onModeChange) {
-  if (_cockpitModeListener && typeof window !== 'undefined') {
-    window.removeEventListener('gev:cockpit-mode-changed', _cockpitModeListener);
+  if (typeof window !== 'undefined') {
+    if (_cockpitModeListener) {
+      window.removeEventListener('gev:cockpit-mode-changed', _cockpitModeListener);
+    }
+    if (_contactLabelsListener) {
+      window.removeEventListener(CONTACT_LABELS_CHANGED_EVENT, _contactLabelsListener);
+    }
   }
   _hostLane?.unregister?.();
   _calloutLane?.unregister?.();
@@ -307,8 +317,13 @@ export function initDetection(viewer, layers, onModeChange) {
     _cockpitActive = event?.detail?.active === true;
     _hostLane?.requestPaint();
   };
+  _contactLabelsListener = () => {
+    _hostLane?.requestPaint();
+    _calloutLane?.requestPaint();
+  };
   if (typeof window !== 'undefined') {
     window.addEventListener('gev:cockpit-mode-changed', _cockpitModeListener);
+    window.addEventListener(CONTACT_LABELS_CHANGED_EVENT, _contactLabelsListener);
   }
 
   setDetectionStyle('normal');
@@ -318,10 +333,16 @@ export function initDetection(viewer, layers, onModeChange) {
 
 /** Release the host lane and all retained detection runtime state. */
 export function destroyDetection() {
-  if (_cockpitModeListener && typeof window !== 'undefined') {
-    window.removeEventListener('gev:cockpit-mode-changed', _cockpitModeListener);
+  if (typeof window !== 'undefined') {
+    if (_cockpitModeListener) {
+      window.removeEventListener('gev:cockpit-mode-changed', _cockpitModeListener);
+    }
+    if (_contactLabelsListener) {
+      window.removeEventListener(CONTACT_LABELS_CHANGED_EVENT, _contactLabelsListener);
+    }
   }
   _cockpitModeListener = null;
+  _contactLabelsListener = null;
   _cockpitActive = false;
   _debugBanner = false;
   if (_hostSurface) _hostSurface.style.display = 'none';
@@ -982,6 +1003,7 @@ function _stashCallout(entry, acquireFade, keyhole) {
  */
 function _paintCalloutLane(frame) {
   if (_mode === MODE_OFF || _suspended || _calloutCount === 0) return;
+  if (!getContactLabelsEnabled()) return;
   const ctx = frame.ctx;
   if (!ctx) return;
   ctx.textAlign = 'left';
@@ -1243,6 +1265,10 @@ function _drawOverlay(frame) {
       if (bracketAlpha > 0) protectedVisibleCount++;
       continue;
     }
+    // Labels off hides billboard text only. Brackets/dots already painted
+    // above; density still collected this contact. Selected/tracked use
+    // skipLabel so their ident card is untouched.
+    if (!getContactLabelsEnabled()) continue;
 
     const primary = String(obj.id || '');
     const micro = String(obj.metric || '');
