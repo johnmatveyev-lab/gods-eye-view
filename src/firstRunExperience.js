@@ -87,7 +87,9 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         (`meridian.launchOrbit`), launch time-window chips
  *                         (`meridian.launchTimeWindow`), launch webcast-only
  *                         toggle (`meridian.launchWebcastOnly`), launch
- *                         probability chips (`meridian.launchProbability`).
+ *                         probability chips (`meridian.launchProbability`),
+ *                         launch hide-unknown-site toggle
+ *                         (`meridian.launchHideUnknownSite`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
@@ -97,7 +99,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setLaunchProviderFilter` / `setLaunchRocketFilter` /
  *                         `setLaunchSiteFilter` / `setLaunchOrbitFilter` /
  *                         `setLaunchTimeWindow` / `setLaunchWebcastOnly` /
- *                         `setLaunchProbabilityFilter`,
+ *                         `setLaunchProbabilityFilter` /
+ *                         `setLaunchHideUnknownSite`,
  *                         which would persist a display choice nobody made.
  *
  * The two Context missions deliberately reuse `styleManager.setContextMode`, the
