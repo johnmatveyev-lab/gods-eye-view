@@ -73,6 +73,12 @@ import {
   normalizeAisMinSpeed,
   vesselMatchesMinSpeedFilter,
 } from './aisMinSpeedFilter.js';
+import {
+  DEFAULT_AIS_DESTINATION,
+  filterVesselsByDestination,
+  normalizeAisDestination,
+  vesselMatchesDestinationFilter,
+} from './aisDestinationFilter.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -568,9 +574,9 @@ const aisLiveVesselsLayer = {
   },
 
   /**
-   * Type chips, Hide parked, and min-speed re-filter in-memory vessels.
+   * Type chips, Hide parked, min-speed, and destination re-filter in-memory vessels.
    * Never hits `/api/ais-live`.
-   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown, minSpeed?: unknown }} [params]
+   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown, minSpeed?: unknown, destination?: unknown }} [params]
    * @returns {boolean}
    */
   setParams(params = {}) {
@@ -578,7 +584,8 @@ const aisLiveVesselsLayer = {
     const hasType = Object.hasOwn(params, 'vesselTypeFilter');
     const hasParked = Object.hasOwn(params, 'hideParked');
     const hasMinSpeed = Object.hasOwn(params, 'minSpeed');
-    if (!hasType && !hasParked && !hasMinSpeed) return true;
+    const hasDestination = Object.hasOwn(params, 'destination');
+    if (!hasType && !hasParked && !hasMinSpeed && !hasDestination) return true;
 
     let nextType = state.typeFilter;
     if (hasType) {
@@ -601,24 +608,34 @@ const aisLiveVesselsLayer = {
       nextMinSpeed = floor;
     }
 
+    let nextDestination = state.destination;
+    if (hasDestination) {
+      const destination = normalizeAisDestination(params.destination);
+      if (destination == null) return false;
+      nextDestination = destination;
+    }
+
     if (
       nextType === state.typeFilter
       && nextParked === state.hideParked
       && nextMinSpeed === state.minSpeed
+      && nextDestination === state.destination
     ) return true;
     state.typeFilter = nextType;
     state.hideParked = nextParked;
     state.minSpeed = nextMinSpeed;
+    state.destination = nextDestination;
     if (state.enabled && state.viewer) updateVisibility(true);
     return true;
   },
 
-  /** @returns {{ vesselTypeFilter: string, hideParked: boolean, minSpeed: string }} */
+  /** @returns {{ vesselTypeFilter: string, hideParked: boolean, minSpeed: string, destination: string }} */
   getParams() {
     return {
       vesselTypeFilter: state.typeFilter,
       hideParked: state.hideParked,
       minSpeed: state.minSpeed,
+      destination: state.destination,
     };
   },
 
@@ -861,6 +878,8 @@ const state = {
   hideParked: DEFAULT_AIS_HIDE_PARKED,
   /** Client-only min-speed floor. Re-applied on the already-fetched vessel list. */
   minSpeed: DEFAULT_AIS_MIN_SPEED,
+  /** Client-only destination field. Re-applied on the already-fetched vessel list. */
+  destination: DEFAULT_AIS_DESTINATION,
 };
 
 /** Replace live AIS rows through the production reconciliation path (DEV only). */
@@ -1224,13 +1243,17 @@ function selectedVesselId() {
 
 function visibleVesselRecords() {
   const selectedId = selectedVesselId();
-  return filterVesselsByMinSpeed(
-    filterVesselsByParked(
-      filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
-      state.hideParked,
+  return filterVesselsByDestination(
+    filterVesselsByMinSpeed(
+      filterVesselsByParked(
+        filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
+        state.hideParked,
+        selectedId,
+      ),
+      state.minSpeed,
       selectedId,
     ),
-    state.minSpeed,
+    state.destination,
     selectedId,
   );
 }
@@ -1239,7 +1262,8 @@ function vesselTypeVisible(record) {
   const selectedId = selectedVesselId();
   return vesselMatchesTypeFilter(record, state.typeFilter, { selectedId })
     && vesselMatchesParkedFilter(record, state.hideParked, { selectedId })
-    && vesselMatchesMinSpeedFilter(record, state.minSpeed, { selectedId });
+    && vesselMatchesMinSpeedFilter(record, state.minSpeed, { selectedId })
+    && vesselMatchesDestinationFilter(record, state.destination, { selectedId });
 }
 
 function addRecordPrimitives(record, occluder) {
@@ -2183,6 +2207,7 @@ function resetState() {
   state.typeFilter = DEFAULT_VESSEL_TYPE_FILTER;
   state.hideParked = DEFAULT_AIS_HIDE_PARKED;
   state.minSpeed = DEFAULT_AIS_MIN_SPEED;
+  state.destination = DEFAULT_AIS_DESTINATION;
 }
 
 /**

@@ -209,6 +209,7 @@ import {
 } from './data/vesselTypeFilter.js';
 import { normalizeAisHideParked } from './data/aisParkedFilter.js';
 import { normalizeAisMinSpeed } from './data/aisMinSpeedFilter.js';
+import { normalizeAisDestination } from './data/aisDestinationFilter.js';
 import radioLayer, {
   buildRadioTunerTicks,
   radioTunerCommitSlot,
@@ -2897,6 +2898,8 @@ export class StyleManager {
     this._aisTypeChips = document.getElementById('ais-type-chips');
     this._aisParkedChips = document.getElementById('ais-parked-chips');
     this._aisMinSpeedChips = document.getElementById('ais-min-speed-chips');
+    this._aisDestination = document.getElementById('ais-destination');
+    this._aisDestinationWrap = document.getElementById('ais-destination-wrap');
     this._installationsListOpen = false;
     this._globalContextMissionsBtn = document.getElementById('global-context-missions-btn');
     this._contextModeStandby = document.getElementById('context-mode-standby');
@@ -3349,6 +3352,7 @@ export class StyleManager {
     this._initAisTypeChips();
     this._initAisParkedChip();
     this._initAisMinSpeedChips();
+    this._initAisDestinationField();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initZoomToPointer();
@@ -5432,6 +5436,7 @@ export class StyleManager {
     this._syncAisTypeChips();
     this._syncAisParkedChip();
     this._syncAisMinSpeedChips();
+    this._syncAisDestinationField();
     this._datacenterInViewList?.refresh();
     this._damsInViewList?.refresh();
     this._updateTrafficSyncChip();
@@ -5477,6 +5482,7 @@ export class StyleManager {
           this._syncAisTypeChips();
           this._syncAisParkedChip();
           this._syncAisMinSpeedChips();
+          this._syncAisDestinationField();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -11930,6 +11936,38 @@ export class StyleManager {
       this._syncAisMinSpeedChips();
     });
     this._syncAisMinSpeedChips();
+  }
+
+  _syncAisDestinationField() {
+    const enabled = this._dataManager?.isEnabled?.('ais-live-vessels') === true;
+    if (this._aisDestinationWrap) this._aisDestinationWrap.hidden = !enabled;
+    const layer = this._dataManager?.layers?.get('ais-live-vessels')?.module;
+    const destination = normalizeAisDestination(layer?.getParams?.()?.destination) ?? '';
+    if (this._aisDestination && document.activeElement !== this._aisDestination) {
+      this._aisDestination.value = destination;
+    }
+    if (this._aisDestination) this._aisDestination.disabled = !enabled;
+  }
+
+  _initAisDestinationField() {
+    if (!this._aisDestination) return;
+    this._aisDestination.addEventListener('input', () => {
+      if (this._aisDestinationWrap?.hidden) {
+        this._aisDestination.value = normalizeAisDestination(
+          this._dataManager?.layers?.get('ais-live-vessels')?.module?.getParams?.()?.destination,
+        ) ?? '';
+        return;
+      }
+      const next = this._aisDestination.value;
+      if (!this._dataManager?.setLayerParams?.('ais-live-vessels', {
+        destination: next,
+      }, { origin: 'user' })) {
+        this._aisDestination.value = normalizeAisDestination(
+          this._dataManager?.layers?.get('ais-live-vessels')?.module?.getParams?.()?.destination,
+        ) ?? '';
+      }
+    });
+    this._syncAisDestinationField();
   }
 
   _initEarthquakeDepthChips() {
