@@ -679,6 +679,8 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
     assert.ok(paragraph.includes(layerId), `mapping must name the existing ${layerId} enum value`);
   }
   assert.match(paragraph, /submarine-cables layer is a commercial no-op/);
+  assert.match(src, /OpenSky Network is disabled in this commercial build/);
+  assert.match(src, /Google News RSS is disabled/);
   assert.ok(paragraph.includes('zoom_to_globe'));
   assert.ok(paragraph.includes('set_layer_visibility'));
 });

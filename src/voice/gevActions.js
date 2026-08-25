@@ -22,6 +22,7 @@ import { resolveRegionRingForQuery } from '../annotations/annotationResolver.js'
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import { TR3B_CLASS } from '../data/tr3bRegistry.js';
 import { detectionDensityControlRequest } from '../detectionDensityChrome.js';
+import { refuseBannedCommercialVoiceArgs } from '../data/commercialBans.js';
 
 const ALLOWED_STYLES = new Set(['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow']);
 const PANEL_ALIASES = new Map([
@@ -280,6 +281,8 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'set_layer_visibility') {
+      const bannedLayer = refuseBannedCommercialVoiceArgs(name, args);
+      if (bannedLayer) return bannedLayer;
       const layerId = normalizeLayerId(args.layerId);
       if (!layerId) {
         throw new Error(`Unknown data layer: ${args.layerId || 'missing'}`);
@@ -397,6 +400,8 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'select_nearest_aircraft') {
+      const bannedAircraft = refuseBannedCommercialVoiceArgs(name, args);
+      if (bannedAircraft) return bannedAircraft;
       const layerId = normalizeLayerId(args.layerId || 'flights');
       if (!['flights', 'military'].includes(layerId)) {
         return {
@@ -725,6 +730,8 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'show_data_layers_menu') {
+      const bannedMenu = refuseBannedCommercialVoiceArgs(name, args);
+      if (bannedMenu) return bannedMenu;
       const layerId = normalizeLayerId(args.layerId || args.layer);
       setPanelOpen(styleManager, 'data-panel', true);
       const focusedLayer = layerId && dataManager.layers.has(layerId)
@@ -1634,6 +1641,8 @@ export function formatTrackedEntityLabel(found, query = '') {
 
 /** Finds and tracks/selects an entity by spoken query across layer families. */
 async function trackEntity(viewer, dataManager, styleManager, args = {}) {
+  const bannedTrack = refuseBannedCommercialVoiceArgs('track_entity', args);
+  if (bannedTrack) return bannedTrack;
   const query = String(args.query || '').trim();
   if (!query) throw new Error('track_entity needs a query');
 
@@ -1782,6 +1791,8 @@ function stopAllTracking(viewer, dataManager) {
  * detectionEnabled so the voice agent can mention labels are on.
  */
 async function frameOverhead(viewer, dataManager, styleManager, args = {}) {
+  const bannedFrame = refuseBannedCommercialVoiceArgs('frame_overhead', args);
+  if (bannedFrame) return bannedFrame;
   const targetRaw = String(args.target || 'flights').toLowerCase();
   const layerId = FRAME_TARGETS.get(targetRaw) || normalizeLayerId(targetRaw) || 'flights';
   if (!dataManager.layers.has(layerId)) {

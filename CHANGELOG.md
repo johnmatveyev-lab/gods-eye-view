@@ -140,6 +140,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “OpenSky” is refused with “OpenSky is disabled”. Civilian flights stay
   labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
   compatibility path and never contacts opensky-network.org.
+- Voice “Google News” / “news RSS” is refused with “Google News RSS is
+  disabled”. Cockpit headlines stay GDELT with citation and never fetch
+  news.google.com. No Google News source picker.
 
 ### Fixed
 
