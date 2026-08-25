@@ -77,6 +77,60 @@ html, body {
   pointer-events: none;
 }
 
+/* Copy control for the selected-contact card ident. Hidden with no selection.
+   Sits on the painted title row; the value button is a transparent hit target
+   over the visible canvas ident, and the copy glyph rides the card's right edge. */
+#selected-contact-ident {
+  position: fixed;
+  z-index: 7;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  pointer-events: none;
+}
+#selected-contact-ident[hidden] { display: none; }
+.selected-contact-ident-value,
+.selected-contact-ident-copy {
+  pointer-events: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: 600 13px "JetBrains Mono", ui-monospace, monospace;
+  color: transparent;
+}
+.selected-contact-ident-value {
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+}
+.selected-contact-ident-copy {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(232, 240, 244, 0.92);
+  border-radius: 3px;
+}
+.selected-contact-ident-copy .material-symbols-outlined {
+  font-size: 15px;
+  line-height: 1;
+}
+.selected-contact-ident-value:hover,
+.selected-contact-ident-value:focus-visible,
+.selected-contact-ident-copy:hover,
+.selected-contact-ident-copy:focus-visible {
+  outline: none;
+}
+.selected-contact-ident-copy:hover,
+.selected-contact-ident-copy:focus-visible {
+  color: #fff;
+  background: rgba(107, 232, 255, 0.16);
+}
+
 /* Scope mask — the explicit circular viewport treatment (see
    src/scopeMask.js for the emergent-artifact history). z2 keeps it above
    the WebGL scene but under the z5 detection surface, preserving the old
@@ -2846,6 +2900,11 @@ body.cockpit-mode:has(#left-panel-stack > .panel-collapsible:not(.collapsed)) .c
   font-size: 10px;
   letter-spacing: 0.1em;
 }
+.cockpit-clock-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .cockpit-vision-controls {
   display: grid;
   grid-template-columns: 48px 58px 48px;
@@ -4294,6 +4353,40 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .hud-rec {
   font-size: 13px;
   letter-spacing: 2px;
+}
+
+.clock-mode-toggle {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  overflow: hidden;
+  vertical-align: middle;
+  pointer-events: auto;
+}
+
+.clock-mode-toggle button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  padding: 2px 6px;
+  cursor: pointer;
+  opacity: 0.55;
+}
+
+.clock-mode-toggle button[aria-pressed="true"] {
+  background: rgba(255, 255, 255, 0.12);
+  opacity: 1;
+}
+
+.cockpit-clock-row .clock-mode-toggle {
+  margin-left: 0;
 }
 
 #hud-rec-dot {
