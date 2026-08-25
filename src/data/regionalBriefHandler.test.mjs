@@ -14,6 +14,7 @@ import {
   regionalBriefHasAnySource,
   validRegionalPoint,
 } from './regionalBriefHandler.js';
+import { formatWindSpeed } from './weatherWindUnits.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const AUSTIN = { latitude: 30.2672, longitude: -97.7431 };
@@ -154,6 +155,11 @@ test('GET and POST cockpit queries return 200 JSON with place, weather, and GDEL
   assertCockpitBrief(getResult);
   assert.equal(getResult.json.place.locality, 'Austin');
   assert.equal(getResult.json.weather.temperatureC, 31.2);
+  assert.equal(getResult.json.weather.windKph, 14);
+  assert.equal(getResult.json.weather.windDirectionDeg, 180);
+  assert.equal(formatWindSpeed(getResult.json.weather.windKph, 'kmh'), '14 KM/H');
+  assert.equal(formatWindSpeed(getResult.json.weather.windKph, 'mph'), '9 MPH');
+  assert.equal(formatWindSpeed(getResult.json.weather.windKph, 'kt'), '8 KT');
   assert.equal(getResult.json.newsSource, 'GDELT Project');
   assert.equal(getResult.json.newsStatus, 'ready');
   assert.equal(getResult.json.articles[0].title, 'Austin regional update');

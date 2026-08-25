@@ -322,6 +322,13 @@ import {
   subscribeDistanceUnit,
 } from './units.js';
 import {
+  bindWindUnitToggle,
+  formatWindSpeed,
+  initWindUnits,
+  subscribeWindUnit,
+  syncWindUnitButtons,
+} from './data/weatherWindUnits.js';
+import {
   clearMeasure,
   destroyMeasure,
   initMeasure,
@@ -1064,6 +1071,7 @@ class CockpitViewController {
       || document.querySelector('.weather-unit-toggle');
     this.localWind = document.getElementById('cockpit-local-wind');
     this.localWindDirection = document.getElementById('cockpit-local-wind-direction');
+    this.windUnitToggle = document.getElementById('cockpit-wind-units');
     this.localCondition = document.getElementById('cockpit-local-condition');
     this.localCloud = document.getElementById('cockpit-local-cloud');
     this.localPrecipitation = document.getElementById('cockpit-local-precipitation');
@@ -1140,6 +1148,16 @@ class CockpitViewController {
     });
     this._listenerRemovers.push(() => this._weatherUnitsUnsubscribe?.());
     this.paintLocalTemperature(this.regionalBrief?.weather);
+    initWindUnits();
+    this._unbindWindUnitToggle = bindWindUnitToggle(this.windUnitToggle, {
+      onChange: () => this.applyLocalWindReadout(),
+    });
+    this._listenerRemovers.push(() => this._unbindWindUnitToggle?.());
+    this._windUnitUnsubscribe = subscribeWindUnit((unit) => {
+      syncWindUnitButtons(this.windUnitToggle, unit);
+      this.applyLocalWindReadout();
+    });
+    this._listenerRemovers.push(() => this._windUnitUnsubscribe?.());
     this._listen(this.entry, 'click', () => {
       this.onEnterRequest();
     });
@@ -2196,10 +2214,7 @@ class CockpitViewController {
     const weather = payload?.weather;
     this.updateWeatherCredit(weather);
     this.paintLocalTemperature(weather);
-    if (this.localWind) {
-      this.localWind.textContent = Number.isFinite(weather?.windKph)
-        ? `${Math.round(weather.windKph)} KM/H` : '—';
-    }
+    this.applyLocalWindReadout(weather);
     if (this.localWindDirection) {
       this.localWindDirection.textContent = formatCockpitWindDirection(weather?.windDirectionDeg);
     }
@@ -2224,6 +2239,15 @@ class CockpitViewController {
   paintLocalTemperature(weather) {
     if (!this.localTemperature) return;
     this.localTemperature.textContent = formatTemperatureC(weather?.temperatureC);
+  }
+
+  /**
+   * Re-paint Local Info wind from the in-memory observation.
+   * Chip changes must not refetch /api/weather-effects or /api/regional-brief.
+   */
+  applyLocalWindReadout(weather = this.regionalBrief?.weather) {
+    if (!this.localWind) return;
+    this.localWind.textContent = formatWindSpeed(weather?.windKph);
   }
 
   /** Open-Meteo credit is required only while weather values are on screen. */

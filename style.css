@@ -4921,14 +4921,16 @@ body.cockpit-mode #view-switcher button {
   font-size: 6px;
   letter-spacing: 0.07em;
 }
-.cockpit-local-temp-readout {
+.cockpit-local-temp-readout,
+.cockpit-local-wind-readout {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 6px;
   min-width: 0;
 }
-.cockpit-local-grid .weather-unit-toggle {
+.cockpit-local-grid .weather-unit-toggle,
+.cockpit-local-grid .wind-unit-toggle {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
@@ -4941,7 +4943,8 @@ body.cockpit-mode #view-switcher button {
   border-radius: 4px;
   overflow: hidden;
 }
-.cockpit-local-grid .weather-unit-toggle button {
+.cockpit-local-grid .weather-unit-toggle button,
+.cockpit-local-grid .wind-unit-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -4951,7 +4954,8 @@ body.cockpit-mode #view-switcher button {
   cursor: pointer;
   opacity: 0.55;
 }
-.cockpit-local-grid .weather-unit-toggle button[aria-pressed="true"] {
+.cockpit-local-grid .weather-unit-toggle button[aria-pressed="true"],
+.cockpit-local-grid .wind-unit-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
@@ -5463,8 +5467,17 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
+.cockpit-weather-unit-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 5px;
+}
+
 .clock-mode-toggle,
-.wx-mode-toggle {
+.wx-mode-toggle,
+.wind-unit-toggle {
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
@@ -5476,7 +5489,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 .clock-mode-toggle button,
-.wx-mode-toggle button {
+.wx-mode-toggle button,
+.wind-unit-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -5491,13 +5505,15 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 .clock-mode-toggle button[aria-pressed="true"],
-.wx-mode-toggle button[aria-pressed="true"] {
+.wx-mode-toggle button[aria-pressed="true"],
+.wind-unit-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
 
 .cockpit-clock-row .clock-mode-toggle,
-.cockpit-clock-row .wx-mode-toggle {
+.cockpit-clock-row .wx-mode-toggle,
+.cockpit-weather-unit-row .wind-unit-toggle {
   margin-left: 0;
 }
 

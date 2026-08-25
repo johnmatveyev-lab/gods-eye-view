@@ -5,6 +5,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATA_CREDITS } from './dataCredits.js';
+import { formatWindSpeed } from './weatherWindUnits.js';
 import weatherEffectsHandler, {
   OPEN_METEO_FORECAST_URL,
   WEATHER_EFFECTS_CACHE_MS,
@@ -239,6 +240,11 @@ test('fresh cache is served without a second Open-Meteo call', async () => {
   assert.equal(second.json.status, 'cached');
   assert.equal(second.headers['X-Weather-Effects'], 'HIT');
   assert.equal(calls.length, 1);
+  assert.equal(second.json.weather.windKph, 18.2);
+  assert.equal(second.json.weather.windDirectionDeg, 270);
+  assert.equal(formatWindSpeed(second.json.weather.windKph, 'kmh'), '18 KM/H');
+  assert.equal(formatWindSpeed(second.json.weather.windKph, 'mph'), '11 MPH');
+  assert.equal(formatWindSpeed(second.json.weather.windKph, 'kt'), '10 KT');
 });
 
 test('rate limiter still rejects a bursting client', async () => {
