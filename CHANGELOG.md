@@ -7,6 +7,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster has a client-only **Hide unknown site** toggle next
+  to the probability chips. Default off matches the current 30-day roster.
+  On hides missions whose normalized `launchSite` is missing, whitespace
+  only, or the exact fallback **Unknown launch site**. Named pads stay.
+  Selected mission stays. Toggle changes re-filter the already-fetched
+  window and AND with status, provider, orbit, site, 7d|30d, rocket,
+  webcast, and probability. No extra `/api/launches` fetch and no new
+  endpoint. Preference persists as `meridian.launchHideUnknownSite`.
+  Hidden when the launches layer is off.
 - AIS has a client-only **Hide unnamed** toggle next to Hide no dest.
   Default off matches the current harbor view. On skips in-memory vessels
   whose `name` is missing, whitespace-only, the generic `VESSEL` label,

@@ -2,6 +2,16 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — launch hide unknown site (plan 181)** (`src/data/launchUnknownSiteFilter.js`,
+> `#space-mission-roster`). **Hide unknown site** next to probability chips,
+> default **off**. Filters already-normalized `launchSite` on the in-memory
+> 30-day roster. On hides missing, whitespace-only, or the exact fallback
+> `Unknown launch site` (trim first; case-insensitive). Named pads stay.
+> Selected mission stays. AND with status, provider, orbit, site, 7d|30d,
+> rocket, webcast, and probability. Re-applies from the cached LL2 payload
+> — no extra `/api/launches` fetch. Persists `meridian.launchHideUnknownSite`.
+> Hidden when the launches layer is off. Client-only; no `/api`.
+
 > **2026-08-25 — launch probability floor (plan 178)** (`src/data/launchProbabilityFilter.js`,
 > `#space-mission-roster`). Exclusive **All | 50+ | 80+** chips next to
 > Webcast only, default **All**. Filters already-normalized `probability`

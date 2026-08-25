@@ -108,6 +108,11 @@ import {
   resetLaunchProbabilityFilterForTest,
   setLaunchProbabilityFilter,
 } from './launchProbabilityFilter.js';
+import {
+  DEFAULT_LAUNCH_HIDE_UNKNOWN_SITE,
+  resetLaunchHideUnknownSiteForTest,
+  setLaunchHideUnknownSite,
+} from './launchUnknownSiteFilter.js';
 
 const NOW = new Date('2026-07-27T00:00:00Z');
 
@@ -1053,6 +1058,44 @@ test('Webcast only roster hides no-stream missions and ANDs status, provider, an
     nowMs: NOW.getTime(),
   });
   assert.ok(selected.some((entry) => entry.launch.id === 'no-stream'));
+});
+
+test('Hide unknown site roster hides unlabeled pads and ANDs status, provider, rocket, webcast, and probability', () => {
+  const rows = [
+    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: true, probability: 90, launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'unknown', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Unknown launch site', rocketName: 'Falcon 9', webcastLive: true, probability: 88, launchTime: '2026-07-19T00:00:00Z' },
+    { id: 'blank', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: '', rocketName: 'Falcon 9', webcastLive: true, probability: 91, launchTime: '2026-07-18T00:00:00Z' },
+    { id: 'ula', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Atlas V', webcastLive: true, probability: 95, launchTime: '2026-07-17T00:00:00Z' },
+    { id: 'no-stream', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: false, probability: 92, launchTime: '2026-07-16T00:00:00Z' },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+  }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Atlas V': false,
+  }, ['Atlas V', 'Falcon 9']);
+  const off = missionRosterEntries(rows, { hideUnknownSite: false, nowMs: NOW.getTime() });
+  assert.deepEqual(off.map((entry) => entry.launch.id).sort(), ['blank', 'keep', 'no-stream', 'ula', 'unknown']);
+  const entries = missionRosterEntries(rows, {
+    statusFilter: { go: true },
+    providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
+    webcastOnly: true,
+    probabilityFilter: '80',
+    hideUnknownSite: true,
+    nowMs: NOW.getTime(),
+  });
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['keep']);
+  const selected = missionRosterEntries(rows, {
+    hideUnknownSite: true,
+    selectedLaunchId: 'unknown',
+    nowMs: NOW.getTime(),
+  });
+  assert.ok(selected.some((entry) => entry.launch.id === 'unknown'));
+  assert.ok(selected.some((entry) => entry.launch.id === 'keep'));
+  assert.ok(!selected.some((entry) => entry.launch.id === 'blank'));
 });
 
 test('keeps rocket.configuration.name (or rocket.name) on the in-memory roster', () => {
@@ -2042,10 +2085,19 @@ function createStatusFilterDocument() {
     if (id === 'all') chip.className = 'space-mission-probability-chip active';
     probabilityChips.appendChild(chip);
   }
+  const unknownSiteChips = new FakeNode('div');
+  unknownSiteChips.className = 'space-mission-unknown-site-chips';
+  unknownSiteChips.setAttribute('data-mission-unknown-site-chips', '');
+  const unknownSiteChip = new FakeNode('button');
+  unknownSiteChip.setAttribute('data-mission-unknown-site-chip', 'hide');
+  unknownSiteChip.dataset.missionUnknownSiteChip = 'hide';
+  unknownSiteChip.textContent = 'Hide unknown site';
+  unknownSiteChips.appendChild(unknownSiteChip);
   roster.appendChild(count);
   roster.appendChild(windowChips);
   roster.appendChild(webcastChips);
   roster.appendChild(probabilityChips);
+  roster.appendChild(unknownSiteChips);
   roster.appendChild(chips);
   roster.appendChild(providerChips);
   roster.appendChild(rocketChips);
@@ -2069,6 +2121,7 @@ function createStatusFilterDocument() {
     windowChips,
     webcastChips,
     probabilityChips,
+    unknownSiteChips,
     document: {
       body: new FakeNode('body'),
       createElement: (tagName) => new FakeNode(tagName),
@@ -2129,6 +2182,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2176,6 +2230,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2257,6 +2312,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2303,6 +2359,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2421,6 +2478,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2464,6 +2522,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2509,6 +2568,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2553,6 +2613,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2637,6 +2698,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2682,6 +2744,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2785,6 +2848,7 @@ test('Webcast only re-applies the cached roster without refetching /api/launches
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2829,6 +2893,7 @@ test('Webcast only re-applies the cached roster without refetching /api/launches
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2902,6 +2967,7 @@ test('probability chips re-apply the cached roster without refetching /api/launc
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2947,6 +3013,7 @@ test('probability chips re-apply the cached roster without refetching /api/launc
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
     resetLaunchProbabilityFilterForTest();
+    resetLaunchHideUnknownSiteForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -3017,4 +3084,120 @@ test('probability chips re-apply the cached roster without refetching /api/launc
 
   await rocketLaunchesLayer.disable();
   assert.equal(probabilityChips.hidden, true, 'launches layer off hides the probability chips');
+});
+
+test('Hide unknown site re-applies the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  resetLaunchProviderFilterForTest();
+  resetLaunchOrbitFilterForTest();
+  resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
+  resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, unknownSiteChips, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  const payload = {
+    results: [
+      siteFilterLaunch('named-go', 'Space Launch Complex 39A', 0),
+      siteFilterLaunch('unknown-go', 'Unknown launch site', 0.1),
+      siteFilterLaunch('named-tbd', 'Space Launch Complex 4E', 0.2),
+    ],
+  };
+  payload.results[2].status = { name: 'TBD' };
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    resetLaunchProviderFilterForTest();
+    resetLaunchOrbitFilterForTest();
+    resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
+    resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
+    resetLaunchProbabilityFilterForTest();
+    resetLaunchHideUnknownSiteForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  assert.equal(DEFAULT_LAUNCH_HIDE_UNKNOWN_SITE, false);
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:named-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:named-tbd').show, true);
+  assert.match(list.innerHTML, /NAMED-GO/);
+  assert.match(list.innerHTML, /UNKNOWN-GO/);
+  assert.match(list.innerHTML, /NAMED-TBD/);
+  assert.equal(unknownSiteChips.hidden, false);
+
+  setLaunchHideUnknownSite(true);
+  assert.equal(launchFetches, 1, 'toggle must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:named-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:named-tbd').show, true);
+  assert.match(list.innerHTML, /NAMED-GO/);
+  assert.match(list.innerHTML, /NAMED-TBD/);
+  assert.doesNotMatch(list.innerHTML, /UNKNOWN-GO/);
+
+  setLaunchHideUnknownSite(DEFAULT_LAUNCH_HIDE_UNKNOWN_SITE);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, true);
+  assert.match(list.innerHTML, /UNKNOWN-GO/);
+
+  _setSelectedRocketMissionForTest('unknown-go');
+  setLaunchHideUnknownSite(true);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, true, 'selected unknown site stays');
+  assert.match(list.innerHTML, /UNKNOWN-GO/);
+
+  _setSelectedRocketMissionForTest(null);
+  setLaunchStatusFilter({ go: true });
+  setLaunchHideUnknownSite(true);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:named-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:named-tbd').show, false, 'Go + Hide unknown site still ANDs');
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, false);
+  assert.match(list.innerHTML, /NAMED-GO/);
+  assert.doesNotMatch(list.innerHTML, /NAMED-TBD|UNKNOWN-GO/);
+
+  await rocketLaunchesLayer.update();
+  assert.equal(launchFetches, 2, 'refresh still hits the same /api/launches window');
+  assert.equal(dataSource.entities.getById('rocket-launch:named-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, false);
+
+  await rocketLaunchesLayer.disable();
+  assert.equal(unknownSiteChips.hidden, true, 'launches layer off hides the unknown-site toggle');
 });
