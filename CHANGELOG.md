@@ -12,6 +12,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Launches panel that lists the existing Launch Library 2 results
+  the globe already fetches (`/api/launches`). Clicking a row flies to the
+  pad when coordinates are present, otherwise the row is only selected.
+  Empty or failed payloads use the existing unavailable/empty language and
+  do not hang. No new vendor or `/api`.
 - Added a copy control on the selected-contact card for the visible asset
   ident (aircraft callsign, else registration/hex; vessel name or MMSI;
   satellite name or NORAD). Clicking the ident or the copy control copies it

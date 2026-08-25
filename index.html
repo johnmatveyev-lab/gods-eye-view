@@ -56,6 +56,17 @@
 
   <!-- Top-center camera and share actions -->
   <nav id="top-center-actions" aria-label="Globe actions">
+    <button
+      id="launches-panel-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="launches-panel"
+      aria-label="Launches — upcoming launch list"
+      title="Launches — show upcoming Launch Library 2 missions"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
+      <span class="launches-panel-toggle-label">LAUNCHES</span>
+    </button>
     <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>
@@ -69,6 +80,20 @@
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
   </nav>
+  <aside id="launches-panel" hidden aria-label="Upcoming launches">
+    <div class="launches-panel-inner">
+      <div class="launches-panel-header">
+        <div>
+          <strong>LAUNCHES</strong>
+          <span>Launch Library 2 — The Space Devs</span>
+        </div>
+        <output id="launches-panel-count">—</output>
+      </div>
+      <div id="launches-panel-list" class="launches-panel-list">
+        <div class="launches-panel-empty">LOADING 30-DAY MISSION INDEX</div>
+      </div>
+    </div>
+  </aside>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
     <span id="global-loading-detail"></span>
