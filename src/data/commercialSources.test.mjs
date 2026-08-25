@@ -8,7 +8,7 @@ import createViteConfig, {
   GOOGLE_NEWS_RSS_ENABLED,
   OPENSKY_ENABLED,
 } from '../../vite.config.js';
-import { DATA_CREDITS } from './dataCredits.js';
+import { AISSTREAM_CREDIT, DATA_CREDITS } from './dataCredits.js';
 import flightsLayer from './flights.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -75,6 +75,7 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.ok(!keys.includes('opensky'));
   assert.ok(!keys.includes('google-news-rss'));
   assert.ok(!keys.includes('telegeography'));
+  assert.ok(!keys.includes('aisstream'), 'AISStream credit is dynamic; hosted empty state must not show it');
   assert.ok(keys.includes('adsblol'));
   assert.ok(keys.includes('gdelt'));
   assert.ok(keys.includes('open-meteo'));
@@ -84,6 +85,14 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.match(osrm.html, /OSRM/);
   assert.match(osrm.html, /OpenStreetMap contributors/);
   assert.match(osrm.html, /ODbL/);
+});
+
+test('AIS stays BYOK on a long-lived Node host; hosted Vercel does not wrap AISStream', () => {
+  assert.match(AISSTREAM_CREDIT.html, /AISStream\.io/);
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
+  const client = readFileSync(path.join(ROOT, 'src/data/aisLiveVessels.js'), 'utf8');
+  assert.doesNotMatch(client, /wss:\/\/stream\.aisstream\.io/);
+  assert.doesNotMatch(client, /new WebSocket\(/);
 });
 
 test('TeleGeography cable GeoJSON is not present on disk', () => {
