@@ -40,6 +40,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   board, stays enabled when empty, skips features without coordinates, and
   stops at the existing 120-mark cap. A malformed file is a no-op with
   `Invalid GeoJSON`. No `/api`.
+- Added a DISPLAY **Airborne only** control. Default off. When on, commercial
+  and military flight layers skip contacts whose existing `onGround` flag is
+  true, so parked and taxiing aircraft leave the globe. A selected or tracked
+  contact that just landed stays visible until untracked. The choice persists
+  with existing flight layer options and ANDs with altitude, speed, heading,
+  class, hide-stale, and callsign-prefix filters. Watchlist and emergency
+  highlight stay paint-only. No new ground heuristic and no `/api`.
 - Added an Export annotations control next to Clear/Undo on the globe chrome.
   It builds a GeoJSON FeatureCollection from `engine.list()` (pin/highlight
   → Point, arrow/route → LineString, area → Polygon or Point) with only

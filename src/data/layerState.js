@@ -256,8 +256,10 @@ const OPTION_GROUPS = Object.freeze({
     headingSectorsOption(),
     // Feed-health hide for contacts in `_missingPolls`. Default OFF keeps the
     // existing 45% fade. Token `g` is omitted while false. `h` is PLAN 101
-    // heading sectors; `s` is PLAN 96 min speed.
+    // heading sectors; `s` is PLAN 96 min speed; `a` is PLAN 95 airborne-only.
     booleanOption('hideStale', 'g', false),
+    // PLAN 95: hide parked/taxi contacts. Default OFF so current draw stays.
+    booleanOption('airborneOnly', 'a', false),
     trackingIdOption('selectedFlightsTrackingId', 't', null),
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
     nullableIntegerOption('speedMinKt', 's', null),
@@ -280,6 +282,10 @@ const OPTION_GROUPS = Object.freeze({
       encode: (value) => parseCallsignPrefixes(value).join('-'),
       decode: (value) => formatCallsignPrefixField(String(value || '').split('-')),
     }),
+    // `c` is PLAN 100 callsign prefixes. Rate uses y/l/d so share tokens stay unique.
+    booleanOption('showClimb', 'y', true),
+    booleanOption('showLevel', 'l', true),
+    booleanOption('showDescent', 'd', true),
   ]),
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),

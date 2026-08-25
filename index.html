@@ -690,6 +690,14 @@
           <button type="button" class="pp-mode-btn active" data-aircraft-class="uav" aria-pressed="true" title="UAV">UAV</button>
         </div>
       </div>
+      <div class="pp-slider-row visible" id="flight-rate-row">
+        <span class="pp-slider-mini-label">Rate</span>
+        <div class="pp-mode-seg" role="group" aria-label="Climb, level, or descent">
+          <button class="pp-mode-btn active" id="flight-rate-climb" aria-pressed="true" title="Show climbing contacts (vertical rate &gt; 1 m/s)">Climb</button>
+          <button class="pp-mode-btn active" id="flight-rate-level" aria-pressed="true" title="Show level contacts (|vertical rate| ≤ 1 m/s)">Level</button>
+          <button class="pp-mode-btn active" id="flight-rate-descent" aria-pressed="true" title="Show descending contacts (vertical rate &lt; −1 m/s)">Descent</button>
+        </div>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true" title="Tracked-target trail — hide the fading path without stopping track">
@@ -701,6 +709,12 @@
       <button class="pp-toggle-btn active" id="emergency-highlight-toggle" aria-pressed="true" title="Emergency highlight — public squawk 7500/7600/7700. Not a verified emergency. Public squawk field only. Click still tracks.">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">sos</span>
         <span class="pp-label">Emergency</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="airborne-only-toggle" type="button" title="Airborne only — hide parked and taxiing contacts" aria-pressed="false" aria-label="Airborne only">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">flight_takeoff</span>
+        <span class="pp-label">Airborne only</span>
       </button>
     </div>
     <div class="pp-toggle-group">

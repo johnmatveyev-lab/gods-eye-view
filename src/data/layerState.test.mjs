@@ -30,9 +30,26 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+const DEFAULT_FLIGHT_RATE_OPTIONS = {
+  showClimb: true,
+  showLevel: true,
+  showDescent: true,
+};
+
+const DEFAULT_FLIGHT_FILTER_OPTIONS = {
+  headingSectors: 'NESW',
+  hideStale: false,
+  airborneOnly: false,
+  speedMinKt: null,
+  speedMaxKt: null,
+  aircraftClassFilter: 'all',
+  callsignPrefixes: '',
+  ...DEFAULT_FLIGHT_RATE_OPTIONS,
+};
+
 function paramsForLayer(id) {
   if (id === 'flights' || id === 'military') {
-    return { models3d: false, models3dMode: 'proximity', irBoost: true };
+    return { models3d: false, models3dMode: 'proximity', irBoost: true, ...DEFAULT_FLIGHT_FILTER_OPTIONS };
   }
   if (id === 'satellites') return { catalog: 'core', showPoints: false, showOrbits: false };
   if (id === 'cctv') {
@@ -259,12 +276,10 @@ test('unknown and forbidden option fields are ignored while missing options use 
     models3dMode: 'all',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
-    speedMinKt: null,
-    speedMaxKt: null,
-    aircraftClassFilter: 'all',
-    callsignPrefixes: '',
+    ...DEFAULT_FLIGHT_FILTER_OPTIONS,
   });
   assert.deepEqual(decoded.options.radio, { filter: 'news', volume: 0.35, minBitrate: 'all' });
 
@@ -512,6 +527,10 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
   const defaults = createDefaultLayerState().options.flights;
   assert.equal(defaults.models3d, true, 'the durable default is 3D ON');
   assert.equal(defaults.models3dMode, 'proximity', 'and proximity, never all');
+  assert.equal(defaults.airborneOnly, false, 'Airborne only stays off so current draw remains');
+  assert.equal(defaults.showClimb, true, 'rate filter defaults all-on');
+  assert.equal(defaults.showLevel, true);
+  assert.equal(defaults.showDescent, true);
 
   const paramsCalls = [];
   const manager = productionManager({
@@ -538,6 +557,8 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
       `${name}: the fleet starts armed, matching the codec default`);
     assert.match(source, /^let _models3dMode = 'proximity';/m,
       `${name}: and starts in proximity, matching the codec default`);
+    assert.match(source, /^let _airborneOnly = false;$/m,
+      `${name}: Airborne only starts off, matching the codec default`);
   }
   const ui = await readFile(new URL('../ui.js', import.meta.url), 'utf8');
   assert.match(ui, /^\s*this\._models3dEnabled = true;$/m,
@@ -553,6 +574,10 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
     'index.html: and the Proximity/All row paints open with it');
   assert.match(html, /id="models3d-mode-proximity"[^>]*aria-checked="true"/,
     'index.html: Proximity is the selected mode in the markup');
+  assert.match(html, /id="flight-rate-climb"[^>]*aria-pressed="true"/,
+    'index.html: Climb ships on so the current view is unchanged');
+  assert.match(html, /id="flight-rate-level"[^>]*aria-pressed="true"/);
+  assert.match(html, /id="flight-rate-descent"[^>]*aria-pressed="true"/);
 });
 
 test('a v2 link written before the flip still means what its author saw: 3D OFF', () => {
@@ -633,26 +658,8 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
   });
   const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage: memoryStorage() });
   await coordinator.start({ shareLayerState: decoded, shareCreatedAtMs: 1_000 });
-  assert.deepEqual(calls.flights, [{
-    models3d: false,
-    models3dMode: 'proximity',
-    headingSectors: 'NESW',
-    hideStale: false,
-    speedMinKt: null,
-    speedMaxKt: null,
-    aircraftClassFilter: 'all',
-    callsignPrefixes: '',
-  }]);
-  assert.deepEqual(calls.military, [{
-    models3d: false,
-    models3dMode: 'proximity',
-    headingSectors: 'NESW',
-    hideStale: false,
-    speedMinKt: null,
-    speedMaxKt: null,
-    aircraftClassFilter: 'all',
-    callsignPrefixes: '',
-  }]);
+  assert.deepEqual(calls.flights, [{ models3d: false, models3dMode: 'proximity', ...DEFAULT_FLIGHT_FILTER_OPTIONS }]);
+  assert.deepEqual(calls.military, [{ models3d: false, models3dMode: 'proximity', ...DEFAULT_FLIGHT_FILTER_OPTIONS }]);
   assert.equal(coordinator.getDurableState().options.flights.models3d, false);
   coordinator.destroy();
 });
@@ -1082,12 +1089,10 @@ test('later explicit params during init replace options without cancelling visib
     models3dMode: 'proximity',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
-    speedMinKt: null,
-    speedMaxKt: null,
-    aircraftClassFilter: 'all',
-    callsignPrefixes: '',
+    ...DEFAULT_FLIGHT_FILTER_OPTIONS,
   });
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   assert.equal(storage.writes.length, 1);
@@ -1131,12 +1136,7 @@ test('explicit navigation preserves unrelated visibility and option restoration'
   assert.deepEqual(paramsCalls, [{
     models3d: true,
     models3dMode: 'all',
-    headingSectors: 'NESW',
-    hideStale: false,
-    speedMinKt: null,
-    speedMaxKt: null,
-    aircraftClassFilter: 'all',
-    callsignPrefixes: '',
+    ...DEFAULT_FLIGHT_FILTER_OPTIONS,
   }]);
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   coordinator.destroy();
@@ -1197,11 +1197,9 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     hideStale: false,
     irBoost: true,
     headingSectors: 'NESW',
+    airborneOnly: false,
     selectedFlightsTrackingId: null,
-    speedMinKt: null,
-    speedMaxKt: null,
-    aircraftClassFilter: 'all',
-    callsignPrefixes: '',
+    ...DEFAULT_FLIGHT_FILTER_OPTIONS,
   });
   assert.deepEqual(manager.getLayerParams('radio'), {
     filter: 'genre:r&b',
@@ -1260,16 +1258,7 @@ test('shared flight selection is deferred until destination refresh and then fol
     onTrackingRestoreStatus: (status) => statuses.push(status),
   });
   await coordinator.start({ shareLayerState: state, shareCreatedAtMs: 1_000 });
-  assert.deepEqual(paramsCalls, [{
-    models3d: true,
-    models3dMode: 'proximity',
-    headingSectors: 'NESW',
-    hideStale: false,
-    speedMinKt: null,
-    speedMaxKt: null,
-    aircraftClassFilter: 'all',
-    callsignPrefixes: '',
-  }]);
+  assert.deepEqual(paramsCalls, [{ models3d: true, models3dMode: 'proximity', ...DEFAULT_FLIGHT_FILTER_OPTIONS }]);
 
   const result = await coordinator.restoreShareTrackingSelection();
   assert.equal(result.status, 'found');

@@ -1233,7 +1233,132 @@ function openAiRealtimeProxy() {
   };
 }
 
-function googlePlacesContextProxy() {
+/**
+ * Shared GET handler for view-biased Places Text Search.
+ * Vite middleware and the Vercel `api/google/text-search.js` wrapper both
+ * call this so hosted production is not a platform 404.
+ *
+ * @param {import('http').IncomingMessage} req
+ * @param {import('http').ServerResponse} res
+ */
+export async function handleGooglePlacesTextSearchHttp(req, res) {
+  if (req.method !== 'GET') {
+    res.statusCode = 405;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'Method not allowed', places: [] }));
+    return;
+  }
+
+  // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
+  // Inlined (nearby-places lives in src/google/nearbyPlaces.js) so the 429
+  // body keeps the `places: []` contract the client expects on errors.
+  const _grl = googleRateLimiter();
+  if (_grl && !_grl(clientKey(req))) {
+    res.statusCode = 429;
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Retry-After', '5');
+    res.end(JSON.stringify({ error: 'Rate limit exceeded', places: [] }));
+    return;
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    res.statusCode = 503;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'GOOGLE_MAPS_API_KEY is not set', places: [] }));
+    return;
+  }
+
+  const requestUrl = new URL(req.url || '', 'http://localhost');
+  const textQuery = String(requestUrl.searchParams.get('q') || '').trim();
+  const latitude = Number(requestUrl.searchParams.get('lat'));
+  const longitude = Number(requestUrl.searchParams.get('lon'));
+  const radiusM = Math.max(50, Math.min(50000, Number(requestUrl.searchParams.get('radiusM')) || 4000));
+  if (!textQuery || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    res.statusCode = 400;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ error: 'q, lat and lon are required', places: [] }));
+    return;
+  }
+
+  try {
+    const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': apiKey,
+        'X-Goog-FieldMask': [
+          'places.id',
+          'places.displayName',
+          'places.formattedAddress',
+          'places.location',
+          'places.viewport',
+          'places.primaryType',
+          'places.types',
+        ].join(','),
+      },
+      body: JSON.stringify({
+        textQuery,
+        locationBias: {
+          circle: {
+            center: { latitude, longitude },
+            radius: radiusM,
+          },
+        },
+        maxResultCount: 5,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    const places = Array.isArray(data.places) ? data.places
+      .map((place) => {
+        const placeLatitude = place.location?.latitude ?? null;
+        const placeLongitude = place.location?.longitude ?? null;
+        const types = Array.isArray(place.types) ? place.types.slice(0, 8) : [];
+        // Places returns a lat/lng bounding box (low/high corners) framing the
+        // place — no polygon, but enough to SIZE a fallback grounds disc to the
+        // real feature instead of a blind constant. Normalize to plain numbers.
+        const vp = place.viewport;
+        const viewport = (
+          Number.isFinite(vp?.low?.latitude) && Number.isFinite(vp?.low?.longitude)
+          && Number.isFinite(vp?.high?.latitude) && Number.isFinite(vp?.high?.longitude)
+        ) ? {
+          low: { latitude: vp.low.latitude, longitude: vp.low.longitude },
+          high: { latitude: vp.high.latitude, longitude: vp.high.longitude },
+        } : null;
+        return {
+          id: place.id || null,
+          name: place.displayName?.text || null,
+          address: place.formattedAddress || null,
+          latitude: placeLatitude,
+          longitude: placeLongitude,
+          distanceM: approximateDistanceM(latitude, longitude, placeLatitude, placeLongitude),
+          primaryType: place.primaryType || null,
+          types,
+          viewport,
+        };
+      })
+      .filter((place) => place.name) : [];
+
+    res.statusCode = response.ok ? 200 : response.status;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.end(JSON.stringify({
+      places,
+      error: response.ok ? null : data.error?.message || 'Google Places request failed',
+    }));
+  } catch (error) {
+    res.statusCode = 502;
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.end(JSON.stringify({ error: error?.message || 'Google Places request failed', places: [] }));
+  }
+}
+
+/** Vercel Node entry used by api/google/text-search.js */
+export default async function googlePlacesTextSearchHandler(req, res) {
+  await handleGooglePlacesTextSearchHttp(req, res);
+}
+
+export function googlePlacesContextProxy() {
   function install(middlewares) {
     middlewares.use('/api/google/nearby-places', async (req, res) => {
       await handleNearbyPlacesHttp(req, res);
@@ -1243,117 +1368,7 @@ function googlePlacesContextProxy() {
     // the view. Geocoding scatters obscure monument/POI names across the city;
     // a view-biased Text Search lands on the actual feature. Same key, field
     // mask, throttle, and `places: []` error contract as nearby-places above.
-    middlewares.use('/api/google/text-search', async (req, res) => {
-      if (req.method !== 'GET') {
-        res.statusCode = 405;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed', places: [] }));
-        return;
-      }
-
-      // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
-      // Inlined (nearby-places lives in src/google/nearbyPlaces.js) so the 429
-      // body keeps the `places: []` contract the client expects on errors.
-      const _grl = googleRateLimiter();
-      if (_grl && !_grl(clientKey(req))) {
-        res.statusCode = 429;
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Retry-After', '5');
-        res.end(JSON.stringify({ error: 'Rate limit exceeded', places: [] }));
-        return;
-      }
-
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) {
-        res.statusCode = 503;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'GOOGLE_MAPS_API_KEY is not set', places: [] }));
-        return;
-      }
-
-      const requestUrl = new URL(req.url || '', 'http://localhost');
-      const textQuery = String(requestUrl.searchParams.get('q') || '').trim();
-      const latitude = Number(requestUrl.searchParams.get('lat'));
-      const longitude = Number(requestUrl.searchParams.get('lon'));
-      const radiusM = Math.max(50, Math.min(50000, Number(requestUrl.searchParams.get('radiusM')) || 4000));
-      if (!textQuery || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'q, lat and lon are required', places: [] }));
-        return;
-      }
-
-      try {
-        const response = await fetch('https://places.googleapis.com/v1/places:searchText', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask': [
-              'places.id',
-              'places.displayName',
-              'places.formattedAddress',
-              'places.location',
-              'places.viewport',
-              'places.primaryType',
-              'places.types',
-            ].join(','),
-          },
-          body: JSON.stringify({
-            textQuery,
-            locationBias: {
-              circle: {
-                center: { latitude, longitude },
-                radius: radiusM,
-              },
-            },
-            maxResultCount: 5,
-          }),
-        });
-        const data = await response.json().catch(() => ({}));
-        const places = Array.isArray(data.places) ? data.places
-          .map((place) => {
-            const placeLatitude = place.location?.latitude ?? null;
-            const placeLongitude = place.location?.longitude ?? null;
-            const types = Array.isArray(place.types) ? place.types.slice(0, 8) : [];
-            // Places returns a lat/lng bounding box (low/high corners) framing the
-            // place — no polygon, but enough to SIZE a fallback grounds disc to the
-            // real feature instead of a blind constant. Normalize to plain numbers.
-            const vp = place.viewport;
-            const viewport = (
-              Number.isFinite(vp?.low?.latitude) && Number.isFinite(vp?.low?.longitude)
-              && Number.isFinite(vp?.high?.latitude) && Number.isFinite(vp?.high?.longitude)
-            ) ? {
-              low: { latitude: vp.low.latitude, longitude: vp.low.longitude },
-              high: { latitude: vp.high.latitude, longitude: vp.high.longitude },
-            } : null;
-            return {
-              id: place.id || null,
-              name: place.displayName?.text || null,
-              address: place.formattedAddress || null,
-              latitude: placeLatitude,
-              longitude: placeLongitude,
-              distanceM: approximateDistanceM(latitude, longitude, placeLatitude, placeLongitude),
-              primaryType: place.primaryType || null,
-              types,
-              viewport,
-            };
-          })
-          .filter((place) => place.name) : [];
-
-        res.statusCode = response.ok ? 200 : response.status;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'private, max-age=300');
-        res.end(JSON.stringify({
-          places,
-          error: response.ok ? null : data.error?.message || 'Google Places request failed',
-        }));
-      } catch (error) {
-        res.statusCode = 502;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: error?.message || 'Google Places request failed', places: [] }));
-      }
-    });
+    middlewares.use('/api/google/text-search', handleGooglePlacesTextSearchHttp);
   }
 
   return {
