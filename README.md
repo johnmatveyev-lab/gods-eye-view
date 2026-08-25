@@ -51,6 +51,7 @@ The dev server binds to **localhost** — your keys stay on your machine.
 - **Cockpit view:** Ride inside a tracked flight.
 - **Contacts:** A 250 km roster of nearby live aircraft. The Contacts control shows and hides that existing list.
 - **Sites:** A list of mapped installations in the current view. Click a row to fly there.
+- **Launches panel:** Upcoming Launch Library 2 missions. Click a row to fly to the pad when coordinates are present.
 - **Click-to-track:** Camera locks on, draws a fading trail, surfaces metadata. Display **Trails** hides that path without stopping track.
 - **Voice whiteboard:** Speak annotations onto the world. Clear them from the globe chrome when marks are present.
 - **3D hangar:** Per-class aircraft models as you close in.
