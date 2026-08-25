@@ -192,6 +192,10 @@ import {
   firmsSensorFilterFlags,
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
+import {
+  installationClassFilterFlags,
+  toggleInstallationClassFilter,
+} from './data/militaryInstallationClassFilter.js';
 import radioLayer, {
   buildRadioTunerTicks,
   radioTunerCommitSlot,
@@ -2832,6 +2836,7 @@ export class StyleManager {
     this._selectedContactWatch = document.getElementById('selected-contact-ident-watch');
     this._installationsListToggle = document.getElementById('installations-list-toggle');
     this._installationsListPanel = document.getElementById('installations-viewport-list');
+    this._installationClassChips = document.getElementById('installation-class-chips');
     this._installationsListOpen = false;
     this._globalContextMissionsBtn = document.getElementById('global-context-missions-btn');
     this._contextModeStandby = document.getElementById('context-mode-standby');
@@ -3269,6 +3274,7 @@ export class StyleManager {
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
     this._initFirmsSensorChips();
+    this._initInstallationClassChips();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initZoomToPointer();
@@ -5346,6 +5352,7 @@ export class StyleManager {
       setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
     });
     this._syncFirmsSensorChips();
+    this._syncInstallationClassChips();
     this._datacenterInViewList?.refresh();
     this._damsInViewList?.refresh();
     this._updateTrafficSyncChip();
@@ -5364,8 +5371,9 @@ export class StyleManager {
             this._damsInViewList?.refresh();
           }
         }
-        if (this._installationsListOpen && change?.layerId === 'military-installations') {
-          this._syncInstallationsViewportList();
+        if (change?.layerId === 'military-installations') {
+          this._syncInstallationClassChips();
+          if (this._installationsListOpen) this._syncInstallationsViewportList();
         }
         if (change?.layerId === 'earthquakes') {
           this._earthquakeListControl?.refresh();
@@ -11530,6 +11538,37 @@ export class StyleManager {
       this._syncFirmsSensorChips();
     });
     this._syncFirmsSensorChips();
+  }
+
+  _syncInstallationClassChips() {
+    const enabled = this._dataManager?.isEnabled?.('military-installations') === true;
+    if (this._installationClassChips) this._installationClassChips.hidden = !enabled;
+    const layer = this._dataManager?.layers?.get('military-installations')?.module;
+    const flags = installationClassFilterFlags(layer?.getParams?.()?.installationClassFilter);
+    const chips = this._installationClassChips?.querySelectorAll?.('[data-installation-class]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = flags[chip.dataset.installationClass] === true;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initInstallationClassChips() {
+    if (!this._installationClassChips) return;
+    this._installationClassChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-installation-class]');
+      if (!chip || !this._installationClassChips.contains(chip)) return;
+      const layer = this._dataManager?.layers?.get('military-installations')?.module;
+      const current = layer?.getParams?.()?.installationClassFilter;
+      const next = toggleInstallationClassFilter(current, chip.dataset.installationClass);
+      this._dataManager?.setLayerParams?.('military-installations', {
+        installationClassFilter: next,
+      }, { origin: 'user' });
+      this._syncInstallationClassChips();
+      if (this._installationsListOpen) this._syncInstallationsViewportList();
+    });
+    this._syncInstallationClassChips();
   }
 
   _initEarthquakeDepthChips() {

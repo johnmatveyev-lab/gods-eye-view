@@ -17,6 +17,11 @@ import {
 // sequentially so overlapping renders cannot stack requests on the proxy.
 import { warmFireAnchorFloors } from './fireAnchors.js';
 import { normalizeMilitaryInstallations } from './militaryInstallationData.js';
+import {
+  DEFAULT_INSTALLATION_CLASS_FILTER,
+  filterInstallationsByClass,
+  normalizeInstallationClassFilter,
+} from './militaryInstallationClassFilter.js';
 import { isSceneClickCaptured, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 
 const LAYER_ID = 'military-installations';
@@ -78,6 +83,7 @@ const state = {
   clickHandler: null,
   timer: null,
   googleSearchRequested: false,
+  classFilter: DEFAULT_INSTALLATION_CLASS_FILTER,
 };
 
 function colorFor(record) {
@@ -231,8 +237,12 @@ function clearRendered() {
  * and the cohort count honest.
  * @returns {Array<object>} Records to render this paint.
  */
+function visibleRecords() {
+  return filterInstallationsByClass(state.records, state.classFilter, state.selectedId);
+}
+
 function renderableRecords() {
-  const rendered = state.records.slice(0, MAX_RENDERED);
+  const rendered = visibleRecords().slice(0, MAX_RENDERED);
   if (!state.selectedId) return rendered;
   if (rendered.some((record) => record.id === state.selectedId)) return rendered;
   const selected = state.recordById.get(state.selectedId);
@@ -546,6 +556,26 @@ const militaryInstallationsLayer = {
     clearSelectedEntityContextForLayer(LAYER_ID);
     state.selectedId = null;
   },
+  /**
+   * Class chips re-filter in-memory records. Never hits Overpass or Places.
+   * @param {{ installationClassFilter?: unknown }} [params]
+   * @returns {boolean}
+   */
+  setParams(params = {}) {
+    if (!params || typeof params !== 'object') return false;
+    if (!Object.hasOwn(params, 'installationClassFilter')) return true;
+    const next = normalizeInstallationClassFilter(params.installationClassFilter);
+    if (next == null) return false;
+    if (next !== state.classFilter) {
+      state.classFilter = next;
+      if (state.enabled && state.dataSource) renderRecords();
+    }
+    return true;
+  },
+  /** @returns {{ installationClassFilter: string }} */
+  getParams() {
+    return { installationClassFilter: state.classFilter };
+  },
   update() { return loadInstallations(); },
   /** Request a one-shot Google Maps Places search around the current map view. */
   searchNearby() {
@@ -560,13 +590,14 @@ const militaryInstallationsLayer = {
     clearRendered();
     if (state.dataSource && viewer) viewer.dataSources.remove(state.dataSource, true);
     state.dataSource = null;
+    state.classFilter = DEFAULT_INSTALLATION_CLASS_FILTER;
   },
   /**
    * Snapshot the current bbox payload. Does not fetch.
    * @returns {Array<object>} In-memory records for the last successful view.
    */
   getViewportRecords() {
-    return state.records.slice();
+    return visibleRecords();
   },
   getNearby(center, rangeM, maxCount = 50) {
     if (!center) return [];
@@ -577,7 +608,7 @@ const militaryInstallationsLayer = {
     const approximateLimit = Number.isFinite(range)
       ? range * 1.03 + DISTANCE_PREFILTER_MARGIN_M
       : Infinity;
-    for (const record of state.records) {
+    for (const record of visibleRecords()) {
       if (record.kind !== 'installation') continue;
       if (approximateSurfaceDistanceM(
         centerCartographic.latitude,

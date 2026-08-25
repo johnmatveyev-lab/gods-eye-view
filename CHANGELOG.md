@@ -60,6 +60,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Mapped Installations has client-only **Airfield | Naval | Range | Land |
+  Places** chips on the Sites list. Default all on matches the current
+  OSM/Places viewport. Naval off hides `naval_base` markers and keeps the
+  other classes; missing or unknown `class` stays visible. A selected
+  installation stays. Last-off can empty the viewport except the selection.
+  Chip changes re-filter in-memory records — no extra Overpass/Places fetch
+  and no new `/api`. Preference persists on `military-installations`
+  (`i.k.*`). Hidden when the layer is off. Existing OSM/Places military
+  layer only.
 - Earthquake **Tsunami only** toggle sits next to the magnitude, time, and
   depth chips. Default off matches the current USGS all_day discs. On keeps
   events whose `properties.tsunami === 1`; missing or `0` hide. A selected
