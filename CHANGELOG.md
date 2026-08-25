@@ -30,9 +30,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+<<<<<<< HEAD
 - Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
   a row to fly to that event (cap 50). Empty or failed feed shows
   UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
+=======
+- Flights layer has a client-side altitude band (All / Surface / &lt;10k /
+  10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
+  the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
+  `meridian.altBand`. Empty bands show an empty layer. No `/api`.
+>>>>>>> 8a8a662 (Add client-side flight altitude band filter.)
 - Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
   camera-center aim point copy-coords and measure already use. Default off.
   Persists as `meridian.crosshair`. Clean view may keep it; credits stay
