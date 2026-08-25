@@ -5,6 +5,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Fixed
+
+- Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
+  the Radio layer also silences it. Starting a station unmutes. Compact
+  Context and Cockpit transports now expose the same control. No voice ducking
+  and no `/api/radio` changes.
+
 ### Changed
 
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
@@ -12,6 +19,28 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Contacts control that shows or hides the existing 250 km nearby
+  aircraft roster. Selecting a row still uses the current track action. Copy
+  ident stays on the tracked card. Cockpit enter still requires a selected
+  aircraft. Empty sky reports empty or unavailable rather than hanging. No new
+  range math, `/api`, or person-search.
+- Added a Look control that cycles the existing sensor styles — CRT, NVG,
+  FLIR, Noir, Snow, then default — through the same setter the share URL and
+  voice already use. No new looks.
+- Hosted globe honors `prefers-reduced-motion` and a persistable DISPLAY
+  Still toggle (`meridian.reduceMotion`). Reduce-motion cuts idle orbit,
+  pulsing brackets, and trail flourish; fly-to Home and other functional
+  camera moves stay live. Data polls and `/api` are unchanged.
+- Added a Clear annotations control on the globe chrome. It calls the existing
+  whiteboard `clear()` action so hosted users can erase voice marks without a
+  spoken command. The control is disabled when the board is empty. Trails,
+  models, and tracking are unchanged.
+- Added a filter field at the top of the Data Layers list. It matches the
+  visible layer name plus existing voice common-names (fires, ships, bikes,
+  traffic, cameras, and the rest of that map). Empty query shows the full
+  legal list. TeleGeography cables, OpenSky, and Google News stay off the
+  list; the cables layer remains a registered no-op and is hidden from the
+  panel. UI filter only — no new `/api` routes or data sources.
 - Added a copy control on the selected-contact card for the visible asset
   ident (aircraft callsign, else registration/hex; vessel name or MMSI;
   satellite name or NORAD). Clicking the ident or the copy control copies it
@@ -40,6 +69,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Added a Display `km | nm | mi` control that reformats existing range, contact,
+  and HUD altitude labels. The choice persists as `meridian.units`; first visit
+  keeps today's kilometre labels.
 - Hidden tabs and offline windows pause flight/layer poll timers and the HUD
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
@@ -61,6 +93,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
   returns 503/400 with variable names only.
+- Added hosted TomTom traffic tiles: `src/data/tomtom.js` owns the
+  budget-governed proxy, the Vite plugin forwards, and
+  `api/tomtom/[...path].js` serves `/api/tomtom/status` and flow tiles on
+  Vercel (256-tile memory cache, optional `/tmp`, in-isolate daily
+  budget, default 40k). A rewrite sends `*.pbf` tile URLs to the
+  function so they are not a static 404. Keyless installs return 503
+  `{error:'no_key'}` without contacting TomTom. Responses never echo
+  the key or upstream URL. This extract does not wrap `/api/ais-live`;
+  OpenSky stays off.
 - Added Vercel Node catch-all `api/[...path].js` that runs the same live
   `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
   adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
@@ -104,6 +145,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “OpenSky” is refused with “OpenSky is disabled”. Civilian flights stay
   labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
   compatibility path and never contacts opensky-network.org.
+- Voice “Google News” / “news RSS” is refused with “Google News RSS is
+  disabled”. Cockpit headlines stay GDELT with citation and never fetch
+  news.google.com. No Google News source picker.
 
 ### Changed
 

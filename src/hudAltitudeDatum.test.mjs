@@ -126,9 +126,14 @@ test('the corner ALT readout prints the MSL height, never the ellipsoidal one', 
     'the ALT readout must convert the camera height before printing it',
   );
   assert.equal(
-    has(/`ALT: \$\{Math\.round\(altMslM\)\}m/),
+    has(/import \{[^}]*\bformatHudAltitude\b[^}]*\} from '\.\/units\.js';/s),
     true,
-    'the #hud-alt line must print altMslM',
+    'HUD altitude strings must go through the shared unit formatter',
+  );
+  assert.equal(
+    has(/`ALT: \$\{formatHudAltitude\(altMslM\)\}/),
+    true,
+    'the #hud-alt line must print the MSL height through formatHudAltitude',
   );
   assert.equal(
     has(/`ALT: \$\{Math\.round\(altM\)\}m/),

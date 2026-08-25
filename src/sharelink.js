@@ -427,6 +427,7 @@ export class ShareLinkManager {
   onStyleChange(styleName) {
     this._currentStyle = styleName;
     this._scheduleUpdate();
+    this._scheduleLastViewPersist();
   }
 
   onToggleChange(bloom, sharpen, extras = {}) {
@@ -477,6 +478,18 @@ export class ShareLinkManager {
   /** Copy a current-state snapshot with a copy-time timestamp. Returns true on success. */
   async copyLink({ nowMs = Date.now() } = {}) {
     const copiedUrl = this.currentShareUrl({ nowMs, includeCreatedAt: true });
+    if (!copiedUrl) return false;
+    try {
+      await navigator.clipboard.writeText(copiedUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Copy the live share URL (same encode helper, no copy-time timestamp). */
+  async copyViewLink() {
+    const copiedUrl = this.currentShareUrl();
     if (!copiedUrl) return false;
     try {
       await navigator.clipboard.writeText(copiedUrl);

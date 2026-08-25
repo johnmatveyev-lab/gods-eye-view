@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { isReduceMotionEnabled, subscribeReduceMotion } from './reduceMotion.js';
 import { deriveWeatherEffectProfile, weatherAltitudeFactors } from './weatherEffectsMath.js';
 import { prefKey, readPrefKey, writePrefKey } from './prefStorage.js';
 
@@ -191,7 +192,10 @@ export class CockpitCloudEffectsController {
     this.pending = null;
     this.abort = null;
     this.destroyed = false;
-    this.reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.reducedMotion = isReduceMotionEnabled();
+    this._unsubReduceMotion = subscribeReduceMotion((enabled) => {
+      this.reducedMotion = enabled;
+    });
     this.enabled = this.readEnabledPreference();
 
     this.onResize = () => this.resize();
@@ -518,6 +522,8 @@ export class CockpitCloudEffectsController {
   destroy() {
     this.destroyed = true;
     this.stop();
+    this._unsubReduceMotion?.();
+    this._unsubReduceMotion = null;
     window.removeEventListener('resize', this.onResize);
     window.removeEventListener('gev:cockpit-mode-changed', this.onCockpitMode);
     window.removeEventListener('gev:cockpit-weather-toggle', this.onEnabledChange);

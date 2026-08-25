@@ -285,7 +285,10 @@ test('Vite plugin is a one-line forward and the Vercel wrapper exists', () => {
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.ok(vercelJson.functions['api/regional-brief.js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
 });
 
 test('handler sources stay GDELT + Open-Meteo; Google News / OpenSky stay out', () => {
@@ -302,7 +305,7 @@ test('handler sources stay GDELT + Open-Meteo; Google News / OpenSky stay out', 
   assert.match(handler, /api\.gdeltproject\.org/);
   assert.match(handler, /api\.open-meteo\.com/);
   assert.match(handler, /GDELT Project/);
-  assert.doesNotMatch(handler, /GOOGLE_NEWS_RSS_ENABLED/);
+  assert.match(handler, /GOOGLE_NEWS_RSS_ENABLED !== false/);
   assert.match(
     html,
     /class="cockpit-weather-credit"[^>]*href="https:\/\/open-meteo.com\/"[^>]*>Weather data by Open-Meteo.com/,

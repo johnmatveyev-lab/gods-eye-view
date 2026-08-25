@@ -138,7 +138,10 @@ test('Vercel radio entrypoint forwards to the allowlisted broker', () => {
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/radio/[...path].js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
 });
 

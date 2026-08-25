@@ -1,5 +1,7 @@
 import { governorRequestRender } from '../renderGovernor.js';
 import { markDetectionSourcesChanged } from './detection.js';
+import { canPoll } from '../pollPresence.js';
+import { applyLayerListFilter, isBannedToggleLayerId } from './layerListFilter.js';
 function cloneLayerParams(value) {
   if (Array.isArray(value)) return value.map(cloneLayerParams);
   if (value && typeof value === 'object') {
@@ -118,7 +120,7 @@ export function layerFeedState(stats = {}) {
  * for real-time data overlays on the CesiumJS globe.
  */
 export class DataLayerManager {
-  constructor(viewer, { allowQaRegistration = false } = {}) {
+  constructor(viewer, { allowQaRegistration = false, canPoll: canPollFn = canPoll } = {}) {
     this.viewer = viewer;
     this.layers = new Map(); // id → { module, enabled, initialized, intervalId, lifecycleState, lifecycleUncertain }
     this._listeners = new Set();
@@ -129,9 +131,12 @@ export class DataLayerManager {
     this._registrationDispositions = null;
     this._allowQaRegistration = allowQaRegistration === true;
     this._qaLayerIds = new Set();
+    this._canPoll = typeof canPollFn === 'function' ? canPollFn : canPoll;
     this._liveScheduler = null;
     this._liveSchedulerUnsubscribe = null;
     this._pollsSuspended = false;
+    this._layerListFilterInput = null;
+    this._layerListFilterQuery = '';
   }
 
   /**
@@ -393,6 +398,7 @@ export class DataLayerManager {
       || entry.destroying
       || entry.refreshing
       || signal?.aborted
+      || !this._canPoll()
     ) return false;
     const refreshEpoch = ++entry.refreshEpoch;
     entry.refreshing = true;
@@ -621,22 +627,35 @@ export class DataLayerManager {
 
   _armUpdateLoop(layerId, entry) {
     if (this._pollsSuspended && this._isChromePollLayer(entry)) return;
+    if (entry.intervalId) return;
     const { refreshInterval } = this._pollSpec(entry);
     const updateInterval = Number(entry.module.updateInterval);
-    if (entry.intervalId) {
-      clearInterval(entry.intervalId);
-      entry.intervalId = null;
-    }
     if (refreshInterval > 0) {
       entry.intervalId = setInterval(() => {
+        if (!this._canPoll()) return;
         void this._runPeriodicUpdate(layerId, entry);
       }, refreshInterval);
     } else if (updateInterval === 0) {
       entry.intervalId = setInterval(() => {
         if (!entry.enabled) return;
+        if (!this._canPoll()) return;
         this._refreshTogglePanel();
       }, entry.module.statsRefreshInterval || 1000);
     }
+  }
+
+  /**
+   * One refresh of already-armed live layers after the tab is visible and
+   * online again. Does not create new interval handles.
+   */
+  resumePausedPolls() {
+    if (!this._canPoll()) return Promise.resolve();
+    const jobs = [];
+    for (const [layerId, entry] of this.layers) {
+      if (!entry.enabled || entry.lifecycleState !== 'enabled' || !entry.intervalId) continue;
+      jobs.push(this._runPeriodicUpdate(layerId, entry));
+    }
+    return Promise.all(jobs);
   }
 
   toggle(layerId, { origin = 'programmatic', notificationToken = null } = {}) {
@@ -2119,10 +2138,28 @@ export class DataLayerManager {
 
   /**
    * Build the toggle panel UI inside the given container element.
+   * @param {HTMLElement} container Layer-row host (`#data-toggles`).
+   * @param {{filterInput?: HTMLInputElement|null}} [options]
    */
-  buildTogglePanel(container) {
+  buildTogglePanel(container, { filterInput = null } = {}) {
     this._toggleContainer = container;
+    this._layerListFilterQuery = filterInput?.value || this._layerListFilterQuery || '';
+    if (filterInput && filterInput !== this._layerListFilterInput) {
+      this._layerListFilterInput = filterInput;
+      filterInput.addEventListener('input', () => {
+        this._layerListFilterQuery = filterInput.value;
+        this._applyLayerListFilter();
+      });
+    }
     this._renderToggles();
+  }
+
+  _applyLayerListFilter() {
+    applyLayerListFilter(
+      this._toggleContainer,
+      this._layerListFilterQuery || '',
+      this.getAll(),
+    );
   }
 
   _renderToggles() {
@@ -2130,7 +2167,7 @@ export class DataLayerManager {
     this._toggleContainer.innerHTML = '';
 
     for (const layer of this.getAll()) {
-      if (!layer.showInTogglePanel) continue;
+      if (!layer.showInTogglePanel || isBannedToggleLayerId(layer.id)) continue;
       const row = document.createElement('div');
       row.className = 'data-toggle-row';
       row.dataset.layerId = layer.id;
@@ -2201,6 +2238,7 @@ export class DataLayerManager {
 
       this._toggleContainer.appendChild(row);
     }
+    this._applyLayerListFilter();
   }
 
   /**

@@ -58,12 +58,11 @@ function check(name, ok, detail) {
 // Substrings that MUST be present across the registered per-layer credits.
 const REQUIRED_CREDIT_SUBSTRINGS = [
   'OpenStreetMap contributors', // ODbL — datacenters/dams/roads
-  'adsb.lol',                    // ODbL — military traces
-  'TeleGeography',               // CC BY-NC-SA — cables
+  'adsb.lol',                    // ODbL — civilian and military flights
   'NASA FIRMS',                  // fires
   'CelesTrak',                   // satellites
   'U.S. Geological Survey',      // earthquakes
-  'OpenSky Network',             // flights
+  'GDELT',                       // cockpit headlines
   'AISStream',                   // vessels
   'City of Austin',              // CCTV
   'Radio Browser',               // internet-radio directory

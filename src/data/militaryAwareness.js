@@ -13,6 +13,7 @@ import {
   getAwarenessNavigationTargets,
   summarizeAwarenessCohort,
 } from './militaryAwarenessEngine.js';
+import { subscribeDistanceUnit } from '../units.js';
 import { announceNavigationAuthority } from '../navigationPolicy.js';
 import { celestialScreenAngle, getKeyholeGeometry } from '../celestialRing.js';
 import { bearingBetweenCoordinates } from '../cockpitMath.js';
@@ -963,12 +964,17 @@ export function findCompatibleHistoryIndex(history, startIndex, direction, {
   return -1;
 }
 
+function awarenessWindowPhrase() {
+  return `${formatAwarenessDistance(AWARENESS_RADIUS_M)} window`;
+}
+
 function navigationControlsHtml() {
   const canPrevious = state.navigationIndex > 0;
+  const windowPhrase = awarenessWindowPhrase();
   return `<div class="military-awareness-controls" role="group" aria-label="Global Context navigation">
-    <button type="button" data-awareness-action="previous" title="Previous — prior visited contact in the 250 km window"${canPrevious ? '' : ' disabled'}>PREVIOUS</button>
+    <button type="button" data-awareness-action="previous" title="Previous — prior visited contact in the ${windowPhrase}"${canPrevious ? '' : ' disabled'}>PREVIOUS</button>
     <button type="button" data-awareness-action="focus">FOCUS</button>
-    <button type="button" data-awareness-action="next" title="Next — nearest unvisited contact in the 250 km window"${canNavigateNext() ? '' : ' disabled'}>NEXT</button>
+    <button type="button" data-awareness-action="next" title="Next — nearest unvisited contact in the ${windowPhrase}"${canNavigateNext() ? '' : ' disabled'}>NEXT</button>
   </div>`;
 }
 
@@ -1737,6 +1743,12 @@ const militaryAwarenessLayer = {
   },
   init(viewer) {
     detachRuntimeListeners();
+    state.unitsUnsubscribe?.();
+    state.unitsUnsubscribe = subscribeDistanceUnit(() => {
+      if (!state.enabled) return;
+      renderResults();
+      scheduleDirectionOverlayUpdate(true);
+    });
     state.viewer = viewer;
     state.subjectListener = (event) => {
       if (!state.enabled) return;
@@ -1829,8 +1841,15 @@ const militaryAwarenessLayer = {
     refreshSelectedSubject();
     return Promise.resolve();
   },
+  refreshDistanceLabels() {
+    if (!state.enabled) return;
+    renderResults();
+    scheduleDirectionOverlayUpdate(true);
+  },
   destroy() {
     this.disable();
+    state.unitsUnsubscribe?.();
+    state.unitsUnsubscribe = null;
     detachRuntimeListeners();
     state.panel?.removeEventListener('click', state.panelClickListener);
     state.panelClickListener = null;

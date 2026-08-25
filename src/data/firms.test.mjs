@@ -104,14 +104,17 @@ test('Vercel Node entrypoints forward to handleFirmsHttp', () => {
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/tomtom.js')), false);
-  assert.equal(existsSync(path.join(ROOT, 'api/tomtom')), false);
+  assert.equal(existsSync(path.join(ROOT, 'api/tomtom/[...path].js')), true);
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/firms/index.js']);
   assert.ok(vercelJson.functions['api/firms/status.js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
 });
 
 test('GET /api/firms/status → 200 JSON hasKey true/false, never NOT_FOUND', async () => {
