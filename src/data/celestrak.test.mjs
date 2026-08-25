@@ -225,9 +225,5 @@ test('Vite forwards to the extracted plugin; no ais-live/google/voice wrap', () 
     assert.match(rule.destination, /^\/api\/tomtom\//);
   }
   const functionKeys = Object.keys(vercelJson.functions);
-<<<<<<< HEAD
-  assert.equal(functionKeys.some((key) => /ais-live|google\/text-search|voice\//.test(key)), false);
-=======
   assert.equal(functionKeys.some((key) => /ais-live|google\/text-search|google\/\[\.\.\.path\]|voice\//.test(key)), false);
->>>>>>> 6320f90 (Keep nearby-places allowed in the CelesTrak Vercel pin)
 });
