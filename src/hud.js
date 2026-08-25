@@ -85,6 +85,9 @@ export class IntelHUD {
     this._summaryRequest = null;
     this._lastSummarySignature = '';
     this._summaryRevision = 0;
+    this._liveScheduler = null;
+    this._liveSchedulerUnsubscribe = null;
+    this._livePollsSuspended = false;
     // One-shot guards so the very first summary lands immediately instead of
     // waiting for the 15s interval tick: B) swap the "Awaiting telemetry..."
     // placeholder for the deterministic line as soon as metrics exist, then
@@ -117,7 +120,12 @@ export class IntelHUD {
       }
       // First settled view: request the AI summary now rather than waiting for
       // the periodic tick (saves up to ~15s of "Awaiting telemetry...").
-      if (!this._firstSummaryKicked && this._visible && this._latestMetrics) {
+      if (
+        !this._firstSummaryKicked
+        && this._visible
+        && this._latestMetrics
+        && !this._livePollsSuspended
+      ) {
         this._firstSummaryKicked = true;
         void this._updateSummary(true, true);
       }
@@ -231,11 +239,72 @@ export class IntelHUD {
       this._updateCameraData();
     }, 250);
 
-    // Semantic summary refresh cadence
+    this._armSummaryInterval();
+  }
+
+  _armSummaryInterval() {
+    if (this._summaryInterval || this._livePollsSuspended) return;
     this._summaryInterval = setInterval(() => {
-      if (!this._visible) return;
+      if (!this._visible || this._livePollsSuspended) return;
       void this._updateSummary(true);
     }, HUD_SUMMARY_INTERVAL_MS);
+  }
+
+  _disarmSummaryInterval() {
+    if (!this._summaryInterval) return;
+    clearInterval(this._summaryInterval);
+    this._summaryInterval = null;
+  }
+
+  /**
+   * Bind the HUD summary poll to the chrome live-poll scheduler.
+   * Voice sessions are not paused here.
+   * @param {{subscribe?: Function}|null} scheduler Chrome scheduler.
+   */
+  attachLiveScheduler(scheduler) {
+    this.detachLiveScheduler();
+    this._liveScheduler = scheduler || null;
+    if (typeof this._liveScheduler?.subscribe !== 'function') return;
+    this._liveSchedulerUnsubscribe = this._liveScheduler.subscribe((state) => {
+      this._syncLivePolls(state);
+    });
+  }
+
+  detachLiveScheduler() {
+    this._liveSchedulerUnsubscribe?.();
+    this._liveSchedulerUnsubscribe = null;
+    this._liveScheduler = null;
+  }
+
+  _syncLivePolls(state) {
+    if (state?.suspended) {
+      this.pauseSummaryPoll();
+      return;
+    }
+    this.resumeSummaryPoll({ refresh: this._livePollsSuspended });
+  }
+
+  /** Pause the OpenAI HUD summary interval. Idempotent. */
+  pauseSummaryPoll() {
+    this._livePollsSuspended = true;
+    this._disarmSummaryInterval();
+  }
+
+  /**
+   * Resume the HUD summary interval.
+   * @param {{refresh?: boolean}} [options] When true, request one summary first.
+   */
+  resumeSummaryPoll({ refresh = false } = {}) {
+    const wasSuspended = this._livePollsSuspended;
+    this._livePollsSuspended = false;
+    if (refresh && wasSuspended) this.refreshSummaryOnce();
+    this._armSummaryInterval();
+  }
+
+  /** One HUD summary refresh after chrome returns to visible+online. */
+  refreshSummaryOnce() {
+    if (this._livePollsSuspended || !this._visible) return;
+    void this._updateSummary(true, true);
   }
 
   /**
@@ -619,6 +688,7 @@ export class IntelHUD {
    *   by character; otherwise sets it instantly.
    */
   async _updateSummary(animate = false, force = false) {
+    if (this._livePollsSuspended) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
@@ -848,10 +918,11 @@ export class IntelHUD {
 
   /** Tear down all running intervals. Call when discarding the HUD instance. */
   destroy() {
+    this.detachLiveScheduler();
     clearInterval(this._updateInterval);
     clearInterval(this._recBlinkInterval);
     clearInterval(this._timestampInterval);
-    clearInterval(this._summaryInterval);
+    this._disarmSummaryInterval();
     clearInterval(this._summaryTypingInterval);
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();
