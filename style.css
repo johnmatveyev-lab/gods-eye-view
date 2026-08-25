@@ -1189,6 +1189,12 @@ body.recording-mode #scale-bar {
   border-radius: 8px 8px 0 0;
 }
 
+/* Labels/declutter sits under Detection sliders as its own chip. */
+.pp-toggle-group .pp-slider-row.visible ~ .pp-toggle-btn {
+  border-radius: 8px;
+  margin-top: 6px;
+}
+
 .pp-slider {
   flex: 1;
   -webkit-appearance: none;

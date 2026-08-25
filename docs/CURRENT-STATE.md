@@ -2,6 +2,15 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — contact label declutter (plan 59)** (`src/contactLabels.js`).
+> DISPLAY gets a Labels on/off control (`#contact-labels-toggle`). Off hides
+> ambient contact billboard text (detection callsigns and contact-source
+> label/track overlays) using `skipLabel` / `label.show` when present,
+> otherwise by skipping the text glyph. Dots, models, and trails stay.
+> Selected/tracked ident cards still show the callsign. Density remains an
+> independent detection budget. Persists `meridian.contactLabels` (default on).
+> Display only — no `/api`, no person names.
+
 > **2026-08-25 — stop-tracking control (plan 54)** (`src/chrome/stopTracking.js`,
 > `#stop-tracking` in `#top-center-actions`). While a contact owns the follow
 > camera, camera chrome shows **Stop tracking**. The click calls the existing
