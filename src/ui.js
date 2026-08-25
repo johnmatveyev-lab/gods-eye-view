@@ -73,6 +73,10 @@ import {
   installWheelZoomSign,
 } from './invertScroll.js';
 import {
+  attachGridOverlay,
+  createCesiumGridHost,
+} from './gridOverlay.js';
+import {
   CelestialRing,
   getKeyholeFadeTuning,
   isCelestialRingStyleSupported,
@@ -113,6 +117,10 @@ import {
   persistDetectionDensity,
   readPersistedDetectionDensity,
 } from './detectionDensityChrome.js';
+import {
+  getContactLabelsEnabled,
+  setContactLabelsEnabled,
+} from './contactLabels.js';
 import trafficLayer from './data/traffic.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
@@ -138,7 +146,15 @@ import bikeshareLayer from './data/bikeshare.js';
 import aisLiveVesselsLayer from './data/aisLiveVessels.js';
 import militaryAwarenessLayer from './data/militaryAwareness.js';
 import militaryInstallationsLayer from './data/militaryInstallations.js';
-import rocketLaunchesLayer from './data/rocketLaunches.js';
+import rocketLaunchesLayer, { flyToExistingLaunchPad } from './data/rocketLaunches.js';
+import {
+  applyLaunchesPanelToggle,
+  launchesPanelLoadingPresentation,
+  launchesPanelRowAction,
+  loadLaunchesPanelPayload,
+  nextLaunchesPanelOpen,
+  renderLaunchesPanelList,
+} from './data/launchesPanel.js';
 import {
   aggregateLayerLoading,
   canPresentDeferredStatusNotice,
@@ -231,6 +247,14 @@ import {
   installPowerMode,
   setPowerMode as writeViewerPowerMode,
 } from './powerMode.js';
+import {
+  initScaleBarPreference,
+  installScaleBar,
+  isScaleBarEnabled,
+  refreshScaleBar,
+  setScaleBarEnabled,
+  uninstallScaleBar,
+} from './scaleBar.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -2419,11 +2443,15 @@ export class StyleManager {
     ].filter(Boolean);
     initDistanceUnits();
     this._syncUnitsUi();
+    initScaleBarPreference();
+    this._scaleBarBtn = document.getElementById('scale-bar-toggle');
+    this._syncScaleBarUi();
     this._unitsUnsubscribe = subscribeDistanceUnit(() => {
       this._syncUnitsUi();
       this.hud?.refreshDisplayUnits?.();
       militaryAwarenessLayer.refreshDistanceLabels?.();
       this.cockpitView?.refreshDistanceUnits?.();
+      refreshScaleBar();
     });
     this._powerBtns = [
       document.getElementById('power-normal'),
@@ -2444,6 +2472,7 @@ export class StyleManager {
     this._detectionOpacityRow = document.getElementById('detection-opacity-row');
     this._detectionOpacitySlider = document.getElementById('detection-opacity-slider');
     this._detectionOpacityValue = document.getElementById('detection-opacity-value');
+    this._contactLabelsBtn = document.getElementById('contact-labels-toggle');
     let storedDetectionAllocation = 'ELASTIC';
     try {
       storedDetectionAllocation = localStorage.getItem(DETECTION_ALLOCATION_STORAGE_KEY) || 'ELASTIC';
@@ -2452,6 +2481,7 @@ export class StyleManager {
     this._celestialBtn = document.getElementById('celestial-toggle');
     this._liveSunBtn = document.getElementById('live-sun-toggle');
     this._liveSunEnabled = false;
+    this._gridBtn = document.getElementById('grid-toggle');
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2579,6 +2609,14 @@ export class StyleManager {
     this._globalLoadingLabel = document.getElementById('global-loading-label');
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
     this._homeViewBtn = document.getElementById('home-view');
+    this._launchesPanelToggle = document.getElementById('launches-panel-toggle');
+    this._launchesPanel = document.getElementById('launches-panel');
+    this._launchesPanelList = document.getElementById('launches-panel-list');
+    this._launchesPanelCount = document.getElementById('launches-panel-count');
+    this._launchesPanelOpen = false;
+    this._launchesPanelRows = [];
+    this._launchesPanelSelectedId = null;
+    this._launchesPanelLoadToken = 0;
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._stopTrackingBtn = document.getElementById('stop-tracking');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
@@ -2693,6 +2731,16 @@ export class StyleManager {
         focus: false,
       }),
     });
+
+    // Local lat/lon graticule. Persist meridian.grid; default off. This is
+    // chrome + ellipsoid polylines, not a data layer or share-link field.
+    let gridStorage = null;
+    try { gridStorage = globalThis.localStorage ?? null; } catch { gridStorage = null; }
+    this._gridOverlay = attachGridOverlay(
+      createCesiumGridHost(viewer, Cesium, () => governorRequestRender('grid')),
+      { storage: gridStorage },
+    );
+    this._syncGridButton();
 
     // Share Link Manager
     this.shareLinkManager = new ShareLinkManager(viewer, {
@@ -2869,6 +2917,7 @@ export class StyleManager {
     this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
+    this._initLaunchesPanel();
     this._initStopTrackingButton();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
@@ -2876,6 +2925,7 @@ export class StyleManager {
     this._initModels3dToggle();
     this._initTrailsToggle();
     this._initLiveSunToggle();
+    this._initScaleBar();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -3714,6 +3764,12 @@ export class StyleManager {
       setReduceMotionOverride(!isReduceMotionEnabled());
       this._syncReduceMotionButton();
     });
+
+    this._gridBtn?.addEventListener('click', () => {
+      const next = this._gridOverlay?.isEnabled() !== true;
+      this._gridOverlay?.setEnabled(next);
+      this._syncGridButton();
+    });
     if (this._cleanViewExitBtn) {
       this._cleanViewExitBtn.addEventListener('click', () => this.toggleCleanView(false));
     }
@@ -3745,6 +3801,12 @@ export class StyleManager {
         this.setPowerMode(button.dataset.power);
       });
     }
+
+    this._scaleBarBtn?.addEventListener('click', () => {
+      setScaleBarEnabled(!isScaleBarEnabled());
+      this._syncScaleBarUi();
+      refreshScaleBar();
+    });
 
     for (const slider of [this._detectionFadeSlider, this._detectionOpacitySlider]) {
       slider?.addEventListener('input', () => {
@@ -3919,6 +3981,18 @@ export class StyleManager {
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', String(active));
     }
+  }
+
+  _syncScaleBarUi() {
+    const enabled = isScaleBarEnabled();
+    this._scaleBarBtn?.classList.toggle('active', enabled);
+    this._scaleBarBtn?.setAttribute('aria-pressed', String(enabled));
+  }
+
+  _initScaleBar() {
+    installScaleBar(this.viewer);
+    this._syncScaleBarUi();
+    refreshScaleBar();
   }
 
   _syncUnitsUi() {
@@ -10270,6 +10344,16 @@ export class StyleManager {
   }
 
   /**
+   * Mirror the persisted lat/lon graticule on the DISPLAY Grid toggle.
+   * @returns {void}
+   */
+  _syncGridButton() {
+    const enabled = this._gridOverlay?.isEnabled() === true;
+    this._gridBtn?.classList.toggle('active', enabled);
+    this._gridBtn?.setAttribute('aria-pressed', String(enabled));
+  }
+
+  /**
    * Toggles idle orbit around the current POI. Decorative spin is refused
    * while reduced motion is on; fly-to Home is unaffected.
    * @returns {void}
@@ -10306,6 +10390,76 @@ export class StyleManager {
   /** Wire the Home control that flies to the settled first-load camera. */
   _initHomeViewButton() {
     this._homeViewBtn?.addEventListener('click', () => this.goHome());
+  }
+
+  /** Wire the hosted Launches panel that lists the existing LL2 payload. */
+  _initLaunchesPanel() {
+    if (!this._launchesPanelToggle || !this._launchesPanel) return;
+    this._launchesPanelToggle.addEventListener('click', () => {
+      this._toggleLaunchesPanel();
+    });
+    this._launchesPanelList?.addEventListener('click', (event) => {
+      const button = event.target.closest?.('[data-launch-id]');
+      if (!button) return;
+      this._activateLaunchesPanelRow(button.dataset.launchId);
+    });
+  }
+
+  _toggleLaunchesPanel() {
+    const open = nextLaunchesPanelOpen(this._launchesPanelOpen);
+    this._launchesPanelOpen = open;
+    applyLaunchesPanelToggle({
+      open,
+      toggle: this._launchesPanelToggle,
+      panel: this._launchesPanel,
+    });
+    if (open) void this._loadLaunchesPanel();
+  }
+
+  _renderLaunchesPanelPresentation(presentation) {
+    if (this._launchesPanelList) {
+      this._launchesPanelList.innerHTML = renderLaunchesPanelList(
+        presentation,
+        this._launchesPanelSelectedId,
+      );
+    }
+    if (this._launchesPanelCount) {
+      this._launchesPanelCount.textContent = Number.isFinite(presentation?.count)
+        ? `${presentation.count}`
+        : '—';
+    }
+  }
+
+  async _loadLaunchesPanel() {
+    const token = ++this._launchesPanelLoadToken;
+    this._renderLaunchesPanelPresentation(launchesPanelLoadingPresentation());
+    const presentation = await loadLaunchesPanelPayload({
+      cachedPayload: rocketLaunchesLayer.getPayload?.() || null,
+    });
+    if (token !== this._launchesPanelLoadToken || this._disposed) return;
+    this._launchesPanelRows = presentation.rows || [];
+    this._renderLaunchesPanelPresentation(presentation);
+  }
+
+  _activateLaunchesPanelRow(launchId) {
+    const row = this._launchesPanelRows.find((item) => item.id === launchId);
+    if (!row) return;
+    const action = launchesPanelRowAction(row);
+    this._launchesPanelSelectedId = action.selectedId;
+    this._renderLaunchesPanelPresentation({
+      kind: 'ready',
+      hang: false,
+      reason: '',
+      count: this._launchesPanelRows.length,
+      rows: this._launchesPanelRows,
+    });
+    if (action.kind === 'fly-to' && action.flyTo) {
+      this._stopOrbit();
+      if (this.viewer) {
+        this.viewer.trackedEntity = undefined;
+        flyToExistingLaunchPad(this.viewer, action.flyTo);
+      }
+    }
   }
 
   /**
@@ -10788,6 +10942,10 @@ export class StyleManager {
       cycleDetectionMode();
       this._syncShareState();
     });
+    this._contactLabelsBtn?.addEventListener('click', () => {
+      this._setContactLabelsEnabled(!getContactLabelsEnabled());
+    });
+    this._syncContactLabelsButtonState();
     this._cockpitDisplayToggleBtn?.addEventListener('click', () => {
       const open = this._cockpitDisplayToggleBtn.getAttribute('aria-expanded') === 'true';
       this._setCockpitDisclosure?.('display', !open);
@@ -10910,6 +11068,25 @@ export class StyleManager {
   }
 
   /**
+   * Persist and apply the Labels on/off preference. Density is unchanged.
+   * @param {boolean} enabled Whether ambient contact billboard text is shown.
+   * @returns {void}
+   */
+  _setContactLabelsEnabled(enabled) {
+    setContactLabelsEnabled(enabled !== false);
+    this._syncContactLabelsButtonState();
+    this.viewer?.scene?.requestRender?.();
+  }
+
+  _syncContactLabelsButtonState() {
+    const enabled = getContactLabelsEnabled();
+    this._contactLabelsBtn?.classList.toggle('active', enabled);
+    this._contactLabelsBtn?.setAttribute('aria-pressed', String(enabled));
+    const label = this._contactLabelsBtn?.querySelector('.pp-label');
+    if (label) label.textContent = enabled ? 'Labels' : 'Declutter';
+  }
+
+  /**
    * Updates the detection toggle button label and CSS classes to reflect
    * the current density-derived profile. Also toggles the density and
    * allocation controls together.
@@ -11019,6 +11196,7 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    uninstallScaleBar();
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
     this._layerStateCoordinator = null;
@@ -11031,6 +11209,7 @@ export class StyleManager {
       this.viewer?.canvas?.removeEventListener('wheel', this._initialShareGestureHandler);
       this._initialShareGestureHandler = null;
     }
+    this._launchesPanelLoadToken += 1;
     this._datacenterListMoveEndRemove?.();
     this._datacenterListMoveEndRemove = null;
     this._datacenterInViewList?.destroy();
@@ -11222,6 +11401,8 @@ export class StyleManager {
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();
+    this._gridOverlay?.destroy();
+    this._gridOverlay = null;
     // Clear transitions
     this.transitions.clear();
   }
