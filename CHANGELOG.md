@@ -39,6 +39,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   failed `/api/celestrak/starlink` load stays on Core and shows the existing
   feed-unavailable status. The choice persists through the existing layerState
   `catalog` option. Not the Plan 65 core-group picker. No new `/api`.
+- Added an Undo last annotation control next to Clear on the globe chrome.
+  It calls `removeLast()` so one wrong pin or area comes off without wiping
+  the board. Undo does not bump the clear() generation or abort in-flight
+  annotate. Disabled when the board is empty. Clear still empties all. No
+  new `/api`, GeoJSON export, or voice/LLM change.
+- Failed or stale Data Layers rows now expose a Retry chip that calls the
+  existing `refreshLayer()` path immediately. Healthy rows stay quiet; a
+  click while a refresh is in flight is ignored. Operators no longer have
+  to wait on the `retry Ns` countdown or toggle the layer. No `/api`.
 - Radio has a client-side min-bitrate floor (All / 64+ / 128+ / 192+ kbps)
   on the already-fetched Radio Browser directory. Default All keeps the
   current list. Null bitrate stays visible. A station already playing stays

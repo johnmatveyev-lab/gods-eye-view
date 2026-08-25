@@ -21,6 +21,9 @@ const FEED_STATE_LABELS = Object.freeze({
   unavailable: 'UNAVAILABLE',
 });
 
+/** Manager-owned row chip. Not a layer filter and not a getRowControls param. */
+export const LAYER_RETRY_CHIP_ID = 'manager-retry';
+
 const SUPERSEDED_VISIBILITY_INTENT = Symbol('superseded-visibility-intent');
 const VALID_LAYER_SERIALIZATION_DISPOSITIONS = new Set([
   'enabled-only',
@@ -79,7 +82,7 @@ export function layerFeedState(stats = {}) {
   const source = `${state.source || ''} ${state.coverage || ''}`;
   const hasExplicitFallback = typeof state.fallback === 'boolean';
   const hasPriorData = Number(state.count) > 0 || Boolean(state.lastUpdate);
-  const presentedError = state.error || state.lastError || state.managerRefreshError;
+  const presentedError = presentedLayerError(state);
   if (['unavailable', 'offline', 'down', 'error'].includes(status)) return 'unavailable';
   if (
     (presentedError || state.unavailable === true || state.available === false)
@@ -113,6 +116,50 @@ export function layerFeedState(stats = {}) {
     || state.available === false
   ) return 'degraded';
   return 'nominal';
+}
+
+/**
+ * Surfaceable feed error from a layer stats object. Modules use `error` or
+ * `lastError`; the manager adds `managerRefreshError` after a rejected tick.
+ * @param {object|null} stats Layer getStats() result.
+ * @returns {string|Error|null|undefined}
+ */
+export function presentedLayerError(stats = {}) {
+  const state = stats || {};
+  return state.error || state.lastError || state.managerRefreshError || null;
+}
+
+/**
+ * Whether a Data Layers row should show the manager-owned Retry chip.
+ * Unavailable/stale feeds and any presentedError on an unhealthy feed qualify.
+ * Healthy (nominal/loading) rows stay quiet, including zoom-in guidance copy.
+ * @param {object} layer Toggle-panel layer projection (`getAll()` shape).
+ * @returns {boolean}
+ */
+export function layerRetryChipVisible(layer = {}) {
+  if (!layer.enabled) return false;
+  if (layer.lifecycleState === 'enabling' || layer.lifecycleState === 'disabling') {
+    return false;
+  }
+  const stats = layer.stats || {};
+  const feedState = layerFeedState(stats);
+  if (feedState === 'nominal' || feedState === 'loading') return false;
+  if (feedState === 'unavailable' || feedState === 'stale') return true;
+  return Boolean(presentedLayerError(stats));
+}
+
+function layerRetryChipDescriptor(layer) {
+  if (!layerRetryChipVisible(layer)) return null;
+  const refreshing = layer.stats?.refreshing === true;
+  return {
+    id: LAYER_RETRY_CHIP_ID,
+    label: 'RETRY',
+    active: false,
+    busy: refreshing,
+    disabled: refreshing,
+    state: refreshing ? 'loading' : 'error',
+    title: refreshing ? 'Refresh already in flight' : 'Refresh this feed now',
+  };
 }
 
 /**
@@ -2212,51 +2259,64 @@ export class DataLayerManager {
       row.appendChild(topRow);
       row.appendChild(bottomRow);
 
-      // Optional per-layer sub-controls (chips + color legend). The click
-      // listener is delegated and attached once here, so it survives
-      // _refreshTogglePanel — which only rewrites the container's contents.
+      // Per-layer sub-controls (chips + color legend) plus the manager-owned
+      // Retry chip. The click listener is delegated and attached once here, so
+      // it survives _refreshTogglePanel — which only rewrites contents.
       const rowModule = this.layers.get(layer.id)?.module;
-      if (typeof rowModule?.getRowControls === 'function') {
-        // A layer whose controls settle asynchronously (a chunked catalog load
-        // that can also fail) pushes a re-render through this; nothing else
-        // would repaint the row before its next scheduled refresh.
-        rowModule.setRowControlsListener?.(() => this._refreshTogglePanel());
-        const controls = document.createElement('div');
-        controls.className = 'data-toggle-controls';
-        controls.addEventListener('click', (event) => {
-          const button = event.target?.closest?.('.data-toggle-chip');
-          if (!button || button.disabled) return;
-          // Re-read the live descriptor rather than trusting the rendered
-          // chip, so a stale row can never apply an inverted toggle.
-          const chip = this._rowControlsFor(layer.id)?.chips
-            ?.find((entry) => entry.id === button.dataset.chipId);
-          if (chip?.params) this.setLayerParams(layer.id, chip.params, { origin: 'user' });
-        });
-        controls.addEventListener('change', (event) => {
-          const satSelect = event.target?.closest?.('select.data-toggle-select');
-          if (satSelect && !satSelect.disabled) {
-            const spec = this._rowControlsFor(layer.id)?.selects
-              ?.find((entry) => entry.id === satSelect.dataset.selectId);
-            if (spec?.param) {
-              this.setLayerParams(layer.id, { [spec.param]: satSelect.value }, { origin: 'user' });
-            }
-            return;
+      // A layer whose controls settle asynchronously (a chunked catalog load
+      // that can also fail) pushes a re-render through this; nothing else
+      // would repaint the row before its next scheduled refresh.
+      rowModule?.setRowControlsListener?.(() => this._refreshTogglePanel());
+      const controls = document.createElement('div');
+      controls.className = 'data-toggle-controls';
+      controls.addEventListener('click', (event) => {
+        const button = event.target?.closest?.('.data-toggle-chip');
+        if (!button || button.disabled) return;
+        if (button.dataset.chipId === LAYER_RETRY_CHIP_ID) {
+          this._retryLayerFromChip(layer.id);
+          return;
+        }
+        // Re-read the live descriptor rather than trusting the rendered
+        // chip, so a stale row can never apply an inverted toggle.
+        const chip = this._rowControlsFor(layer.id)?.chips
+          ?.find((entry) => entry.id === button.dataset.chipId);
+        if (chip?.params) this.setLayerParams(layer.id, chip.params, { origin: 'user' });
+      });
+      controls.addEventListener('change', (event) => {
+        const satSelect = event.target?.closest?.('select.data-toggle-select');
+        if (satSelect && !satSelect.disabled) {
+          const spec = this._rowControlsFor(layer.id)?.selects
+            ?.find((entry) => entry.id === satSelect.dataset.selectId);
+          if (spec?.param) {
+            this.setLayerParams(layer.id, { [spec.param]: satSelect.value }, { origin: 'user' });
           }
-          const select = event.target?.closest?.('.data-toggle-picker-select');
-          if (!select || select.disabled) return;
-          const module = this.layers.get(layer.id)?.module;
-          if (typeof module?.setSelectedSystem === 'function') {
-            module.setSelectedSystem(select.value);
-            this._refreshTogglePanel();
-          }
-        });
-        row.appendChild(controls);
-        this._syncRowControls(controls, layer);
-      }
+          return;
+        }
+        const select = event.target?.closest?.('.data-toggle-picker-select');
+        if (!select || select.disabled) return;
+        const module = this.layers.get(layer.id)?.module;
+        if (typeof module?.setSelectedSystem === 'function') {
+          module.setSelectedSystem(select.value);
+          this._refreshTogglePanel();
+        }
+      });
+      row.appendChild(controls);
+      this._syncRowControls(controls, layer);
 
       this._toggleContainer.appendChild(row);
     }
     this._applyLayerListFilter();
+  }
+
+  /**
+   * Operator Retry: one immediate refreshLayer. A click while the entry is
+   * already refreshing is ignored so refreshLayer does not queue a second tick.
+   * @param {string} layerId Registered layer id.
+   */
+  _retryLayerFromChip(layerId) {
+    const entry = this.layers.get(layerId);
+    if (!entry || entry.refreshing) return;
+    void this.refreshLayer(layerId);
   }
 
   /**
@@ -2293,7 +2353,11 @@ export class DataLayerManager {
   _syncRowControls(container, layer) {
     if (!container) return;
     const declared = this._rowControlsFor(layer.id);
-    const chips = layer.enabled ? (declared?.chips || []) : [];
+    const retryChip = layerRetryChipDescriptor(layer);
+    const chips = [
+      ...(layer.enabled ? (declared?.chips || []) : []),
+      ...(retryChip ? [retryChip] : []),
+    ];
     const legend = layer.enabled ? (declared?.legend || []) : [];
     const selects = layer.enabled ? (declared?.selects || []) : [];
     const headingText = typeof declared?.heading === 'string' ? declared.heading.trim() : '';
@@ -2527,7 +2591,7 @@ export class DataLayerManager {
     if (layer.lifecycleUncertain) {
       return `UNCERTAIN · ${source} · lifecycle state requires reconciliation`;
     }
-    const presentedError = stats.error || stats.lastError || stats.managerRefreshError;
+    const presentedError = presentedLayerError(stats);
     if (presentedError) {
       if (typeof stats.retryInSec === 'number' && stats.retryInSec > 0) {
         return `${stateLabel} · ${source} · ${presentedError} · retry ${stats.retryInSec}s`;

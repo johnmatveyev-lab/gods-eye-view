@@ -11,7 +11,16 @@
 // headless. Run with: npm test
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DataLayerManager, layerFeedState } from './manager.js';
+import { readFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  DataLayerManager,
+  LAYER_RETRY_CHIP_ID,
+  layerFeedState,
+  layerRetryChipVisible,
+  presentedLayerError,
+} from './manager.js';
 import {
   contextSnapshotLayerIds,
   shouldCaptureContextSession,
@@ -1833,6 +1842,51 @@ test('layer feed states distinguish unavailable, fallback, stale, and degraded c
   assert.equal(layerFeedState({ count: 5, lastUpdate: 1 }), 'nominal');
 });
 
+test('Retry chip visibility follows unavailable/stale/presentedError, not healthy rows', () => {
+  assert.equal(presentedLayerError({ lastError: 'USGS network error' }), 'USGS network error');
+  assert.equal(presentedLayerError({ error: null, managerRefreshError: 'refresh rejected' }), 'refresh rejected');
+  assert.equal(layerRetryChipVisible({
+    enabled: true,
+    lifecycleState: 'enabled',
+    stats: { error: 'feed down', count: 0, lastUpdate: null },
+  }), true);
+  assert.equal(layerRetryChipVisible({
+    enabled: true,
+    lifecycleState: 'enabled',
+    stats: { stale: true, count: 4, lastUpdate: 1 },
+  }), true);
+  assert.equal(layerRetryChipVisible({
+    enabled: true,
+    lifecycleState: 'enabled',
+    stats: { error: 'partial group failure', count: 50, lastUpdate: 1 },
+  }), true);
+  assert.equal(layerRetryChipVisible({
+    enabled: true,
+    lifecycleState: 'enabled',
+    stats: { count: 5, lastUpdate: 1 },
+  }), false);
+  assert.equal(layerRetryChipVisible({
+    enabled: true,
+    lifecycleState: 'enabled',
+    stats: { status: 'zoom-in', error: 'zoom in to search', count: 12 },
+  }), false, 'guidance copy is healthy, not a Retry');
+  assert.equal(layerRetryChipVisible({
+    enabled: true,
+    lifecycleState: 'enabled',
+    stats: { mode: 'sim', count: 100, lastUpdate: 1 },
+  }), false, 'healthy fallback without an error is not a Retry');
+  assert.equal(layerRetryChipVisible({
+    enabled: false,
+    lifecycleState: 'disabled',
+    stats: { error: 'feed down' },
+  }), false);
+  assert.equal(layerRetryChipVisible({
+    enabled: true,
+    lifecycleState: 'enabling',
+    stats: { error: 'feed down' },
+  }), false);
+});
+
 test('layer metadata names degraded state instead of presenting an ordinary age', () => {
   const mgr = new DataLayerManager({});
   assert.match(mgr._buildMetaText({
@@ -3375,4 +3429,214 @@ test('a Jam chip group stays independent of Live | Sim and Uncovered', async () 
     if (originalDocument === undefined) delete globalThis.document;
     else globalThis.document = originalDocument;
   }
+});
+
+// ── PLAN 112: manager-owned Retry chip ──────────────────────────────────────
+// Operators can force one refreshLayer() without waiting on retry Ns or
+// toggling the layer. Not a filter. No new /api.
+
+function findRetryChip(controls) {
+  return collectByClass(controls, 'data-toggle-chip')
+    .find((chip) => chip.dataset.chipId === LAYER_RETRY_CHIP_ID) || null;
+}
+
+function makeRetryableFeedLayer() {
+  let stats = {
+    count: 0,
+    lastUpdate: null,
+    error: 'USGS network error',
+    lastError: 'USGS network error',
+  };
+  let hangUpdate = false;
+  let releaseUpdate = () => {};
+  let markStarted = null;
+  let updateCalls = 0;
+  return {
+    setStats(next) { stats = { ...stats, ...next }; },
+    get updateCalls() { return updateCalls; },
+    hangNextUpdate() { hangUpdate = true; },
+    release() { releaseUpdate(); },
+    waitForNextUpdate() {
+      return new Promise((resolve) => { markStarted = resolve; });
+    },
+    module: {
+      id: 'earthquakes',
+      name: 'Earthquakes (24h)',
+      icon: '',
+      source: 'USGS',
+      updateInterval: -1,
+      async init() {},
+      enable() {},
+      disable() {},
+      async update() {
+        updateCalls += 1;
+        markStarted?.();
+        markStarted = null;
+        if (hangUpdate) {
+          hangUpdate = false;
+          await new Promise((resolve) => { releaseUpdate = resolve; });
+        }
+        return true;
+      },
+      getStats() { return { ...stats }; },
+    },
+  };
+}
+
+test('lastError surfaces Retry; a healthy sibling row does not', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const failed = makeRetryableFeedLayer();
+  mgr.register(failed.module);
+  mgr.register({
+    id: 'flights',
+    name: 'Live Flights',
+    icon: '',
+    source: 'adsb.lol',
+    fallback: false,
+    updateInterval: -1,
+    async init() {},
+    enable() {},
+    disable() {},
+    async update() { return true; },
+    getStats() {
+      return { count: 8, lastUpdate: Date.now(), error: null, fallback: false, source: 'adsb.lol' };
+    },
+  });
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('earthquakes', true), true);
+    assert.equal(await mgr.setEnabled('flights', true), true);
+    mgr._refreshTogglePanel();
+
+    const quakeControls = container
+      .querySelector('[data-layer-id="earthquakes"]')
+      .querySelector('.data-toggle-controls');
+    const flightControls = container
+      .querySelector('[data-layer-id="flights"]')
+      .querySelector('.data-toggle-controls');
+    const retry = findRetryChip(quakeControls);
+    assert.ok(retry, 'a killed feed shows Retry');
+    assert.equal(retry.textContent, 'RETRY');
+    assert.equal(retry.disabled, false);
+    assert.equal(findRetryChip(flightControls), null, 'a healthy row has no Retry');
+    assert.match(
+      container.querySelector('[data-layer-id="earthquakes"]').querySelector('.data-toggle-meta').textContent,
+      /USGS network error/,
+    );
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('Retry click runs refreshLayer, ignores a second click in flight, then hides on success', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const layer = makeRetryableFeedLayer();
+  mgr.register(layer.module);
+  const container = makeControlElement();
+  let refreshCalls = 0;
+  const originalRefresh = mgr.refreshLayer.bind(mgr);
+  mgr.refreshLayer = (...args) => {
+    refreshCalls += 1;
+    return originalRefresh(...args);
+  };
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('earthquakes', true), true);
+    const row = container.querySelector('[data-layer-id="earthquakes"]');
+    const controls = row.querySelector('.data-toggle-controls');
+    const retry = findRetryChip(controls);
+    assert.ok(retry);
+
+    const updatesBefore = layer.updateCalls;
+    layer.hangNextUpdate();
+    const began = layer.waitForNextUpdate();
+    controls.listeners.click({ target: retry });
+    await began;
+    assert.equal(refreshCalls, 1);
+    assert.equal(layer.updateCalls, updatesBefore + 1);
+    assert.equal(retry.disabled, true, 'in-flight refresh disables Retry');
+    assert.equal(mgr.layers.get('earthquakes').refreshing, true);
+
+    controls.listeners.click({ target: retry });
+    await Promise.resolve();
+    assert.equal(refreshCalls, 1, 'a second click while refreshing is ignored');
+    assert.equal(layer.updateCalls, updatesBefore + 1);
+
+    layer.setStats({
+      count: 12,
+      lastUpdate: Date.now(),
+      error: null,
+      lastError: null,
+    });
+    layer.release();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.equal(mgr.layers.get('earthquakes').refreshing, false);
+    assert.equal(findRetryChip(controls), null, 'success hides Retry');
+    assert.match(row.querySelector('.data-toggle-meta').textContent, /USGS · /);
+    assert.doesNotMatch(row.querySelector('.data-toggle-meta').textContent, /USGS network error/);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('Retry does not replace layer toggle off/on', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const layer = makeRetryableFeedLayer();
+  mgr.register(layer.module);
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('earthquakes', true, { origin: 'user' }), true);
+    const row = container.querySelector('[data-layer-id="earthquakes"]');
+    const controls = row.querySelector('.data-toggle-controls');
+    assert.ok(findRetryChip(controls));
+
+    assert.equal(await mgr.setEnabled('earthquakes', false, { origin: 'user' }), true);
+    assert.equal(mgr.isEnabled('earthquakes'), false);
+    assert.equal(findRetryChip(controls), null, 'an OFF row hides Retry');
+
+    assert.equal(await mgr.setEnabled('earthquakes', true, { origin: 'user' }), true);
+    assert.equal(mgr.isEnabled('earthquakes'), true);
+    assert.ok(findRetryChip(controls), 'turning the layer back on restores Retry while the feed is still failed');
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('Retry is not a filter and adds no endpoints', () => {
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+  const managerSource = readFileSync(path.join(root, 'src/data/manager.js'), 'utf8');
+  const license = readFileSync(path.join(root, 'LICENSE'), 'utf8');
+  const readme = readFileSync(path.join(root, 'README.md'), 'utf8');
+  const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
+  const retryStart = managerSource.indexOf('export const LAYER_RETRY_CHIP_ID');
+  const retryEnd = managerSource.indexOf('export class DataLayerManager');
+  const retrySlice = managerSource.slice(retryStart, retryEnd);
+  assert.match(retrySlice, /layerRetryChipVisible/);
+  assert.match(managerSource, /_retryLayerFromChip/);
+  assert.match(managerSource, /refreshLayer\(layerId\)/);
+  assert.doesNotMatch(retrySlice, /\/api\/|fetch\(/);
+  assert.doesNotMatch(retrySlice, /applyLayerListFilter|layerMatchesFilter/);
+  assert.equal(existsSync(path.join(root, 'api/retry.js')), false);
+  assert.equal(existsSync(path.join(root, 'api/layer-retry.js')), false);
+  assert.equal(pkg.name, 'meridian');
+  assert.match(readme, /Meridian/);
+  assert.doesNotMatch(readme, /God's Eye View rebrand|quantum-earth/i);
+  assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
 });
