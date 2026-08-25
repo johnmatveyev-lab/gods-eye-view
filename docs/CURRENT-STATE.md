@@ -70,9 +70,10 @@ Updated: August 24, 2026
 > shipped tools (`set_layer_visibility`'s enum already carries
 > `local-datacenters`, `local-dams`, `telegeography-submarine-cables`,
 > `local-firms`, `earthquakes`; `zoom_to_globe` supplies the camera), so
-> `GEV_REALTIME_TOOLS` is **byte-identical to `main`** and pinned by sha256 in
-> the unit suite. One instruction paragraph in `vite.config.js` teaches the
-> phrase mapping; deleting it is the complete rollback.
+> `GEV_REALTIME_TOOLS` is pinned by sha256 in the unit suite. A few shipped
+> descriptions were rewritten for the Meridian product name; the remaining
+> tools stay byte-identical. One instruction paragraph in `vite.config.js`
+> teaches the phrase mapping; deleting it is the complete rollback.
 >
 > **ESC arbitration — three rules, do not collapse them into one.** (1) The
 > launcher **yields**: a MutationObserver watches `body` for the surfaces that
@@ -1591,7 +1592,7 @@ its criteria cannot be silently ignored.
 
 | Layer | Source | File | Proxy | Update Interval |
 |-------|--------|------|-------|-----------------|
-| Live Flights ✈️ | OpenSky Network; bounded adsb.lol regional fallback | `src/data/flights.js` | `/api/opensky` (OAuth + fallback) | 30s |
+| Live Flights ✈️ | adsb.lol 250 nm regional snapshot (OpenSky disabled) | `src/data/flights.js` | `/api/opensky` (adsb.lol compatibility path) | 30s |
 | Military Flights 🎖️ | adsb.lol /v2/mil | `src/data/militaryFlights.js` | `/api/adsblol/mil` | 15s |
 | Live AIS Vessels 🚢 | AISStream websocket | `src/data/aisLiveVessels.js` | `/api/ais-live` | 60s (+800ms visibility pass) |
 | Mapped Installations ⌖ | OpenStreetMap mapped context; on-demand Google Maps Places supplement | `src/data/militaryInstallations.js` | `/api/military-installations`, `/api/google/text-search` | viewport-driven + user search; while unavailable, auto-retry 30 s → 240 s backoff |
@@ -1604,7 +1605,7 @@ its criteria cannot be silently ignored.
 | Bikeshare 🚲 | GBFS (Lyft + BCycle) | `src/data/bikeshare.js` | `/api/gbfs` | 60s |
 | Datacenters ▣ | OSM extract (bundled) | `src/data/localLayers.js` | — | static |
 | Dams ▰ | OpenInfraMap/OSM extract (bundled) | `src/data/localLayers.js` | — | static |
-| Submarine Cables ◠ | TeleGeography public map (bundled) | `src/data/telegeographySubmarineCables.js` | — | static |
+| Submarine Cables ◠ | Removed (CC BY-NC-SA); registered no-op | `src/data/telegeographySubmarineCables.js` | — | no-op |
 | FIRMS Active Fires ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
 
 `src/data/militaryAwareness.js` remains registered internally as the Contacts
@@ -2255,9 +2256,9 @@ silently demoting every later lookup for the session.
 - Recommended launcher: `./scripts/dev-fresh.sh` (also: `dev-secure.sh` for stricter bindings, `dev-cctv.sh` for CCTV source-pack tuning)
 - Build gate: `npm run build`
 - Network access: local-only by default (`HOST=localhost` in dev-fresh.sh); LAN is an explicit opt-in via `HOST=0.0.0.0` (launcher prints a key-exposure warning + LAN URL; see SECURITY.md)
-- OpenSky default mode: OAuth (`OPENSKY_AUTH_MODE=oauth`; `anon` works without credentials)
+- OpenSky is disabled in this commercial fork; do not set `OPENSKY_*` credentials
 - Google key expected in Keychain service `google-maps-api` (or `GOOGLE_MAPS_API_KEY`, or `.env`)
-- OpenSky credentials expected in Keychain service `opensky-network` (or env, or `.env`); `OPENSKY_AUTH_MODE` and `OPENSKY_CREDENTIALS_FILE` read from `.env` too
+- Civilian flights use adsb.lol only via the `/api/opensky` compatibility path
 - Optional-key precedence in `dev-fresh.sh` is uniform — explicit shell env, then `.env`, then Keychain: `OPENAI_API_KEY` (Keychain `openai-api`/`api-key` — voice + HUD summary), `AISSTREAM_API_KEY` (`aisstream-api`/`api-key` — live vessels), `CESIUM_ION_TOKEN` (`cesium-ion`/`token` — Bing stacks), `TOMTOM_API_KEY` (`tomtom-api`/`api-key` — live traffic flow), `FIRMS_MAP_KEY` (`firms-map`/`map-key` — live fires), `LL2_API_TOKEN` (`.env` only)
 - An empty string is not "unset" on either side of the launcher, and both sides are handled. `scripts/read-dotenv-value.mjs` hides the requested key from `process.env` for the duration of the read (Vite's `loadEnv` otherwise lets an inherited empty export win over the parsed files) and restores it after. A key the launcher resolves to nothing is then removed from the dev server's environment outright (`env -u`), not merely omitted — the child inherits this shell's environment, and Vite backfills `.env` only over undefined variables, so an empty export in either place would shadow a configured key. `CCTV_CALTRANS_DISTRICTS` is the deliberate exception: empty is its documented Caltrans kill switch and is passed through as-is
 - `.env` supported via `.env.example` template
@@ -2267,8 +2268,8 @@ silently demoting every later lookup for the session.
 - CCTV proxy rejects client-specified upstream URLs (server-side source allowlist only).
 - CCTV upstream still-image fetches use an explicit abort controller with an
   eight-second timeout; the timer is cleared on every success or failure path.
-- OpenSky response cache stores successful upstream responses only; OAuth token refresh calls are coalesced.
-- A cold OpenSky failure uses the current camera subpoint only to request a cached adsb.lol point fallback capped at 250 nm. A fresh OpenSky response or last-good cache wins; a nominally successful worldwide snapshot more than two minutes old prefers viewport-scoped adsb.lol when available, otherwise the stale source is reported honestly. The fallback is visibly source-labeled and is never presented as a worldwide snapshot.
+- `/api/opensky` never contacts OpenSky; it serves a cached 250 nm adsb.lol snapshot around the current camera subpoint and is never presented as a worldwide snapshot.
+- `/api/opensky-track` returns HTTP 410 without contacting OpenSky. Trails keep locally accumulated history.
 - GBFS response size is capped; CCTV health map is bounded.
 - Proxy error payloads are sanitized (no internal error details returned to clients).
 - `OPENAI_API_KEY` is server-side only; the browser receives ephemeral Realtime client secrets from `/api/realtime/token`.
@@ -2278,7 +2279,7 @@ silently demoting every later lookup for the session.
 - `/api/overpass` is bounded by body/response caps, per-client/global rate limits, concurrency limits, mirror fallback, in-flight dedupe, cache bounds, and static validation that every selector is spatially bounded.
 - `/api/military-installations` uses an independent limiter with the same 90-per-client/300-global one-minute bounds, so viewport installation refreshes never consume `/api/overpass` annotation/traffic capacity.
 - `/api/route` proxies bounded OSRM route requests for annotation routes, with profile allowlisting, distance caps, response caps, caching, and sanitized "no route found" errors.
-- Track endpoints: `/api/ais-live/track?mmsi=` (server-accumulated ring buffers; sub-route handled before the rows snapshot), `/api/opensky-track?icao24=` (OAuth, 60s cache, sanitized errors, independent OpenSky credit bucket), `/api/adsblol/trace?hex=` (60s cache, 5MB cap, ODbL attribution required in UI).
+- Track endpoints: `/api/ais-live/track?mmsi=` (server-accumulated ring buffers; sub-route handled before the rows snapshot), `/api/opensky-track?icao24=` (HTTP 410; OpenSky disabled), `/api/adsblol/trace?hex=` (60s cache, 5MB cap, ODbL attribution required in UI).
 - Realtime debug logs redact API keys, bearer tokens, client secrets, and image data URLs before writing to disk; request bodies are size-capped.
 
 ## UI/UX Runtime Defaults

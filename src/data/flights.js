@@ -1044,42 +1044,15 @@ function _contactLabel(icao24, info) {
 }
 
 /**
- * Map OpenSky proxy response headers into a human-readable auth error string.
- * The Vite proxy forwards `x-opensky-auth-mode-used` and `x-opensky-auth-reason`
- * headers so the client can display a meaningful diagnostic.
+ * Map a flights-proxy HTTP failure into a user-visible adsb.lol error.
+ * OpenSky auth headers are ignored — this commercial fork never contacts OpenSky.
  * @param {object} params
- * @param {string} params.detail  - Error body text from the proxy, if any.
- * @param {string} params.authMode - Normalized auth mode header value.
- * @param {string} params.authReason - Normalized auth reason header value.
+ * @param {string} params.detail - Error body text from the proxy, if any.
  * @returns {string} Concise error description for UI display.
  */
-function _deriveOpenSkyAuthError({ detail, authMode, authReason }) {
-  const reason = _toLowerText(authReason);
-  const mode = _toLowerText(authMode);
-
-  if (reason === 'oauth_invalid_or_missing') {
-    return 'OpenSky OAuth client missing/invalid';
-  }
-  if (reason === 'oauth_invalid_credentials') {
-    return 'OpenSky OAuth rejected credentials';
-  }
-  if (reason === 'basic_invalid_credentials') {
-    return 'OpenSky username/password rejected';
-  }
-  if (reason === 'missing_basic_creds' || reason === 'missing_oauth_and_basic_creds') {
-    return 'OpenSky auth missing';
-  }
-  if (reason === 'auth_required') {
-    return 'OpenSky auth required';
-  }
-  if (reason.startsWith('oauth_') || reason.startsWith('basic_')) {
-    return 'OpenSky auth invalid';
-  }
-  if (reason === 'forced_anonymous' || mode === 'anon') {
-    return 'OpenSky auth required';
-  }
-  if (detail) return detail;
-  return 'OpenSky auth failed';
+function _deriveFlightSourceError({ detail }) {
+  const text = typeof detail === 'string' ? detail.trim() : '';
+  return text || 'adsb.lol unavailable';
 }
 
 /**
@@ -4086,18 +4059,12 @@ const flightsLayer = {
       _lastStatus = response.status;
       const responseSource = response.headers.get('x-flight-source');
       const responseCoverage = response.headers.get('x-flight-coverage');
-      const authMode = _toLowerText(
-        response.headers.get('x-opensky-auth-mode-used') || response.headers.get('x-opensky-auth')
-      );
-      const authReason = _toLowerText(response.headers.get('x-opensky-auth-reason'));
 
       if (response.status === 429) {
         console.warn('[Data:Flights] Rate limited, backing off to 30s');
         _backoff = true;
         _retryAt = nowMs + BACKOFF_INTERVAL;
-        _lastError = authMode && authMode !== 'anon'
-          ? 'adsb.lol rate limited'
-          : 'adsb.lol rate limited';
+        _lastError = 'adsb.lol rate limited';
         return;
       }
 
@@ -4113,10 +4080,8 @@ const flightsLayer = {
         } catch {
           detail = '';
         }
-        _lastError = _deriveOpenSkyAuthError({
+        _lastError = _deriveFlightSourceError({
           detail,
-          authMode,
-          authReason,
         });
         return;
       }
