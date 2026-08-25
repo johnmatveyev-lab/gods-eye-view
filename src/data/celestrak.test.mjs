@@ -209,20 +209,21 @@ test('Vite forwards to the extracted plugin; no ais-live/google/voice wrap', () 
     'api/ais-live/[...path].js',
     'api/google/text-search.js',
     'api/google/[...path].js',
-    'api/realtime/token.js',
     'api/voice/[...path].js',
   ]) {
     assert.equal(existsSync(path.join(ROOT, forbidden)), false, forbidden);
   }
+  assert.equal(existsSync(path.join(ROOT, 'api/realtime/token.js')), true);
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/celestrak/[...group].js']);
   assert.ok(vercelJson.functions['api/billing/[...path].js']);
+  assert.ok(vercelJson.functions['api/realtime/token.js']);
   for (const rule of vercelJson.rewrites || []) {
     assert.match(rule.source, /^\/api\/tomtom\//);
     assert.match(rule.destination, /^\/api\/tomtom\//);
   }
   const functionKeys = Object.keys(vercelJson.functions);
-  assert.equal(functionKeys.some((key) => /ais-live|voice|realtime|text-search/.test(key)), false);
+  assert.equal(functionKeys.some((key) => /ais-live|google\/text-search|google\/\[\.\.\.path\]|voice\//.test(key)), false);
 });

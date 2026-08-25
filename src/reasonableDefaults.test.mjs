@@ -18,7 +18,8 @@
 // literal:
 //
 //   • the first-run VALUE, at every surface that independently decides it — a
-//     fresh boot runs no restore, so these literals ARE the startup state and
+//     first-visit restore now enables flights, but these literals ARE still the
+//     pre-restore startup state and
 //     changing one alone ships a UI that disagrees with its own engine;
 //   • explicit state still WINS over it — a link, or the operator's own hand,
 //     because "default" means "what you get when you said nothing";
@@ -271,4 +272,13 @@ test('a share link that carries detection OFF still restores OFF', () => {
   const dense = managerForHash('#lat=10&lon=20&dm=DENSE&dd=75').parseInitialHash();
   assert.equal(dense.detectionMode, 'DENSE');
   assert.equal(dense.detectionDensity, 75);
+});
+
+test('first run opens with tracked-target trails on', () => {
+  assert.match(indexHtml, /class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true"/,
+    'index.html: Trails paints lit before ui.js hydrates storage');
+  assert.match(uiSource, /this\._trailsEnabled = true;/,
+    'ui.js: the DISPLAY rail believes Trails is on before hydrate');
+  assert.match(uiSource, /hydrateTrailsEnabled\(\)/,
+    'ui.js: a stored meridian.trails value still wins over the default');
 });

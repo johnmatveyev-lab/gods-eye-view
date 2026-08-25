@@ -44,6 +44,9 @@ export const GROUND_SAMPLE_MAX_ARMED_RETRIES = 30;
 /** Ignore sub-metre camera-derived stem-tip noise at camera settle. */
 export const LOCAL_STEM_TIP_EPSILON_M = 0.5;
 const LOCAL_STEM_TIP_EPSILON_SQ = LOCAL_STEM_TIP_EPSILON_M ** 2;
+/** Stem-click / in-view-list fly height. Keep in lockstep with datacenterList. */
+export const LOCAL_FEATURE_FLY_HEIGHT_M = 5000;
+export const LOCAL_FEATURE_FLY_DURATION_S = 1.5;
 
 const DEFAULT_OVERLAY_HOST = Object.freeze({
   clearSource: clearOverlaySource,
@@ -398,6 +401,50 @@ export function createLocalGeoJsonLayer({
       return { count: _count, lastUpdate: _lastUpdate, error: _error };
     },
 
+    /**
+     * Already-loaded payload for the hosted in-view list. Empty while the
+     * layer is off so a disabled row cannot invent sites.
+     * @returns {Array<{id: string, label: string, latitude: number, longitude: number, visible: boolean}>}
+     */
+    getListPayload: () => {
+      if (!_enabled || !_stemRecords.length) return [];
+      const listed = [];
+      for (let i = 0; i < _stemRecords.length; i++) {
+        const record = _stemRecords[i];
+        const carto = record.carto;
+        if (!carto) continue;
+        listed.push({
+          id: String(record.id),
+          label: record.entry?.title || featureLabelFromProperties(
+            propertyObject(record.entity),
+            id,
+          ),
+          latitude: Number(Cesium.Math.toDegrees(carto.latitude).toFixed(6)),
+          longitude: Number(Cesium.Math.toDegrees(carto.longitude).toFixed(6)),
+          visible: record.entity?.show !== false,
+        });
+      }
+      return listed;
+    },
+
+    /**
+     * Fly to a payload site using the same stem-base camera move as a globe click.
+     * @param {object} viewer Cesium viewer.
+     * @param {string} recordId Payload id from `getListPayload()`.
+     * @returns {boolean}
+     */
+    flyToRecord: (viewer, recordId) => {
+      if (!_enabled || !viewer) return false;
+      const wanted = String(recordId ?? '');
+      const record = _stemRecords.find((entry) => String(entry.id) === wanted);
+      if (!record?.carto) return false;
+      if (record.entity) {
+        viewer.selectedEntity = record.entity;
+        selectEntityContext(record.entity);
+      }
+      return flyToLocalFeature(viewer, record.carto);
+    },
+
     enable: async (viewer) => {
       if (_destroyed) return;
       _enabled = true;
@@ -607,16 +654,7 @@ export function createLocalGeoJsonLayer({
               
               if (targetPos) {
                 const carto = Cesium.Cartographic.fromCartesian(targetPos);
-                
-                // Disable interactions so Cesium doesn't magically cancel the flight
-                viewer.scene.screenSpaceCameraController.enableInputs = false;
-                
-                viewer.camera.flyTo({
-                  destination: Cesium.Cartesian3.fromRadians(carto.longitude, carto.latitude, 5000),
-                  duration: 1.5,
-                  complete: () => { viewer.scene.screenSpaceCameraController.enableInputs = true; },
-                  cancel: () => { viewer.scene.screenSpaceCameraController.enableInputs = true; },
-                });
+                flyToLocalFeature(viewer, carto);
               }
             }
           }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
@@ -744,6 +782,32 @@ export function createLocalGeoJsonLayer({
       _error = null;
     }
   };
+}
+
+function flyToLocalFeature(viewer, carto) {
+  if (!viewer?.camera || !carto) return false;
+  if (viewer.scene?.screenSpaceCameraController) {
+    viewer.scene.screenSpaceCameraController.enableInputs = false;
+  }
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromRadians(
+      carto.longitude,
+      carto.latitude,
+      LOCAL_FEATURE_FLY_HEIGHT_M,
+    ),
+    duration: LOCAL_FEATURE_FLY_DURATION_S,
+    complete: () => {
+      if (viewer.scene?.screenSpaceCameraController) {
+        viewer.scene.screenSpaceCameraController.enableInputs = true;
+      }
+    },
+    cancel: () => {
+      if (viewer.scene?.screenSpaceCameraController) {
+        viewer.scene.screenSpaceCameraController.enableInputs = true;
+      }
+    },
+  });
+  return true;
 }
 
 function compareLocalOverlayRecords(a, b) {

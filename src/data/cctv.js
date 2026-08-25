@@ -3392,6 +3392,7 @@ function getPublicCameraState(record, activeId = null) {
     id: camera.id,
     name: camera.name,
     city: camera.city,
+    cityId: camera.cityId,
     provider: camera.provider,
     lat: camera.lat,
     lon: camera.lon,

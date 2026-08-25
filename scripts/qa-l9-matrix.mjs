@@ -162,7 +162,7 @@ function keyGuard(name, state) {
  * unmapped layer must never pass silently just because nobody added it here.
  */
 const CREDIT_EXPECTATIONS = {
-  flights: /OpenSky/i,
+  flights: /adsb\.lol/i,
   military: /adsb\.lol/i,
   satellites: /CelesTrak/i,
   earthquakes: /Geological Survey|USGS/i,

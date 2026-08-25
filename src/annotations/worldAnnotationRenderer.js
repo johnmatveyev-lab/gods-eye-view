@@ -1,4 +1,5 @@
 import * as Cesium from 'cesium';
+import { decorativeFlowTimeSeconds, decorativePulseFactor } from '../reduceMotion.js';
 
 /**
  * World-space annotation renderer (Direction A).
@@ -281,8 +282,7 @@ export function createWorldAnnotationRenderer(viewer) {
 }
 
 function pulseFactor() {
-  // 0.6 .. 1.0 sinusoid at ~0.8 Hz
-  return 0.8 + 0.2 * Math.sin(performance.now() * 0.005);
+  return decorativePulseFactor();
 }
 
 /**
@@ -356,7 +356,7 @@ FlowMaterialProperty.prototype.getValue = function getValue(time, result) {
   // frame (the scene renders continuously; no requestRenderMode here).
   if (!Cesium.defined(result)) result = {};
   result.color = this._color;
-  result.time = performance.now() / 1000; // the per-frame animated value
+  result.time = decorativeFlowTimeSeconds(); // frozen under reduce-motion
   result.repeat = 64.0;
   result.duty = 0.46;
   result.speed = 0.55;

@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
 import {
   GROUND_SAMPLE_MAX_ARMED_RETRIES,
+  LOCAL_FEATURE_FLY_DURATION_S,
+  LOCAL_FEATURE_FLY_HEIGHT_M,
   LOCAL_OVERLAY_COHORT_LIMIT,
   LOCAL_STEM_TIP_EPSILON_M,
   createLocalGeoJsonLayer,
@@ -962,4 +964,34 @@ test('after the cap a camera-motion frame still samples, and re-opens the budget
     GROUND_SAMPLE_MAX_ARMED_RETRIES,
     'a grounded record asks for no further frames',
   );
+});
+
+test('local layer payload lists loaded sites and flyToRecord uses the stem-click flight', async () => {
+  const env = await createRealLocalLayerHarness();
+  const flights = [];
+  env.viewer.camera.flyTo = (options) => { flights.push(options); };
+
+  const payload = env.layer.getListPayload();
+  assert.equal(payload.length, 1);
+  assert.equal(payload[0].label, 'Runtime Dam');
+  assert.ok(Number.isFinite(payload[0].latitude));
+  assert.ok(Number.isFinite(payload[0].longitude));
+
+  assert.equal(env.layer.flyToRecord(env.viewer, payload[0].id), true);
+  assert.equal(flights.length, 1);
+  const carto = Cesium.Cartographic.fromCartesian(flights[0].destination);
+  assert.ok(Math.abs(Cesium.Math.toDegrees(carto.latitude) - payload[0].latitude) < 1e-4);
+  assert.ok(Math.abs(Cesium.Math.toDegrees(carto.longitude) - payload[0].longitude) < 1e-4);
+  assert.ok(Math.abs(carto.height - LOCAL_FEATURE_FLY_HEIGHT_M) < 1e-6);
+  assert.equal(flights[0].duration, LOCAL_FEATURE_FLY_DURATION_S);
+  assert.equal(env.viewer.selectedEntity, env.layer.getListPayload()[0]
+    ? env.viewer.selectedEntity
+    : undefined);
+  assert.ok(env.viewer.selectedEntity);
+
+  env.layer.disable(env.viewer);
+  assert.deepEqual(env.layer.getListPayload(), []);
+  assert.equal(env.layer.flyToRecord(env.viewer, payload[0].id), false);
+  env.layer.destroy(env.viewer);
+  env.cleanup();
 });

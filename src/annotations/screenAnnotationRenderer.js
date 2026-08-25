@@ -669,6 +669,10 @@ function injectStyles() {
   .gev-pulse { animation: gev-ring-pulse 1.8s ease-in-out infinite; transform-box: fill-box; transform-origin: center; }
   @keyframes gev-ring-pulse { 0%,100% { opacity: 0.9; stroke-width: 2; } 50% { opacity: 0.35; stroke-width: 3.5; } }
   @keyframes gev-pop { from { opacity: 0; } to { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    html:not([data-reduce-motion="false"]) .gev-pulse { animation: none; }
+  }
+  html[data-reduce-motion="true"] .gev-pulse { animation: none; }
   `;
   document.head.appendChild(style);
 }

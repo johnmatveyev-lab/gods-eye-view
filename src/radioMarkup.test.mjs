@@ -8,7 +8,10 @@ const ui = readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
 const radio = readFileSync(new URL('./data/radio.js', import.meta.url), 'utf8');
 const rocketLaunches = readFileSync(new URL('./data/rocketLaunches.js', import.meta.url), 'utf8');
 const realtime = readFileSync(new URL('./voice/gevRealtime.js', import.meta.url), 'utf8');
-const voice = readFileSync(new URL('./server/liveApiProxies.js', import.meta.url), 'utf8');
+const voice = [
+  readFileSync(new URL('./voice/realtimeTools.js', import.meta.url), 'utf8'),
+  readFileSync(new URL('./voice/realtimeInstructions.js', import.meta.url), 'utf8'),
+].join('\n');
 const css = readFileSync(new URL('../style.css', import.meta.url), 'utf8');
 
 /** Parse the Realtime tool array out of the Vite config as real data. */
@@ -353,4 +356,42 @@ test('successful explicit user playback hands the speaker from voice to Radio', 
   assert.match(ui, /cycleStation\(direction, \{[\s\S]*?origin: 'user'/);
   assert.match(ui, /commitTuningStation\(station\.id, \{ origin: 'user' \}\)/);
   assert.match(realtime, /event\.origin === 'user' && event\.action === 'play' && this\.isActive\(\)[\s\S]*?this\.stop\(\{ preserveRadioPlayback: true \}\)/);
+});
+
+test('hosted Radio surfaces expose Mute/Stop on the existing player without new voice ducking', () => {
+  assert.match(
+    html,
+    /id="radio-stop-btn"[^>]*aria-label="Mute or stop radio playback"[^>]*>MUTE\/STOP</,
+  );
+  assert.match(
+    html,
+    /id="context-radio-mini-stop-btn"[^>]*aria-label="Mute or stop radio playback"/,
+  );
+  assert.match(
+    html,
+    /id="cockpit-radio-stop-btn"[^>]*aria-label="Mute or stop radio playback"/,
+  );
+  assert.match(css, /\.context-radio-mini-transport\s*\{[\s\S]*?grid-template-columns: repeat\(4/);
+  assert.match(css, /\.cockpit-radio-transport\s*\{[\s\S]*?grid-template-columns: repeat\(4/);
+
+  const playStart = radio.indexOf('export async function playSelectedRadio');
+  const playMethod = radio.slice(playStart, radio.indexOf('\n/**', playStart + 10));
+  assert.match(playMethod, /_audio\.muted = false/);
+
+  const stopStart = radio.indexOf('export function stopRadioPlayback');
+  const stopMethod = radio.slice(stopStart, radio.indexOf('\n/**', stopStart + 10));
+  assert.match(stopMethod, /_audio\.muted = true/);
+  assert.match(stopMethod, /_audio\.pause\(\)/);
+  assert.doesNotMatch(stopMethod, /setRadioVoiceDucking|_voiceDucked|voiceDucked/);
+
+  assert.match(ui, /contextRadioMiniStopBtn[\s\S]*stopPlayback\(\{ origin: 'user' \}\)/);
+  assert.match(ui, /cockpitRadioStopBtn[\s\S]*stopPlayback\(\{ origin: 'user' \}\)/);
+  assert.doesNotMatch(
+    ui,
+    /_radioStopBtn\.disabled = !interactive \|\| state\.audioState === 'stopped'/,
+  );
+  assert.match(
+    ui,
+    /_radioStopBtn\.disabled = !\['loading', 'playing', 'buffering', 'paused', 'error'\]\.includes\(state\.audioState\)/,
+  );
 });

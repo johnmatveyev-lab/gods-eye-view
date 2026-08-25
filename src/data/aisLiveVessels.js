@@ -5,6 +5,11 @@ import {
   clearSelectedEntityContextForLayer,
 } from './contextStore.js';
 import { createTrail } from './trailRenderer.js';
+import {
+  getTrailsEnabled,
+  subscribeTrailsEnabled,
+  trailDrawingVisible,
+} from './trailPreference.js';
 import { screenProjectedRotation, cameraPoseSignature } from './iconOrientation.js';
 import { formatKnots } from './detectionDraw.js';
 import {
@@ -1711,8 +1716,21 @@ function startSelectedVesselTrail(record) {
     state.trail = createTrail(state.viewer, { color: TRAIL_COLOR, width: 2.5 });
   }
   if (state.trail) state.trail.setPositions(state.trailPositions);
+  applySelectedVesselTrailDrawing();
   backfillVesselTrail(record.mmsi, state.trailBackfillToken);
 }
+
+/** Hide or show the selected-vessel trail without discarding its history. */
+function applySelectedVesselTrailDrawing() {
+  const trail = state.trail;
+  if (typeof trail?.setVisible !== 'function') return;
+  trail.setVisible(trailDrawingVisible({
+    trailsEnabled: getTrailsEnabled(),
+    cockpitContactMode: false,
+  }));
+}
+
+subscribeTrailsEnabled(applySelectedVesselTrailDrawing);
 
 /**
  * Fire-and-forget backfill from the server-side per-MMSI ring buffer

@@ -5,8 +5,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Fixed
+
+- Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
+  the Radio layer also silences it. Starting a station unmutes. Compact
+  Context and Cockpit transports now expose the same control. No voice ducking
+  and no `/api/radio` changes.
+
 ### Changed
 
+- A first hosted visit with no lastView, share-URL layers, or saved layer
+  prefs now starts with the globe plus civilian flights only. Returning
+  lastView / share URLs that include layers, and saved `gev:layer-state:v2`
+  prefs, keep that set. No new `/api` routes or sources. Cables, OpenSky,
+  and Google News stay off.
+- Hosted CCTV frames use the rest catch-all `api/cctv/[...path].js` plus dedicated `frame|stream|media/[id].js` entries so `/api/cctv/frame/:id` is not a Vercel platform 404. The client URL is unchanged. Austin / Caltrans / TfL only.
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
 - Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
 
@@ -16,6 +29,76 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   geodesic line and show the distance in the current `km | nm | mi` units.
   Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
   points only — no person-search, OpenSky, Google News, or TeleGeography.
+- Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
+  Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
+  The choice persists as `meridian.power`. Data polls, the idle render
+  governor, and required credits are unchanged. Clean view still keeps
+  Google Maps and Data attribution on screen.
+- Added a camera-center lat,lon copy control next to Copy view link. It shows
+  the pose already computed from `positionCartographic` (same source as the
+  share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept
+  as the secondary GIS order. Height is not shown, so the units toggle is
+  unused. No /api and no place names.
+- Hosted WX OFF | ON chrome sits next to the HUD and cockpit clocks and
+  toggles the existing cockpit weather-effects render flag
+  (`godsEyeView.cockpitWeatherEffects.enabled`). Off removes globe FX;
+  Local Info still fetches Open-Meteo and shows the credit when weather
+  values are on screen. Hidden-tab and offline pauses still apply. No new
+  weather vendor or `/api`.
+- Added a bike-share system picker for the existing allowlisted GBFS city list.
+  Switching a system uses the current `/api/gbfs` URL builder only, persists
+  the last system locally, and does not add hosts or open the proxy.
+- Added a top-center north-up compass. Click or `N` sets heading 0 and keeps
+  the current target, range, and tilt. The needle tracks camera heading.
+  Home still returns the full default pose. Share links keep using the
+  existing `heading` field.
+- Hosted `/api/military-installations` on Vercel through the existing live
+  catch-all (`api/[...path].js`), forwarding the GET handler extracted to
+  `src/data/militaryInstallationsHttp.js`. Keeps the non-dateline ≤10° bbox
+  gate, snap-to-cache, `exact=1` after saturated tiles, element cap +
+  `saturated` flag, and the independent 90/300 rate limiter. Public OSM
+  Overpass mapped context only. This extract does not add a dedicated
+  serverless function and does not wrap `/api/ais-live`.
+- Camera chrome shows **Stop tracking** while a contact is followed. The
+  control calls the existing untrack/clear-target action and leaves the camera
+  where it is. Hidden when nothing is tracked. Home still does the full
+  default pose reset. Roster click still tracks. No `/api`.
+- Added a city/provider filter on the CCTV panel list. It uses `city`,
+  `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
+  isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.
+  Selecting a camera still uses the existing stream/placeholder. Last city
+  persists as `meridian.cctvCity`. Panel clamp is unchanged. No extra `/api`.
+- Added a Display Trails on/off control for the existing tracked-target trail.
+  The preference persists as `meridian.trails` and defaults on. Off hides the
+  already-drawn path without stopping track; stop tracking still clears the
+  target. No API changes.
+- Street Traffic has a Traffic: Live | Sim control. Live uses the existing
+  `/api/tomtom` tiles when `status.hasKey`; Sim is the built-in model and
+  does not request tiles. Without a key, Live stays disabled. A 429 budget
+  stop still leaves Sim available. "Traffic flow data © TomTom" is credited
+  only after Live actually painted a tile. No extra `/api` route.
+- Added a DISPLAY-rail Sun on/off control. On follows the existing Cesium
+  clock so the terminator matches real time. Off keeps the well-lit globe
+  already used when lighting is disabled. The choice persists as
+  `meridian.liveSun`. The existing UTC | Local HUD toggle only changes the
+  clock display. WX FX and visual looks stay independent. No new imagery
+  stack and no `/api`.
+- Added a Contacts control that shows or hides the existing 250 km nearby
+  aircraft roster. Selecting a row still uses the current track action. Copy
+  ident stays on the tracked card. Cockpit enter still requires a selected
+  aircraft. Empty sky reports empty or unavailable rather than hanging. No new
+  range math, `/api`, or person-search.
+- Added a Look control that cycles the existing sensor styles — CRT, NVG,
+  FLIR, Noir, Snow, then default — through the same setter the share URL and
+  voice already use. No new looks.
+- Hosted globe honors `prefers-reduced-motion` and a persistable DISPLAY
+  Still toggle (`meridian.reduceMotion`). Reduce-motion cuts idle orbit,
+  pulsing brackets, and trail flourish; fly-to Home and other functional
+  camera moves stay live. Data polls and `/api` are unchanged.
+- Added a Clear annotations control on the globe chrome. It calls the existing
+  whiteboard `clear()` action so hosted users can erase voice marks without a
+  spoken command. The control is disabled when the board is empty. Trails,
+  models, and tracking are unchanged.
 - Added a filter field at the top of the Data Layers list. It matches the
   visible layer name plus existing voice common-names (fires, ships, bikes,
   traffic, cameras, and the rest of that map). Empty query shows the full
@@ -116,6 +199,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   6-hour memory + optional `/tmp` cache and stale-on-failure. Vite forwards
   through `src/data/celestrak.js`. User-Agent is
   `Meridian-celestrak-proxy/1.0 (+https://github.com/johnmatveyev-lab/gods-eye-view)`.
+- Added dedicated Vercel Node functions `api/realtime/token.js` and
+  `api/openai/hud-summary.js` that mint ephemeral OpenAI sessions / HUD
+  summaries with the server `OPENAI_API_KEY`. HUD logic lives in
+  `src/hud/summary.js`. Hosted/Vercel spend fails closed without Clerk +
+  Pro; local self-host BYOK stays. Hosted Free/anonymous MIC is locked to
+  the existing upgrade/sign-in modal. The long-lived key is never injected
+  into the client bundle.
 
 ### Changed
 
@@ -126,6 +216,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “OpenSky” is refused with “OpenSky is disabled”. Civilian flights stay
   labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
   compatibility path and never contacts opensky-network.org.
+- Voice “Google News” / “news RSS” is refused with “Google News RSS is
+  disabled”. Cockpit headlines stay GDELT with citation and never fetch
+  news.google.com. No Google News source picker.
 
 ### Fixed
 

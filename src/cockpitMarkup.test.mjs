@@ -23,8 +23,10 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   );
   const topCenterActions = html.match(/<nav id="top-center-actions"[\s\S]*?<\/nav>/);
   assert.ok(topCenterActions, 'Top-center globe actions are missing');
-  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="share-btn"[\s\S]*?id="home-view"[\s\S]*?id="copy-view-link"[\s\S]*?id="measure-toggle"[\s\S]*?id="reset-globe-view"/);
+  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="clear-annotations"[\s\S]*?id="share-btn"[\s\S]*?id="north-up-compass"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="measure-toggle"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"/);
+  assert.equal((html.match(/id="fullscreen-view"/g) || []).length, 1, 'Fullscreen must have one DOM owner');
   assert.equal((html.match(/id="clear-selected-layers"/g) || []).length, 1, 'Clear Layers must have one DOM owner');
+  assert.equal((html.match(/id="north-up-compass"/g) || []).length, 1, 'North-up compass must have one DOM owner');
   assert.equal((html.match(/id="home-view"/g) || []).length, 1, 'Home view must have one DOM owner');
   assert.equal((html.match(/id="copy-view-link"/g) || []).length, 1, 'Copy view link must have one DOM owner');
   assert.equal((html.match(/id="measure-toggle"/g) || []).length, 1, 'Measure must have one DOM owner');
@@ -258,7 +260,11 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(css, /body\.recording-mode #top-center-actions/);
   assert.match(
     css,
-    /body\.scene-playback-mode :is\(#clear-selected-layers, #home-view, #measure-toggle, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+    /body\.scene-playback-mode :is\(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+  );
+  assert.match(
+    css,
+    /body\.scene-playback-mode :is\(#measure-toggle, #measure-readout\)\s*\{\s*display:\s*none !important;/,
   );
   assert.match(sceneDirector, /this\._running = true;\s*document\.body\.classList\.add\('scene-playback-mode'\);/);
   assert.match(sceneDirector, /styleManager\.setRecordingMode\(false\);\s*document\.body\.classList\.remove\('scene-playback-mode'\);/);
@@ -271,7 +277,7 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(html, /data-cockpit-launcher="radio"[\s\S]*?id="cockpit-radio-toggle-btn"/);
   const cockpitRadio = html.match(/id="cockpit-radio-panel"[\s\S]*?<\/div>\s*<\/div>\s*<\/aside>/);
   assert.ok(cockpitRadio, 'Cockpit compact Radio controls are missing');
-  assert.doesNotMatch(cockpitRadio[0], /context-radio-details-btn|radio-filter|radio-tuner/);
+  assert.doesNotMatch(cockpitRadio[0], /context-radio-details-btn|radio-filter|radio-tuner|radio-station-search|radio-station-list/);
   assert.match(css, /\.cockpit-utility-controls[\s\S]*?top:\s*var\(--cockpit-utility-top/);
   assert.match(css, /\[data-cockpit-launcher="display"\]\s*\{\s*width:\s*var\(--left-collapsed-width, 176px\)/);
   assert.match(css, /--display-panel-expanded-width:\s*272px/);
@@ -487,7 +493,12 @@ test('Cockpit hides the complete top-center globe action group', () => {
   );
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #measure-toggle, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view\)\s*\{\s*display:\s*none !important;/,
+    'Cockpit must hide each map-only globe action even if its group layout is disturbed',
+  );
+  assert.match(
+    css,
+    /body\.cockpit-mode :is\(#measure-toggle, #measure-readout\)\s*\{\s*display:\s*none !important;/,
     'Cockpit must hide each map-only globe action even if its group layout is disturbed',
   );
 });

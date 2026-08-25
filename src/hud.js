@@ -24,9 +24,18 @@ import {
   getClockMode,
   syncClockToggleButtons,
 } from './clockPreference.js';
+import {
+  WX_STATE_EVENT,
+  WX_TOGGLE_EVENT,
+  bindWxToggle,
+  getWxEnabled,
+  syncWxToggleButtons,
+} from './weatherChrome.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import { canPoll } from './pollPresence.js';
 import { formatHudAltitude, subscribeDistanceUnit } from './units.js';
+import { isReduceMotionEnabled } from './reduceMotion.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -73,8 +82,9 @@ export class IntelHUD {
    * @param {Cesium.Viewer} viewer - The Cesium Viewer instance used for
    *   camera telemetry and coordinate derivation.
    */
-  constructor(viewer) {
+  constructor(viewer, options = {}) {
     this.viewer = viewer;
+    this._canPoll = typeof options.canPoll === 'function' ? options.canPoll : canPoll;
     this._visible = false;
     this._autoMode = true; // auto show/hide based on style
     this._currentStyle = 'normal';
@@ -85,6 +95,7 @@ export class IntelHUD {
     this._recBlinkInterval = null;
     this._timestampInterval = null;
     this._unbindClockToggle = null;
+    this._unbindWxToggle = null;
     this._summaryInterval = null;
     this._summaryTypingInterval = null;
     this._latestMetrics = null;
@@ -155,8 +166,14 @@ export class IntelHUD {
     this._unbindClockToggle = bindClockToggle(this._el, {
       onChange: () => this._paintTimestamp(),
     });
+    this._onWxPreference = () => {
+      syncWxToggleButtons(this._el, getWxEnabled());
+    };
+    this._unbindWxToggle = bindWxToggle(this._el);
     if (typeof window !== 'undefined') {
       window.addEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+      window.addEventListener(WX_TOGGLE_EVENT, this._onWxPreference);
+      window.addEventListener(WX_STATE_EVENT, this._onWxPreference);
     }
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
@@ -199,6 +216,10 @@ export class IntelHUD {
             <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
               <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
               <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+            </span>
+            <span class="wx-mode-toggle" role="group" aria-label="Weather effects">
+              <button type="button" data-wx-mode="off" aria-pressed="true">WX OFF</button>
+              <button type="button" data-wx-mode="on" aria-pressed="false">WX ON</button>
             </span>
           </div>
           <div class="hud-orbital">ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
@@ -248,19 +269,25 @@ export class IntelHUD {
    */
   _startTimers() {
     // Timestamp — every second
-    this._timestampInterval = setInterval(() => {
+    this._timestampInterval ??= setInterval(() => {
       this._paintTimestamp();
     }, 1000);
 
-    // REC blink — every 800ms
-    this._recBlinkInterval = setInterval(() => {
+    // REC blink — every 800ms (held solid under reduce-motion)
+    this._recBlinkInterval ??= setInterval(() => {
+      if (isReduceMotionEnabled()) {
+        this._recBlinkState = true;
+        const held = document.getElementById('hud-rec-dot');
+        if (held) held.style.visibility = 'visible';
+        return;
+      }
       this._recBlinkState = !this._recBlinkState;
       const dot = document.getElementById('hud-rec-dot');
       if (dot) dot.style.visibility = this._recBlinkState ? 'visible' : 'hidden';
     }, 800);
 
     // Camera-derived data — 4 updates/second (250ms)
-    this._updateInterval = setInterval(() => {
+    this._updateInterval ??= setInterval(() => {
       if (!this._visible) return;
       this._updateCameraData();
     }, 250);
@@ -272,6 +299,7 @@ export class IntelHUD {
     if (this._summaryInterval || this._livePollsSuspended) return;
     this._summaryInterval = setInterval(() => {
       if (!this._visible || this._livePollsSuspended) return;
+      if (!this._canPoll()) return;
       void this._updateSummary(true);
     }, HUD_SUMMARY_INTERVAL_MS);
   }
@@ -707,6 +735,7 @@ export class IntelHUD {
    */
   async _updateSummary(animate = false, force = false) {
     if (this._livePollsSuspended) return;
+    if (!this._canPoll()) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
@@ -844,6 +873,16 @@ export class IntelHUD {
   }
 
   /**
+   * One HUD-summary refresh after the tab is visible and online again.
+   * Does not create a second summary timer.
+   */
+  resumePausedSummary() {
+    if (!this._visible || !this._canPoll()) return Promise.resolve();
+    this._markSummaryDirty();
+    return this._updateSummary(true, true);
+  }
+
+  /**
    * Re-print altitude labels after a display-unit change. Uses the last
    * telemetry sample so the toggle does not invent a new measurement.
    */
@@ -959,8 +998,14 @@ export class IntelHUD {
     clearInterval(this._summaryTypingInterval);
     this._unbindClockToggle?.();
     this._unbindClockToggle = null;
+    this._unbindWxToggle?.();
+    this._unbindWxToggle = null;
     if (typeof window !== 'undefined' && this._onClockPreference) {
       window.removeEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+    }
+    if (typeof window !== 'undefined' && this._onWxPreference) {
+      window.removeEventListener(WX_TOGGLE_EVENT, this._onWxPreference);
+      window.removeEventListener(WX_STATE_EVENT, this._onWxPreference);
     }
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();

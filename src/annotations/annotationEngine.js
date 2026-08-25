@@ -116,10 +116,20 @@ export function createAnnotationEngine({
   // task with the FINAL outcome — resolved or failed — so narration that said
   // "tracing the boundary now" can later honestly confirm or correct itself.
   const outlineListeners = new Set();
+  // Board-count listeners (hosted Clear chrome): notified when live marks appear
+  // or disappear. Alpha ticks do not count — only add/remove/clear.
+  const changeListeners = new Set();
 
   function emitOutlineEvent(evt) {
     for (const listener of outlineListeners) {
       try { listener(evt); } catch { /* a listener error must never break the upgrade */ }
+    }
+  }
+
+  function emitChange() {
+    const snapshot = { count: annotations.size };
+    for (const listener of changeListeners) {
+      try { listener(snapshot); } catch { /* a listener error must never break the board */ }
     }
   }
 
@@ -177,6 +187,7 @@ export function createAnnotationEngine({
     if (tickHandle != null) return;
     const tick = () => {
       const now = performance.now();
+      const sizeBefore = annotations.size;
       let changed = false;
       let pending = false; // any mark still fading in / out, or with a TTL fade ahead
       for (const anno of annotations.values()) {
@@ -196,6 +207,7 @@ export function createAnnotationEngine({
       if (changed) {
         renderer.sync(annotations);
         syncAnnotationHold();
+        if (annotations.size !== sizeBefore) emitChange();
       }
       // Stop once the board is STABLE — persistent marks (persist=true is the default)
       // finish fading in after ~260ms and never change again, so without this the loop
@@ -366,6 +378,7 @@ export function createAnnotationEngine({
     if (ids.length) {
       renderer.sync(annotations);
       ensureTicking();
+      emitChange();
     }
     if (opts.flyTo && firstAnchor) frameAnnotation(firstAnchor);
     else if (ids.length) ensureMarksVisible(ids);
@@ -763,6 +776,7 @@ export function createAnnotationEngine({
     annotations.clear();
     renderer.sync(annotations);
     syncAnnotationHold();
+    emitChange();
   }
 
   /** Begin a graceful fade-out of everything, then remove. */
@@ -878,6 +892,16 @@ export function createAnnotationEngine({
       if (typeof listener !== 'function') return () => {};
       outlineListeners.add(listener);
       return () => outlineListeners.delete(listener);
+    },
+
+    /**
+     * Subscribe to live-board count changes. Listener receives `{ count }` after
+     * a mark is added, removed, or the board is cleared. Returns unsubscribe.
+     */
+    onChange(listener) {
+      if (typeof listener !== 'function') return () => {};
+      changeListeners.add(listener);
+      return () => changeListeners.delete(listener);
     },
 
     /**

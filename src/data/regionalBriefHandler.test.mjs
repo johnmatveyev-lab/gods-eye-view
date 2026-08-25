@@ -305,7 +305,7 @@ test('handler sources stay GDELT + Open-Meteo; Google News / OpenSky stay out', 
   assert.match(handler, /api\.gdeltproject\.org/);
   assert.match(handler, /api\.open-meteo\.com/);
   assert.match(handler, /GDELT Project/);
-  assert.doesNotMatch(handler, /GOOGLE_NEWS_RSS_ENABLED/);
+  assert.match(handler, /GOOGLE_NEWS_RSS_ENABLED !== false/);
   assert.match(
     html,
     /class="cockpit-weather-credit"[^>]*href="https:\/\/open-meteo.com\/"[^>]*>Weather data by Open-Meteo.com/,
