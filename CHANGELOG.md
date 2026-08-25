@@ -26,6 +26,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ### Added
 
 - Satellites row can pick a CelesTrak TLE group (stations, weather, visual, GPS, GLONASS, Galileo, GEO). Changing the group refetches `/api/celestrak/<group>` and replaces the layer. The choice persists as `meridian.satGroup` (`stations` default). Invalid groups are not listed. Space Missions still uses `/api/celestrak/active` independently; the Launches panel stays on `/api/launches`. No new `/api`.
+- Added a Clean view control on the globe chrome that toggles the existing
+  `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
+  Google Maps and Data attribution stay on. No new hide system and no `/api`.
 - Contact Labels on/off (declutter) hides ambient callsign billboards on
   busy FIRs. Dots, models, and trails stay. Selected/tracked ident cards stay.
   Density still only changes detections. Persists `meridian.contactLabels`
@@ -150,6 +153,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
   "Offline — showing last data". AIS is not wrapped. No service worker.
+- Radio volume is a 0–100 slider on the existing Radio Browser audio element.
+  The level persists as `meridian.radioVolume`. Mute sets 0 and unmute
+  restores the prior level. Disabling the Radio layer still stops audio.
+  Station search and play are unchanged. No new `/api` and no voice ducking.
 
 ### Changed
 
