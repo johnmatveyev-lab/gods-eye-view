@@ -253,11 +253,11 @@ test('the compass is map camera chrome beside Share and Reset Globe', () => {
   assert.match(css, /--north-up-heading/);
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #import-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
   );
   assert.match(
     css,
-    /body\.scene-playback-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
+    /body\.scene-playback-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #import-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
   );
   assert.match(ui, /e\.key\.toLowerCase\(\) === 'n'/);
   assert.match(ui, /this\.cockpitView\?\.active/);

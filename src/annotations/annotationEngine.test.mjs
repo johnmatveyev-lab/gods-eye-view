@@ -768,6 +768,83 @@ test('removeLast: does not bump generation or abort in-flight annotate', async (
   assert.deepEqual(engine.list().map((anno) => anno.label), ['First', 'Slow']);
 });
 
+test('coordinate-only import specs skip resolveTarget and fetch', async (t) => {
+  installAnimationFrameStubs(t);
+  const fetches = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (...args) => {
+    fetches.push(args);
+    throw new Error('import must not hit /api');
+  };
+  t.after(() => {
+    if (originalFetch === undefined) delete globalThis.fetch;
+    else globalThis.fetch = originalFetch;
+  });
+
+  const resolveCalls = [];
+  const engine = createAnnotationEngine({
+    viewer: {},
+    renderer: fakeRenderer().renderer,
+    resolveTarget: async (opts) => {
+      resolveCalls.push(opts);
+      return { lon: 0, lat: 0, height: 0, source: 'should-not-run' };
+    },
+  });
+
+  const result = await engine.annotate([
+    { type: 'pin', label: 'First', latitude: 37.77, longitude: -122.42 },
+    {
+      type: 'arrow',
+      label: 'Connector',
+      latitude: 37.80,
+      longitude: -122.45,
+      toLatitude: 37.81,
+      toLongitude: -122.44,
+    },
+    {
+      type: 'route',
+      label: 'Shoreline',
+      points: [
+        { latitude: 37.80, longitude: -122.45 },
+        { latitude: 37.81, longitude: -122.47 },
+      ],
+    },
+    {
+      type: 'area',
+      label: 'The Presidio',
+      latitude: 37.80,
+      longitude: -122.45,
+      ring: [[-122.46, 37.79], [-122.44, 37.81], [-122.43, 37.79]],
+      footprint: false,
+    },
+  ], { clearPrevious: false, persist: true, flyTo: false });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.drawn, 4);
+  assert.equal(result.capped, false);
+  assert.equal(engine.count(), 4);
+  assert.deepEqual(resolveCalls, []);
+  assert.deepEqual(fetches, []);
+  assert.deepEqual(engine.list().map((anno) => anno.label), ['First', 'Connector', 'Shoreline', 'The Presidio']);
+  assert.equal(engine.list()[3].ring.length, 3);
+});
+
+test('named voice specs still go through resolveTarget', async (t) => {
+  installAnimationFrameStubs(t);
+  const resolveCalls = [];
+  const engine = createAnnotationEngine({
+    viewer: {},
+    renderer: fakeRenderer().renderer,
+    resolveTarget: async (opts) => {
+      resolveCalls.push(opts.target);
+      return { lon: 1, lat: 2, height: 0, source: 'fixture' };
+    },
+  });
+  await engine.annotate([{ type: 'pin', target: 'Palace of Fine Arts', label: 'Palace' }]);
+  assert.deepEqual(resolveCalls, ['Palace of Fine Arts']);
+  assert.equal(engine.count(), 1);
+});
+
 test('clear still empties the board after undo', async (t) => {
   installAnimationFrameStubs(t);
   const renderer = {

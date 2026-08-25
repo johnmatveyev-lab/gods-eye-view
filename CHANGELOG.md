@@ -33,6 +33,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added an Import annotations control next to Export on the globe chrome.
+  Operators pick a Plan 114 `meridian-annotations.geojson` FeatureCollection
+  and `annotate()` places pins/lines/areas from latitude/longitude (and
+  ring/points) only — no geocode, Places, or Overpass. Appends to the live
+  board, stays enabled when empty, skips features without coordinates, and
+  stops at the existing 120-mark cap. A malformed file is a no-op with
+  `Invalid GeoJSON`. No `/api`.
 - Added an Export annotations control next to Clear/Undo on the globe chrome.
   It builds a GeoJSON FeatureCollection from `engine.list()` (pin/highlight
   → Point, arrow/route → LineString, area → Polygon or Point) with only
