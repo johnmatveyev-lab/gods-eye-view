@@ -14,8 +14,9 @@ import { Readable } from 'node:stream';
 import { fileURLToPath } from 'node:url';
 import { directionToHeading } from './directionText.js';
 
-/** Repo root — this module lives in src/data. */
-const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+/** Repo root — this module lives in src/data. Not named __dirname: Netlify
+ *  esbuild already injects that binding into the function bundle. */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
  * FNV-1a 32-bit hash of a string, used to derive deterministic pseudo-random
@@ -160,7 +161,7 @@ function loadSourcesFromFile() {
   const sourceFile = process.env.CCTV_SOURCES_FILE || DEFAULT_CCTV_SOURCE_FILE;
   const resolved = path.isAbsolute(sourceFile)
     ? sourceFile
-    : path.resolve(__dirname, sourceFile);
+    : path.resolve(repoRoot, sourceFile);
   try {
     if (!fs.existsSync(resolved)) return [];
     const raw = fs.readFileSync(resolved, 'utf8');

@@ -11,9 +11,12 @@
 
 [functions]
   directory = "netlify/functions"
-  node_bundler = "esbuild"
+  # nft does not inject the esbuild ESM CJS shim (`let __dirname=...`).
+  # esbuild's banner plus source `const __dirname` is a SyntaxError 502.
+  node_bundler = "nft"
 
 [functions.api]
+  node_bundler = "nft"
   included_files = ["config/**"]
 
 # Functions v2 (netlify/functions/api.js, path /api and /api/*) owns /api.

@@ -7,6 +7,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Hosted Netlify `/api/*` no longer 502s with
+  `Identifier '__dirname' has already been declared`. The function wrapper
+  does not declare `__dirname`, bundled sources use `repoRoot`, and
+  `node_bundler = "nft"` turns off the esbuild CJS-shim inject. Vercel
+  `api/*.js` is unchanged.
 - Voice token mint and HUD summary fail closed unless Clerk is configured and
   the signed-in user is Pro. An unset Clerk env no longer mints an unauthenticated
   Realtime secret or HUD call.

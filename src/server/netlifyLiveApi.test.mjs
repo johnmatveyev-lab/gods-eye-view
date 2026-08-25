@@ -77,6 +77,8 @@ test('netlify.toml builds the Vite dist and never SPA-falls-back /api/*', () => 
   assert.equal(toml.buildEnvironment.NODE_VERSION, '24');
   assert.match(source, /\[functions\.api\]/);
   assert.match(source, /included_files\s*=\s*\["config\/\*\*"\]/);
+  assert.match(source, /node_bundler\s*=\s*"nft"/);
+  assert.doesNotMatch(source, /node_bundler\s*=\s*"esbuild"/);
 
   assert.ok(toml.redirects.length >= 2);
   const spaIndex = toml.redirects.findIndex((rule) => (
@@ -191,6 +193,27 @@ test('unknown /api path is a handler 404 JSON, never index.html', async () => {
   assert.match(contentType, /json/);
   assert.doesNotMatch(text, /<!doctype html/i);
   assert.doesNotMatch(text, /<html/i);
+});
+
+function countDirnameBindings(source) {
+  return [...String(source).matchAll(/\b(?:const|let|var)\s+__dirname\b/g)].length;
+}
+
+test('Netlify function wrapper does not declare a second __dirname', () => {
+  const wrapper = readFileSync(path.join(ROOT, 'netlify/functions/api.js'), 'utf8');
+  const adapter = readFileSync(path.join(ROOT, 'src/server/netlifyLiveApi.js'), 'utf8');
+  assert.equal(countDirnameBindings(wrapper), 0);
+  assert.equal(countDirnameBindings(adapter), 0);
+  assert.doesNotMatch(wrapper, /fileURLToPath\(new URL\(['"]\.['"]/);
+  assert.doesNotMatch(adapter, /fileURLToPath\(new URL\(['"]\.['"]/);
+
+  // These modules are pulled into the same Netlify function graph. A second
+  // `const __dirname` collides with zip-it-and-ship-it's esbuild CJS shim.
+  for (const relative of ['src/server/liveApiProxies.js', 'src/data/cctvProxy.js']) {
+    const source = readFileSync(path.join(ROOT, relative), 'utf8');
+    assert.equal(countDirnameBindings(source), 0, relative);
+    assert.match(source, /\brepoRoot\b/);
+  }
 });
 
 test('GET /api/opensky never contacts OpenSky', async () => {
