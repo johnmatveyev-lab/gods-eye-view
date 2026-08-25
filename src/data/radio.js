@@ -62,6 +62,14 @@ import {
   writeRadioCodecFilter,
 } from './radioCodecFilter.js';
 import {
+  DEFAULT_RADIO_COUNTRY,
+  filterRadioStationsByCountry,
+  normalizeRadioCountryQuery,
+  readRadioCountry,
+  stationMatchesRadioCountry,
+  writeRadioCountry,
+} from './radioCountryFilter.js';
+import {
   DEFAULT_RADIO_VOLUME_PCT,
   radioMuteToggle,
   radioVolumePctToUnit,
@@ -223,6 +231,7 @@ let _bitrateFloor = DEFAULT_RADIO_BITRATE_FLOOR;
 let _codecFilter = { ...DEFAULT_RADIO_CODEC_FILTER };
 let _favoriteIds = [];
 let _favoritesOnly = false;
+let _country = DEFAULT_RADIO_COUNTRY;
 let _selectedId = null;
 let _selectedEntity = null;
 let _selectionGeneration = 0;
@@ -739,6 +748,10 @@ function applyPersistedRadioCodecs() {
   _codecFilter = readRadioCodecFilter();
 }
 
+function applyPersistedRadioCountry() {
+  _country = readRadioCountry();
+}
+
 function commitUserVolume(volume) {
   const next = clampRadioVolume(volume);
   if (next > 0) _unmutedVolume = next;
@@ -1225,18 +1238,22 @@ function playingStationKeepId() {
 
 function directoryStations({ keepPlaying = true } = {}) {
   const keepStationId = keepPlaying ? playingStationKeepId() : null;
-  return filterRadioStationsByFavorites(
-    filterRadioStationsByCodec(
-      filterRadioStationsByBitrateFloor(
-        filterRadioStations(_stations, _filter),
-        _bitrateFloor,
+  return filterRadioStationsByCountry(
+    filterRadioStationsByFavorites(
+      filterRadioStationsByCodec(
+        filterRadioStationsByBitrateFloor(
+          filterRadioStations(_stations, _filter),
+          _bitrateFloor,
+          { keepStationId },
+        ),
+        _codecFilter,
         { keepStationId },
       ),
-      _codecFilter,
-      { keepStationId },
+      _favoriteIds,
+      { favoritesOnly: _favoritesOnly },
     ),
-    _favoriteIds,
-    { favoritesOnly: _favoritesOnly },
+    _country,
+    { keepStationId },
   );
 }
 
@@ -1254,7 +1271,8 @@ function stationMatchesCurrentDirectory(station, { keepPlaying = true } = {}) {
     && stationMatchesRadioSearch(station, _stationSearch)
     && stationMatchesRadioBitrateFloor(station, _bitrateFloor, { keepStationId })
     && stationMatchesRadioCodecFilter(station, _codecFilter, { keepStationId })
-    && stationMatchesRadioFavorites(station, _favoriteIds, { favoritesOnly: _favoritesOnly });
+    && stationMatchesRadioFavorites(station, _favoriteIds, { favoritesOnly: _favoritesOnly })
+    && stationMatchesRadioCountry(station, _country, { keepStationId });
 }
 
 function viewportRadioAnchor() {
@@ -1329,6 +1347,7 @@ export function getRadioUIState() {
     updatedAt: _updatedAt,
     filter: _filter,
     stationSearch: _stationSearch,
+    country: _country,
     minBitrate: _bitrateFloor,
     codecs: Object.freeze({ ..._codecFilter }),
     favoritesOnly: _favoritesOnly,
@@ -2559,6 +2578,19 @@ function applyRadioDirectoryFilterChange() {
   scheduleRadioOverlayPublish();
 }
 
+/** Narrow the current directory by ISO-2 or country name without fetching. */
+export function setRadioCountry(query) {
+  if (!radioPresentationAllowed()) return false;
+  const nextCountry = normalizeRadioCountryQuery(query);
+  const changed = nextCountry !== _country;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _country = nextCountry;
+  writeRadioCountry(nextCountry);
+  if (changed) applyRadioDirectoryFilterChange();
+  emitState();
+  return true;
+}
+
 /** Raise or clear the min-bitrate floor without fetching or stopping audio. */
 export function setRadioBitrateFloor(floorId) {
   if (!radioPresentationAllowed()) return false;
@@ -2833,6 +2865,7 @@ export const radioLayer = {
     applyPersistedRadioVolume();
     applyPersistedRadioFavorites();
     applyPersistedRadioCodecs();
+    applyPersistedRadioCountry();
     installAudio();
     if (!_dataSource) {
       _dataSource = new Cesium.CustomDataSource('Radio stations');
@@ -3045,6 +3078,7 @@ export const radioLayer = {
     _codecFilter = { ...DEFAULT_RADIO_CODEC_FILTER };
     _favoriteIds = [];
     _favoritesOnly = false;
+    _country = DEFAULT_RADIO_COUNTRY;
     _renderById.clear();
     resetRadioClusterOverlayIdentities();
     _lastHorizonCameraPosition = null;
@@ -3109,6 +3143,7 @@ export const radioLayer = {
   endTuning: endRadioTuning,
   setFilter: setRadioFilter,
   setStationSearch: setRadioStationSearch,
+  setCountry: setRadioCountry,
   setBitrateFloor: setRadioBitrateFloor,
   setCodecs: setRadioCodecs,
   setFavoritesOnly: setRadioFavoritesOnly,

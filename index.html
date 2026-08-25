@@ -1216,19 +1216,34 @@
                 <button type="button" id="radio-favorites-only" class="pp-mode-btn radio-favorites-chip" aria-pressed="false" aria-label="Show favorite stations only" disabled>Favorites</button>
               </div>
             </div>
-            <div class="radio-station-search-wrap">
-              <label class="radio-filter-label" for="radio-station-search">SEARCH STATIONS</label>
-              <input
-                type="search"
-                id="radio-station-search"
-                placeholder="Name, country, or tag…"
-                autocomplete="off"
-                spellcheck="false"
-                aria-label="Search stations by name, country, or tag"
-                aria-controls="radio-station-list"
-                disabled
-              />
-              <span id="radio-station-search-count" class="radio-station-search-count"></span>
+            <div class="radio-directory-query-row">
+              <div class="radio-station-search-wrap">
+                <label class="radio-filter-label" for="radio-station-search">SEARCH STATIONS</label>
+                <input
+                  type="search"
+                  id="radio-station-search"
+                  placeholder="Name, country, or tag…"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-label="Search stations by name, country, or tag"
+                  aria-controls="radio-station-list"
+                  disabled
+                />
+                <span id="radio-station-search-count" class="radio-station-search-count"></span>
+              </div>
+              <div class="radio-country-wrap">
+                <label class="radio-filter-label" for="radio-country">COUNTRY</label>
+                <input
+                  type="search"
+                  id="radio-country"
+                  placeholder="All countries"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-label="Filter stations by country code or name"
+                  aria-controls="radio-station-list"
+                  disabled
+                />
+              </div>
             </div>
             <div id="radio-station-list" class="radio-station-list" role="listbox" aria-label="Current Radio Browser stations" hidden></div>
             <div id="radio-station-card" class="radio-station-card" aria-live="polite">
