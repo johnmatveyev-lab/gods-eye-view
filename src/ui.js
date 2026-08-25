@@ -222,6 +222,12 @@ import {
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
 import {
+  handleCleanViewEscape,
+  isCleanView,
+  setCleanViewEnabled,
+  syncCleanViewButton,
+} from './cleanViewChrome.js';
+import {
   DATACENTER_LAYER_ID,
   bindDatacenterInViewList,
   datacenterFlyDestination,
@@ -2481,6 +2487,7 @@ export class StyleManager {
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
+    this._cleanViewChromeBtn = document.getElementById('clean-view-chrome');
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
@@ -3648,7 +3655,11 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
-        handleFullscreenEscape(e);
+        if (handleCleanViewEscape(e)) {
+          this.toggleCleanView(false);
+        } else {
+          handleFullscreenEscape(e);
+        }
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
           this._locationSearch.value = '';
@@ -3752,6 +3763,7 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.addEventListener('click', () => this.toggleCleanView());
     }
+    this._cleanViewChromeBtn?.addEventListener('click', () => this.toggleCleanView());
 
     this._reduceMotionBtn?.addEventListener('click', () => {
       setReduceMotionOverride(!isReduceMotionEnabled());
@@ -8440,8 +8452,9 @@ export class StyleManager {
   toggleCleanView(forceEnabled) {
     const shouldEnable = typeof forceEnabled === 'boolean'
       ? forceEnabled
-      : !document.body.classList.contains('ui-clean-view');
-    document.body.classList.toggle('ui-clean-view', shouldEnable);
+      : !isCleanView();
+    setCleanViewEnabled(shouldEnable);
+    syncCleanViewButton(this._cleanViewChromeBtn, shouldEnable);
     if (this._cleanViewBtn) {
       this._cleanViewBtn.classList.toggle('active', shouldEnable);
     }
