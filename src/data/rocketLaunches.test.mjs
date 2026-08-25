@@ -113,6 +113,11 @@ import {
   resetLaunchHideUnknownSiteForTest,
   setLaunchHideUnknownSite,
 } from './launchUnknownSiteFilter.js';
+import {
+  DEFAULT_LAUNCH_RECOVERY_ONLY,
+  resetLaunchRecoveryOnlyForTest,
+  setLaunchRecoveryOnly,
+} from './launchRecoveryFilter.js';
 
 const NOW = new Date('2026-07-27T00:00:00Z');
 
@@ -1098,6 +1103,111 @@ test('Hide unknown site roster hides unlabeled pads and ANDs status, provider, r
   assert.ok(!selected.some((entry) => entry.launch.id === 'blank'));
 });
 
+test('Recovery-attempted roster hides empty stages and ANDs status, provider, rocket, webcast, probability, and hide-unknown-site', () => {
+  const rows = [
+    {
+      id: 'keep',
+      status: 'Go',
+      provider: 'SpaceX',
+      orbit: { name: 'LEO' },
+      launchSite: 'KSC',
+      rocketName: 'Falcon 9',
+      webcastLive: true,
+      probability: 90,
+      launchTime: '2026-07-20T00:00:00Z',
+      recoveryStages: [{ attempted: true }],
+    },
+    {
+      id: 'empty',
+      status: 'Go',
+      provider: 'SpaceX',
+      orbit: { name: 'LEO' },
+      launchSite: 'KSC',
+      rocketName: 'Falcon 9',
+      webcastLive: true,
+      probability: 88,
+      launchTime: '2026-07-19T00:00:00Z',
+      recoveryStages: [],
+    },
+    {
+      id: 'ula',
+      status: 'Go',
+      provider: 'ULA',
+      orbit: { name: 'LEO' },
+      launchSite: 'KSC',
+      rocketName: 'Atlas V',
+      webcastLive: true,
+      probability: 95,
+      launchTime: '2026-07-18T00:00:00Z',
+      recoveryStages: [{ attempted: true }],
+    },
+    {
+      id: 'no-stream',
+      status: 'Go',
+      provider: 'SpaceX',
+      orbit: { name: 'LEO' },
+      launchSite: 'KSC',
+      rocketName: 'Falcon 9',
+      webcastLive: false,
+      probability: 92,
+      launchTime: '2026-07-17T00:00:00Z',
+      recoveryStages: [{ attempted: true }],
+    },
+    {
+      id: 'unknown',
+      status: 'Go',
+      provider: 'SpaceX',
+      orbit: { name: 'LEO' },
+      launchSite: 'Unknown launch site',
+      rocketName: 'Falcon 9',
+      webcastLive: true,
+      probability: 91,
+      launchTime: '2026-07-16T00:00:00Z',
+      recoveryStages: [{ attempted: true }],
+    },
+    {
+      id: 'missing',
+      status: 'Go',
+      provider: 'SpaceX',
+      orbit: { name: 'LEO' },
+      launchSite: 'KSC',
+      rocketName: 'Falcon 9',
+      webcastLive: true,
+      probability: 87,
+      launchTime: '2026-07-15T00:00:00Z',
+    },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+  }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Atlas V': false,
+  }, ['Atlas V', 'Falcon 9']);
+  const off = missionRosterEntries(rows, { recoveryOnly: false, nowMs: NOW.getTime() });
+  assert.deepEqual(off.map((entry) => entry.launch.id).sort(), ['empty', 'keep', 'missing', 'no-stream', 'ula', 'unknown']);
+  const entries = missionRosterEntries(rows, {
+    statusFilter: { go: true },
+    providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
+    webcastOnly: true,
+    probabilityFilter: '80',
+    hideUnknownSite: true,
+    recoveryOnly: true,
+    nowMs: NOW.getTime(),
+  });
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['keep']);
+  const selected = missionRosterEntries(rows, {
+    recoveryOnly: true,
+    selectedLaunchId: 'empty',
+    nowMs: NOW.getTime(),
+  });
+  assert.ok(selected.some((entry) => entry.launch.id === 'empty'));
+  assert.ok(selected.some((entry) => entry.launch.id === 'keep'));
+  assert.ok(!selected.some((entry) => entry.launch.id === 'missing'));
+});
+
 test('keeps rocket.configuration.name (or rocket.name) on the in-memory roster', () => {
   const fromConfig = normalizeRocketLaunches({ results: [{
     id: 'falcon',
@@ -1175,6 +1285,7 @@ test('normalizes detailed payload and stage recovery records', () => {
   assert.equal(launches[0].payloads[0].amount, 2);
   assert.equal(launches[0].payloads[0].massKg, 420);
   assert.equal(launches[0].recoveryStages[0].name, 'Core · B1099');
+  assert.equal(launches[0].recoveryStages[0].attempted, true);
   assert.equal(launches[0].recoveryStages[0].status, 'RECOVERED');
   assert.equal(launches[0].recoveryStages[0].downrangeKm, 610);
   assert.equal(launches[0].recoveryStages[0].lat, 30.1);
@@ -2093,11 +2204,20 @@ function createStatusFilterDocument() {
   unknownSiteChip.dataset.missionUnknownSiteChip = 'hide';
   unknownSiteChip.textContent = 'Hide unknown site';
   unknownSiteChips.appendChild(unknownSiteChip);
+  const recoveryChips = new FakeNode('div');
+  recoveryChips.className = 'space-mission-recovery-chips';
+  recoveryChips.setAttribute('data-mission-recovery-chips', '');
+  const recoveryChip = new FakeNode('button');
+  recoveryChip.setAttribute('data-mission-recovery-chip', 'attempted');
+  recoveryChip.dataset.missionRecoveryChip = 'attempted';
+  recoveryChip.textContent = 'Recovery-attempted';
+  recoveryChips.appendChild(recoveryChip);
   roster.appendChild(count);
   roster.appendChild(windowChips);
   roster.appendChild(webcastChips);
   roster.appendChild(probabilityChips);
   roster.appendChild(unknownSiteChips);
+  roster.appendChild(recoveryChips);
   roster.appendChild(chips);
   roster.appendChild(providerChips);
   roster.appendChild(rocketChips);
@@ -2122,6 +2242,7 @@ function createStatusFilterDocument() {
     webcastChips,
     probabilityChips,
     unknownSiteChips,
+    recoveryChips,
     document: {
       body: new FakeNode('body'),
       createElement: (tagName) => new FakeNode(tagName),
@@ -2183,6 +2304,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2231,6 +2353,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2313,6 +2436,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2360,6 +2484,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2479,6 +2604,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2523,6 +2649,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2569,6 +2696,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2614,6 +2742,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2699,6 +2828,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2745,6 +2875,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2849,6 +2980,7 @@ test('Webcast only re-applies the cached roster without refetching /api/launches
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2894,6 +3026,7 @@ test('Webcast only re-applies the cached roster without refetching /api/launches
     resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2968,6 +3101,7 @@ test('probability chips re-apply the cached roster without refetching /api/launc
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -3014,6 +3148,7 @@ test('probability chips re-apply the cached roster without refetching /api/launc
     resetLaunchWebcastOnlyForTest();
     resetLaunchProbabilityFilterForTest();
     resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -3096,6 +3231,7 @@ test('Hide unknown site re-applies the cached roster without refetching /api/lau
   resetLaunchWebcastOnlyForTest();
   resetLaunchProbabilityFilterForTest();
   resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -3141,6 +3277,7 @@ test('Hide unknown site re-applies the cached roster without refetching /api/lau
     resetLaunchWebcastOnlyForTest();
     resetLaunchProbabilityFilterForTest();
     resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -3201,3 +3338,149 @@ test('Hide unknown site re-applies the cached roster without refetching /api/lau
   await rocketLaunchesLayer.disable();
   assert.equal(unknownSiteChips.hidden, true, 'launches layer off hides the unknown-site toggle');
 });
+
+function recoveryFilterLaunch(id, attempted, latOffset = 0) {
+  return {
+    id,
+    name: `${id} | Recovery Filter`,
+    net: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    status: { name: 'Go' },
+    launch_service_provider: { name: 'SpaceX' },
+    pad: {
+      latitude: String(28.608 + latOffset),
+      longitude: '-80.604',
+      name: 'Space Launch Complex 39A',
+    },
+    mission: { name: id, orbit: { name: 'Low Earth Orbit' } },
+    rocket: attempted == null
+      ? { configuration: { name: 'Falcon 9' } }
+      : {
+        configuration: { name: 'Falcon 9' },
+        launcher_stage: [{
+          id: 1,
+          type: 'Core',
+          launcher: { serial_number: 'B1099' },
+          landing: { attempt: attempted },
+        }],
+      },
+  };
+}
+
+test('Recovery-attempted re-applies the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  resetLaunchProviderFilterForTest();
+  resetLaunchOrbitFilterForTest();
+  resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
+  resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
+  resetLaunchHideUnknownSiteForTest();
+  resetLaunchRecoveryOnlyForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, recoveryChips, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  const payload = {
+    results: [
+      recoveryFilterLaunch('falcon-go', true, 0),
+      recoveryFilterLaunch('empty-go', null, 0.1),
+      recoveryFilterLaunch('falcon-tbd', true, 0.2),
+    ],
+  };
+  payload.results[2].status = { name: 'TBD' };
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    resetLaunchProviderFilterForTest();
+    resetLaunchOrbitFilterForTest();
+    resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
+    resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
+    resetLaunchProbabilityFilterForTest();
+    resetLaunchHideUnknownSiteForTest();
+    resetLaunchRecoveryOnlyForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  assert.equal(DEFAULT_LAUNCH_RECOVERY_ONLY, false);
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:empty-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-tbd').show, true);
+  assert.match(list.innerHTML, /FALCON-GO/);
+  assert.match(list.innerHTML, /EMPTY-GO/);
+  assert.match(list.innerHTML, /FALCON-TBD/);
+  assert.equal(recoveryChips.hidden, false);
+
+  setLaunchRecoveryOnly(true);
+  assert.equal(launchFetches, 1, 'toggle must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:empty-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-tbd').show, true);
+  assert.match(list.innerHTML, /FALCON-GO/);
+  assert.match(list.innerHTML, /FALCON-TBD/);
+  assert.doesNotMatch(list.innerHTML, /EMPTY-GO/);
+
+  setLaunchRecoveryOnly(DEFAULT_LAUNCH_RECOVERY_ONLY);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:empty-go').show, true);
+  assert.match(list.innerHTML, /EMPTY-GO/);
+
+  _setSelectedRocketMissionForTest('empty-go');
+  setLaunchRecoveryOnly(true);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:empty-go').show, true, 'selected empty-recovery mission stays');
+  assert.match(list.innerHTML, /EMPTY-GO/);
+
+  _setSelectedRocketMissionForTest(null);
+  setLaunchStatusFilter({ go: true });
+  setLaunchRecoveryOnly(true);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-tbd').show, false, 'Go + Recovery-attempted still ANDs');
+  assert.equal(dataSource.entities.getById('rocket-launch:empty-go').show, false);
+  assert.match(list.innerHTML, /FALCON-GO/);
+  assert.doesNotMatch(list.innerHTML, /FALCON-TBD|EMPTY-GO/);
+
+  await rocketLaunchesLayer.update();
+  assert.equal(launchFetches, 2, 'refresh still hits the same /api/launches window');
+  assert.equal(dataSource.entities.getById('rocket-launch:falcon-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:empty-go').show, false);
+
+  await rocketLaunchesLayer.disable();
+  assert.equal(recoveryChips.hidden, true, 'launches layer off hides the recovery toggle');
+});
+

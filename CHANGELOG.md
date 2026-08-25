@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster has a client-only **Recovery-attempted** toggle next
+  to Hide unknown site. Default off matches the current 30-day roster.
+  On keeps missions that already have at least one normalized
+  `recoveryStages` entry with `attempted === true` (Launch Library 2
+  `landing.attempt`). Empty or missing stages hide. Selected mission
+  stays. Toggle changes re-filter the already-fetched window and AND with
+  status, provider, orbit, site, 7d|30d, rocket, webcast, probability,
+  and hide-unknown-site. No extra `/api/launches` fetch and no new
+  endpoint. Preference persists as `meridian.launchRecoveryOnly`.
+  Hidden when the launches layer is off.
 - AIS has a client-only **Hide no IMO** toggle next to Hide unnamed.
   Default off matches the current harbor view. On skips in-memory vessels
   whose `imo` is missing, empty, or whitespace-only (trim first). Vessels

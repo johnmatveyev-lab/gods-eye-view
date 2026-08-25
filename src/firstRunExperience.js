@@ -89,7 +89,9 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         toggle (`meridian.launchWebcastOnly`), launch
  *                         probability chips (`meridian.launchProbability`),
  *                         launch hide-unknown-site toggle
- *                         (`meridian.launchHideUnknownSite`), FIRMS TI5
+ *                         (`meridian.launchHideUnknownSite`), launch
+ *                         recovery-attempted toggle
+ *                         (`meridian.launchRecoveryOnly`), FIRMS TI5
  *                         brightness chips (`meridian.firmsBrightnessTi5`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
@@ -101,7 +103,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setLaunchSiteFilter` / `setLaunchOrbitFilter` /
  *                         `setLaunchTimeWindow` / `setLaunchWebcastOnly` /
  *                         `setLaunchProbabilityFilter` /
- *                         `setLaunchHideUnknownSite`,
+ *                         `setLaunchHideUnknownSite` /
+ *                         `setLaunchRecoveryOnly`,
  *                         which would persist a display choice nobody made.
  *
  * The two Context missions deliberately reuse `styleManager.setContextMode`, the
