@@ -189,6 +189,9 @@ import {
 import cctvLayer from './data/cctv.js';
 import { attachFirmsListPanel } from './data/firmsListPanel.js';
 import {
+  normalizeBrightnessFloor,
+} from './data/firmsBrightnessFloor.js';
+import {
   firmsSensorFilterFlags,
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
@@ -2800,6 +2803,7 @@ export class StyleManager {
     this._dataPanel = document.getElementById('data-panel');
     this._firesPanel = document.getElementById('fires-panel');
     this._firmsSensorChips = document.getElementById('fires-sensor-chips');
+    this._firmsBrightnessChips = document.getElementById('fires-brightness-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -3309,6 +3313,7 @@ export class StyleManager {
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
     this._initFirmsSensorChips();
+    this._initFirmsBrightnessChips();
     this._initInstallationClassChips();
     this._initAisTypeChips();
     this._initHUDToggle();
@@ -5424,6 +5429,7 @@ export class StyleManager {
         }
         if (change?.layerId === 'local-firms') {
           this._syncFirmsSensorChips();
+          this._syncFirmsBrightnessChips();
         }
         if (change?.layerId === 'ais-live-vessels') {
           this._syncAisTypeChips();
@@ -11579,6 +11585,32 @@ export class StyleManager {
       this._syncFirmsSensorChips();
     });
     this._syncFirmsSensorChips();
+  }
+
+  _syncFirmsBrightnessChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsBrightnessChips) this._firmsBrightnessChips.hidden = !enabled;
+    const layer = this._dataManager?.layers?.get('local-firms')?.module;
+    const floor = normalizeBrightnessFloor(layer?.getParams?.()?.brightnessFloor);
+    const chips = this._firmsBrightnessChips?.querySelectorAll?.('[data-firms-brightness]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsBrightness === floor;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsBrightnessChips() {
+    if (!this._firmsBrightnessChips) return;
+    this._firmsBrightnessChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-brightness]');
+      if (!chip || !this._firmsBrightnessChips.contains(chip)) return;
+      const next = normalizeBrightnessFloor(chip.dataset.firmsBrightness);
+      this._dataManager?.setLayerParams?.('local-firms', { brightnessFloor: next }, { origin: 'user' });
+      this._syncFirmsBrightnessChips();
+    });
+    this._syncFirmsBrightnessChips();
   }
 
   _syncInstallationClassChips() {

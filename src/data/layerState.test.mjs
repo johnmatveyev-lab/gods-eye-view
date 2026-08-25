@@ -67,6 +67,7 @@ function paramsForLayer(id) {
     return {
       frpFloor: 'all',
       confidenceFloor: 'all',
+      brightnessFloor: 'all',
       showDay: true,
       showNight: true,
       ageWindow: '24',
@@ -368,6 +369,35 @@ test('FIRMS confidence floor is a cheap local-firms enum that defaults to All', 
   assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), high).get('lo'), /w\.c\.8/);
   assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), high))
     .options['local-firms'].confidenceFloor, '0.8');
+});
+
+test('FIRMS brightness floor is a cheap local-firms enum that defaults to All', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].brightnessFloor, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].brightnessFloor, 'all', 'existing w links stay All');
+  assert.equal(omitted.options['local-firms'].frpFloor, 'all');
+  assert.equal(omitted.options['local-firms'].confidenceFloor, 'all');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { brightnessFloor: '320', frpFloor: '50' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.b\.3/);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  const decoded = decodeLayerStateParams(params).options['local-firms'];
+  assert.equal(decoded.brightnessFloor, '320');
+  assert.equal(decoded.frpFloor, '50');
+
+  const hotter = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { brightnessFloor: '340' } },
+  });
+  assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), hotter).get('lo'), /w\.b\.4/);
+  assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), hotter))
+    .options['local-firms'].brightnessFloor, '340');
 });
 
 test('FIRMS Day | Night persists on local-firms with the existing floors', () => {

@@ -377,6 +377,11 @@ const OPTION_GROUPS = Object.freeze({
       '0.5': '5',
       '0.8': '8',
     }),
+    enumOption('brightnessFloor', 'b', 'all', ['all', '320', '340'], {
+      all: 'a',
+      320: '3',
+      340: '4',
+    }),
     booleanOption('showDay', 'd', true),
     booleanOption('showNight', 'n', true),
     enumOption('ageWindow', 'a', '24', ['6', '12', '24'], {

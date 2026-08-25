@@ -27,6 +27,14 @@ import {
   normalizeAgeWindow,
 } from './firmsAgeWindow.js';
 import {
+  DEFAULT_FIRMS_BRIGHTNESS_FLOOR,
+  FIRMS_BRIGHTNESS_FLOOR_CHIPS,
+  filterFiresByBrightnessFloor,
+  fireMeetsBrightnessFloor,
+  firmsBrightnessChipModels,
+  normalizeBrightnessFloor,
+} from './firmsBrightnessFloor.js';
+import {
   filterFiresByDayNight,
   fireMeetsDayNight,
   firmsDayNightChipModels,
@@ -134,6 +142,15 @@ export {
   filterFiresByAgeWindow,
   fireMeetsAgeWindow,
   normalizeAgeWindow,
+};
+
+export {
+  FIRMS_BRIGHTNESS_FLOOR_CHIPS,
+  DEFAULT_FIRMS_BRIGHTNESS_FLOOR,
+  filterFiresByBrightnessFloor,
+  fireMeetsBrightnessFloor,
+  firmsBrightnessChipModels,
+  normalizeBrightnessFloor,
 };
 
 /**
@@ -289,6 +306,7 @@ export function createFirmsHeatmapLayer({
   /** Last-good fetch stays in `_fires`; `_firesByFrp` is the operator-filtered view. */
   let _frpFloor = 'all';
   let _confidenceFloor = 'all';
+  let _brightnessFloor = DEFAULT_FIRMS_BRIGHTNESS_FLOOR;
   let _showDay = true;
   let _showNight = true;
   let _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
@@ -420,6 +438,7 @@ export function createFirmsHeatmapLayer({
       _firesByFrp = [];
       _frpFloor = 'all';
       _confidenceFloor = 'all';
+      _brightnessFloor = DEFAULT_FIRMS_BRIGHTNESS_FLOOR;
       _showDay = true;
       _showNight = true;
       _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
@@ -586,24 +605,26 @@ export function createFirmsHeatmapLayer({
 
     /**
      * FIRMS floors for the data-panel chips. Re-filters in-memory `_fires`
-     * — never hits /api/firms. Age, FRP, confidence, Day | Night, and
-     * sensor chips AND.
-     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown }} [params]
+     * — never hits /api/firms. Age, FRP, confidence, brightness, Day | Night,
+     * and sensor chips AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, brightnessFloor?: string|number, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
       if (!params || typeof params !== 'object') return false;
       const hasFrp = Object.hasOwn(params, 'frpFloor');
       const hasConf = Object.hasOwn(params, 'confidenceFloor');
+      const hasBright = Object.hasOwn(params, 'brightnessFloor');
       const hasDay = Object.hasOwn(params, 'showDay');
       const hasNight = Object.hasOwn(params, 'showNight');
       const hasAge = Object.hasOwn(params, 'ageWindow');
       const hasSensors = Object.hasOwn(params, 'sensors');
-      if (!hasFrp && !hasConf && !hasDay && !hasNight && !hasAge && !hasSensors) return true;
+      if (!hasFrp && !hasConf && !hasBright && !hasDay && !hasNight && !hasAge && !hasSensors) return true;
       if (hasSensors && normalizeFirmsSensorFilter(params.sensors) == null) return false;
       return applyVisibleFloors({
         frpFloor: hasFrp ? params.frpFloor : undefined,
         confidenceFloor: hasConf ? params.confidenceFloor : undefined,
+        brightnessFloor: hasBright ? params.brightnessFloor : undefined,
         showDay: hasDay ? params.showDay : undefined,
         showNight: hasNight ? params.showNight : undefined,
         ageWindow: hasAge ? params.ageWindow : undefined,
@@ -615,6 +636,7 @@ export function createFirmsHeatmapLayer({
      * @returns {{
      *   frpFloor: 'all'|'10'|'50'|'100',
      *   confidenceFloor: 'all'|'0.5'|'0.8',
+     *   brightnessFloor: 'all'|'320'|'340',
      *   showDay: boolean,
      *   showNight: boolean,
      *   ageWindow: '6'|'12'|'24',
@@ -625,6 +647,7 @@ export function createFirmsHeatmapLayer({
       return {
         frpFloor: _frpFloor,
         confidenceFloor: _confidenceFloor,
+        brightnessFloor: _brightnessFloor,
         showDay: _showDay,
         showNight: _showNight,
         ageWindow: _ageWindow,
@@ -652,6 +675,7 @@ export function createFirmsHeatmapLayer({
             group: 'Conf',
             params: { confidenceFloor: chip.id },
           })),
+          ...firmsBrightnessChipModels(_brightnessFloor),
           ...firmsDayNightChipModels({ showDay: _showDay, showNight: _showNight }),
           ...FIRMS_AGE_WINDOW_CHIPS.map((chip) => ({
             id: `age-${chip.id}`,
@@ -769,9 +793,12 @@ export function createFirmsHeatmapLayer({
     const visible = filterFiresBySensor(
       filterFiresByAgeWindow(
         filterFiresByDayNight(
-          filterFiresByConfidenceFloor(
-            filterFiresByFrpFloor(_fires, _frpFloor),
-            _confidenceFloor,
+          filterFiresByBrightnessFloor(
+            filterFiresByConfidenceFloor(
+              filterFiresByFrpFloor(_fires, _frpFloor),
+              _confidenceFloor,
+            ),
+            _brightnessFloor,
           ),
           { showDay: _showDay, showNight: _showNight },
         ),
@@ -784,20 +811,21 @@ export function createFirmsHeatmapLayer({
     _count = visible.length;
   }
 
-  /** True when the detection clears FRP, confidence, Day | Night, age, and sensor. */
+  /** True when the detection clears FRP, confidence, brightness, Day | Night, age, and sensor. */
   function fireMeetsVisibleFloors(fire) {
     const minMw = frpFloorThresholdMw(_frpFloor);
     if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
     if (!fireMeetsConfidenceFloor(fire, _confidenceFloor)) return false;
+    if (!fireMeetsBrightnessFloor(fire, _brightnessFloor)) return false;
     if (!fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight })) return false;
     if (!fireMeetsAgeWindow(fire, _ageWindow, Date.now())) return false;
     return fireMatchesFirmsSensorFilter(fire, _sensors);
   }
 
   /**
-   * Change FRP, confidence, Day | Night, age, and/or sensor and re-render
-   * from memory. Never fetches.
-   * @param {{ frpFloor?: *, confidenceFloor?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: * }} next
+   * Change FRP, confidence, brightness, Day | Night, age, and/or sensor and
+   * re-render from memory. Never fetches.
+   * @param {{ frpFloor?: *, confidenceFloor?: *, brightnessFloor?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: * }} next
    * @returns {boolean}
    */
   function applyVisibleFloors(next = {}) {
@@ -811,6 +839,11 @@ export function createFirmsHeatmapLayer({
       const floor = normalizeConfidenceFloor(next.confidenceFloor);
       if (floor !== _confidenceFloor) changed = true;
       _confidenceFloor = floor;
+    }
+    if (next.brightnessFloor !== undefined) {
+      const floor = normalizeBrightnessFloor(next.brightnessFloor);
+      if (floor !== _brightnessFloor) changed = true;
+      _brightnessFloor = floor;
     }
     if (next.showDay !== undefined) {
       const showDay = next.showDay !== false;
