@@ -18,6 +18,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
   adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
   terrain, Google Places, and the rest). No Next rewrite and no new vendors.
+- Added `api/opensky.js` for hosted civilian flights. The path stays
+  `/api/opensky`; the handler is the extracted 250 nm adsb.lol snapshot
+  (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).
+  `/api/opensky-track` stays 410. No `OPENSKY_*` env.
 
 ### Fixed
 

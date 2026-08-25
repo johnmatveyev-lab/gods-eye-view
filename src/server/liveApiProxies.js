@@ -34,8 +34,13 @@ import {
   normalizeRegionalPlace,
   normalizeRegionalWeather,
 } from '../data/regionalBrief.js';
-import { normalizeAdsbLolPointResponse } from '../data/adsbLolFallback.js';
 import { createAisStreamAdapter, isRecognizedAisEnvelope } from '../data/aisStreamAdapter.js';
+import {
+  COMMERCIAL_FLIGHT_SOURCE,
+  OPENSKY_ENABLED,
+  adsbLolFallbackAnchor,
+  handleOpenskyFlightsHttp,
+} from './openskyFlights.js';
 import { rejectIfVoiceForbidden } from '../billing/http.js';
 import { parseSilenceTimeoutEnv } from '../data/aisWatchdog.js';
 import {
@@ -54,20 +59,9 @@ const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // ---------------------------------------------------------------------------
 // Civilian flights: adsb.lol only (OpenSky is disabled in this commercial fork)
 // ---------------------------------------------------------------------------
-/** Commercial flights feed. OpenSky is not contacted. */
-export const COMMERCIAL_FLIGHT_SOURCE = 'adsb.lol';
-/** Hard off — do not fetch opensky-network.org from production paths. */
-export const OPENSKY_ENABLED = false;
+export { COMMERCIAL_FLIGHT_SOURCE, OPENSKY_ENABLED, adsbLolFallbackAnchor };
 /** Hard off — cockpit headlines use GDELT only. */
 export const GOOGLE_NEWS_RSS_ENABLED = false;
-/** Regional civilian snapshot cache, keyed by a coarse 0.25° view anchor. */
-const _adsbLolPointCache = new Map();
-/** Per-anchor single-flight map for concurrent regional requests. */
-const _adsbLolPointInFlight = new Map();
-const ADSBLOL_POINT_CACHE_MS = 12000;
-const ADSBLOL_POINT_CACHE_MAX = 80;
-const ADSBLOL_POINT_RADIUS_NM = 250;
-const ADSBLOL_POINT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 // ---------------------------------------------------------------------------
 // Overpass API proxy constants and cache state
 // ---------------------------------------------------------------------------
@@ -2601,95 +2595,6 @@ function overpassProxy() {
   };
 }
 
-export function adsbLolFallbackAnchor(req) {
-  const incoming = new URL(req?.url || '', 'http://localhost');
-  const latitude = requiredFiniteQueryNumber(incoming.searchParams, 'lat');
-  const longitude = requiredFiniteQueryNumber(incoming.searchParams, 'lon');
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null;
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null;
-  return { latitude, longitude };
-}
-
-async function fetchAdsbLolPointFallback(req) {
-  const anchor = adsbLolFallbackAnchor(req);
-  if (!anchor) return null;
-  const roundedLat = Math.round(anchor.latitude * 4) / 4;
-  const roundedLon = Math.round(anchor.longitude * 4) / 4;
-  const cacheKey = `${roundedLat.toFixed(2)},${roundedLon.toFixed(2)}`;
-  const cached = _adsbLolPointCache.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.cachedAt < ADSBLOL_POINT_CACHE_MS) {
-    return { ...cached, cacheStatus: 'HIT' };
-  }
-
-  const request = coalesceProxyRequest(_adsbLolPointInFlight, cacheKey, async () => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-      const upstream = await fetch(
-        `https://api.adsb.lol/v2/lat/${roundedLat}/lon/${roundedLon}/dist/${ADSBLOL_POINT_RADIUS_NM}`,
-        {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'meridian-adsblol-flights/1.0',
-          },
-          signal: controller.signal,
-        },
-      );
-      if (!upstream.ok) throw new Error(`upstream HTTP ${upstream.status}`);
-      const payload = await readResponseJsonCapped(upstream, ADSBLOL_POINT_MAX_RESPONSE_BYTES);
-      const normalized = normalizeAdsbLolPointResponse(payload);
-      const record = {
-        body: JSON.stringify(normalized),
-        cachedAt: Date.now(),
-        count: normalized.states.length,
-      };
-      _adsbLolPointCache.delete(cacheKey);
-      _adsbLolPointCache.set(cacheKey, record);
-      while (_adsbLolPointCache.size > ADSBLOL_POINT_CACHE_MAX) {
-        _adsbLolPointCache.delete(_adsbLolPointCache.keys().next().value);
-      }
-      return record;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  });
-  try {
-    const record = await request.promise;
-    return { ...record, cacheStatus: request.shared ? 'INFLIGHT' : 'MISS' };
-  } catch (error) {
-    if (!request.shared && error?.name !== 'AbortError') {
-      console.warn('[adsb.lol Flights]', error?.message || error);
-    }
-    return cached ? { ...cached, cacheStatus: 'STALE' } : null;
-  }
-}
-
-function buildAdsbLolFlightHeaders({ cacheStatus, reason }) {
-  return {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-store',
-    'X-Flight-Source': COMMERCIAL_FLIGHT_SOURCE,
-    'X-Flight-Coverage': `${ADSBLOL_POINT_RADIUS_NM}nm regional`,
-    'X-Flight-Cache': cacheStatus,
-    'X-Flight-Reason': reason,
-  };
-}
-
-async function serveAdsbLolFlightsSnapshot(req, res, reason) {
-  const snapshot = await fetchAdsbLolPointFallback(req);
-  if (!snapshot) return false;
-  res.writeHead(200, {
-    ...buildAdsbLolFlightHeaders({
-      cacheStatus: snapshot.cacheStatus,
-      reason,
-    }),
-    'X-Flight-Count': String(snapshot.count),
-  });
-  res.end(snapshot.body);
-  return true;
-}
-
 /**
  * Vite plugin: civilian flights proxy.
  *
@@ -2703,26 +2608,7 @@ function openSkyProxy() {
   return {
     name: 'opensky-proxy',
     configureServer(server) {
-      server.middlewares.use('/api/opensky', async (req, res) => {
-        try {
-          if (await serveAdsbLolFlightsSnapshot(req, res, 'adsblol_primary')) return;
-          res.writeHead(400, buildAdsbLolFlightHeaders({
-            cacheStatus: 'MISS',
-            reason: 'missing_view_anchor',
-          }));
-          res.end(JSON.stringify({
-            error: 'adsb.lol regional snapshot requires lat and lon query parameters',
-          }));
-        } catch (e) {
-          console.error('[adsb.lol Flights Proxy]', e.message);
-          if (await serveAdsbLolFlightsSnapshot(req, res, 'adsblol_proxy_error')) return;
-          res.writeHead(502, buildAdsbLolFlightHeaders({
-            cacheStatus: 'MISS',
-            reason: 'proxy_error',
-          }));
-          res.end(JSON.stringify({ error: 'adsb.lol flights proxy error' }));
-        }
-      });
+      server.middlewares.use('/api/opensky', (req, res) => handleOpenskyFlightsHttp(req, res));
     },
   };
 }
