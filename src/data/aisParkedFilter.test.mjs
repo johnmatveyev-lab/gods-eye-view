@@ -18,6 +18,7 @@ import {
   vesselMatchesParkedFilter,
   vesselSpeedKnots,
 } from './aisParkedFilter.js';
+import { filterVesselsByMinSpeed } from './aisMinSpeedFilter.js';
 import { filterVesselsByType } from './vesselTypeFilter.js';
 import aisLiveVesselsLayer, {
   _applyAisFeedSnapshotForTest,
@@ -121,6 +122,15 @@ test('Hide parked ANDs with Plan 153 type chips', () => {
       .map((record) => record.mmsi),
     ['1', '3', '4', '5', '6', '7', '8'],
     'selected parked tanker stays through both filters',
+  );
+  assert.deepEqual(
+    filterVesselsByMinSpeed(
+      filterVesselsByParked(filterVesselsByType(MIXED, 'CPFSO', '1'), true, '1'),
+      '10',
+      '1',
+    ).map((record) => record.mmsi),
+    ['1', '5', '6', '7', '8'],
+    'selected parked tanker stays through type, Hide parked, and 10+',
   );
 });
 

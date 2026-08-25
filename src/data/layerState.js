@@ -433,6 +433,13 @@ const OPTION_GROUPS = Object.freeze({
     // PLAN 157: hide parked default OFF. Omitted `p` keeps the current harbor
     // view — there was no prior parked filter, so absent === default.
     booleanOption('hideParked', 'p', false),
+    // PLAN 162: min-speed default All. Omitted `s` keeps the current view —
+    // there was no prior speed floor, so absent === default.
+    enumOption('minSpeed', 's', 'all', ['all', '5', '10'], {
+      all: 'a',
+      5: '5',
+      10: 't',
+    }),
   ]),
 });
 

@@ -156,6 +156,10 @@ test('AIS layer row and Ships/AIS panel expose Tanker | Cargo | Passenger | Fish
   ]);
   assert.ok(typeChips.every((chip) => chip.active === true));
   assert.equal(chips.find((chip) => chip.id === 'hide-parked')?.label, 'Hide parked');
+  assert.deepEqual(
+    chips.filter((chip) => String(chip.id || '').startsWith('min-speed-')).map((chip) => chip.label),
+    ['All', '5+', '10+'],
+  );
   assert.equal(vesselTypeChipModels('all')[0].params.vesselTypeFilter, 'CPFSO');
 });
 
