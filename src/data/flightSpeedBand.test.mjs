@@ -183,7 +183,7 @@ test('honors sibling in-flight filter modules when they have already landed', as
   const siblings = [
     ['./flightIdentWatchlist.js', ['contactMatchesWatchlist', 'contactMatchesIdentWatchlist']],
     ['./flightAltitudeBand.js', ['contactMatchesAltitudeBand', 'aircraftMatchesAltitudeBand']],
-    ['./flightEmergencySquawk.js', ['contactMatchesEmergencySquawk', 'contactMatchesSquawk']],
+    ['./emergencySquawk.js', ['contactMatchesEmergencySquawk', 'contactMatchesSquawk', 'isEmergencySquawk']],
     ['./flightAirborneOnly.js', ['contactMatchesAirborneOnly', 'contactIsAirborne']],
   ];
   const matchers = [];

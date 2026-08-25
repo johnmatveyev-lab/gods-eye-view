@@ -422,7 +422,7 @@ function _contactUsesEmergencyHighlight(icao24) {
   return shouldPaintEmergencyHighlight({
     squawk: _flightData.get(icao24)?.squawk,
     highlightEnabled: getEmergencyHighlightEnabled(),
-    inAltitudeBand: _passesInFlightFilters(icao24, _flightData.get(icao24)),
+    inAltitudeBand: true,
   });
 }
 
