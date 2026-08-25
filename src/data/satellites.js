@@ -65,6 +65,14 @@ import {
   satellitePassesLaunchYearFilter,
   setSatLaunchYear,
 } from './satelliteLaunchYearFilter.js';
+import {
+  DEFAULT_SAT_PERIGEE,
+  getSatPerigee,
+  resetSatPerigeeCache,
+  satellitePassesPerigeeFilter,
+  satellitePerigeeChipModels,
+  setSatPerigee,
+} from './satellitePerigeeFilter.js';
 import { satelliteCatalogControls } from './satelliteCatalogControls.js';
 import {
   clearOverlaySource,
@@ -335,6 +343,7 @@ let _classTallyCache = {
   inclination: null,
   eccentricity: null,
   launchYear: null,
+  perigee: null,
   counts: null,
 };
 /** @type {(() => void)|null} Manager callback: "this layer's row controls changed". */
@@ -361,6 +370,7 @@ function _classTally() {
   const inclination = getSatInclination();
   const eccentricity = getSatEccentricity();
   const launchYear = getSatLaunchYear();
+  const perigee = getSatPerigee();
   if (
     _classTallyCache.counts
     && _classTallyCache.revision === _catalogRevision
@@ -369,6 +379,7 @@ function _classTally() {
     && _classTallyCache.inclination === inclination
     && _classTallyCache.eccentricity === eccentricity
     && _classTallyCache.launchYear === launchYear
+    && _classTallyCache.perigee === perigee
   ) {
     return _classTallyCache.counts;
   }
@@ -388,6 +399,7 @@ function _classTally() {
     inclination,
     eccentricity,
     launchYear,
+    perigee,
     counts,
   };
   return counts;
@@ -470,8 +482,23 @@ function _launchYearAllowsSatellite(noradId, sat = _catalog.get(noradId), tracke
 }
 
 /**
+ * Whether one catalog row may render under the current perigee chips.
+ * Missing / non-finite altp stays. The tracked satellite always passes.
+ * @param {number} noradId
+ * @param {{satrec?: object}|null|undefined} [sat]
+ * @param {number|null} [trackedNorad]
+ * @returns {boolean}
+ */
+function _perigeeAllowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _trackedNorad) {
+  return satellitePassesPerigeeFilter(sat, getSatPerigee(), {
+    noradId,
+    trackedNorad,
+  });
+}
+
+/**
  * Class chips AND period chips AND inclination chips AND eccentricity chips
- * AND launch-year chips. Tracked stays even when a chip is off.
+ * AND launch-year chips AND perigee chips. Tracked stays even when a chip is off.
  * @param {number} noradId
  * @param {{group?: string, satrec?: object}|null|undefined} [sat]
  * @param {number|null} [trackedNorad]
@@ -482,16 +509,17 @@ function _allowsSatellite(noradId, sat = _catalog.get(noradId), trackedNorad = _
     && _periodAllowsSatellite(noradId, sat, trackedNorad)
     && _inclinationAllowsSatellite(noradId, sat, trackedNorad)
     && _eccentricityAllowsSatellite(noradId, sat, trackedNorad)
-    && _launchYearAllowsSatellite(noradId, sat, trackedNorad);
+    && _launchYearAllowsSatellite(noradId, sat, trackedNorad)
+    && _perigeeAllowsSatellite(noradId, sat, trackedNorad);
 }
 
-/** Untracked point show-flag for the current class / period / inclination / eccentricity / year chips. Tracked stays hidden. */
+/** Untracked point show-flag for the current class / period / inclination / eccentricity / year / perigee chips. Tracked stays hidden. */
 function _untrackedPointShouldShow(noradId) {
   if (noradId === _trackedNorad) return false;
   return _allowsSatellite(noradId);
 }
 
-/** Orbit ring show-flag: ORBITS on AND class / period / inclination / eccentricity / year chips allow this satellite. */
+/** Orbit ring show-flag: ORBITS on AND class / period / inclination / eccentricity / year / perigee chips allow this satellite. */
 function _orbitPathShouldShow(noradId) {
   return _params.showOrbits && _allowsSatellite(noradId);
 }
@@ -517,7 +545,7 @@ function _classFilterChips() {
   });
 }
 
-/** Re-apply class, period, inclination, eccentricity, and launch-year chips to in-memory points and orbit rings. Never fetches CelesTrak. */
+/** Re-apply class, period, inclination, eccentricity, launch-year, and perigee chips to in-memory points and orbit rings. Never fetches CelesTrak. */
 function _applyClassVisibility() {
   for (const [noradId, point] of _points) {
     if (!point) continue;
@@ -534,6 +562,7 @@ function _applyClassVisibility() {
     inclination: null,
     eccentricity: null,
     launchYear: null,
+    perigee: null,
     counts: null,
   };
   _syncIssOverlay();
@@ -1657,6 +1686,8 @@ export function _setDenseCatalogStateForTest({
   setSatEccentricity(DEFAULT_SAT_ECCENTRICITY, { getItem: () => null, setItem() {} });
   resetSatLaunchYearCache();
   setSatLaunchYear(DEFAULT_SAT_LAUNCH_YEAR, { getItem: () => null, setItem() {} });
+  resetSatPerigeeCache();
+  setSatPerigee(DEFAULT_SAT_PERIGEE, { getItem: () => null, setItem() {} });
   _enabled = true;
   _applyClassVisibility();
 }
@@ -1692,6 +1723,8 @@ export function _clearDenseCatalogStateForTest() {
   setSatEccentricity(DEFAULT_SAT_ECCENTRICITY, { getItem: () => null, setItem() {} });
   resetSatLaunchYearCache();
   setSatLaunchYear(DEFAULT_SAT_LAUNCH_YEAR, { getItem: () => null, setItem() {} });
+  resetSatPerigeeCache();
+  setSatPerigee(DEFAULT_SAT_PERIGEE, { getItem: () => null, setItem() {} });
   _cancelPendingTrackingRestore();
   _enabled = false;
 }
@@ -1752,6 +1785,7 @@ export function _satelliteVisualStateForTest() {
     satInclination: getSatInclination(),
     satEccentricity: getSatEccentricity(),
     satLaunchYear: getSatLaunchYear(),
+    satPerigee: getSatPerigee(),
     pointCollectionShow: _pointCollection ? Boolean(_pointCollection.show) : null,
     pointIds: [..._points.keys()],
     pointShows: Object.fromEntries(
@@ -2464,7 +2498,7 @@ const satellitesLayer = {
    * Runtime params (DataLayerManager.setLayerParams path).
    * catalog: 'core' (default, ~840 sats) | 'dense' (adds the Starlink shell
    * as points-only extras on a relaxed propagation budget).
-   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown, satInclination?: unknown, satEccentricity?: unknown, satLaunchYear?: unknown }} [params]
+   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown, satPeriod?: unknown, satInclination?: unknown, satEccentricity?: unknown, satLaunchYear?: unknown, satPerigee?: unknown }} [params]
    */
   setParams(params = {}, { origin = 'programmatic', storage } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -2548,6 +2582,13 @@ const satellitesLayer = {
         _applyClassVisibility();
       }
     }
+    if (Object.hasOwn(params, 'satPerigee')) {
+      const previous = getSatPerigee(storage);
+      const next = setSatPerigee(params.satPerigee, storage);
+      if (next !== previous) {
+        _applyClassVisibility();
+      }
+    }
     if (Object.hasOwn(params, 'selectedSatTrackingId')) {
       const requested = _normalizeTrackedNorad(params.selectedSatTrackingId);
       if (requested === _trackedNorad) {
@@ -2565,7 +2606,7 @@ const satellitesLayer = {
     return true;
   },
 
-  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string, satInclination: string, satEccentricity: string, satLaunchYear: string }} Current runtime params. */
+  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string, satPeriod: string, satInclination: string, satEccentricity: string, satLaunchYear: string, satPerigee: string }} Current runtime params. */
   getParams() {
     return {
       catalog: _params.catalog,
@@ -2578,6 +2619,7 @@ const satellitesLayer = {
       satInclination: getSatInclination(),
       satEccentricity: getSatEccentricity(),
       satLaunchYear: getSatLaunchYear(),
+      satPerigee: getSatPerigee(),
     };
   },
 
@@ -2586,7 +2628,8 @@ const satellitesLayer = {
    * Dense catalog chips, PLAN 132 class chips, PLAN 164 period chips
    * (All | <100m | <128m), PLAN 169 inclination chips (Eq | Mid | Polar),
    * PLAN 177 eccentricity chips (All | <0.01 | <0.05), PLAN 182 launch-year
-   * chips (All | 2020s | 2010s | older),
+   * chips (All | 2020s | 2010s | older), PLAN 199 perigee chips
+   * (All | <600km | <400km),
    * the Plan 65 Sats group picker, POINTS and ORBITS chips over the existing
    * `showPoints` / `showOrbits` params, a class legend, and the Next ISS
    * readout host (Plan 139).
@@ -2596,7 +2639,7 @@ const satellitesLayer = {
    * the same `catalog` / `showPoints` / `showOrbits` params) stays the single
    * source of truth. Hiding dots must keep this row: otherwise POINTS could
    * not turn back on, and Orbits / Core|Dense / class / period / inclination /
-   * eccentricity / year chips would vanish.
+   * eccentricity / year / perigee chips would vanish.
    *
    * Dense reports the LOAD state, not the catalog param: the param flips
    * synchronously while the Starlink shell takes seconds to arrive and
@@ -2619,6 +2662,7 @@ const satellitesLayer = {
         ...satelliteInclinationChipModels(getSatInclination()),
         ...satelliteEccentricityChipModels(getSatEccentricity()),
         ...satelliteLaunchYearChipModels(getSatLaunchYear()),
+        ...satellitePerigeeChipModels(getSatPerigee()),
         {
           id: 'points',
           label: 'POINTS',
