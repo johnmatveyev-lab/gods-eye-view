@@ -444,7 +444,7 @@ test('every explicit visual UI gesture claims restore authority before it mutate
     ["this._scopeFeatherSlider?.addEventListener('input'", 'if (this._sharpenSlider)', 'setScopeMaskFeather(', 'scope feather slider'],
     ["this._sharpenSlider.addEventListener('input'", 'if (this._hudLayoutSelect)', 'this._applySharpenIntensity(', 'sharpen slider'],
     ["this._hudLayoutSelect.addEventListener('change'", 'if (this._cleanViewBtn)', 'this._setHudVariant(', 'HUD layout select'],
-    ["this._detectionDensitySlider.addEventListener('input'", 'for (const button of this._detectionAllocationBtns)', 'this._applyDetectionDensityFromUi()', 'detection density slider'],
+    ["this._detectionDensitySlider.addEventListener('input'", 'for (const button of this._detectionAllocationBtns)', 'this.setDetection(detectionDensityControlRequest(', 'detection density slider'],
     ["button.addEventListener('click'", 'for (const slider of [this._detectionFadeSlider', 'this._setDetectionAllocation(', 'detection allocation button'],
     ["slider?.addEventListener('input'", 'if (this._celestialBtn)', 'this._applyDetectionFadeFromUi()', 'detection fade controls'],
   ];

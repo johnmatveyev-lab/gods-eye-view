@@ -429,8 +429,22 @@
       </button>
       <div class="pp-slider-row detection-slider-row" id="detection-slider-row">
         <label class="pp-slider-mini-label" for="detection-density-slider">Density</label>
-        <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" aria-label="Detection label density" />
-        <span class="pp-slider-value" id="detection-density-value">50%</span>
+        <div class="detection-density-control">
+          <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" list="detection-density-stop-values" aria-label="Detection density" aria-valuetext="Balanced" />
+          <div class="detection-density-stops" aria-hidden="true">
+            <span>Sparse</span>
+            <span>Balanced</span>
+            <span>Dense</span>
+          </div>
+        </div>
+        <span class="pp-slider-value" id="detection-density-value">Balanced</span>
+        <datalist id="detection-density-stop-values">
+          <option value="0" label="Sparse"></option>
+          <option value="25" label="Sparse"></option>
+          <option value="50" label="Balanced"></option>
+          <option value="75" label="Dense"></option>
+          <option value="100" label="Dense"></option>
+        </datalist>
       </div>
       <div class="pp-slider-row detection-allocation-row" id="detection-allocation-row">
         <span class="pp-slider-mini-label">Allocation</span>
