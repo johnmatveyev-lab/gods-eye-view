@@ -14,11 +14,20 @@ import {
 } from './focusDeemphasis.js';
 import { refreshTrackedReadout } from './trackedReadout.js';
 import {
+  SATELLITE_CLASS_ORDER,
+  SATELLITE_CLASSES,
   satelliteClassColor,
   satelliteClassLabel,
   satelliteClassLegend,
   tallySatelliteClasses,
 } from './satelliteClass.js';
+import {
+  DEFAULT_SATELLITE_CLASS_FILTER,
+  normalizeSatelliteClassFilter,
+  satelliteClassFilterFlags,
+  satellitePassesClassFilter,
+  toggleSatelliteClassFilter,
+} from './satelliteClassFilter.js';
 import { satelliteCatalogControls } from './satelliteCatalogControls.js';
 import {
   clearOverlaySource,
@@ -245,7 +254,12 @@ let _clickHandler = null;
 let _trackedEntityChangedRemove = null;
 
 // Runtime params (DataLayerManager.setLayerParams path)
-let _params = { catalog: 'core', showPoints: true, showOrbits: true }; // 'core' | 'dense'
+let _params = {
+  catalog: 'core',
+  showPoints: true,
+  showOrbits: true,
+  satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER,
+}; // 'core' | 'dense'
 let _denseIds = [];      // norad ids of dense extras, round-robin order
 let _denseCursor = 0;    // next dense id to re-propagate
 let _denseLoadToken = 0; // invalidates in-flight dense loads on mode flip/reload
@@ -263,7 +277,7 @@ let _denseStatus = 'idle';
 let _denseError = null;
 /** Bumped on every bulk catalog mutation; keys the row-legend tally cache. */
 let _catalogRevision = 0;
-let _classTallyCache = { revision: -1, counts: null };
+let _classTallyCache = { revision: -1, filter: null, counts: null };
 /** @type {(() => void)|null} Manager callback: "this layer's row controls changed". */
 let _rowControlsListener = null;
 
@@ -283,7 +297,12 @@ function _notifyRowControls() {
  * @returns {Record<string, number>} Class key → count.
  */
 function _classTally() {
-  if (_classTallyCache.counts && _classTallyCache.revision === _catalogRevision) {
+  const filter = _params.satelliteClassFilter;
+  if (
+    _classTallyCache.counts
+    && _classTallyCache.revision === _catalogRevision
+    && _classTallyCache.filter === filter
+  ) {
     return _classTallyCache.counts;
   }
   const entries = [];
@@ -291,11 +310,65 @@ function _classTally() {
   // ISS is ingested as `visual`, and the legend must file it exactly where its
   // card does (STATION) rather than letting STATION vanish from the legend.
   for (const [noradId, sat] of _catalog) {
+    if (!_classAllowsSatellite(noradId, sat)) continue;
     entries.push({ group: sat.group, isIss: noradId === ISS_NORAD });
   }
   const counts = tallySatelliteClasses(entries);
-  _classTallyCache = { revision: _catalogRevision, counts };
+  _classTallyCache = { revision: _catalogRevision, filter, counts };
   return counts;
+}
+
+/**
+ * Whether one catalog row may render under the current class chips.
+ * The tracked satellite always passes, including the ISS STATION rule.
+ * @param {number} noradId
+ * @param {{group?: string}|null|undefined} [sat]
+ * @returns {boolean}
+ */
+function _classAllowsSatellite(noradId, sat = _catalog.get(noradId)) {
+  return satellitePassesClassFilter(sat, _params.satelliteClassFilter, {
+    noradId,
+    trackedNorad: _trackedNorad,
+    isIss: noradId === ISS_NORAD,
+  });
+}
+
+/** Untracked point show-flag for the current class chips. Tracked stays hidden. */
+function _untrackedPointShouldShow(noradId) {
+  if (noradId === _trackedNorad) return false;
+  return _classAllowsSatellite(noradId);
+}
+
+function _classFilterChips() {
+  const filter = _params.satelliteClassFilter;
+  const flags = satelliteClassFilterFlags(filter);
+  return SATELLITE_CLASS_ORDER.map((klass) => {
+    const spec = SATELLITE_CLASSES[klass];
+    const commsNoop = klass === 'comms' && _params.catalog === 'core';
+    return {
+      id: `class-${klass}`,
+      label: spec.label,
+      active: flags[klass] === true,
+      busy: false,
+      disabled: false,
+      state: flags[klass] ? 'active' : 'idle',
+      title: commsNoop
+        ? `${spec.blurb} — no-op in Core (shown only in Dense)`
+        : spec.blurb,
+      params: { satelliteClassFilter: toggleSatelliteClassFilter(filter, klass) },
+    };
+  });
+}
+
+/** Re-apply class chips to in-memory points. Never fetches CelesTrak. */
+function _applyClassVisibility() {
+  for (const [noradId, point] of _points) {
+    if (!point) continue;
+    point.show = _untrackedPointShouldShow(noradId);
+  }
+  _classTallyCache = { revision: -1, filter: null, counts: null };
+  _syncIssOverlay();
+  _notifyRowControls();
 }
 
 /**
@@ -415,9 +488,11 @@ function _syncIssOverlay() {
   // Hidden when ISS is the tracked subject, and equally when ISS is DOCKED to
   // whatever is tracked: its ambient label would otherwise sit underneath the
   // tracked card at the same position.
+  const stationOn = satelliteClassFilterFlags(_params.satelliteClassFilter).station === true;
   const visible = _enabled && _params.showOrbits && _trackedNorad !== ISS_NORAD
     && !_dockedCompanions.has(ISS_NORAD)
-    && _catalog.has(ISS_NORAD) && _issDisplayCached();
+    && _catalog.has(ISS_NORAD) && _issDisplayCached()
+    && stationOn;
   if (!visible) {
     _overlayHost.clearSource(ISS_OVERLAY_SOURCE_ID);
     _overlayHost.setVisible(ISS_OVERLAY_SOURCE_ID, false);
@@ -707,7 +782,11 @@ function _clearTracking(skipViewerUntrack = false, { origin = 'programmatic' } =
   // and restore the original group palette from the shared style table (WS-D3)
   if (lastPos) {
     const style = _pointStyleFor(_trackedNorad, _catalog.get(_trackedNorad)?.group);
-    lastPos.show = true;
+    lastPos.show = satellitePassesClassFilter(_catalog.get(clearedNorad), _params.satelliteClassFilter, {
+      noradId: clearedNorad,
+      trackedNorad: null,
+      isIss: clearedNorad === ISS_NORAD,
+    });
     lastPos.pixelSize = style.pixelSize;
     lastPos.color = style.color;
     lastPos.outlineColor = style.outlineColor;
@@ -1148,6 +1227,7 @@ async function _loadDenseCatalog({ signal = null } = {}) {
           outlineWidth: style.outlineWidth,
           scaleByDistance: new Cesium.NearFarScalar(1e6, 1.5, 2e7, 0.6),
           id: noradId,
+          show: _untrackedPointShouldShow(noradId),
         });
         _points.set(noradId, point);
         _denseIds.push(noradId);
@@ -1174,7 +1254,7 @@ async function _loadDenseCatalog({ signal = null } = {}) {
     console.log(`[Data:Satellites] Dense catalog: +${added} ${DENSE_GROUP_PATH} (points only)`);
     // The panel would otherwise keep the pre-load count and legend until the
     // next natural refresh — up to the 5-minute catalog interval.
-    _notifyRowControls();
+    _applyClassVisibility();
     _applyPendingTrackingRestore();
     return { status: 'ready', added };
   } catch (e) {
@@ -1311,7 +1391,12 @@ export function _setTrackedSatelliteRefreshStateForTest({
   _trackedFrameNumber = -1;
   _trackedFrameGeo = null;
   _trackedFrameNowForTest = now;
-  _params = { catalog: 'core', showPoints: false, showOrbits: false };
+  _params = {
+    catalog: 'core',
+    showPoints: false,
+    showOrbits: false,
+    satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER,
+  };
   _enabled = true;
 }
 
@@ -1384,8 +1469,14 @@ export function _setDenseCatalogStateForTest({
   _catalogRevision++;
   _trackedNorad = trackedNorad;
   _cancelPendingTrackingRestore();
-  _params = { catalog, showPoints, showOrbits };
+  _params = {
+    catalog,
+    showPoints,
+    showOrbits,
+    satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER,
+  };
   _enabled = true;
+  _applyClassVisibility();
 }
 
 /** Tear the dense seam back down so ordering cannot leak into other tests. */
@@ -1404,7 +1495,12 @@ export function _clearDenseCatalogStateForTest() {
   _lastError = null;
   _count = 0;
   _trackedNorad = null;
-  _params = { catalog: 'core', showPoints: true, showOrbits: true };
+  _params = {
+    catalog: 'core',
+    showPoints: true,
+    showOrbits: true,
+    satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER,
+  };
   _cancelPendingTrackingRestore();
   _enabled = false;
 }
@@ -1431,11 +1527,12 @@ export function _setSatellitePresentationForTest({
   showOrbits = true,
   points = [],
   orbits = [],
+  groups = {},
 } = {}) {
   _setDenseCatalogStateForTest({ catalog, showPoints, showOrbits });
   for (const noradId of points) {
     const id = Number(noradId);
-    const group = id === 44444 ? 'dense' : 'stations';
+    const group = groups[id] || (id === 44444 ? 'dense' : 'stations');
     _catalog.set(id, { name: `SAT-${id}`, satrec: {}, group });
     _points.set(id, _pointCollection.add({ id, show: true }));
     if (group === 'dense') _denseIds.push(id);
@@ -1445,6 +1542,7 @@ export function _setSatellitePresentationForTest({
   }
   if (_pointCollection) _pointCollection.show = satelliteVisualsVisible(_enabled, _params.showPoints);
   _catalogRevision++;
+  _applyClassVisibility();
 }
 
 /** Live presentation snapshot for orbit/point toggle tests. */
@@ -1453,8 +1551,12 @@ export function _satelliteVisualStateForTest() {
     catalog: _params.catalog,
     showPoints: _params.showPoints,
     showOrbits: _params.showOrbits,
+    satelliteClassFilter: _params.satelliteClassFilter,
     pointCollectionShow: _pointCollection ? Boolean(_pointCollection.show) : null,
     pointIds: [..._points.keys()],
+    pointShows: Object.fromEntries(
+      [..._points].map(([id, point]) => [id, point?.show !== false]),
+    ),
     orbitShows: Object.fromEntries(
       [..._orbitPaths].map(([id, path]) => [id, Boolean(path.primitive?.show)]),
     ),
@@ -1482,7 +1584,12 @@ export function _setSatelliteLabelLifecycleStateForTest({
   _trackedFrameNumber = -1;
   _trackedFrameGeo = null;
   _enabled = true;
-  _params = { catalog: 'core', showPoints: true, showOrbits: true };
+  _params = {
+    catalog: 'core',
+    showPoints: true,
+    showOrbits: true,
+    satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER,
+  };
   _overlayHost = overlayHost || DEFAULT_OVERLAY_HOST;
   _syncIssOverlay();
 }
@@ -1809,6 +1916,7 @@ const satellitesLayer = {
           outlineWidth: style.outlineWidth,
           scaleByDistance: new Cesium.NearFarScalar(1e6, 1.5, 2e7, 0.6),
           id: noradId,
+          show: _untrackedPointShouldShow(noradId),
         });
 
         _points.set(noradId, point);
@@ -1833,6 +1941,7 @@ const satellitesLayer = {
         failedGroups: [...failed],
       };
       console.log(`[Data:Satellites] ${_count} satellites active, ISS path shown`);
+      _applyClassVisibility();
 
       // Re-apply dense mode after a full catalog rebuild (fire-and-forget —
       // _loadDenseCatalog handles its own errors and token invalidation).
@@ -1935,6 +2044,7 @@ const satellitesLayer = {
       // mark and label would stack underneath the tracked card. It is listed on
       // that card instead. Only members of the tracked cluster are affected —
       // unrelated nearby satellites are never suppressed.
+      if (!isTracked && point.show === false) continue;
       if (!isTracked && _dockedCompanions.has(noradId)) continue;
       const cat = _catalog.get(noradId);
       let object = _detectionObjects.get(noradId);
@@ -2139,7 +2249,7 @@ const satellitesLayer = {
    * Runtime params (DataLayerManager.setLayerParams path).
    * catalog: 'core' (default, ~840 sats) | 'dense' (adds the Starlink shell
    * as points-only extras on a relaxed propagation budget).
-   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string }} [params]
+   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string, satelliteClassFilter?: unknown }} [params]
    */
   setParams(params = {}, { origin = 'programmatic', storage } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -2186,6 +2296,13 @@ const satellitesLayer = {
         void this.update(_viewer);
       }
     }
+    if (Object.hasOwn(params, 'satelliteClassFilter')) {
+      const next = normalizeSatelliteClassFilter(params.satelliteClassFilter);
+      if (next !== _params.satelliteClassFilter) {
+        _params.satelliteClassFilter = next;
+        _applyClassVisibility();
+      }
+    }
     if (Object.hasOwn(params, 'selectedSatTrackingId')) {
       const requested = _normalizeTrackedNorad(params.selectedSatTrackingId);
       if (requested === _trackedNorad) {
@@ -2203,7 +2320,7 @@ const satellitesLayer = {
     return true;
   },
 
-  /** @returns {{ catalog: string, satGroup: string }} Current runtime params. */
+  /** @returns {{ catalog: string, satGroup: string, satelliteClassFilter: string }} Current runtime params. */
   getParams() {
     return {
       catalog: _params.catalog,
@@ -2211,13 +2328,14 @@ const satellitesLayer = {
       showPoints: _params.showPoints,
       showOrbits: _params.showOrbits,
       selectedSatTrackingId: _trackedNorad,
+      satelliteClassFilter: _params.satelliteClassFilter,
     };
   },
 
   /**
    * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
-   * Dense catalog chips, the Plan 65 Sats group picker, an ORBITS chip over
-   * the existing `showOrbits` param, plus a class legend.
+   * Dense catalog chips, PLAN 132 class chips, the Plan 65 Sats group picker,
+   * an ORBITS chip over the existing `showOrbits` param, plus a class legend.
    *
    * The chips are stateless — they declare the params to apply and the manager
    * owns the write, so the Space Missions snapshot/restore path (which drives
@@ -2245,6 +2363,7 @@ const satellitesLayer = {
       ...catalog,
       chips: [
         ...catalog.chips,
+        ..._classFilterChips(),
         {
           id: 'orbits',
           label: 'ORBITS',
