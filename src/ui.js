@@ -159,6 +159,13 @@ import {
   shareableDetectionState,
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
+import {
+  handleFullscreenEscape,
+  hideFullscreenButtonIfUnsupported,
+  isDocumentFullscreen,
+  syncFullscreenButton,
+  toggleFullscreen,
+} from './fullscreenChrome.js';
 import { AWARENESS_RADIUS_M, formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
 import {
   formatDistanceMeters,
@@ -2463,6 +2470,7 @@ export class StyleManager {
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
@@ -2746,6 +2754,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initFullscreenButton();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
     this._initResetGlobeButton();
@@ -3469,6 +3478,7 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
+        handleFullscreenEscape(e);
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
           this._locationSearch.value = '';
@@ -3496,6 +3506,7 @@ export class StyleManager {
       if (e.key.toLowerCase() === 'o') this._toggleOrbit();
       if (e.key.toLowerCase() === 'v') this.toggleCleanView();
       if (e.key.toLowerCase() === 'f') {
+        // f = data-panel — fullscreen uses the button; Escape exits
         document.getElementById('data-panel').classList.toggle('active');
       }
       if (e.key.toLowerCase() === 'd') {
@@ -10076,6 +10087,27 @@ export class StyleManager {
     });
   }
 
+  /** Wire fullscreen on the document root so #cesium-credits stays painted. */
+  _initFullscreenButton() {
+    hideFullscreenButtonIfUnsupported(this._fullscreenBtn);
+    this._fullscreenBtn?.addEventListener('click', () => { void this.toggleGlobeFullscreen(); });
+    const onChange = () => {
+      syncFullscreenButton(this._fullscreenBtn, isDocumentFullscreen());
+      pinRequiredCredits();
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    this._removeFullscreenListener = () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+    onChange();
+  }
+
+  toggleGlobeFullscreen() {
+    return toggleFullscreen();
+  }
+
   /**
    * Displays a temporary toast notification for 2 seconds.
    * @param {string} message - Text to show in the toast.
@@ -10552,6 +10584,8 @@ export class StyleManager {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
     }
+    this._removeFullscreenListener?.();
+    this._removeFullscreenListener = null;
     if (this._poiKeydownHandler) {
       document.removeEventListener('keydown', this._poiKeydownHandler);
       this._poiKeydownHandler = null;
