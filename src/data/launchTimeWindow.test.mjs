@@ -24,6 +24,7 @@ import {
 } from './launchTimeWindow.js';
 import { filterLaunchesByStatus } from './launchStatusFilter.js';
 import { filterLaunchesByProvider, normalizeLaunchProviderFilter } from './launchProviderFilter.js';
+import { filterLaunchesByRocket, normalizeLaunchRocketFilter } from './launchRocketFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const indexHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -56,6 +57,7 @@ const NEAR_GO_KSC = {
   status: 'Go',
   provider: 'SpaceX',
   launchSite: 'KSC',
+  rocketName: 'Falcon 9',
   launchTime: isoDaysFromNow(-2),
 };
 const FAR_GO_KSC = {
@@ -63,6 +65,7 @@ const FAR_GO_KSC = {
   status: 'Go',
   provider: 'SpaceX',
   launchSite: 'KSC',
+  rocketName: 'Falcon 9',
   launchTime: isoDaysFromNow(-20),
 };
 const NEAR_TBD_KSC = {
@@ -70,6 +73,7 @@ const NEAR_TBD_KSC = {
   status: 'TBD',
   provider: 'ULA',
   launchSite: 'KSC',
+  rocketName: 'Atlas V',
   launchTime: isoDaysFromNow(-1),
 };
 const NEAR_GO_VAFB = {
@@ -77,6 +81,7 @@ const NEAR_GO_VAFB = {
   status: 'Go',
   provider: 'ULA',
   launchSite: 'VAFB',
+  rocketName: 'Atlas V',
   launchTime: isoDaysFromNow(-3),
 };
 const MISSING_TIME = {
@@ -152,6 +157,20 @@ test('Status Go + one provider still ANDs with the 7d window', () => {
     normalizeLaunchProviderFilter({ SpaceX: true, ULA: false, NASA: false }, ['SpaceX', 'ULA', 'NASA']),
   );
   const windowed = filterLaunchesByTimeWindow(spaceXOnly, '7d', null, NOW_MS);
+  assert.deepEqual(windowed.map((row) => row.id), ['near-go-ksc']);
+});
+
+test('Status Go + one provider + one rocket still ANDs with the 7d window', () => {
+  const goOnly = filterLaunchesByStatus(ROSTER, { go: true });
+  const spaceXOnly = filterLaunchesByProvider(
+    goOnly,
+    normalizeLaunchProviderFilter({ SpaceX: true, ULA: false, NASA: false }, ['SpaceX', 'ULA', 'NASA']),
+  );
+  const falconOnly = filterLaunchesByRocket(
+    spaceXOnly,
+    normalizeLaunchRocketFilter({ 'Falcon 9': true, 'Atlas V': false }, ['Atlas V', 'Falcon 9']),
+  );
+  const windowed = filterLaunchesByTimeWindow(falconOnly, '7d', null, NOW_MS);
   assert.deepEqual(windowed.map((row) => row.id), ['near-go-ksc']);
 });
 

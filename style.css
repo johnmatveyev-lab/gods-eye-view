@@ -6261,6 +6261,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #space-mission-panel-host .space-mission-window-chips,
 #space-mission-panel-host .space-mission-status-chips,
 #space-mission-panel-host .space-mission-provider-chips,
+#space-mission-panel-host .space-mission-rocket-chips,
 #space-mission-panel-host .space-mission-site-chips,
 #space-mission-panel-host .space-mission-orbit-chips {
   display: flex;
@@ -6271,6 +6272,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #space-mission-panel-host .space-mission-window-chip,
 #space-mission-panel-host .space-mission-status-chip,
 #space-mission-panel-host .space-mission-provider-chip,
+#space-mission-panel-host .space-mission-rocket-chip,
 #space-mission-panel-host .space-mission-site-chip,
 #space-mission-panel-host .space-mission-orbit-chip {
   padding: 2px 7px;
@@ -6289,6 +6291,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #space-mission-panel-host .space-mission-status-chip:focus-visible,
 #space-mission-panel-host .space-mission-provider-chip:hover,
 #space-mission-panel-host .space-mission-provider-chip:focus-visible,
+#space-mission-panel-host .space-mission-rocket-chip:hover,
+#space-mission-panel-host .space-mission-rocket-chip:focus-visible,
 #space-mission-panel-host .space-mission-site-chip:hover,
 #space-mission-panel-host .space-mission-site-chip:focus-visible,
 #space-mission-panel-host .space-mission-orbit-chip:hover,
@@ -6299,6 +6303,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #space-mission-panel-host .space-mission-window-chip.active,
 #space-mission-panel-host .space-mission-status-chip.active,
 #space-mission-panel-host .space-mission-provider-chip.active,
+#space-mission-panel-host .space-mission-rocket-chip.active,
 #space-mission-panel-host .space-mission-site-chip.active,
 #space-mission-panel-host .space-mission-orbit-chip.active {
   color: #22e6e6;

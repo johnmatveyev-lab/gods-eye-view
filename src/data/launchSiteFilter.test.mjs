@@ -28,6 +28,7 @@ import {
   launchPassesStatusFilter,
 } from './launchStatusFilter.js';
 import { normalizeLaunchProviderFilter } from './launchProviderFilter.js';
+import { normalizeLaunchRocketFilter } from './launchRocketFilter.js';
 import { missionRosterEntries } from './rocketLaunches.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -159,19 +160,20 @@ test('selected mission stays visible when its site chip is off', () => {
   assert.deepEqual(roster.map((entry) => entry.launch.id).sort(), ['cape', 'vandy']);
 });
 
-test('Status Go + one provider + LEO + one site still AND', () => {
+test('Status Go + one provider + LEO + one site + one rocket still AND', () => {
   const mixed = [
-    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E' },
-    { id: 'geo', status: 'Go', provider: 'SpaceX', orbit: { name: 'GTO' }, launchSite: 'Space Launch Complex 4E' },
-    { id: 'tbd', status: 'TBD', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E' },
-    { id: 'ula', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E' },
-    { id: 'cape', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 39A' },
+    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Falcon 9' },
+    { id: 'geo', status: 'Go', provider: 'SpaceX', orbit: { name: 'GTO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Falcon 9' },
+    { id: 'tbd', status: 'TBD', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Falcon 9' },
+    { id: 'ula', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Atlas V' },
+    { id: 'cape', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 39A', rocketName: 'Falcon 9' },
+    { id: 'heavy', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'Space Launch Complex 4E', rocketName: 'Falcon Heavy' },
   ];
   const goOnly = filterLaunchesByStatus(mixed, { go: true });
   const goLeo = goOnly.filter((launch) => isLeo(launch));
   const goLeoProvider = goLeo.filter((launch) => launch.provider === 'SpaceX');
   const andSite = filterLaunchesBySite(goLeoProvider, { '4E': true });
-  assert.deepEqual(andSite.map((row) => row.id), ['keep']);
+  assert.deepEqual(andSite.map((row) => row.id), ['keep', 'heavy']);
   assert.equal(launchPassesStatusFilter(mixed[0], { go: true }), true);
   assert.equal(isLeo(mixed[0]), true);
   assert.equal(isLeo(mixed[1]), false);
@@ -182,9 +184,15 @@ test('Status Go + one provider + LEO + one site still AND', () => {
     SpaceX: true,
     ULA: false,
   }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Falcon Heavy': false,
+    'Atlas V': false,
+  }, ['Atlas V', 'Falcon 9', 'Falcon Heavy']);
   const roster = missionRosterEntries(mixed, {
     statusFilter: { go: true },
     providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
     orbitFilter: { leo: true },
     siteFilter: { '4E': true },
   });

@@ -29,6 +29,7 @@ import {
   launchPassesProviderFilter,
   normalizeLaunchProviderFilter,
 } from './launchProviderFilter.js';
+import { normalizeLaunchRocketFilter } from './launchRocketFilter.js';
 import { missionRosterEntries } from './rocketLaunches.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -124,21 +125,27 @@ test('selected mission stays visible when its orbit chip is off', () => {
   assert.deepEqual(roster.map((entry) => entry.launch.id).sort(), ['gto-1', 'leo-1']);
 });
 
-test('Status Go + one provider + LEO still AND', () => {
+test('Status Go + one provider + LEO + one rocket still AND', () => {
   const mixed = [
-    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' } },
-    { id: 'geo', status: 'Go', provider: 'SpaceX', orbit: { name: 'GTO' } },
-    { id: 'tbd', status: 'TBD', provider: 'SpaceX', orbit: { name: 'LEO' } },
-    { id: 'ula', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' } },
+    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, rocketName: 'Falcon 9' },
+    { id: 'geo', status: 'Go', provider: 'SpaceX', orbit: { name: 'GTO' }, rocketName: 'Falcon 9' },
+    { id: 'tbd', status: 'TBD', provider: 'SpaceX', orbit: { name: 'LEO' }, rocketName: 'Falcon 9' },
+    { id: 'ula', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' }, rocketName: 'Atlas V' },
+    { id: 'heavy', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, rocketName: 'Falcon Heavy' },
   ];
   const spaceXOnly = normalizeLaunchProviderFilter({
     SpaceX: true,
     ULA: false,
   }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Falcon Heavy': false,
+    'Atlas V': false,
+  }, ['Atlas V', 'Falcon 9', 'Falcon Heavy']);
   const goOnly = filterLaunchesByStatus(mixed, { go: true });
   const goLeo = filterLaunchesByOrbit(goOnly, { leo: true });
   const andProvider = goLeo.filter((launch) => launchPassesProviderFilter(launch, spaceXOnly));
-  assert.deepEqual(andProvider.map((row) => row.id), ['keep']);
+  assert.deepEqual(andProvider.map((row) => row.id), ['keep', 'heavy']);
   assert.equal(launchPassesStatusFilter(mixed[0], { go: true }), true);
   assert.equal(launchPassesOrbitFilter(mixed[0], { leo: true }), true);
   assert.equal(launchPassesOrbitFilter(mixed[1], { leo: true }), false);
@@ -148,6 +155,7 @@ test('Status Go + one provider + LEO still AND', () => {
     statusFilter: { go: true },
     orbitFilter: { leo: true },
     providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
   });
   assert.deepEqual(roster.map((entry) => entry.launch.id), ['keep']);
 });

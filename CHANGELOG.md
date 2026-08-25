@@ -60,6 +60,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster has client-only rocket-family chips derived from the
+  cached 30-day Launch Library 2 `rocket.configuration.name` (or `rocket.name`)
+  via compact family labels, plus Other for blank or unknown vehicles.
+  Default all on matches the current roster. Falcon 9 off hides those
+  missions; Other off hides unnamed vehicles. Selected mission stays.
+  Chip changes re-filter the already-fetched window and AND with status,
+  provider, orbit, site, and 7d|30d. No extra `/api/launches` fetch and no
+  new endpoint. Preference persists as `meridian.launchRocket`. Hidden when
+  the launches layer is off.
 - AIS has a client-only **Hide parked** toggle next to the Plan 153 type chips.
   Default off matches the current harbor view. On skips in-memory vessels
   whose `speed` is a finite value under 0.5 kt; missing or non-finite speed

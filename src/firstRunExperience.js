@@ -81,7 +81,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         (`meridian.altBand`), emergency highlight
  *                         (`meridian.emergencyHighlight`), launch status chips
  *                         (`meridian.launchStatus`), launch provider chips
- *                         (`meridian.launchProvider`), launch site chips
+ *                         (`meridian.launchProvider`), launch rocket chips
+ *                         (`meridian.launchRocket`), launch site chips
  *                         (`meridian.launchSite`), launch orbit chips
  *                         (`meridian.launchOrbit`), launch time-window chips
  *                         (`meridian.launchTimeWindow`). All are defaults or
@@ -90,8 +91,9 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `_setModels3dMode` / `setTrailsEnabled` /
  *                         `_setContactLabelsEnabled` / `setAltitudeBand` /
  *                         `setEmergencyHighlightEnabled` / `setLaunchStatusFilter` /
- *                         `setLaunchProviderFilter` / `setLaunchSiteFilter` /
- *                         `setLaunchOrbitFilter` / `setLaunchTimeWindow`,
+ *                         `setLaunchProviderFilter` / `setLaunchRocketFilter` /
+ *                         `setLaunchSiteFilter` / `setLaunchOrbitFilter` /
+ *                         `setLaunchTimeWindow`,
  *                         which would persist a display choice nobody made.
  *
  * The two Context missions deliberately reuse `styleManager.setContextMode`, the

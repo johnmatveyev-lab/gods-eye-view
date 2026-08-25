@@ -23,6 +23,7 @@ import {
   writeLaunchProviderFilter,
 } from './launchProviderFilter.js';
 import { filterLaunchesByStatus } from './launchStatusFilter.js';
+import { filterLaunchesByRocket, normalizeLaunchRocketFilter } from './launchRocketFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const indexHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
@@ -111,6 +112,27 @@ test('Status Go + one provider still ANDs', () => {
   }, CHIP_IDS);
   const goOnly = filterLaunchesByStatus(ROSTER, { go: true });
   const anded = filterLaunchesByProvider(goOnly, spaceXOnly);
+  assert.deepEqual(anded.map((row) => row.id), ['sx-1']);
+});
+
+test('Status Go + one provider + one rocket still ANDs', () => {
+  const mixed = [
+    { id: 'sx-1', provider: 'SpaceX', status: 'Go', rocketName: 'Falcon 9' },
+    { id: 'sx-heavy', provider: 'SpaceX', status: 'Go', rocketName: 'Falcon Heavy' },
+    { id: 'ula-1', provider: 'ULA', status: 'Go', rocketName: 'Atlas V' },
+    { id: 'sx-tbd', provider: 'SpaceX', status: 'TBD', rocketName: 'Falcon 9' },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+  }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Falcon Heavy': false,
+    'Atlas V': false,
+  }, ['Atlas V', 'Falcon 9', 'Falcon Heavy']);
+  const goOnly = filterLaunchesByStatus(mixed, { go: true });
+  const anded = filterLaunchesByRocket(filterLaunchesByProvider(goOnly, spaceXOnly), falconOnly);
   assert.deepEqual(anded.map((row) => row.id), ['sx-1']);
 });
 
