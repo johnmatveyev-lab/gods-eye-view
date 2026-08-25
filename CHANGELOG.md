@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Mapped Installations has a client-only **Named only** toggle next to the
+  Plan 151 class chips and Plan 165 Footprints only. Default off matches
+  the current named + class-labeled view. On hides in-memory records whose
+  `hasName` is false — Overpass ways that only received a class label
+  (Airfield, Range) because `tags.name` / `name:en` were empty after trim.
+  Places search rows already have a name and stay. A selected installation
+  stays even if it is unlabeled. Chip changes re-filter already-fetched
+  OSM/Places rows and AND with Airfield | Naval | Range | Land | Places
+  and Footprints only — no extra Overpass or Places fetch and no `/api`.
+  Preference persists as `meridian.militaryNamedOnly` and
+  `military-installations.namedOnly` (`i.n.1`). Hidden when the
+  installations layer is off. Viewport refresh keeps the toggle.
 - AIS has a client-only **Hide no IMO** toggle next to Hide unnamed.
   Default off matches the current harbor view. On skips in-memory vessels
   whose `imo` is missing, empty, or whitespace-only (trim first). Vessels

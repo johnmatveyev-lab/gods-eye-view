@@ -78,7 +78,7 @@ function paramsForLayer(id) {
     };
   }
   if (id === 'military-installations') {
-    return { installationClassFilter: 'all', footprintsOnly: false };
+    return { installationClassFilter: 'all', footprintsOnly: false, namedOnly: false };
   }
   if (id === 'ais-live-vessels') {
     return { vesselTypeFilter: 'all', hideParked: false, minSpeed: 'all', destination: '', hideNoDestination: false, hideUnnamed: false, hideNoImo: false };
@@ -639,6 +639,25 @@ test('installation Footprints only persists on military-installations and defaul
   const decoded = decodeLayerStateParams(params);
   assert.equal(decoded.options['military-installations'].footprintsOnly, true);
   assert.equal(layerOptionsForRestore(decoded, 'military-installations').footprintsOnly, true);
+});
+
+test('installation Named only persists on military-installations and defaults off', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['military-installations'].namedOnly, false);
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=i'));
+  assert.equal(omitted.options['military-installations'].namedOnly, false,
+    'existing i links keep unlabeled pins visible');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['military-installations'],
+    options: { 'military-installations': { namedOnly: true } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /i\.n\.1/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['military-installations'].namedOnly, true);
+  assert.equal(layerOptionsForRestore(decoded, 'military-installations').namedOnly, true);
 });
 
 test('FIRMS sensor chips persist on local-firms and default all on', () => {

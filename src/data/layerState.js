@@ -36,6 +36,7 @@ import {
   normalizeInstallationClassFilter,
 } from './militaryInstallationClassFilter.js';
 import { DEFAULT_INSTALLATION_FOOTPRINTS_ONLY } from './militaryFootprintFilter.js';
+import { DEFAULT_INSTALLATION_NAMED_ONLY } from './militaryNamedFilter.js';
 import {
   DEFAULT_VESSEL_TYPE_FILTER,
   decodeVesselTypeFilter,
@@ -452,6 +453,9 @@ const OPTION_GROUPS = Object.freeze({
     // points + polygons view — there was no prior footprint filter, so
     // absent === default.
     booleanOption('footprintsOnly', 'f', DEFAULT_INSTALLATION_FOOTPRINTS_ONLY),
+    // PLAN 186: named-only default OFF. Omitted `n` keeps class-labeled
+    // pins visible — there was no prior name filter, so absent === default.
+    booleanOption('namedOnly', 'n', DEFAULT_INSTALLATION_NAMED_ONLY),
   ]),
   'ais-live-vessels': Object.freeze([
     // PLAN 153: type chips default ALL ON. Omitted `k` means every family

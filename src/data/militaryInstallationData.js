@@ -125,6 +125,7 @@ export function normalizeMilitaryInstallations(payload, retrievedAt = new Date()
       continue;
     }
     ids.add(id);
+    const taggedName = String(tags.name || tags['name:en'] || '').trim();
     records.push({
       id,
       kind: 'installation',
@@ -132,7 +133,9 @@ export function normalizeMilitaryInstallations(payload, retrievedAt = new Date()
       // geometry, while a footprint-less way/relation has unknown extent.
       osmType: type,
       class: klass,
-      name: String(tags.name || tags['name:en'] || '').trim() || humanizeInstallationClass(klass),
+      // hasName is the real OSM label, not the class fallback used on-screen.
+      hasName: taggedName.length > 0,
+      name: taggedName || humanizeInstallationClass(klass),
       ...point,
       footprint: footprintFrom(element),
       sources: [{ name: 'OpenStreetMap', id: `${type}/${osmId}`, retrievedAt }],

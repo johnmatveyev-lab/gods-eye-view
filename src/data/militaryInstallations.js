@@ -27,6 +27,12 @@ import {
   filterInstallationsByFootprint,
   normalizeInstallationFootprintsOnly,
 } from './militaryFootprintFilter.js';
+import {
+  DEFAULT_INSTALLATION_NAMED_ONLY,
+  filterInstallationsByNamed,
+  normalizeInstallationNamedOnly,
+  writeMilitaryNamedOnly,
+} from './militaryNamedFilter.js';
 import { isSceneClickCaptured, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 
 const LAYER_ID = 'military-installations';
@@ -90,6 +96,7 @@ const state = {
   googleSearchRequested: false,
   classFilter: DEFAULT_INSTALLATION_CLASS_FILTER,
   footprintsOnly: DEFAULT_INSTALLATION_FOOTPRINTS_ONLY,
+  namedOnly: DEFAULT_INSTALLATION_NAMED_ONLY,
 };
 
 function colorFor(record) {
@@ -244,9 +251,13 @@ function clearRendered() {
  * @returns {Array<object>} Records to render this paint.
  */
 function visibleRecords() {
-  return filterInstallationsByFootprint(
-    filterInstallationsByClass(state.records, state.classFilter, state.selectedId),
-    state.footprintsOnly,
+  return filterInstallationsByNamed(
+    filterInstallationsByFootprint(
+      filterInstallationsByClass(state.records, state.classFilter, state.selectedId),
+      state.footprintsOnly,
+      state.selectedId,
+    ),
+    state.namedOnly,
     state.selectedId,
   );
 }
@@ -483,6 +494,7 @@ async function loadInstallations() {
             id: `google:${place.id}`,
             kind: placeClass === 'military_land' ? 'installation' : 'place_candidate',
             class: placeClass,
+            hasName: true,
             name: String(place.name).trim(),
             latitude: place.latitude,
             longitude: place.longitude,
@@ -567,16 +579,17 @@ const militaryInstallationsLayer = {
     state.selectedId = null;
   },
   /**
-   * Class chips and Footprints only re-filter in-memory records.
+   * Class chips, Footprints only, and Named only re-filter in-memory records.
    * Never hits Overpass or Places.
-   * @param {{ installationClassFilter?: unknown, footprintsOnly?: unknown }} [params]
+   * @param {{ installationClassFilter?: unknown, footprintsOnly?: unknown, namedOnly?: unknown }} [params]
    * @returns {boolean}
    */
   setParams(params = {}) {
     if (!params || typeof params !== 'object') return false;
     const hasClass = Object.hasOwn(params, 'installationClassFilter');
     const hasFootprints = Object.hasOwn(params, 'footprintsOnly');
-    if (!hasClass && !hasFootprints) return true;
+    const hasNamed = Object.hasOwn(params, 'namedOnly');
+    if (!hasClass && !hasFootprints && !hasNamed) return true;
 
     let nextClass = state.classFilter;
     if (hasClass) {
@@ -592,17 +605,31 @@ const militaryInstallationsLayer = {
       nextFootprints = only;
     }
 
-    if (nextClass === state.classFilter && nextFootprints === state.footprintsOnly) return true;
+    let nextNamed = state.namedOnly;
+    if (hasNamed) {
+      const only = normalizeInstallationNamedOnly(params.namedOnly);
+      if (only == null) return false;
+      nextNamed = only;
+    }
+
+    if (
+      nextClass === state.classFilter
+      && nextFootprints === state.footprintsOnly
+      && nextNamed === state.namedOnly
+    ) return true;
     state.classFilter = nextClass;
     state.footprintsOnly = nextFootprints;
+    state.namedOnly = nextNamed;
+    if (hasNamed) writeMilitaryNamedOnly(nextNamed);
     if (state.enabled && state.dataSource) renderRecords();
     return true;
   },
-  /** @returns {{ installationClassFilter: string, footprintsOnly: boolean }} */
+  /** @returns {{ installationClassFilter: string, footprintsOnly: boolean, namedOnly: boolean }} */
   getParams() {
     return {
       installationClassFilter: state.classFilter,
       footprintsOnly: state.footprintsOnly,
+      namedOnly: state.namedOnly,
     };
   },
   update() { return loadInstallations(); },
@@ -621,6 +648,7 @@ const militaryInstallationsLayer = {
     state.dataSource = null;
     state.classFilter = DEFAULT_INSTALLATION_CLASS_FILTER;
     state.footprintsOnly = DEFAULT_INSTALLATION_FOOTPRINTS_ONLY;
+    state.namedOnly = DEFAULT_INSTALLATION_NAMED_ONLY;
   },
   /**
    * Snapshot the current bbox payload. Does not fetch.
