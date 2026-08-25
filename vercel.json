@@ -32,6 +32,9 @@
     },
     "api/adsblol/mil.js": {
       "maxDuration": 15
+    },
+    "api/route.js": {
+      "maxDuration": 20
     }
   }
 }

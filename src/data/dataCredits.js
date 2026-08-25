@@ -6,7 +6,7 @@ import * as Cesium from 'cesium';
  * Legal requirement (see DATA_SOURCES.md, findings H10/H11 in
  * every third-party data layer this app can
  * display carries its own license and required attribution — ODbL (OSM
- * datacenters/dams, adsb.lol, Overpass roads), NASA FIRMS, CelesTrak, USGS,
+ * datacenters/dams, adsb.lol, Overpass roads, OSRM routing), NASA FIRMS, CelesTrak, USGS,
  * City of Austin, GBFS operators.
  * The MIT code license does NOT cover this data.
  *
@@ -62,6 +62,15 @@ export const DATA_CREDITS = [
     key: 'overpass',
     html:
       'Road geometry (traffic): ' +
+      '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> ' +
+      '(ODbL 1.0)',
+  },
+  {
+    key: 'osrm',
+    html:
+      'Street routing: ' +
+      '<a href="http://project-osrm.org/" target="_blank" rel="noopener">OSRM</a> via ' +
+      '<a href="https://routing.openstreetmap.de/" target="_blank" rel="noopener">FOSSGIS</a> — ' +
       '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a> ' +
       '(ODbL 1.0)',
   },

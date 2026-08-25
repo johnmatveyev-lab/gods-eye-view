@@ -7,6 +7,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted `/api/route` on Vercel via `api/route.js`, forwarding the same GET
+  handler extracted to `src/data/osrmRoute.js`. Public FOSSGIS OSRM only
+  (foot/car/bike, 2–12 coords, span guard, rate limiter). Failures are
+  `{ok:false}` JSON, not a platform 404. No commercial router.
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
