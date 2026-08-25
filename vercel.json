@@ -7,6 +7,9 @@
     },
     "api/stripe/webhook.js": {
       "maxDuration": 15
+    },
+    "api/launches.js": {
+      "maxDuration": 30
     }
   }
 }
