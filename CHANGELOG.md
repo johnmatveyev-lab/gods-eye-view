@@ -20,6 +20,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a bike-share system picker for the existing allowlisted GBFS city list.
+  Switching a system uses the current `/api/gbfs` URL builder only, persists
+  the last system locally, and does not add hosts or open the proxy.
 - Added a top-center north-up compass. Click or `N` sets heading 0 and keeps
   the current target, range, and tilt. The needle tracks camera heading.
   Home still returns the full default pose. Share links keep using the

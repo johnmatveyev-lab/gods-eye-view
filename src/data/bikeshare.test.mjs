@@ -4,10 +4,16 @@ import * as Cesium from 'cesium';
 import {
   BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS,
   _clearBikeshareSelectionForTest,
+  _resetBikeshareSystemPickerForTest,
   _selectBikeshareStationForTest,
   _setBikeshareSelectionStateForTest,
+  _setBikeshareSystemStorageForTest,
   createBikeshareSelectedOverlayEntry,
+  listBikeshareSystems,
+  loadBikeshareSystemStations,
 } from './bikeshare.js';
+import bikeshareLayer from './bikeshare.js';
+import { BIKESHARE_SYSTEM_STORAGE_KEY, buildGbfsProxyUrl } from './bikeshareSystems.js';
 
 function makeRecord() {
   return {
@@ -75,5 +81,109 @@ test('real station select/clear path publishes one card and creates no native la
     assert.deepEqual(calls.at(-1), ['clear', 'bikeshare-selected']);
   } finally {
     _clearBikeshareSelectionForTest();
+  }
+});
+
+function gbfsPayload(stations) {
+  return { data: { stations } };
+}
+
+function mockGbfsFetch(feeds) {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(url);
+    const feed = feeds.find((entry) => url === entry.proxyUrl);
+    if (!feed) {
+      return { ok: false, status: 404, json: async () => ({ error: 'missing' }) };
+    }
+    return { ok: true, json: async () => feed.payload };
+  };
+  return { calls, fetchImpl };
+}
+
+test('picking system A then B loads only that system through /api/gbfs', async () => {
+  const systems = listBikeshareSystems();
+  const systemA = systems.find((system) => system.id === 'nyc-citibike');
+  const systemB = systems.find((system) => system.id === 'chicago-divvy');
+  assert.ok(systemA && systemB);
+
+  const { calls, fetchImpl } = mockGbfsFetch([
+    {
+      proxyUrl: buildGbfsProxyUrl(systemA.stationInformationUrl),
+      payload: gbfsPayload([{ station_id: 'nyc-1', name: 'W 4 St', lat: 40.73, lon: -74.00, capacity: 20 }]),
+    },
+    {
+      proxyUrl: buildGbfsProxyUrl(systemA.stationStatusUrl),
+      payload: gbfsPayload([{ station_id: 'nyc-1', num_bikes_available: 4, num_docks_available: 16 }]),
+    },
+    {
+      proxyUrl: buildGbfsProxyUrl(systemB.stationInformationUrl),
+      payload: gbfsPayload([{ station_id: 'chi-1', name: 'Michigan Ave', lat: 41.88, lon: -87.62, capacity: 15 }]),
+    },
+    {
+      proxyUrl: buildGbfsProxyUrl(systemB.stationStatusUrl),
+      payload: gbfsPayload([{ station_id: 'chi-1', num_bikes_available: 9, num_docks_available: 6 }]),
+    },
+  ]);
+
+  const first = await loadBikeshareSystemStations(systemA.id, { fetchImpl });
+  assert.equal(first.unavailable, false);
+  assert.deepEqual(first.proxyUrls, [
+    buildGbfsProxyUrl(systemA.stationInformationUrl),
+    buildGbfsProxyUrl(systemA.stationStatusUrl),
+  ]);
+  assert.ok(first.stations.has('nyc-1'));
+  assert.equal(first.stations.has('chi-1'), false);
+  assert.equal(first.status.get('nyc-1')?.bikesAvailable, 4);
+  assert.ok(calls.every((url) => url.startsWith('/api/gbfs/')));
+  assert.ok(calls.includes(buildGbfsProxyUrl(systemA.stationInformationUrl)));
+  assert.equal(calls.includes(buildGbfsProxyUrl(systemB.stationInformationUrl)), false);
+
+  const second = await loadBikeshareSystemStations(systemB.id, { fetchImpl });
+  assert.equal(second.cityId, systemB.id);
+  assert.ok(second.stations.has('chi-1'));
+  assert.equal(second.stations.has('nyc-1'), false);
+  assert.equal(second.status.get('chi-1')?.bikesAvailable, 9);
+  assert.ok(calls.includes(buildGbfsProxyUrl(systemB.stationInformationUrl)));
+});
+
+test('empty GBFS feed is empty and unavailable', async () => {
+  const austin = listBikeshareSystems().find((system) => system.id === 'austin-capmetro');
+  assert.ok(austin);
+  const { fetchImpl } = mockGbfsFetch([
+    {
+      proxyUrl: buildGbfsProxyUrl(austin.stationInformationUrl),
+      payload: gbfsPayload([]),
+    },
+    {
+      proxyUrl: buildGbfsProxyUrl(austin.stationStatusUrl),
+      payload: gbfsPayload([]),
+    },
+  ]);
+
+  const result = await loadBikeshareSystemStations(austin.id, { fetchImpl });
+  assert.equal(result.cityId, austin.id);
+  assert.equal(result.stations.size, 0);
+  assert.equal(result.unavailable, true);
+});
+
+test('setSelectedSystem persists the last allowlisted system and rejects unknown ids', () => {
+  const storage = new Map();
+  _setBikeshareSystemStorageForTest({
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => { storage.set(key, value); },
+  });
+  try {
+    assert.equal(bikeshareLayer.setSelectedSystem('not-a-real-system'), false);
+    assert.equal(bikeshareLayer.getSelectedSystem(), 'austin-capmetro');
+    assert.equal(bikeshareLayer.setSelectedSystem('boston-bluebikes'), true);
+    assert.equal(bikeshareLayer.getSelectedSystem(), 'boston-bluebikes');
+    assert.equal(storage.get(BIKESHARE_SYSTEM_STORAGE_KEY), 'boston-bluebikes');
+    const picker = bikeshareLayer.getRowControls().picker;
+    assert.equal(picker.value, 'boston-bluebikes');
+    assert.ok(picker.options.every((option) => listBikeshareSystems().some((system) => system.id === option.value)));
+    assert.equal(picker.options.some((option) => /evil/i.test(option.value)), false);
+  } finally {
+    _resetBikeshareSystemPickerForTest();
   }
 });
