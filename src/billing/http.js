@@ -178,7 +178,11 @@ async function handleCheckout(req, res, runtime) {
 
   try {
     const stripe = await stripeClient(runtime);
-    const session = await createCheckoutSession(stripe, params);
+    const session = await createCheckoutSession(stripe, params).catch(async (error) => {
+      if (!String(error?.message || '').includes('integration_identifier')) throw error;
+      const { integration_identifier: _ignored, ...legacy } = params;
+      return createCheckoutSession(stripe, legacy);
+    });
     if (!session?.url) {
       return writeJson(res, 502, { error: 'Stripe Checkout did not return a session URL.' });
     }
