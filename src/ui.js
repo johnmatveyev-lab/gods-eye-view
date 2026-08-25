@@ -126,6 +126,7 @@ import {
   setKeepAboveEnabled,
 } from './cameraAboveGround.js';
 import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
+import { copyViewSnapshot, snapshotToast } from './viewSnapshot.js';
 import { destroyWorldOverlay, getOverlayPaintRect, hitTestWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -2741,6 +2742,7 @@ export class StyleManager {
     this._shareBtn = document.getElementById('share-btn');
     this._northUpCompassBtn = document.getElementById('north-up-compass');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._copyViewSnapshotBtn = document.getElementById('copy-view-snapshot');
     this._measureToggleBtn = document.getElementById('measure-toggle');
     this._measureReadout = document.getElementById('measure-readout');
     this._measureReadoutLabel = document.getElementById('measure-readout-label');
@@ -3082,6 +3084,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initCopyViewSnapshotButton();
     this._initMeasureButton();
     this._initFullscreenButton();
     this._initDatacenterInViewList();
@@ -11360,6 +11363,17 @@ export class StyleManager {
     this._copyViewLinkBtn?.addEventListener('click', async () => {
       const success = await this.shareLinkManager.copyViewLink();
       this._showToast(success ? 'Link copied' : 'Copy failed');
+    });
+  }
+
+  /** Wire Copy snapshot — Cesium canvas PNG + #cesium-credits, local only. */
+  _initCopyViewSnapshotButton() {
+    this._copyViewSnapshotBtn?.addEventListener('click', async () => {
+      const globeCanvas = this.viewer?.scene?.canvas || this.viewer?.canvas;
+      const creditsEl = document.getElementById('cesium-credits');
+      this.viewer?.render?.();
+      const result = await copyViewSnapshot({ globeCanvas, creditsEl });
+      this._showToast(snapshotToast(result));
     });
   }
 

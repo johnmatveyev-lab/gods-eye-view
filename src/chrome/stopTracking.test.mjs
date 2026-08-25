@@ -124,7 +124,7 @@ test('roster click still tracks; Stop tracking is camera chrome only', () => {
   assert.ok(topCenter, 'camera chrome nav is missing');
   assert.match(
     topCenter[0],
-    /id="contacts-roster-toggle"[\s\S]*?id="clear-selected-layers"[\s\S]*?id="clear-annotations"[\s\S]*?id="share-btn"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"/,
+    /id="contacts-roster-toggle"[\s\S]*?id="clear-selected-layers"[\s\S]*?id="clear-annotations"[\s\S]*?id="share-btn"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="copy-view-snapshot"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"/,
   );
   assert.match(
     topCenter[0],

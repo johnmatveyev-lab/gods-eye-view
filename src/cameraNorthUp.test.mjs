@@ -244,7 +244,7 @@ test('the compass is map camera chrome beside Share and Reset Globe', () => {
   assert.ok(actions, 'top-center globe actions are missing');
   assert.match(
     actions[0],
-    /id="clear-selected-layers"[\s\S]*?id="share-btn"[\s\S]*?id="north-up-compass"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"/,
+    /id="clear-selected-layers"[\s\S]*?id="share-btn"[\s\S]*?id="north-up-compass"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="copy-view-snapshot"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"/,
   );
   assert.equal((html.match(/id="north-up-compass"/g) || []).length, 1);
   assert.match(html, /id="north-up-compass"[^>]*aria-label="Set heading north-up"/);
@@ -253,7 +253,7 @@ test('the compass is map camera chrome beside Share and Reset Globe', () => {
   assert.match(css, /--north-up-heading/);
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
   );
   assert.match(
     css,

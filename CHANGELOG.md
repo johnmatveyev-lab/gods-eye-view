@@ -33,6 +33,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Copy snapshot control next to Copy view link. It captures the
+  Cesium canvas plus the on-screen `#cesium-credits` strip (Google / Cesium
+  / data attribution) as a local PNG. Clipboard image write first; a
+  same-tab download if that is denied. Clean view still keeps credits in
+  the image. Operator-local only — no upload, no `/api`, and Copy view
+  link still copies the URL only.
 - Satellites DATA LAYERS row now has a **Core | Dense** catalog control. Core
   is the current catalog (Plan 65 group picker). Dense calls the existing
   `setParams({ catalog: 'dense' })` Starlink path (chunked, points-only). A

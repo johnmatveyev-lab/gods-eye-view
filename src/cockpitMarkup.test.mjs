@@ -23,7 +23,7 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   );
   const topCenterActions = html.match(/<nav id="top-center-actions"[\s\S]*?<\/nav>/);
   assert.ok(topCenterActions, 'Top-center globe actions are missing');
-  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="restore-live-layers"[\s\S]*?id="clear-annotations"[\s\S]*?id="share-btn"[\s\S]*?id="north-up-compass"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="measure-toggle"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"[\s\S]*?id="earthquake-list-toggle"/);
+  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="restore-live-layers"[\s\S]*?id="clear-annotations"[\s\S]*?id="share-btn"[\s\S]*?id="north-up-compass"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="copy-view-snapshot"[\s\S]*?id="measure-toggle"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"[\s\S]*?id="earthquake-list-toggle"/);
   assert.equal((html.match(/id="earthquake-list-toggle"/g) || []).length, 1, 'Quakes list must have one DOM owner');
   assert.equal((html.match(/id="earthquake-list-panel"/g) || []).length, 1, 'Quakes panel must have one DOM owner');
   assert.equal((html.match(/id="fullscreen-view"/g) || []).length, 1, 'Fullscreen must have one DOM owner');
@@ -497,13 +497,13 @@ test('Cockpit hides the complete top-center globe action group', () => {
   );
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)\s*\{\s*display:\s*none !important;/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)\s*\{\s*display:\s*none !important;/,
     'Cockpit must hide each map-only globe action even if its group layout is disturbed',
   );
   assert.match(
     css,
     /body\.cockpit-mode :is\(#measure-toggle, #measure-readout\)\s*\{\s*display:\s*none !important;/,
-    'Cockpit must hide each map-only globe action even if its group layout is disturbed',
+    'Cockpit must hide Measure even if its group layout is disturbed',
   );
 });
 
