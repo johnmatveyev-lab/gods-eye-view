@@ -1,3 +1,10 @@
+import {
+  distanceUnitSuffix,
+  formatDistanceMeters,
+  getDistanceUnit,
+  normalizeDistanceUnit,
+} from './units.js';
+
 /** Normalize a heading into the [0, 360) range. */
 export function normalizeHeading(value) {
   if (!Number.isFinite(value)) return 0;
@@ -66,17 +73,23 @@ export function cockpitAltitudeDisplayFt(altitudeM, onGround) {
 }
 
 /** Format the cockpit Context scope without overstating installation coverage. */
-export function formatCockpitContextScope(subjectLabel, radiusM, installationCoverage = null) {
+export function formatCockpitContextScope(
+  subjectLabel,
+  radiusM,
+  installationCoverage = null,
+  unit = getDistanceUnit(),
+) {
   const normalizedLabel = typeof subjectLabel === 'string'
     ? subjectLabel.trim() || '—'
     : Number.isFinite(subjectLabel) ? String(subjectLabel) : '—';
-  const radiusKm = Number.isFinite(radiusM) && radiusM >= 0
-    ? String(Math.round(radiusM / 1000))
-    : '—';
+  const resolvedUnit = normalizeDistanceUnit(unit) || getDistanceUnit();
+  const radiusText = Number.isFinite(radiusM) && radiusM >= 0
+    ? formatDistanceMeters(radiusM, resolvedUnit, { style: 'compact', decimals: 0 })
+    : `— ${distanceUnitSuffix(resolvedUnit).toUpperCase()}`;
   const coverage = typeof installationCoverage === 'string'
     ? installationCoverage.trim()
     : '';
-  const base = `${normalizedLabel} · ${radiusKm} KM AIR/SEA WINDOW`;
+  const base = `${normalizedLabel} · ${radiusText} AIR/SEA WINDOW`;
   return coverage
     ? `${base} · INSTALLATIONS ${coverage}`
     : base;

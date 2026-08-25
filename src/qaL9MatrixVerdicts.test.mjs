@@ -205,6 +205,11 @@ test('a known condition is evidence-gated and never touches a pass', () => {
 function fail(detail) { return { status: FAIL, detail }; }
 
 // ── finding 4: attribution coverage fails closed ──────────────────────────
+test('flights attribution expects adsb.lol, not OpenSky', () => {
+  assert.match(CREDIT_EXPECTATIONS.flights.source, /adsb\\.lol/);
+  assert.doesNotMatch(CREDIT_EXPECTATIONS.flights.source, /OpenSky/i);
+});
+
 test('every layer the matrix can enable has an attribution expectation', () => {
   // C11 enables military-installations, which the old check filtered out.
   for (const id of ['flights', 'satellites', 'earthquakes', 'cctv', 'traffic',

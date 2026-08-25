@@ -1528,6 +1528,7 @@ function _resetTrackedSelectionState() {
 
 /** Whether the driver may start another tracked-model load this frame. */
 function _trackedModelLoadAllowed(nowMs = Date.now()) {
+  if (!_models3dEnabled) return false;
   if (_trackedModelFailIcao !== _trackedIcao) return true; // untried selection
   if (_trackedModelFailCount >= TRACKED_MODEL_MAX_LOAD_FAILS) return false;
   return nowMs >= _trackedModelRetryAtMs;
@@ -1551,12 +1552,13 @@ function _noteTrackedModelLoadFailure(url, err) {
 }
 
 /**
- * The TRACKED aircraft's own model regime — DEFAULT-ON, camera-distance driven
- * (product invariant 2026-08-19). Unlike the fleet, this does NOT consult the
- * DISPLAY-rail `models3d` toggle: the selected contact is a single model, it is
- * what the camera is pointed at, and zooming in on a target should resolve it
- * into an aircraft without the operator arming anything. The toggle keeps
- * owning the FLEET (`_modelRegimeActive`), which is the draw-call budget.
+ * The TRACKED aircraft's own model regime — camera-distance driven when Models
+ * are ON (product invariant 2026-08-19, gated by PLAN 55). The DISPLAY-rail
+ * Models control (`models3d` / `meridian.models`) owns hangar GLBs for both the
+ * fleet and the selected contact. Off keeps close-in aircraft on the same 2D
+ * billboard path used when a GLB fails to load. Track and cockpit camera still
+ * work; they just stay sprites. The toggle still owns the FLEET budget via
+ * `_modelRegimeActive`.
  *
  * Thresholds + hysteresis live in trackedModelRegime.js: enter at
  * TRACKED_MODEL_ENTER_ALT_M (150_000 m — the playtested swap distance,
@@ -1577,7 +1579,7 @@ function _trackedModelRegimeActive() {
   // A converted TR-3B has no 3D asset — suppressing the regime keeps its
   // tracked billboard fully opaque (the colour callback reads this too), so
   // the triangle stays the visual all the way in.
-  if (!_trackedIcao || _cockpitContactMode || isTr3b(_trackedIcao)) {
+  if (!_models3dEnabled || !_trackedIcao || _cockpitContactMode || isTr3b(_trackedIcao)) {
     _trackedZoomLatched = false;
     return false;
   }
@@ -2497,7 +2499,11 @@ function _releaseTrackedModel() {
 function _updateTrackedModel() {
   const active = _trackedIcao && _trackedModelRegimeActive()
     && _modelCollection && !_modelCollection.isDestroyed();
-  if (!active) { if (_trackedModel) _trackedModel.show = false; return; }
+  if (!active) {
+    if (!_models3dEnabled) _releaseTrackedModel();
+    else if (_trackedModel) _trackedModel.show = false;
+    return;
+  }
   // Ask the frame-cached source directly. If the entity callback already ran,
   // this is a no-op; if model loading completed between phases, it establishes
   // this frame's single sample before the model renders. Camera, detection, and
@@ -3886,7 +3892,7 @@ const flightsLayer = {
     // Warm the glTF cache so the tracked plane's model instantiates instantly when first needed
     // (keeps the retained instance referenced; never rendered). Captured against this epoch so a
     // destroy/re-init mid-load doesn't flip the flag for a torn-down lifecycle.
-    if (!_preloadModel) {
+    if (_models3dEnabled && !_preloadModel) {
       const epoch = _modelEpoch;
       Cesium.Model.fromGltfAsync({ url: PLANE_MODEL_URL, asynchronous: false })
         .then((m) => {
@@ -4686,10 +4692,11 @@ const flightsLayer = {
 
   /**
    * Live layer params.
-   * `models3d` toggles 3D glTF model rendering for the FLEET (altitude-gated): when on,
-   * surrounding aircraft become 3D models once the camera is zoomed in past MODEL_ALT_CEIL_M.
-   * The TRACKED contact is NOT gated by this — it takes its 3D model by camera distance
-   * regardless (see `_trackedModelRegimeActive` / trackedModelRegime.js).
+   * `models3d` toggles hangar glTF rendering for the FLEET and the TRACKED
+   * contact (altitude-gated). When on, surrounding aircraft become 3D models
+   * once the camera is zoomed in past MODEL_ALT_CEIL_M, and the selected
+   * contact uses the hysteretic tracked hangar path. When off, close-in
+   * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
    * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', selectedFlightsTrackingId?: string|null}} params
    */
@@ -4702,6 +4709,7 @@ const flightsLayer = {
       _models3dEnabled = params.models3d;
       if (!_models3dEnabled) {
         _releaseModels();
+        _releaseTrackedModel();
         _syncTracked2dRotation();
         // Restore fleet billboards (the horizon-cull pass re-asserts next tick), but NEVER the
         // tracked plane's own fleet billboard — its tracked entity is the visual, so re-showing it

@@ -26,6 +26,9 @@ import {
 } from './clockPreference.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import { canPoll } from './pollPresence.js';
+import { formatHudAltitude, subscribeDistanceUnit } from './units.js';
+import { isReduceMotionEnabled } from './reduceMotion.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -72,8 +75,9 @@ export class IntelHUD {
    * @param {Cesium.Viewer} viewer - The Cesium Viewer instance used for
    *   camera telemetry and coordinate derivation.
    */
-  constructor(viewer) {
+  constructor(viewer, options = {}) {
     this.viewer = viewer;
+    this._canPoll = typeof options.canPoll === 'function' ? options.canPoll : canPoll;
     this._visible = false;
     this._autoMode = true; // auto show/hide based on style
     this._currentStyle = 'normal';
@@ -160,6 +164,7 @@ export class IntelHUD {
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
     this._paintTimestamp();
+    this._unitsUnsubscribe = subscribeDistanceUnit(() => this.refreshDisplayUnits());
   }
 
   /**
@@ -246,19 +251,25 @@ export class IntelHUD {
    */
   _startTimers() {
     // Timestamp — every second
-    this._timestampInterval = setInterval(() => {
+    this._timestampInterval ??= setInterval(() => {
       this._paintTimestamp();
     }, 1000);
 
-    // REC blink — every 800ms
-    this._recBlinkInterval = setInterval(() => {
+    // REC blink — every 800ms (held solid under reduce-motion)
+    this._recBlinkInterval ??= setInterval(() => {
+      if (isReduceMotionEnabled()) {
+        this._recBlinkState = true;
+        const held = document.getElementById('hud-rec-dot');
+        if (held) held.style.visibility = 'visible';
+        return;
+      }
       this._recBlinkState = !this._recBlinkState;
       const dot = document.getElementById('hud-rec-dot');
       if (dot) dot.style.visibility = this._recBlinkState ? 'visible' : 'hidden';
     }, 800);
 
     // Camera-derived data — 4 updates/second (250ms)
-    this._updateInterval = setInterval(() => {
+    this._updateInterval ??= setInterval(() => {
       if (!this._visible) return;
       this._updateCameraData();
     }, 250);
@@ -270,6 +281,7 @@ export class IntelHUD {
     if (this._summaryInterval || this._livePollsSuspended) return;
     this._summaryInterval = setInterval(() => {
       if (!this._visible || this._livePollsSuspended) return;
+      if (!this._canPoll()) return;
       void this._updateSummary(true);
     }, HUD_SUMMARY_INTERVAL_MS);
   }
@@ -426,7 +438,7 @@ export class IntelHUD {
     const geoidN = this._geoidUndulationM(latDeg, lonDeg);
     const altMslM = ellipsoidalToMslDisplayM(altM, geoidN);
     const sunEl = this._estimateSunElevation(latDeg, lonDeg);
-    if (altEl) altEl.textContent = `ALT: ${Math.round(altMslM)}m   SUN: ${sunEl.toFixed(1)}° EL`;
+    if (altEl) altEl.textContent = `ALT: ${formatHudAltitude(altMslM)}   SUN: ${sunEl.toFixed(1)}° EL`;
 
     // Collection timestamp
     const collEl = document.getElementById('hud-coll');
@@ -665,9 +677,7 @@ export class IntelHUD {
     // together, so they must never disagree. The view band above deliberately
     // keeps the ellipsoidal height: its thresholds were tuned against it.
     const altDisplayM = Number.isFinite(m.altMslM) ? m.altMslM : m.altM;
-    const altTag = altDisplayM >= 1000
-      ? `${(altDisplayM / 1000).toFixed(1)}KM`
-      : `${Math.round(altDisplayM)}M`;
+    const altTag = formatHudAltitude(altDisplayM, { compact: true });
     const winTag = window
       ? `${Math.max(1, Math.round(window.widthKm))}x${Math.max(1, Math.round(window.heightKm))}KM`
       : 'N/A';
@@ -707,6 +717,7 @@ export class IntelHUD {
    */
   async _updateSummary(animate = false, force = false) {
     if (this._livePollsSuspended) return;
+    if (!this._canPoll()) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
@@ -843,6 +854,31 @@ export class IntelHUD {
     }
   }
 
+  /**
+   * One HUD-summary refresh after the tab is visible and online again.
+   * Does not create a second summary timer.
+   */
+  resumePausedSummary() {
+    if (!this._visible || !this._canPoll()) return Promise.resolve();
+    this._markSummaryDirty();
+    return this._updateSummary(true, true);
+  }
+
+  /**
+   * Re-print altitude labels after a display-unit change. Uses the last
+   * telemetry sample so the toggle does not invent a new measurement.
+   */
+  refreshDisplayUnits() {
+    const m = this._latestMetrics;
+    if (!m) return;
+    const altEl = document.getElementById('hud-alt');
+    const altDisplayM = Number.isFinite(m.altMslM) ? m.altMslM : m.altM;
+    if (altEl) {
+      altEl.textContent = `ALT: ${formatHudAltitude(altDisplayM)}   SUN: ${m.sunEl.toFixed(1)}° EL`;
+    }
+    if (this._firstMetricsShown) this._setSummaryText(this._composeSummary(), false);
+  }
+
   /** Make the HUD visible and immediately refresh all readouts. */
   show() {
     this._visible = true;
@@ -949,6 +985,8 @@ export class IntelHUD {
     }
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();
+    this._unitsUnsubscribe?.();
+    this._unitsUnsubscribe = null;
     this._summaryRequest?.abort();
   }
 }

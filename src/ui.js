@@ -20,6 +20,11 @@ import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
 } from './cockpitTracking.js';
+import {
+  cockpitEnterControlVisible,
+  cockpitExitControlVisible,
+  requestCockpitEnter,
+} from './cockpitEnterControl.js';
 import { IntelHUD } from './hud.js';
 import {
   CLOCK_CHANGE_EVENT,
@@ -28,13 +33,31 @@ import {
   getClockMode,
   syncClockToggleButtons,
 } from './clockPreference.js';
+import {
+  cycleHud,
+  hudChromeAriaLabel,
+  hudChromeLabel,
+  readStoredHudVariant,
+  writeStoredHudVariant,
+} from './hudCycle.js';
 import { ShareLinkManager } from './sharelink.js';
+import {
+  cycleSensorLook,
+  readStoredSensorLook,
+  sensorLookLabel,
+  writeStoredSensorLook,
+} from './sensorLookPolicy.js';
 import {
   isExplicitLayerStateOrigin,
   LayerStateCoordinator,
 } from './data/layerState.js';
 import { renderMapStackChips, syncMapStackChips } from './mapStackChips.js';
 import { OrbitController } from './orbit.js';
+import {
+  isReduceMotionEnabled,
+  setReduceMotionOverride,
+  subscribeReduceMotion,
+} from './reduceMotion.js';
 import {
   CelestialRing,
   getKeyholeFadeTuning,
@@ -65,6 +88,12 @@ import {
   normalizeProfile,
   profileForDensity,
 } from './data/detectionPolicy.js';
+import {
+  detectionDensityChromeState,
+  detectionDensityControlRequest,
+  persistDetectionDensity,
+  readPersistedDetectionDensity,
+} from './detectionDensityChrome.js';
 import trafficLayer from './data/traffic.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
@@ -119,6 +148,7 @@ import {
   shouldExpandGlobalContextPanel,
   shouldHideCollapsedRightPanels,
 } from './rightRailPolicy.js';
+import { applyContactsRosterToggle } from './data/contactsRosterToggle.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -147,7 +177,21 @@ import {
   shareableDetectionState,
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
-import { formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
+import {
+  handleFullscreenEscape,
+  hideFullscreenButtonIfUnsupported,
+  isDocumentFullscreen,
+  syncFullscreenButton,
+  toggleFullscreen,
+} from './fullscreenChrome.js';
+import { AWARENESS_RADIUS_M, formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
+import {
+  formatDistanceMeters,
+  getDistanceUnit,
+  initDistanceUnits,
+  setDistanceUnit,
+  subscribeDistanceUnit,
+} from './units.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -184,6 +228,13 @@ import {
   clampScopeTerminusPct,
 } from './scopeMask.js';
 import {
+  applyLiveSunLighting,
+  LIVE_SUN_DEFAULT,
+  LIVE_SUN_STORAGE_KEY,
+  readLiveSunPreference,
+  writeLiveSunPreference,
+} from './liveSunLighting.js';
+import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -210,6 +261,10 @@ import {
   slewHeading,
   speedRulerTicks,
 } from './cockpitMath.js';
+import {
+  peekModelsPreference,
+  writeModelsPreference,
+} from './modelsPreference.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
@@ -244,6 +299,11 @@ const COCKPIT_ENTRY_COLLAPSE_PANEL_IDS = Object.freeze([
  */
 const PANEL_POSITION_STORAGE_VERSION = 'v8';
 const DETECTION_ALLOCATION_STORAGE_KEY = 'gev:detection-allocation:v1';
+
+/** Best-effort localStorage for `meridian.models`. Access itself can throw. */
+function modelsPreferenceStore() {
+  try { return globalThis.localStorage ?? null; } catch { return null; }
+}
 /** Z ladder: panels promote within [100, 139]; voice pill 150, toast 200, clean-view-exit 300. */
 const PANEL_Z_BASE = 100;
 const PANEL_Z_MAX = 139;
@@ -281,7 +341,7 @@ const COCKPIT_BRIEF_PAGES = [
     id: 'news',
     kicker: 'REGIONAL NEWS',
     subtitle: 'LATEST LOCATION-MATCHED REPORTING',
-    source: 'GOOGLE NEWS RSS · LOCATION QUERY · RECENT',
+    source: 'GDELT PROJECT · LOCATION QUERY · CITATION REQUIRED',
   },
   {
     id: 'local',
@@ -678,6 +738,7 @@ class CockpitViewController {
     onExited = null,
     getInheritedVisionLabel = null,
     restoreTrackingFrame = null,
+    onEnterRequest = null,
   } = {}) {
     this.viewer = viewer;
     this.active = false;
@@ -737,6 +798,9 @@ class CockpitViewController {
     this.restoreTrackingFrame = typeof restoreTrackingFrame === 'function'
       ? restoreTrackingFrame
       : () => false;
+    this.onEnterRequest = typeof onEnterRequest === 'function'
+      ? onEnterRequest
+      : () => this.enter();
     this.isEntryAllowed = typeof isEntryAllowed === 'function' ? isEntryAllowed : () => true;
     this.context = document.getElementById('cockpit-context');
     this.contextSubject = document.getElementById('cockpit-context-subject');
@@ -828,7 +892,9 @@ class CockpitViewController {
       syncClockToggleButtons(this.clockToggle, getClockMode());
     });
     this._paintChromeClock();
-    this._listen(this.entry, 'click', () => this.enter());
+    this._listen(this.entry, 'click', () => {
+      this.onEnterRequest();
+    });
     this._listen(this.tr3bToggle, 'click', () => this.toggleTrackedTr3b());
     this._listen(this.mapViewButton, 'click', () => this.exit());
     this._listen(this.visionPrevious, 'click', () => this.cycleVisionMode(-1));
@@ -963,15 +1029,22 @@ class CockpitViewController {
     const info = this.readAircraftInfo();
     const trackedContact = !!(info && this.viewer.trackedEntity?.position);
     this.syncTr3bToggle(trackedContact ? info : null);
-    const available = !!(this.isEntryAllowed() && trackedContact);
+    const available = cockpitEnterControlVisible({
+      cockpitActive: this.active,
+      selectedAircraft: trackedContact ? info : null,
+    });
     // Change-only DOM writes: this runs on a preUpdate cadence, and
     // unconditional `hidden` assignments invalidate style/layout every frame
     // even when nothing changed. (perf item 9)
     if (this._entryAvailable === available) return;
     this._entryAvailable = available;
     if (this.entry) this.entry.hidden = !available;
-    if (this.mapViewButton) this.mapViewButton.hidden = true;
-    if (this.resetGlobeButton) this.resetGlobeButton.hidden = true;
+    if (this.mapViewButton) this.mapViewButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: this.active,
+    });
+    if (this.resetGlobeButton) this.resetGlobeButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: this.active,
+    });
   }
 
   /**
@@ -1064,8 +1137,11 @@ class CockpitViewController {
       }
       event.preventDefault();
       event.stopImmediatePropagation();
-      if (!this.active && !this.isEntryAllowed()) return;
-      const changed = this.active ? this.exit() : this.enter();
+      if (this.active) {
+        this.exit();
+        return;
+      }
+      this.onEnterRequest();
       return;
     }
   }
@@ -1110,13 +1186,20 @@ class CockpitViewController {
     // syncEntry's change-only cache — invalidate it so the exit-path
     // syncEntry re-applies every write (notably re-hiding mapViewButton).
     this._entryAvailable = undefined;
-    if (this.entry) this.entry.hidden = true;
+    if (this.entry) this.entry.hidden = !cockpitEnterControlVisible({
+      cockpitActive: true,
+      selectedAircraft: info,
+    });
     if (this.tr3bToggle) {
       this.tr3bToggle.hidden = true;
       this._tr3bSignature = null;
     }
-    if (this.mapViewButton) this.mapViewButton.hidden = false;
-    if (this.resetGlobeButton) this.resetGlobeButton.hidden = false;
+    if (this.mapViewButton) this.mapViewButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: true,
+    });
+    if (this.resetGlobeButton) this.resetGlobeButton.hidden = !cockpitExitControlVisible({
+      cockpitActive: true,
+    });
     if (this.hud) this.hud.hidden = false;
     if (this.signalStream) this.signalStream.hidden = false;
     this.hud?.classList.add('signals-active');
@@ -1549,8 +1632,14 @@ class CockpitViewController {
     }
   }
 
+  refreshDistanceUnits() {
+    if (this._lastContextInfo) this.updateContext(this._lastContextInfo, this._lastContextHeading);
+  }
+
   updateContext(info, heading) {
     if (!this.context) return;
+    this._lastContextInfo = info;
+    this._lastContextHeading = heading;
     const snapshot = militaryAwarenessLayer.getContextSnapshot?.() || null;
     const trackedId = info.icao24 || info.id;
     const readout = resolveCockpitContextReadout({ snapshot, info });
@@ -1630,7 +1719,7 @@ class CockpitViewController {
     if (this.contextDistance) {
       const distanceM = closest?.distanceM;
       this.contextDistance.textContent = Number.isFinite(distanceM)
-        ? `${distanceM < 10000 ? (distanceM / 1000).toFixed(1) : Math.round(distanceM / 1000)} KM` : '—';
+        ? formatDistanceMeters(distanceM, getDistanceUnit(), { style: 'compact' }) : '—';
       this.contextDistance.setAttribute(
         'aria-label',
         Number.isFinite(distanceM) ? this.contextDistance.textContent : 'Unavailable',
@@ -1969,7 +2058,7 @@ class CockpitViewController {
           title: formatAwarenessLabel(item),
           detail: `${cohort.id === 'military' ? 'MILITARY FLIGHT' : 'COMMERCIAL FLIGHT'} · ${
             Number.isFinite(item.distanceM)
-              ? `${item.distanceM < 10000 ? (item.distanceM / 1000).toFixed(1) : Math.round(item.distanceM / 1000)} KM`
+              ? formatDistanceMeters(item.distanceM, getDistanceUnit(), { style: 'compact' })
               : 'DISTANCE UNKNOWN'
           }`,
           target: { layerId: cohort.id, id: String(id) },
@@ -2270,6 +2359,19 @@ export class StyleManager {
     this._hudBtn = document.getElementById('hud-toggle');
     this._hudLayoutRow = document.getElementById('hud-layout-row');
     this._hudLayoutSelect = document.getElementById('hud-layout-select');
+    this._unitsBtns = [
+      document.getElementById('units-km'),
+      document.getElementById('units-nm'),
+      document.getElementById('units-mi'),
+    ].filter(Boolean);
+    initDistanceUnits();
+    this._syncUnitsUi();
+    this._unitsUnsubscribe = subscribeDistanceUnit(() => {
+      this._syncUnitsUi();
+      this.hud?.refreshDisplayUnits?.();
+      militaryAwarenessLayer.refreshDistanceLabels?.();
+      this.cockpitView?.refreshDistanceUnits?.();
+    });
     this._detectionSliderRow = document.getElementById('detection-slider-row');
     this._detectionDensitySlider = document.getElementById('detection-density-slider');
     this._detectionDensityValue = document.getElementById('detection-density-value');
@@ -2290,12 +2392,17 @@ export class StyleManager {
     } catch { /* storage can be unavailable in privacy/test contexts */ }
     this._detectionAllocationPreference = normalizeAllocationStrategy(storedDetectionAllocation);
     this._celestialBtn = document.getElementById('celestial-toggle');
+    this._liveSunBtn = document.getElementById('live-sun-toggle');
+    this._liveSunEnabled = false;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
+    this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
+    this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
+    this._syncReduceMotionButton();
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -2311,6 +2418,7 @@ export class StyleManager {
     this._contextRadioMiniPrevBtn = document.getElementById('context-radio-mini-prev-btn');
     this._contextRadioMiniPlayBtn = document.getElementById('context-radio-mini-play-btn');
     this._contextRadioMiniNextBtn = document.getElementById('context-radio-mini-next-btn');
+    this._contextRadioMiniStopBtn = document.getElementById('context-radio-mini-stop-btn');
     this._contextRadioMiniVolume = document.getElementById('context-radio-mini-volume');
     this._contextRadioMiniVolumeValue = document.getElementById('context-radio-mini-volume-value');
     this._cockpitUtilityControls = document.getElementById('cockpit-utility-controls');
@@ -2326,6 +2434,7 @@ export class StyleManager {
     this._cockpitRadioPrevBtn = document.getElementById('cockpit-radio-prev-btn');
     this._cockpitRadioPlayBtn = document.getElementById('cockpit-radio-play-btn');
     this._cockpitRadioNextBtn = document.getElementById('cockpit-radio-next-btn');
+    this._cockpitRadioStopBtn = document.getElementById('cockpit-radio-stop-btn');
     this._cockpitRadioVolume = document.getElementById('cockpit-radio-volume');
     this._cockpitRadioVolumeValue = document.getElementById('cockpit-radio-volume-value');
     this._radioLayerState = document.getElementById('radio-layer-state');
@@ -2349,6 +2458,7 @@ export class StyleManager {
     this._radioPlaybackState = document.getElementById('radio-playback-state');
     this._radioStationHomepage = document.getElementById('radio-station-homepage');
     this._globalContextFlightsBtn = document.getElementById('global-context-flights-btn');
+    this._contactsRosterToggle = document.getElementById('contacts-roster-toggle');
     this._globalContextMissionsBtn = document.getElementById('global-context-missions-btn');
     this._contextModeStandby = document.getElementById('context-mode-standby');
     this._contextFlightsView = document.getElementById('context-flights-view');
@@ -2393,6 +2503,7 @@ export class StyleManager {
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
@@ -2414,6 +2525,7 @@ export class StyleManager {
     this._poiRow = document.getElementById('poi-row');
     this._locationBarDivider = document.getElementById('location-bar-divider');
     this._styleMiniValue = document.getElementById('style-mini-value');
+    this._lookCycleBtn = document.getElementById('look-cycle-btn');
     this._locationMiniCity = document.getElementById('location-mini-city');
     this._locationMiniPoi = document.getElementById('location-mini-poi');
     this._safeFrameOverlay = document.getElementById('safe-frame-overlay');
@@ -2490,6 +2602,7 @@ export class StyleManager {
           });
         }
       },
+      onEnterRequest: () => this.requestCockpitEnter(),
       restoreTrackingFrame: (entity) => {
         const [layerId, ...idParts] = String(entity?.gevTrackedId || '').split(':');
         const trackedId = idParts.join(':');
@@ -2564,9 +2677,7 @@ export class StyleManager {
           this._updateHudButtonState();
         }
         if (typeof detectionDensity === 'number' && this._detectionDensitySlider) {
-          const pct = canonicalizeDensity(detectionDensity);
-          this._detectionDensitySlider.value = String(pct);
-          this._detectionDensityValue.textContent = `${pct}%`;
+          this._paintDetectionDensityChrome(detectionDensity);
           this._applyDetectionDensityFromUi();
         }
         if (detectionAllocation) {
@@ -2675,12 +2786,15 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initFullscreenButton();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initLiveSunToggle();
     this._applyGlobalPostDefaults();
+    this._restoreSessionDetectionDensity();
     this._initOrbit();
     this._initRecordingOverlay();
     this._startAnimationLoop();
@@ -2737,6 +2851,10 @@ export class StyleManager {
         })();
       }, 1500);
     } else {
+      const storedLook = readStoredSensorLook();
+      if (storedLook && storedLook !== this.activeStyle) {
+        this.setStyle(storedLook, { applyPreset: true, revealParameters: false, restore: true });
+      }
       this._syncShareState();
     }
     // A recipient can orbit before or during the delayed share flight. That
@@ -3380,6 +3498,11 @@ export class StyleManager {
     document.querySelectorAll('.style-btn').forEach(btn => {
       btn.addEventListener('click', () => this.setStyle(btn.dataset.style));
     });
+    this._lookCycleBtn?.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      this.cycleLook();
+    });
 
     // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
     this._globalKeydownHandler = (e) => {
@@ -3398,6 +3521,7 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
+        handleFullscreenEscape(e);
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
           this._locationSearch.value = '';
@@ -3425,6 +3549,7 @@ export class StyleManager {
       if (e.key.toLowerCase() === 'o') this._toggleOrbit();
       if (e.key.toLowerCase() === 'v') this.toggleCleanView();
       if (e.key.toLowerCase() === 'f') {
+        // f = data-panel — fullscreen uses the button; Escape exits
         document.getElementById('data-panel').classList.toggle('active');
       }
       if (e.key.toLowerCase() === 'd') {
@@ -3497,6 +3622,11 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.addEventListener('click', () => this.toggleCleanView());
     }
+
+    this._reduceMotionBtn?.addEventListener('click', () => {
+      setReduceMotionOverride(!isReduceMotionEnabled());
+      this._syncReduceMotionButton();
+    });
     if (this._cleanViewExitBtn) {
       this._cleanViewExitBtn.addEventListener('click', () => this.toggleCleanView(false));
     }
@@ -3505,13 +3635,7 @@ export class StyleManager {
       this._detectionDensitySlider.addEventListener('input', () => {
         this.shareLinkManager?.claimRestoreLane?.('visual');
         this._detectionUserOverridden = true;
-        const pct = canonicalizeDensity(this._detectionDensitySlider.value);
-        this._detectionDensitySlider.value = String(pct);
-        if (this._detectionDensityValue) {
-          this._detectionDensityValue.textContent = `${pct}%`;
-        }
-        this._applyDetectionDensityFromUi();
-        this._syncShareState();
+        this.setDetection(detectionDensityControlRequest(this._detectionDensitySlider.value));
       });
     }
 
@@ -3520,6 +3644,12 @@ export class StyleManager {
         this.shareLinkManager?.claimRestoreLane?.('visual');
         this._detectionUserOverridden = true;
         this._setDetectionAllocation(button.dataset.allocation);
+      });
+    }
+
+    for (const button of this._unitsBtns) {
+      button.addEventListener('click', () => {
+        setDistanceUnit(button.dataset.units);
       });
     }
 
@@ -3541,6 +3671,47 @@ export class StyleManager {
         }
       });
     }
+  }
+
+  _initLiveSunToggle() {
+    this._liveSunBtn?.addEventListener('click', () => {
+      this.setLiveSunEnabled(!this._liveSunEnabled);
+    });
+    let stored = LIVE_SUN_DEFAULT;
+    try {
+      stored = readLiveSunPreference(window.localStorage);
+    } catch {
+      stored = LIVE_SUN_DEFAULT;
+    }
+    this.setLiveSunEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Turn live sun lighting on or off. On follows the Cesium clock; off is the
+   * well-lit globe already used when `enableLighting` is false.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, liveSun: boolean}}
+   */
+  setLiveSunEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._liveSunEnabled = next;
+    applyLiveSunLighting(this.viewer, next, {
+      now: Cesium.JulianDate.now(),
+      clockStep: Cesium.ClockStep.SYSTEM_CLOCK,
+    });
+    this._liveSunBtn?.classList.toggle('active', next);
+    this._liveSunBtn?.setAttribute('aria-pressed', String(next));
+    if (this._liveSunBtn) {
+      this._liveSunBtn.title = next
+        ? 'Live sun on — terminator follows real time'
+        : 'Live sun off — fixed well-lit day';
+    }
+    if (persist) {
+      try { writeLiveSunPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    governorRequestRender('live-sun');
+    return { ok: true, liveSun: next };
   }
 
   /**
@@ -3578,6 +3749,7 @@ export class StyleManager {
     if (state?.activeId === before && stackId !== before && state?.lastError) {
       this._showToast(state.lastError);
     }
+    this.setLiveSunEnabled(this._liveSunEnabled, { persist: false });
     if (syncShare) this._syncShareState();
   }
 
@@ -3602,16 +3774,30 @@ export class StyleManager {
   }
 
   /**
+   * Paints the five-stop density handle and Sparse/Balanced/Dense readout.
+   * @param {number} inputPct
+   * @returns {number} Canonical density stop.
+   */
+  _paintDetectionDensityChrome(inputPct) {
+    const { densityPct, label } = detectionDensityChromeState(inputPct);
+    if (this._detectionDensitySlider) {
+      this._detectionDensitySlider.value = String(densityPct);
+      this._detectionDensitySlider.setAttribute('aria-valuetext', label);
+    }
+    if (this._detectionDensityValue) this._detectionDensityValue.textContent = label;
+    return densityPct;
+  }
+
+  /**
    * Reads and canonicalizes the five-stop density control. The engine derives
-   * Sparse/Balanced/Dense from the same stop.
+   * Sparse/Balanced/Dense from the same stop. Density 0 hides the overlay.
    * @returns {void}
    */
   _applyDetectionDensityFromUi() {
     if (!this._detectionDensitySlider) return;
-    const pct = canonicalizeDensity(this._detectionDensitySlider.value);
-    this._detectionDensitySlider.value = String(pct);
-    if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${pct}%`;
+    const pct = this._paintDetectionDensityChrome(this._detectionDensitySlider.value);
     setDetectionTuning({ densityPct: pct });
+    if (pct === 0) setDetectionModeByLabel('OFF');
     this._updateDetectionButton(getDetectionMode());
   }
 
@@ -3634,6 +3820,28 @@ export class StyleManager {
     this.viewer.scene.requestRender?.();
   }
 
+  _syncUnitsUi() {
+    const unit = getDistanceUnit();
+    for (const button of this._unitsBtns || []) {
+      const active = button.dataset.units === unit;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+    }
+    const windowPhrase = `${formatDistanceMeters(AWARENESS_RADIUS_M, unit, { style: 'range' })} window`;
+    const previous = document.getElementById('cockpit-context-previous');
+    const next = document.getElementById('cockpit-context-next');
+    if (previous) {
+      const label = `Previous — prior visited contact in the ${windowPhrase}`;
+      previous.setAttribute('aria-label', label);
+      previous.title = label;
+    }
+    if (next) {
+      const label = `Next — nearest unvisited contact in the ${windowPhrase}`;
+      next.setAttribute('aria-label', label);
+      next.title = label;
+    }
+  }
+
   _setDetectionAllocation(strategy, { syncShare = true, persist = true } = {}) {
     const raw = String(strategy || '').trim().toUpperCase();
     if (!ALLOCATION_STRATEGIES.includes(raw)) return false;
@@ -3654,8 +3862,7 @@ export class StyleManager {
 
   _syncDetectionUiFromEngine() {
     const tuning = getDetectionTuning();
-    if (this._detectionDensitySlider) this._detectionDensitySlider.value = String(tuning.densityPct);
-    if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${tuning.densityPct}%`;
+    this._paintDetectionDensityChrome(tuning.densityPct);
     this._setDetectionAllocation(tuning.allocationStrategy, { syncShare: false, persist: false });
     const fadeTuning = getKeyholeFadeTuning();
     if (this._detectionFadeSlider) this._detectionFadeSlider.value = String(Math.round(fadeTuning.fadeRatio * 100));
@@ -3690,6 +3897,7 @@ export class StyleManager {
     if (this._hudLayoutSelect && this._hudLayoutSelect.value !== this.hud.getVariant()) {
       this._hudLayoutSelect.value = this.hud.getVariant();
     }
+    writeStoredHudVariant(this.hud.getVariant());
     this._syncShareState();
     this._scheduleAdaptivePanelLayout({ settle: true });
   }
@@ -3787,9 +3995,7 @@ export class StyleManager {
   _applyDetectionPreset(det) {
     if (!det) return;
     if (typeof det.densityPct === 'number' && this._detectionDensitySlider) {
-      const pct = canonicalizeDensity(det.densityPct);
-      this._detectionDensitySlider.value = String(pct);
-      if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${pct}%`;
+      this._paintDetectionDensityChrome(det.densityPct);
       this._applyDetectionDensityFromUi();
     }
     if (det.mode) this._setDetectionMode(String(det.mode).toUpperCase());
@@ -3832,9 +4038,7 @@ export class StyleManager {
       this._setDetectionMode(defaults.detectionMode);
     }
     if (typeof defaults.detectionDensity === 'number' && this._detectionDensitySlider) {
-      const density = canonicalizeDensity(defaults.detectionDensity);
-      this._detectionDensitySlider.value = String(density);
-      this._detectionDensityValue.textContent = `${density}%`;
+      this._paintDetectionDensityChrome(defaults.detectionDensity);
       this._applyDetectionDensityFromUi();
     }
     this._setDetectionAllocation(
@@ -3851,6 +4055,24 @@ export class StyleManager {
     if (typeof defaults.celestialRing === 'boolean') {
       this.setCelestialRingEnabled(defaults.celestialRing, { syncShare: false, focus: false });
     }
+  }
+
+  /**
+   * Re-apply a leftover or session density the operator already chose.
+   * Share links still win; factory defaults stay unpersisted.
+   * @returns {void}
+   */
+  _restoreSessionDetectionDensity() {
+    if (this._initialShareState) return;
+    const stored = readPersistedDetectionDensity();
+    if (!Number.isFinite(stored) || !this._detectionDensitySlider) return;
+    this._paintDetectionDensityChrome(stored);
+    this._applyDetectionDensityFromUi();
+    if (stored > 0 && getDetectionMode() === 'OFF') {
+      setDetectionModeByLabel(profileForDensity(stored));
+      this._syncDetectionUiFromEngine();
+    }
+    this._detectionUserOverridden = true;
   }
 
   /**
@@ -4602,6 +4824,9 @@ export class StyleManager {
       }
       void this._layerStateRestorePromise.then(() => {
         this._syncModels3dFromLayerState(this._layerStateCoordinator?.getDurableState());
+        // Share links keep their encoded models3d; a laptop that chose Models
+        // off via meridian.models otherwise stays on the billboard path.
+        if (!this._initialShareState) this._applyStoredModelsPreference();
       });
     }
   }
@@ -4673,6 +4898,37 @@ export class StyleManager {
     showAfterStartupCover();
   }
 
+  _setContactsRosterControlsDisabled(disabled) {
+    const value = Boolean(disabled);
+    this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = value);
+    this._contactsRosterToggle && (this._contactsRosterToggle.disabled = value);
+  }
+
+  _toggleContactsRoster() {
+    const nextMode = this._contextMode === 'flights' ? null : 'flights';
+    this._claimContextVisualAuthority();
+    void this._runUserFacingContextAction(
+      (notificationToken) => this._selectContextMode(
+        nextMode,
+        { notificationToken },
+      ),
+      'Contacts could not complete the requested transition; try again',
+    ).then((succeeded) => {
+      if (nextMode && shouldExpandGlobalContextPanel({
+        action: 'contacts',
+        explicitUserAction: true,
+        succeeded: succeeded === true,
+      })) {
+        applyContactsRosterToggle({
+          open: true,
+          toggle: this._contactsRosterToggle,
+          view: this._contextFlightsView,
+          setPanelCollapsed: (id, collapsed, opts) => this.setPanelCollapsed(id, collapsed, opts),
+        });
+      }
+    });
+  }
+
   _initGlobalContextPanel() {
     const contextTabs = [this._globalContextFlightsBtn, this._globalContextMissionsBtn].filter(Boolean);
     contextTabs.forEach((tab, index) => tab.addEventListener('keydown', (event) => {
@@ -4686,22 +4942,11 @@ export class StyleManager {
       contextTabs[nextIndex].focus({ preventScroll: true });
       contextTabs[nextIndex].click();
     }));
+    this._contactsRosterToggle?.addEventListener('click', () => {
+      this._toggleContactsRoster();
+    });
     this._globalContextFlightsBtn?.addEventListener('click', () => {
-      const nextMode = this._contextMode === 'flights' ? null : 'flights';
-      this._claimContextVisualAuthority();
-      void this._runUserFacingContextAction(
-        (notificationToken) => this._selectContextMode(
-          nextMode,
-          { notificationToken },
-        ),
-        'Contacts could not complete the requested transition; try again',
-      ).then((succeeded) => {
-        if (nextMode && shouldExpandGlobalContextPanel({
-          action: 'contacts',
-          explicitUserAction: true,
-          succeeded: succeeded === true,
-        })) this.setPanelCollapsed('global-context-panel', false, { explicit: true });
-      });
+      this._toggleContactsRoster();
     });
     this._globalContextMissionsBtn?.addEventListener('click', () => {
       const nextMode = this._contextMode === 'space-missions' ? null : 'space-missions';
@@ -4953,7 +5198,7 @@ export class StyleManager {
     this._contextModeEntryIntent = null;
     this._contextModeReplacementIntent = null;
     this._contextModeChanging = true;
-    this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = true);
+    this._setContactsRosterControlsDisabled(true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     try {
       if (mode !== 'flights' && this.cockpitView?.active) {
@@ -5108,7 +5353,7 @@ export class StyleManager {
     } finally {
       if (isCurrent()) {
         this._contextModeChanging = false;
-        this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = false);
+        this._setContactsRosterControlsDisabled(false);
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
         this._syncContextModeButtons();
       }
@@ -5359,7 +5604,11 @@ export class StyleManager {
     if (this._globalContextFlightsBtn) this._globalContextFlightsBtn.tabIndex = missionsActive ? -1 : 0;
     if (this._globalContextMissionsBtn) this._globalContextMissionsBtn.tabIndex = missionsActive ? 0 : -1;
     if (this._contextModeStandby) this._contextModeStandby.hidden = flightsActive || missionsActive;
-    if (this._contextFlightsView) this._contextFlightsView.hidden = !flightsActive;
+    applyContactsRosterToggle({
+      open: flightsActive,
+      toggle: this._contactsRosterToggle,
+      view: this._contextFlightsView,
+    });
     if (this._contextMissionsView) this._contextMissionsView.hidden = !missionsActive;
     this.cockpitView?.syncEntry();
     // Every _contextMode mutation funnels through here; the sync no-ops until
@@ -5717,6 +5966,8 @@ export class StyleManager {
     this._radioNextBtn?.addEventListener('click', () => cycleRadio(1));
     this._radioPlayBtn?.addEventListener('click', () => void radioLayer.togglePlayback({ origin: 'user' }));
     this._radioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
+    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
+    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
     this._radioVolume?.addEventListener('input', () => {
       const value = Number(this._radioVolume.value);
       if (this._radioVolumeValue) this._radioVolumeValue.textContent = `${value}%`;
@@ -6099,7 +6350,10 @@ export class StyleManager {
       this._cockpitRadioPlayBtn.setAttribute('aria-label', `${action} ${selected ? 'selected' : 'nearest'} radio station`);
       this._cockpitRadioPlayBtn.title = action;
     }
-    if (this._radioStopBtn) this._radioStopBtn.disabled = !interactive || state.audioState === 'stopped';
+    const liveRadioAudio = ['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
+    if (this._radioStopBtn) this._radioStopBtn.disabled = !['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
+    if (this._contextRadioMiniStopBtn) this._contextRadioMiniStopBtn.disabled = !liveRadioAudio;
+    if (this._cockpitRadioStopBtn) this._cockpitRadioStopBtn.disabled = !liveRadioAudio;
     if (this._radioVolume) this._radioVolume.disabled = !interactive;
     if (this._radioVolume && document.activeElement !== this._radioVolume) {
       this._radioVolume.value = String(Math.round(state.volume * 100));
@@ -7918,6 +8172,21 @@ export class StyleManager {
   // { ok, ...resultingState } so callers confirm only what actually happened.
 
   /**
+   * Advances the HUD one step along the existing set_hud cycle:
+   * operator → minimal → tactical → off → operator.
+   * @returns {{ok: boolean, visible?: boolean, layout?: string, error?: string}}
+   */
+  cycleHud() {
+    return cycleHud({
+      visible: !!this.hud?.visible,
+      layout: this.hud?.getVariant?.() || 'tactical',
+    }, {
+      setHudLayout: (layout) => this.setHudLayout(layout),
+      setHudVisible: (mode) => this.setHudVisible(mode),
+    });
+  }
+
+  /**
    * Sets HUD visibility mode. 'auto' restores style-driven show/hide.
    * @param {'on'|'off'|'auto'} mode - Visibility mode.
    * @returns {{ok: boolean, visible?: boolean, layout?: string, error?: string}}
@@ -7946,6 +8215,7 @@ export class StyleManager {
     }
     this.shareLinkManager?.claimRestoreLane?.('visual');
     this._setHudVariant(variant);
+    this._updateHudButtonState();
     return { ok: true, layout: this.hud.getVariant(), visible: !!this.hud.visible };
   }
 
@@ -8063,14 +8333,18 @@ export class StyleManager {
       setDetectionModeByLabel('OFF');
     } else if (requestedProfile) {
       setDetectionModeByLabel(requestedProfile);
-    } else if (enabled === true && getDetectionMode() === 'OFF') {
+    } else if (requestedDensity === 0) {
+      setDetectionModeByLabel('OFF');
+    } else if ((enabled === true || requestedDensity != null) && getDetectionMode() === 'OFF') {
       setDetectionModeByLabel(profileForDensity(
         requestedDensity ?? this._detectionDensitySlider?.value ?? 50,
       ));
     }
     this._syncDetectionUiFromEngine();
     this._syncShareState();
-    return { ok: true, ...this.getDetectionState() };
+    const next = this.getDetectionState();
+    if (Number.isFinite(next.densityPct)) persistDetectionDensity(next.densityPct);
+    return { ok: true, ...next };
   }
 
   /**
@@ -8248,6 +8522,9 @@ export class StyleManager {
     if (enabled === false) {
       this._stopOrbit();
       return { ok: true, orbiting: false };
+    }
+    if (isReduceMotionEnabled()) {
+      return { ok: false, orbiting: false, error: 'Orbit is off while reduced motion is on' };
     }
     if (!this._currentTarget) {
       return { ok: false, orbiting: false, error: 'No active landmark to orbit — fly to a landmark first' };
@@ -8509,6 +8786,26 @@ export class StyleManager {
   }
 
   /**
+   * Operator Enter cockpit: same `controlCockpit('enter')` action as voice,
+   * establishing Contacts first when that existing gate is still shut.
+   */
+  async requestCockpitEnter() {
+    if (!this.cockpitView) {
+      return {
+        ok: false,
+        action: 'control_cockpit',
+        error: 'Cockpit controller unavailable',
+        state: this.getCockpitState(),
+      };
+    }
+    return requestCockpitEnter({
+      isEntryAllowed: () => this.cockpitView.isEntryAllowed?.() === true,
+      setContextMode: (mode, options) => this.setContextMode(mode, options),
+      controlCockpit: (action) => this.controlCockpit(action),
+    });
+  }
+
+  /**
    * Controls cockpit entry/exit and context navigation.
    * @param {'enter'|'exit'|'next'|'previous'|'status'} action - Cockpit action.
    * @param {object} [options]
@@ -8667,6 +8964,7 @@ export class StyleManager {
         visible: !!this.celestialRing?.visible,
       },
       orbiting: !!this.orbitController?.active,
+      reduceMotion: isReduceMotionEnabled(),
       recording: !!this._recordingMode,
       cleanView: document.body.classList.contains('ui-clean-view'),
     };
@@ -8831,9 +9129,7 @@ export class StyleManager {
 
     const detectionState = state.detection || {};
     if (typeof detectionState.density === 'number' && this._detectionDensitySlider) {
-      const pct = canonicalizeDensity(detectionState.density);
-      this._detectionDensitySlider.value = String(pct);
-      if (this._detectionDensityValue) this._detectionDensityValue.textContent = `${pct}%`;
+      this._paintDetectionDensityChrome(detectionState.density);
       this._applyDetectionDensityFromUi();
     }
     if (detectionState.allocation) {
@@ -8948,9 +9244,7 @@ export class StyleManager {
       this._setDetectionMode(preset.detectionMode);
     }
     if (typeof preset.detectionDensity === 'number' && this._detectionDensitySlider) {
-      const density = canonicalizeDensity(preset.detectionDensity);
-      this._detectionDensitySlider.value = String(density);
-      this._detectionDensityValue.textContent = `${density}%`;
+      this._paintDetectionDensityChrome(preset.detectionDensity);
       this._applyDetectionDensityFromUi();
     }
     if (preset.detectionAllocation) {
@@ -9115,6 +9409,15 @@ export class StyleManager {
   // ── Style switching ───────────────────────────
 
   /**
+   * Cycles hosted sensor looks: CRT → NVG → FLIR → Noir → Snow → default.
+   * Uses setStyle so share URL, lastView, and voice stay on the same style id.
+   * @returns {string} The style id now active.
+   */
+  cycleLook() {
+    return cycleSensorLook(this);
+  }
+
+  /**
    * Switches the active visual style. Handles full lifecycle:
    * 1. Crossfades the previous shader stage intensity to 0.
    * 2. Crossfades the new shader stage intensity to 1.
@@ -9186,6 +9489,7 @@ export class StyleManager {
 
     // Notify share link manager
     this.shareLinkManager.onStyleChange(styleName);
+    writeStoredSensorLook(styleName);
     this._syncShareState();
   }
 
@@ -9697,8 +10001,13 @@ export class StyleManager {
    * @returns {void}
    */
   _updateStyleMiniStatus(styleName = this.activeStyle) {
-    if (!this._styleMiniValue) return;
-    this._styleMiniValue.textContent = STYLE_STATUS_LABELS[styleName] || String(styleName || 'normal').toUpperCase();
+    const label = sensorLookLabel(styleName)
+      || STYLE_STATUS_LABELS[styleName]
+      || String(styleName || 'normal').toUpperCase();
+    if (this._styleMiniValue) this._styleMiniValue.textContent = label;
+    if (this._lookCycleBtn) {
+      this._lookCycleBtn.setAttribute('aria-label', `Look ${label}. Cycle sensor look.`);
+    }
   }
 
   // ── Orbit Mode ──────────────────────────────
@@ -9716,11 +10025,27 @@ export class StyleManager {
   }
 
   /**
-   * Toggles the orbit controller around the current POI target. Shows a toast
-   * if no target position has been set (user must fly to a POI first).
+   * Mirror OS reduce-motion (or the persist override) on the DISPLAY toggle.
+   * Turning reduce-motion on also stops leftover idle orbit.
+   * @returns {void}
+   */
+  _syncReduceMotionButton() {
+    const enabled = isReduceMotionEnabled();
+    this._reduceMotionBtn?.classList.toggle('active', enabled);
+    this._reduceMotionBtn?.setAttribute('aria-pressed', String(enabled));
+    if (enabled) this._stopOrbit();
+  }
+
+  /**
+   * Toggles idle orbit around the current POI. Decorative spin is refused
+   * while reduced motion is on; fly-to Home is unaffected.
    * @returns {void}
    */
   _toggleOrbit() {
+    if (isReduceMotionEnabled()) {
+      this._showToast('Orbit is off while reduced motion is on');
+      return;
+    }
     if (!this._currentTarget) {
       this._showToast('Fly to a POI first');
       return;
@@ -9739,9 +10064,9 @@ export class StyleManager {
    * @returns {void}
    */
   _stopOrbit() {
-    if (this.orbitController.active) {
+    if (this.orbitController?.active) {
       this.orbitController.stop();
-      this._orbitIndicator.classList.remove('active');
+      this._orbitIndicator?.classList.remove('active');
     }
   }
 
@@ -9803,7 +10128,7 @@ export class StyleManager {
     this._preservePanelStateDuringLayerClear = true;
     this._syncContextModeButtons();
     this._userFacingContextNotificationTokens.add(notificationToken);
-    this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = true);
+    this._setContactsRosterControlsDisabled(true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     this._clearSelectedLayersBtn.disabled = true;
     this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clearing selected data layers');
@@ -9837,7 +10162,7 @@ export class StyleManager {
       if (generation === this._contextModeGeneration) {
         this._contextModeChanging = false;
         this._syncContextModeButtons();
-        this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = false);
+        this._setContactsRosterControlsDisabled(false);
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
       }
       this._clearSelectedLayersBtn.disabled = false;
@@ -9937,6 +10262,27 @@ export class StyleManager {
     });
   }
 
+  /** Wire fullscreen on the document root so #cesium-credits stays painted. */
+  _initFullscreenButton() {
+    hideFullscreenButtonIfUnsupported(this._fullscreenBtn);
+    this._fullscreenBtn?.addEventListener('click', () => { void this.toggleGlobeFullscreen(); });
+    const onChange = () => {
+      syncFullscreenButton(this._fullscreenBtn, isDocumentFullscreen());
+      pinRequiredCredits();
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    this._removeFullscreenListener = () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+    onChange();
+  }
+
+  toggleGlobeFullscreen() {
+    return toggleFullscreen();
+  }
+
   /**
    * Displays a temporary toast notification for 2 seconds.
    * @param {string} message - Text to show in the toast.
@@ -9964,14 +10310,24 @@ export class StyleManager {
    * renders as 3D glTF models once the camera is zoomed in past the layer's
    * altitude ceiling, and only the nearest MODEL_MAX in view are admitted, so
    * the default costs nothing at globe scale. `all` is the deliberate opt-in;
-   * turning the toggle off returns the fleet to flat billboards. The TRACKED
-   * contact is independent of this toggle (see trackedModelRegime.js).
+   * turning the toggle off returns the fleet AND the tracked hangar model to
+   * flat billboards. Persist as `meridian.models` = on|off (default on).
    * @returns {void}
    */
-  /** One 3D toggle drives BOTH aircraft layers (commercial + military) so all planes flip together. */
+  /** One Models toggle drives BOTH aircraft layers (commercial + military) so all planes flip together. */
   _setModels3dParams(params, { origin = 'user' } = {}) {
     this._dataManager?.setLayerParams('flights', params, { origin });
     this._dataManager?.setLayerParams('military', params, { origin });
+  }
+
+  _applyStoredModelsPreference() {
+    const stored = peekModelsPreference(modelsPreferenceStore());
+    if (stored !== 'on' && stored !== 'off') return;
+    const enabled = stored === 'on';
+    if (enabled === this._models3dEnabled) return;
+    this._setModels3dEnabled(enabled, { persist: false });
+    this._models3dModeRow?.classList.toggle('visible', this._models3dEnabled);
+    this._layoutRightPanels();
   }
 
   _syncModels3dFromLayerState(state) {
@@ -9992,7 +10348,12 @@ export class StyleManager {
 
   _initModels3dToggle() {
     if (!this._models3dBtn) return;
-    // The Proximity/All mode row is revealed only while 3D is on (mirrors the DETECT slider row).
+    const stored = peekModelsPreference(modelsPreferenceStore());
+    if (stored === 'off' || stored === 'on') {
+      this._models3dEnabled = stored === 'on';
+      this._setModels3dParams({ models3d: this._models3dEnabled }, { origin: 'local-restore' });
+    }
+    // The Proximity/All mode row is revealed only while Models is on (mirrors the DETECT slider row).
     const syncModeRow = () => {
       if (this._models3dModeRow) this._models3dModeRow.classList.toggle('visible', this._models3dEnabled);
       this._layoutRightPanels();
@@ -10012,10 +10373,11 @@ export class StyleManager {
     syncModeRow();
   }
 
-  _setModels3dEnabled(enabled) {
+  _setModels3dEnabled(enabled, { persist = true } = {}) {
     this._models3dEnabled = !!enabled;
     this._setModels3dParams({ models3d: this._models3dEnabled });
     this._syncModels3dButtonState();
+    if (persist) writeModelsPreference(modelsPreferenceStore(), this._models3dEnabled ? 'on' : 'off');
   }
 
   _setModels3dMode(mode) {
@@ -10044,15 +10406,15 @@ export class StyleManager {
   _initHUDToggle() {
     this._hudBtn.addEventListener('click', () => {
       this.shareLinkManager?.claimRestoreLane?.('visual');
-      this.hud.toggle();
-      this._updateHudButtonState();
-      this._syncShareState();
+      this.cycleHud();
     });
 
+    const storedVariant = readStoredHudVariant();
+    const initialVariant = storedVariant || 'tactical';
     if (this._hudLayoutSelect) {
-      this._hudLayoutSelect.value = 'tactical';
+      this._hudLayoutSelect.value = initialVariant;
     }
-    this._setHudVariant('tactical');
+    this._setHudVariant(initialVariant);
     this.hud.setMode('on');
     this._updateHudButtonState();
 
@@ -10169,9 +10531,17 @@ export class StyleManager {
    * @returns {void}
    */
   _updateHudButtonState() {
-    this._hudBtn.classList.toggle('active', this.hud.visible);
+    const hudState = {
+      visible: !!this.hud.visible,
+      layout: this.hud.getVariant(),
+    };
+    this._hudBtn.classList.toggle('active', hudState.visible);
+    this._hudBtn.setAttribute('aria-pressed', String(hudState.visible));
+    this._hudBtn.setAttribute('aria-label', hudChromeAriaLabel(hudState));
+    const label = this._hudBtn.querySelector('.pp-label');
+    if (label) label.textContent = hudChromeLabel(hudState);
     if (this._hudLayoutRow) {
-      this._hudLayoutRow.classList.toggle('visible', this.hud.visible);
+      this._hudLayoutRow.classList.toggle('visible', hudState.visible);
     }
     this._scheduleAdaptivePanelLayout({ settle: true });
   }
@@ -10284,6 +10654,8 @@ export class StyleManager {
     this._globalStatusNotice = null;
     if (this._globalLoadingStatus) this._globalLoadingStatus.hidden = true;
     this._disposed = true;
+    this._unitsUnsubscribe?.();
+    this._unitsUnsubscribe = null;
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
     this._layerStateCoordinator = null;
@@ -10383,10 +10755,14 @@ export class StyleManager {
       this._loadingVisibilityHandler = null;
     }
     this._stopLoadingFeedbackTicker();
+    this._reduceMotionUnsubscribe?.();
+    this._reduceMotionUnsubscribe = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
     }
+    this._removeFullscreenListener?.();
+    this._removeFullscreenListener = null;
     if (this._poiKeydownHandler) {
       document.removeEventListener('keydown', this._poiKeydownHandler);
       this._poiKeydownHandler = null;
