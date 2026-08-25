@@ -48,6 +48,20 @@ test('typeCode outranks category; unknown → airliner', () => {
   assert.equal(classifyAircraft({ typeCode: null, category: 0 }), 'airliner');
 });
 
+test('unknown typeCode does not stamp JET over a known snapshot category', () => {
+  // Live hole: T-6 Texan II (TEX2) + OpenSky cat 2 Light must not flip to airliner.
+  assert.notEqual(classifyAircraft({ typeCode: 'TEX2', category: 2 }), 'airliner');
+  assert.equal(classifyAircraft({ typeCode: 'DV20' }), 'light');
+  assert.equal(classifyAircraft({ typeCode: 'G200' }), 'bizjet');
+  assert.equal(classifyAircraft({ typeCode: 'GALX' }), 'bizjet');
+  assert.equal(classifyAircraft({ typeCode: 'b738' }), 'airliner');
+  assert.equal(classifyAircraft({ typeCode: 'A319' }), 'airliner');
+  assert.equal(classifyAircraft({ category: 2 }), 'light');
+  // Unrecognized ICAO + known category uses the snapshot, not the airliner default.
+  assert.equal(classifyAircraft({ typeCode: 'XXXX', category: 2 }), 'light');
+  assert.equal(classifyAircraft({ typeCode: 'XXXX', category: 8 }), 'helicopter');
+});
+
 test('scale/url tables cover every class', () => {
   for (const kind of ['light','glider','turboprop','airliner','widebody','quadjet','helicopter','fastjet','bizjet','uav']) {
     assert.ok(Number.isFinite(CLASS_SCALE_2D[kind]), kind);

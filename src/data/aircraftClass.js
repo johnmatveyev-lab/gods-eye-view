@@ -31,6 +31,8 @@ const TPROP = new Set([
   'D328', 'F50', 'F27', 'ATP', 'TBM7', 'TBM8', 'TBM9', 'TBM0', 'PC6', 'C441',
   'C425', 'DHC6', 'DHC7', 'C130', 'AN12', 'AN26', 'AN32', 'SH36', 'CVLT', 'SAAB',
   'A400',
+  'TEX2', // T-6 Texan II — turboprop trainer (adsbdb typeCode)
+  'U21',  // Beech U-21 Ute / King Air family
 ]);
 const GLIDER = new Set([
   'DISC', 'DUOD', 'VENT', 'NIMB', 'NIM3', 'NIM4', 'JANS', 'ARCE', 'DG40', 'DG80',
@@ -42,9 +44,10 @@ const LIGHT = new Set([
   'C150', 'C152', 'C162', 'C172', 'C72R', 'C175', 'C177', 'C180', 'C182', 'C185',
   'C188', 'C206', 'C207', 'C210', 'C310', 'C337', 'SR20', 'SR22', 'S22T', 'PA18',
   'PA24', 'PA28', 'P28A', 'P28B', 'P28R', 'PA32', 'P32R', 'PA34', 'PA38', 'PA44',
-  'PA46', 'DA20', 'DA40', 'DA42', 'DA62', 'BE33', 'BE35', 'BE36', 'BE58', 'BE76',
+  'PA46', 'DA20', 'DV20', 'DA40', 'DA42', 'DA62', 'BE33', 'BE35', 'BE36', 'BE58', 'BE76',
   'BE19', 'BE23', 'BE24', 'M20P', 'M20T', 'AA1', 'AA5', 'GLAS', 'COL4', 'RV4',
   'RV6', 'RV7', 'RV8', 'RV9', 'RV10', 'RV14', 'GA8', 'G115', 'BL8', 'CH7',
+  'P06T',
 ]);
 // GEV addition (2026-08-15 Hangar fleet): business jets — distinct class so the
 // Citation II GLB + a slimmer glyph read apart from airliners.
@@ -52,7 +55,7 @@ const BIZJET = new Set([
   'C500', 'C501', 'C510', 'C525', 'C25A', 'C25B', 'C25C', 'C25M', 'C550',
   'C551', 'C560', 'C56X', 'C650', 'C680', 'C68A', 'C700', 'C750',
   'CL30', 'CL35', 'CL60', 'GLF2', 'GLF3', 'GLF4', 'GLF5', 'GLF6', 'GA5C',
-  'GA6C', 'G150', 'G280', 'GL5T', 'GL7T', 'GLEX',
+  'GA6C', 'G150', 'G200', 'GALX', 'G280', 'GL5T', 'GL7T', 'GLEX',
   'LJ23', 'LJ24', 'LJ25', 'LJ31', 'LJ35', 'LJ40', 'LJ45', 'LJ55', 'LJ60',
   'LJ70', 'LJ75', 'FA10', 'FA20', 'FA50', 'FA7X', 'FA8X', 'F900', 'F2TH',
   'H25A', 'H25B', 'H25C', 'HDJT', 'E50P', 'E55P', 'E545', 'E550', 'PC24',
@@ -102,7 +105,7 @@ export function classifyAircraft({ typeCode, category } = {}) {
     if (GLIDER.has(code)) return 'glider';
     if (BIZJET.has(code)) return 'bizjet';
     if (LIGHT.has(code)) return 'light';
-    return 'airliner'; // known type code, not in a special set → default jet
+    // Unrecognized ICAO must not stamp JET — fall through to snapshot category.
   }
   if (Number.isFinite(category) && OPENSKY_CATEGORY[category]) return OPENSKY_CATEGORY[category];
   const cat = String(category || '').trim().toUpperCase();
