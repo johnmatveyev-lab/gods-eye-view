@@ -535,6 +535,9 @@ test('no mission writes a preference the visitor did not choose by picking it', 
     'setEmergencyHighlightEnabled',
     'hydrateEmergencyHighlightEnabled',
     '_initEmergencyHighlightToggle',
+    'setLaunchStatusFilter',
+    'writeLaunchStatusFilter',
+    'hydrateLaunchStatusFilter',
     'setFeather',
   ]) {
     assert.doesNotMatch(code, new RegExp(forbidden), `a mission must never touch ${forbidden}`);
