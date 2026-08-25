@@ -54,6 +54,9 @@
     },
     "api/regional-brief.js": {
       "maxDuration": 15
+    },
+    "api/google/nearby-places.js": {
+      "maxDuration": 15
     }
   }
 }

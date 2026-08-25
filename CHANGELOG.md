@@ -7,6 +7,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted `/api/google/nearby-places` on Vercel via `api/google/nearby-places.js`,
+  forwarding the same GET handler extracted to `src/google/nearbyPlaces.js`.
+  Reuses `GOOGLE_MAPS_API_KEY` and optional `GEV_RATELIMIT_GOOGLE_PER_MIN`.
+  Place labels only — the Google key never appears in JSON.
 - Added a hosted `/api/adsbdb` enrichment proxy (`api/adsbdb/[...path].js`)
   that forwards route and aircraft lookups to `api.adsbdb.com` only, with a
   24h in-memory cache, 404 negative-cache, last-good on error, and optional
