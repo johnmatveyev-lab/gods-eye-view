@@ -72,7 +72,8 @@ test('min-docks is client-only: no new /api path and chips hide with the bike la
   const markup = readFileSync(join(here, '..', '..', 'index.html'), 'utf8');
   const ui = readFileSync(join(here, '..', 'ui.js'), 'utf8');
 
-  assert.equal(helper.includes('/api/'), false);
+  assert.equal(/\bfetch\s*\(/.test(helper), false);
+  assert.equal(/export\s+async\s+function|\/api\/gbfs\/\$\{/.test(helper), false);
   assert.match(persist, /meridian\.bikeshare\.minDocks/);
   assert.match(layer, /stationMatchesBikeshareMinDocks/);
   assert.match(layer, /minDocks/);
