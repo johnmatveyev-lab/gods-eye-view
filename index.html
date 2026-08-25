@@ -59,6 +59,9 @@
     <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>
+    <button id="clear-annotations" type="button" aria-label="Clear annotations" title="Erase whiteboard marks" disabled>
+      <span class="material-symbols-outlined" aria-hidden="true">ink_eraser</span>
+    </button>
     <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
@@ -67,6 +70,9 @@
     </button>
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
+    </button>
+    <button id="fullscreen-view" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
     </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
@@ -362,6 +368,7 @@
             <button id="cockpit-radio-prev-btn" type="button" aria-label="Previous filtered radio station" disabled>◀◀</button>
             <button id="cockpit-radio-play-btn" type="button" aria-label="Play selected radio station" disabled>▶</button>
             <button id="cockpit-radio-next-btn" type="button" aria-label="Next filtered radio station" disabled>▶▶</button>
+            <button id="cockpit-radio-stop-btn" type="button" aria-label="Mute or stop radio playback" title="Mute / Stop" disabled>⏹</button>
           </div>
           <label class="cockpit-radio-volume" for="cockpit-radio-volume">
             <span>VOLUME</span>
@@ -375,6 +382,10 @@
   </section>
 
   <nav id="view-switcher" aria-label="View switcher">
+    <button id="cockpit-entry" type="button" aria-label="Enter cockpit" title="Enter cockpit" hidden>
+      <span class="material-symbols-outlined" aria-hidden="true">flight</span>
+      <span>ENTER COCKPIT</span>
+    </button>
     <button id="cockpit-reset-globe" type="button" aria-label="Reset cockpit to full globe view" title="Exit cockpit and return to full globe view" hidden>
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
       <span>RESET</span>
@@ -405,6 +416,14 @@
           <option value="minimal">Minimal</option>
         </select>
       </div>
+      <div class="pp-slider-row visible" id="units-row">
+        <span class="pp-slider-mini-label">Units</span>
+        <div class="pp-mode-seg" role="radiogroup" aria-label="Distance units">
+          <button class="pp-mode-btn active" id="units-km" data-units="km" role="radio" aria-checked="true">km</button>
+          <button class="pp-mode-btn" id="units-nm" data-units="nm" role="radio" aria-checked="false">nm</button>
+          <button class="pp-mode-btn" id="units-mi" data-units="mi" role="radio" aria-checked="false">mi</button>
+        </div>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="detection-toggle" title="Detection Overlay (D)" aria-label="Detection overlay" aria-pressed="false">
@@ -413,8 +432,22 @@
       </button>
       <div class="pp-slider-row detection-slider-row" id="detection-slider-row">
         <label class="pp-slider-mini-label" for="detection-density-slider">Density</label>
-        <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" aria-label="Detection label density" />
-        <span class="pp-slider-value" id="detection-density-value">50%</span>
+        <div class="detection-density-control">
+          <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" list="detection-density-stop-values" aria-label="Detection density" aria-valuetext="Balanced" />
+          <div class="detection-density-stops" aria-hidden="true">
+            <span>Sparse</span>
+            <span>Balanced</span>
+            <span>Dense</span>
+          </div>
+        </div>
+        <span class="pp-slider-value" id="detection-density-value">Balanced</span>
+        <datalist id="detection-density-stop-values">
+          <option value="0" label="Sparse"></option>
+          <option value="25" label="Sparse"></option>
+          <option value="50" label="Balanced"></option>
+          <option value="75" label="Dense"></option>
+          <option value="100" label="Dense"></option>
+        </datalist>
       </div>
       <div class="pp-slider-row detection-allocation-row" id="detection-allocation-row">
         <span class="pp-slider-mini-label">Allocation</span>
@@ -444,16 +477,17 @@
       <div id="param-sliders"></div>
     </div>
     <div class="pp-toggle-group">
-      <!-- 3D aircraft is DEFAULT-ON in Proximity (product invariant 2026-08-22), so the
-           button ships lit and the mode row ships open — the same markup-carries-the-default
-           convention as #scope-toggle. ui.js re-syncs both from durable layer state, which
-           is what flips them back for a share link or a stored session carrying 3D off. -->
-      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="3D aircraft — flat icons zoomed out, 3D models up close">
+      <!-- Hangar models are DEFAULT-ON in Proximity (product invariant 2026-08-22),
+           persisted as meridian.models = on|off. The button ships lit and the mode
+           row ships open — the same markup-carries-the-default convention as
+           #scope-toggle. ui.js re-syncs from meridian.models and durable layer
+           state, which flips them back for a share link or a stored Off session. -->
+      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="Hangar 3D models — on loads per-class GLBs up close; off keeps 2D billboards">
         <span class="pp-icon">&#x2708;</span>
-        <span class="pp-label">3D</span>
+        <span class="pp-label">Models</span>
       </button>
       <div class="pp-slider-row visible" id="models3d-mode-row">
-        <span class="pp-slider-mini-label">Models</span>
+        <span class="pp-slider-mini-label">Coverage</span>
         <div class="pp-mode-seg" role="radiogroup" aria-label="3D model coverage">
           <button class="pp-mode-btn active" id="models3d-mode-proximity" data-mode="proximity" role="radio" aria-checked="true">Proximity</button>
           <button class="pp-mode-btn" id="models3d-mode-all" data-mode="all" role="radio" aria-checked="false">All</button>
@@ -755,6 +789,7 @@
                 <button id="context-radio-mini-prev-btn" type="button" aria-label="Previous filtered radio station" title="Previous station" disabled>◀◀</button>
                 <button id="context-radio-mini-play-btn" type="button" aria-label="Play selected radio station" title="Play" disabled>▶</button>
                 <button id="context-radio-mini-next-btn" type="button" aria-label="Next filtered radio station" title="Next station" disabled>▶▶</button>
+                <button id="context-radio-mini-stop-btn" type="button" aria-label="Mute or stop radio playback" title="Mute / Stop" disabled>⏹</button>
               </div>
               <label class="context-radio-mini-volume" for="context-radio-mini-volume">
                 <span>VOLUME</span>
@@ -781,10 +816,6 @@
         </div>
         <section id="context-flights-view" class="context-mode-view" role="tabpanel" aria-labelledby="global-context-flights-btn" hidden>
           <div class="global-context-actions" aria-label="Contact Context actions">
-            <button id="cockpit-entry" type="button" hidden>
-              <span class="material-symbols-outlined" aria-hidden="true">flight</span>
-              <span>COCKPIT</span>
-            </button>
             <button id="installations-search-btn" class="panel-layer-toggle" type="button">SEARCH NEARBY SITES</button>
             <button id="tr3b-toggle" class="tr3b-toggle" type="button" aria-pressed="false" hidden aria-label="Reclassify tracked contact as TR-3B" title="Reclassify as TR-3B">🛸</button>
           </div>
@@ -851,7 +882,7 @@
               <button id="radio-prev-btn" type="button" aria-label="Previous filtered station" disabled>PREV</button>
               <button id="radio-play-btn" type="button" aria-label="Play selected station" disabled>PLAY</button>
               <button id="radio-next-btn" type="button" aria-label="Next filtered station" disabled>NEXT</button>
-              <button id="radio-stop-btn" type="button" aria-label="Stop radio playback" disabled>STOP</button>
+              <button id="radio-stop-btn" type="button" aria-label="Mute or stop radio playback" disabled>MUTE/STOP</button>
             </div>
             <label class="radio-volume-row" for="radio-volume">
               <span>VOLUME</span>
