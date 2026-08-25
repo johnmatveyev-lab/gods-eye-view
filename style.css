@@ -3799,6 +3799,9 @@ body.cockpit-mode #view-switcher button {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.cockpit-weather-credit[hidden] {
+  display: none;
+}
 .cockpit-signal-footer {
   display: flex;
   align-items: center;

@@ -11,6 +11,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   that forwards route and aircraft lookups to `api.adsbdb.com` only, with a
   24h in-memory cache, 404 negative-cache, last-good on error, and optional
   `/tmp` persist. Dev/preview still use the Vite plugin. OpenSky is not used.
+- Hosted cockpit regional brief now shares one Node handler between Vite and
+  Vercel (`api/regional-brief.js`). GET and POST return 200 JSON with place
+  and/or weather and/or GDELT news — never a platform `NOT_FOUND`. Google News
+  RSS stays off. The Local Info page shows the linked Open-Meteo credit only
+  when weather values are on screen.
 - Hosted `/api/route` on Vercel via `api/route.js`, forwarding the same GET
   handler extracted to `src/data/osrmRoute.js`. Public FOSSGIS OSRM only
   (foot/car/bike, 2–12 coords, span guard, rate limiter). Failures are
