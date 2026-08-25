@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites row has client-only **All | <0.01 | <0.05** eccentricity chips
+  next to inclination chips. Default All matches the current catalog. The
+  chips filter already-fetched CelesTrak satrecs by `satrec.ecco` (unitless
+  0–1). **<0.01** keeps near-circular orbits. **<0.05** is looser. Missing
+  or non-finite eccentricity stays visible. The tracked satellite stays.
+  Chip changes re-filter in memory and AND with Core | Dense, class chips,
+  POINTS, ORBITS, period, and inclination — no extra `/api/celestrak` fetch
+  and no new endpoint. Preference persists as `meridian.satEccentricity`
+  and is not a share-link field. Catalog refresh and group switch keep the
+  floor. Hidden when the Satellites layer is off. Distinct from Plan 164
+  period chips and Plan 169 inclination chips.
 - Space Missions roster has a client-only **Webcast only** toggle next to
   the 7d | 30d chips. Default off matches the current 30-day roster. On
   keeps missions whose normalized `webcastLive` is true — `webcast_live
