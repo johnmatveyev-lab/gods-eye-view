@@ -142,6 +142,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   6-hour memory + optional `/tmp` cache and stale-on-failure. Vite forwards
   through `src/data/celestrak.js`. User-Agent is
   `Meridian-celestrak-proxy/1.0 (+https://github.com/johnmatveyev-lab/gods-eye-view)`.
+- Added dedicated Vercel Node functions `api/realtime/token.js` and
+  `api/openai/hud-summary.js` that mint ephemeral OpenAI sessions / HUD
+  summaries with the server `OPENAI_API_KEY`. Free stays gated; Pro and
+  self-host BYOK keep working. The long-lived key is never injected into
+  the client bundle.
 
 ### Changed
 

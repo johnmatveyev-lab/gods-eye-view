@@ -649,7 +649,7 @@ test('the DISPLAY rail starts collapsed on a first run, and a stored choice wins
 // ── Voice: instruction-only, tool schema byte-unchanged ─────────────────────
 
 test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is instructions only', () => {
-  const src = fs.readFileSync(new URL('./server/liveApiProxies.js', import.meta.url), 'utf8');
+  const src = fs.readFileSync(new URL('./voice/realtimeTools.js', import.meta.url), 'utf8');
   const start = src.indexOf('const GEV_REALTIME_TOOLS = [');
   assert.ok(start > 0, 'GEV_REALTIME_TOOLS must still be a single literal array');
   const end = src.indexOf('\n];\n', start);
@@ -666,12 +666,13 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
   // string, whose rollback is deleting that string. Anchored to a LIVE array
   // entry — a quote at the start of its own line — so commenting the paragraph
   // out reads as the removal it is, not as a passing substring match.
+  const instructions = fs.readFileSync(new URL('./voice/realtimeInstructions.js', import.meta.url), 'utf8');
   assert.match(
-    src,
+    instructions,
     /\n\s+'NAMED VIEWS are shorthand/,
     'the mission mapping must be an active instruction entry, not commented out',
   );
-  const mapping = src.slice(src.indexOf('NAMED VIEWS are shorthand'));
+  const mapping = instructions.slice(instructions.indexOf('NAMED VIEWS are shorthand'));
   const paragraph = mapping.slice(0, mapping.indexOf("',\n"));
   for (const layerId of [
     'local-datacenters', 'local-dams', 'local-firms', 'earthquakes',
@@ -686,7 +687,7 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
 });
 
 test('every layer a mission drives is already in the shipped set_layer_visibility enum', () => {
-  const src = fs.readFileSync(new URL('./server/liveApiProxies.js', import.meta.url), 'utf8');
+  const src = fs.readFileSync(new URL('./voice/realtimeTools.js', import.meta.url), 'utf8');
   const tool = src.slice(src.indexOf("name: 'set_layer_visibility'"), src.indexOf("name: 'show_data_layers_menu'"));
   const missionLayerIds = Object.values(FIRST_RUN_MISSIONS).flatMap((mission) => mission.layerIds || []);
   assert.ok(missionLayerIds.length > 0);
