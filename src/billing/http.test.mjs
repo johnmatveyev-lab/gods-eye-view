@@ -59,7 +59,10 @@ function hostedRuntime(overrides = {}) {
         },
       },
       webhooks: {
-        constructEvent: (raw) => JSON.parse(String(raw)),
+        constructEvent: (raw, signature) => {
+          if (signature !== 'sig_test') throw new Error('Invalid Stripe webhook signature.');
+          return JSON.parse(String(raw));
+        },
       },
     }),
     ...overrides,
@@ -127,6 +130,63 @@ test('checkout degrades with a clear message when Stripe env is missing', async 
   assert.equal(status, 503);
   assert.equal(json.code, BILLING_CODES.STRIPE_NOT_CONFIGURED);
   assert.match(json.error, /STRIPE_SECRET_KEY/);
+  assert.deepEqual(json.missing, ['STRIPE_SECRET_KEY', 'STRIPE_PRICE_PRO']);
+  assert.doesNotMatch(JSON.stringify(json), /sk_test|whsec_/);
+});
+
+test('checkout 503s with missing Clerk names when CLERK_* are unset', async () => {
+  const runtime = createBillingRuntime({ env: {} });
+  const { status, json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/billing/checkout',
+  });
+  assert.equal(status, 503);
+  assert.equal(json.code, BILLING_CODES.CLERK_NOT_CONFIGURED);
+  assert.deepEqual(json.missing, ['CLERK_PUBLISHABLE_KEY', 'CLERK_SECRET_KEY']);
+  assert.doesNotMatch(JSON.stringify(json), /sk_|whsec_|BEGIN/);
+});
+
+test('checkout 503s when only one Clerk key is set instead of unlocking BYOK voice', async () => {
+  const runtime = createBillingRuntime({
+    env: { CLERK_PUBLISHABLE_KEY: 'pk_test_example' },
+  });
+  const { status, json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/billing/checkout',
+    headers: { authorization: 'Bearer sess_test' },
+  });
+  assert.equal(status, 503);
+  assert.equal(json.code, BILLING_CODES.CLERK_NOT_CONFIGURED);
+  assert.deepEqual(json.missing, ['CLERK_SECRET_KEY']);
+
+  const voice = await authorizeVoiceRequest(
+    mockReq({ headers: { authorization: 'Bearer sess_test' } }),
+    runtime,
+  );
+  assert.equal(voice.ok, false);
+  assert.equal(voice.status, 503);
+});
+
+test('checkout 502 never echoes Stripe secret material', async () => {
+  const runtime = hostedRuntime({
+    createStripe: () => ({
+      checkout: {
+        sessions: {
+          create: async () => {
+            throw new Error('Invalid API Key provided: sk_test_leakedsecret');
+          },
+        },
+      },
+    }),
+  });
+  const { status, json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/billing/checkout',
+    headers: { authorization: 'Bearer sess_test' },
+  });
+  assert.equal(status, 502);
+  assert.match(json.error, /Stripe Checkout failed/);
+  assert.doesNotMatch(JSON.stringify(json), /sk_test_leakedsecret|leakedsecret/);
 });
 
 test('webhook marks the account Pro without live Stripe keys', async () => {
@@ -197,3 +257,233 @@ test('self-host without Clerk does not require a token for voice', async () => {
   assert.equal(voice.ok, true);
   assert.equal(voice.hosted, false);
 });
+
+test('webhook 503s when STRIPE_WEBHOOK_SECRET is unset', async () => {
+  const runtime = hostedRuntime({
+    env: {
+      CLERK_PUBLISHABLE_KEY: 'pk_test_example',
+      CLERK_SECRET_KEY: 'sk_test_example',
+      STRIPE_SECRET_KEY: 'sk_test_stripe',
+      STRIPE_PRICE_PRO: 'price_env_pro',
+    },
+  });
+  const { status, json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: { type: 'checkout.session.completed', data: { object: {} } },
+  });
+  assert.equal(status, 503);
+  assert.equal(json.code, BILLING_CODES.STRIPE_WEBHOOK_NOT_CONFIGURED);
+  assert.deepEqual(json.missing, ['STRIPE_WEBHOOK_SECRET']);
+});
+
+test('webhook 400s when the Stripe signature header is missing', async () => {
+  const { status, json } = await dispatch(hostedRuntime(), {
+    method: 'POST',
+    url: '/api/billing/webhook',
+    body: { type: 'checkout.session.completed', data: { object: {} } },
+  });
+  assert.equal(status, 400);
+  assert.match(json.error, /Stripe-Signature/);
+});
+
+test('customer.subscription.updated keeps Pro while active and returns Free when canceled', async () => {
+  const clerkWrites = [];
+  const runtime = hostedRuntime({
+    updateUserMetadata: async (userId, metadata) => {
+      clerkWrites.push({ userId, metadata });
+    },
+  });
+  runtime.accounts.applyPatch('user_abc', {
+    plan: PLANS.PRO,
+    stripeCustomerId: 'cus_123',
+    stripeSubscriptionId: 'sub_123',
+  });
+
+  const updated = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_123',
+          customer: 'cus_123',
+          status: 'past_due',
+          metadata: { userId: 'user_abc' },
+        },
+      },
+    },
+  });
+  assert.equal(updated.status, 200);
+  assert.equal(updated.json.applied, true);
+  assert.equal(runtime.accounts.get('user_abc').plan, PLANS.PRO);
+
+  const canceled = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_123',
+          customer: 'cus_123',
+          status: 'canceled',
+          metadata: { userId: 'user_abc' },
+        },
+      },
+    },
+  });
+  assert.equal(canceled.json.plan, PLANS.FREE);
+  assert.equal(runtime.accounts.get('user_abc').plan, PLANS.FREE);
+  assert.equal(clerkWrites.at(-1).metadata.publicMetadata.meridianPlan, PLANS.FREE);
+});
+
+test('subscription.updated can look up the account by Stripe customer id', async () => {
+  const runtime = hostedRuntime();
+  runtime.accounts.applyPatch('user_abc', {
+    plan: PLANS.PRO,
+    stripeCustomerId: 'cus_lookup',
+    stripeSubscriptionId: 'sub_lookup',
+  });
+  const { json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: {
+      type: 'customer.subscription.updated',
+      data: {
+        object: {
+          id: 'sub_lookup',
+          customer: 'cus_lookup',
+          status: 'canceled',
+        },
+      },
+    },
+  });
+  assert.equal(json.applied, true);
+  assert.equal(json.userId, 'user_abc');
+  assert.equal(runtime.accounts.get('user_abc').plan, PLANS.FREE);
+});
+
+test('checkout.session.completed syncs Pro onto mocked Clerk metadata', async () => {
+  const clerkWrites = [];
+  const runtime = hostedRuntime({
+    updateUserMetadata: async (userId, metadata) => {
+      clerkWrites.push({ userId, metadata });
+    },
+  });
+  const { json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          mode: 'subscription',
+          customer: 'cus_clerk',
+          subscription: 'sub_clerk',
+          metadata: { userId: 'user_abc' },
+        },
+      },
+    },
+  });
+  assert.equal(json.applied, true);
+  assert.equal(clerkWrites[0].userId, 'user_abc');
+  assert.equal(clerkWrites[0].metadata.publicMetadata.meridianPlan, PLANS.PRO);
+  assert.equal(clerkWrites[0].metadata.privateMetadata.stripeCustomerId, 'cus_clerk');
+});
+
+test('empty serverless store hydrates Pro from mocked Clerk so voice unlocks', async () => {
+  const runtime = hostedRuntime({
+    getUserRecord: async () => ({
+      publicMetadata: { meridianPlan: PLANS.PRO },
+      privateMetadata: { stripeCustomerId: 'cus_hydrated' },
+    }),
+  });
+  const { json } = await dispatch(runtime, {
+    url: '/api/billing/me',
+    headers: { authorization: 'Bearer sess_test' },
+  });
+  assert.equal(json.plan, PLANS.PRO);
+  assert.equal(json.voice, true);
+
+  const voice = await authorizeVoiceRequest(
+    mockReq({ headers: { authorization: 'Bearer sess_test' } }),
+    runtime,
+  );
+  assert.equal(voice.ok, true);
+});
+
+test('money path: Free cannot use voice, Checkout + completed webhook unlocks Pro voice', async () => {
+  const created = [];
+  const clerkWrites = [];
+  const runtime = hostedRuntime({
+    updateUserMetadata: async (userId, metadata) => {
+      clerkWrites.push({ userId, metadata });
+    },
+    createStripe: () => ({
+      checkout: {
+        sessions: {
+          create: async (params) => {
+            created.push(params);
+            return { id: 'cs_money', url: 'https://checkout.stripe.com/c/pay/cs_money' };
+          },
+        },
+      },
+      webhooks: {
+        constructEvent: (raw, signature) => {
+          if (signature !== 'sig_test') throw new Error('Invalid Stripe webhook signature.');
+          return JSON.parse(String(raw));
+        },
+      },
+    }),
+  });
+
+  const before = await authorizeVoiceRequest(
+    mockReq({ headers: { authorization: 'Bearer sess_test' } }),
+    runtime,
+  );
+  assert.equal(before.ok, false);
+  assert.equal(before.body.code, BILLING_CODES.VOICE_REQUIRES_PRO);
+
+  const checkout = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/billing/checkout',
+    headers: { authorization: 'Bearer sess_test', host: 'meridian.example' },
+  });
+  assert.equal(checkout.status, 200);
+  assert.equal(created[0].line_items[0].price, 'price_env_pro');
+  assert.equal(created[0].metadata.userId, 'user_abc');
+
+  const webhook = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          mode: 'subscription',
+          customer: 'cus_money',
+          subscription: 'sub_money',
+          metadata: { userId: 'user_abc' },
+        },
+      },
+    },
+  });
+  assert.equal(webhook.json.applied, true);
+  assert.equal(runtime.accounts.get('user_abc').plan, PLANS.PRO);
+  assert.equal(clerkWrites.at(-1).metadata.publicMetadata.meridianPlan, PLANS.PRO);
+
+  const after = await authorizeVoiceRequest(
+    mockReq({ headers: { authorization: 'Bearer sess_test' } }),
+    runtime,
+  );
+  assert.equal(after.ok, true);
+});
+

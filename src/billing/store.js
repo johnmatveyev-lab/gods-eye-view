@@ -22,11 +22,15 @@ export function createAccountStore({ persistPath = null, now = () => Date.now() 
 
   const persist = () => {
     if (!persistPath) return;
-    mkdirSync(path.dirname(persistPath), { recursive: true });
-    writeFileSync(persistPath, JSON.stringify({
-      updatedAt: now(),
-      accounts: [...accounts.values()],
-    }, null, 2));
+    try {
+      mkdirSync(path.dirname(persistPath), { recursive: true });
+      writeFileSync(persistPath, JSON.stringify({
+        updatedAt: now(),
+        accounts: [...accounts.values()],
+      }, null, 2));
+    } catch {
+      // Serverless filesystems are read-only; Clerk metadata remains the host store.
+    }
   };
 
   return {

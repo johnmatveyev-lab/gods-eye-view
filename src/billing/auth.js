@@ -1,4 +1,4 @@
-import { readBillingEnv } from './env.js';
+import { formatMissingEnvError, missingClerkEnv, readBillingEnv } from './env.js';
 
 export function readBearerToken(req) {
   const header = req?.headers?.authorization || req?.headers?.Authorization || '';
@@ -18,6 +18,17 @@ export async function authenticateRequest(req, {
 } = {}) {
   const config = readBillingEnv(env);
   if (!config.hosted) {
+    if (config.clerkPartial) {
+      const missing = missingClerkEnv(config);
+      return {
+        ok: false,
+        hosted: true,
+        status: 503,
+        error: `Hosted billing is not configured. ${formatMissingEnvError(missing)}`,
+        code: 'clerk_not_configured',
+        missing,
+      };
+    }
     return { ok: true, hosted: false, user: null };
   }
 
