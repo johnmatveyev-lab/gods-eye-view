@@ -10,6 +10,7 @@
 
 import { GBFS_ALLOWED_HOSTS } from './gbfs.js';
 import { normalizeBikeshareMinAvailable } from './bikeshareMinAvailable.js';
+import { normalizeBikeshareMinDocks } from './bikeshareMinDocks.js';
 
 /** localStorage key for the last picked allowlisted system. */
 export const BIKESHARE_SYSTEM_STORAGE_KEY = 'meridian.bikeshare.system';
@@ -21,6 +22,8 @@ export const BIKESHARE_HIDE_FULL_STORAGE_KEY = 'meridian.bikeshare.hideFull';
 export const BIKESHARE_HIDE_CLOSED_STORAGE_KEY = 'meridian.bikeshare.hideClosed';
 /** localStorage key for the min-available bike floor. Default omitted = All. */
 export const BIKESHARE_MIN_AVAILABLE_STORAGE_KEY = 'meridian.bikeshare.minAvailable';
+/** localStorage key for the min-open-docks floor. Default omitted = All. */
+export const BIKESHARE_MIN_DOCKS_STORAGE_KEY = 'meridian.bikeshare.minDocks';
 
 /** Default system: the app's first-run city. */
 export const DEFAULT_BIKESHARE_SYSTEM_ID = 'austin-capmetro';
@@ -263,6 +266,35 @@ export function writePersistedBikeshareMinAvailable(value, storage) {
   if (normalized == null || !storage || typeof storage.setItem !== 'function') return null;
   try {
     storage.setItem(BIKESHARE_MIN_AVAILABLE_STORAGE_KEY, normalized);
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {{getItem?: Function}|null} storage
+ * @returns {'all'|'3'|'5'|null}
+ */
+export function readPersistedBikeshareMinDocks(storage) {
+  if (!storage || typeof storage.getItem !== 'function') return null;
+  try {
+    return normalizeBikeshareMinDocks(storage.getItem(BIKESHARE_MIN_DOCKS_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {{setItem?: Function}|null} storage
+ * @returns {'all'|'3'|'5'|null}
+ */
+export function writePersistedBikeshareMinDocks(value, storage) {
+  const normalized = normalizeBikeshareMinDocks(value);
+  if (normalized == null || !storage || typeof storage.setItem !== 'function') return null;
+  try {
+    storage.setItem(BIKESHARE_MIN_DOCKS_STORAGE_KEY, normalized);
     return normalized;
   } catch {
     return null;

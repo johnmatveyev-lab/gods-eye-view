@@ -23,22 +23,30 @@ import {
   BIKESHARE_HIDE_EMPTY_STORAGE_KEY,
   BIKESHARE_HIDE_FULL_STORAGE_KEY,
   BIKESHARE_MIN_AVAILABLE_STORAGE_KEY,
+  BIKESHARE_MIN_DOCKS_STORAGE_KEY,
   BIKESHARE_SYSTEM_STORAGE_KEY,
   buildGbfsProxyUrl,
   readPersistedBikeshareHideClosed,
   readPersistedBikeshareHideEmpty,
   readPersistedBikeshareHideFull,
   readPersistedBikeshareMinAvailable,
+  readPersistedBikeshareMinDocks,
   writePersistedBikeshareHideClosed,
   writePersistedBikeshareHideEmpty,
   writePersistedBikeshareHideFull,
   writePersistedBikeshareMinAvailable,
+  writePersistedBikeshareMinDocks,
 } from './bikeshareSystems.js';
 import {
   DEFAULT_BIKESHARE_MIN_AVAILABLE,
   normalizeBikeshareMinAvailable,
   stationMatchesBikeshareMinAvailable,
 } from './bikeshareMinAvailable.js';
+import {
+  DEFAULT_BIKESHARE_MIN_DOCKS,
+  normalizeBikeshareMinDocks,
+  stationMatchesBikeshareMinDocks,
+} from './bikeshareMinDocks.js';
 
 function makeRecord() {
   return {
@@ -970,7 +978,7 @@ test('selected 1-bike station stays visible when 3+ is on', () => {
   }
 });
 
-test('hide full + hide closed + 5+ still AND', () => {
+test('hide full + hide closed + bike 5+ + dock 5+ still AND', () => {
   _resetBikeshareSystemPickerForTest();
   const cityId = 'austin-capmetro';
   const full = makeStationRecord({
@@ -985,57 +993,75 @@ test('hide full + hide closed + 5+ still AND', () => {
     cityId,
     stationId: 'closed',
     bikesAvailable: 6,
-    docksAvailable: 3,
+    docksAvailable: 6,
     isRenting: false,
   });
-  const low = makeStationRecord({
-    key: `${cityId}:low`,
+  const lowBikes = makeStationRecord({
+    key: `${cityId}:low-bikes`,
     cityId,
-    stationId: 'low',
+    stationId: 'low-bikes',
     bikesAvailable: 4,
-    docksAvailable: 4,
+    docksAvailable: 6,
+  });
+  const lowDocks = makeStationRecord({
+    key: `${cityId}:low-docks`,
+    cityId,
+    stationId: 'low-docks',
+    bikesAvailable: 7,
+    docksAvailable: 3,
   });
   const usable = makeStationRecord({
     key: `${cityId}:usable`,
     cityId,
     stationId: 'usable',
     bikesAvailable: 7,
-    docksAvailable: 3,
+    docksAvailable: 6,
   });
-  _seedBikeshareStationsForTest([full, closed, low, usable], { cityId });
+  _seedBikeshareStationsForTest([full, closed, lowBikes, lowDocks, usable], { cityId });
 
   const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
-  bikeshareLayer.setParams({ hideFull: true, hideClosed: true, minAvailable: '5' });
+  bikeshareLayer.setParams({
+    hideFull: true,
+    hideClosed: true,
+    minAvailable: '5',
+    minDocks: '5',
+  });
   assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
   assert.equal(_getBikeshareStationShowForTest(full.key), false);
   assert.equal(_getBikeshareStationShowForTest(closed.key), false);
-  assert.equal(_getBikeshareStationShowForTest(low.key), false);
+  assert.equal(_getBikeshareStationShowForTest(lowBikes.key), false);
+  assert.equal(_getBikeshareStationShowForTest(lowDocks.key), false);
   assert.equal(_getBikeshareStationShowForTest(usable.key), true);
 
   assert.equal(shouldShowBikeshareStation({
     bikesAvailable: 7,
     docksAvailable: 0,
     isRenting: true,
-  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), false);
+  }, { hideFull: true, hideClosed: true, minAvailable: '5', minDocks: '5' }), false);
   assert.equal(shouldShowBikeshareStation({
     bikesAvailable: 7,
-    docksAvailable: 2,
+    docksAvailable: 6,
     isRenting: false,
-  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), false);
+  }, { hideFull: true, hideClosed: true, minAvailable: '5', minDocks: '5' }), false);
   assert.equal(shouldShowBikeshareStation({
     bikesAvailable: 4,
-    docksAvailable: 2,
+    docksAvailable: 6,
     isRenting: true,
-  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), false);
+  }, { hideFull: true, hideClosed: true, minAvailable: '5', minDocks: '5' }), false);
   assert.equal(shouldShowBikeshareStation({
     bikesAvailable: 7,
-    docksAvailable: 2,
+    docksAvailable: 3,
     isRenting: true,
-  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), true);
+  }, { hideFull: true, hideClosed: true, minAvailable: '5', minDocks: '5' }), false);
+  assert.equal(shouldShowBikeshareStation({
+    bikesAvailable: 7,
+    docksAvailable: 6,
+    isRenting: true,
+  }, { hideFull: true, hideClosed: true, minAvailable: '5', minDocks: '5' }), true);
   _resetBikeshareSystemPickerForTest();
 });
 
-test('row chips are Hide empty / Hide full / Hide closed then All | 3+ | 5+', () => {
+test('row chips are Hide empty / Hide full / Hide closed then bike All | 3+ | 5+ then dock All | 3+ | 5+', () => {
   _resetBikeshareSystemPickerForTest();
   const controls = bikeshareLayer.getRowControls();
   assert.deepEqual(controls.chips.map((chip) => chip.id), [
@@ -1045,6 +1071,9 @@ test('row chips are Hide empty / Hide full / Hide closed then All | 3+ | 5+', ()
     'min-available-all',
     'min-available-3',
     'min-available-5',
+    'min-docks-all',
+    'min-docks-3',
+    'min-docks-5',
   ]);
   assert.deepEqual(controls.chips.map((chip) => chip.label), [
     'Hide empty',
@@ -1053,13 +1082,22 @@ test('row chips are Hide empty / Hide full / Hide closed then All | 3+ | 5+', ()
     'All',
     '3+',
     '5+',
+    'All',
+    '3+',
+    '5+',
   ]);
   assert.equal(controls.chips.find((chip) => chip.id === 'min-available-all').active, true);
   assert.equal(controls.chips.find((chip) => chip.id === 'min-available-3').params.minAvailable, '3');
-  bikeshareLayer.setParams({ minAvailable: '5' });
+  assert.equal(controls.chips.find((chip) => chip.id === 'min-available-all').group, 'Bikes');
+  assert.equal(controls.chips.find((chip) => chip.id === 'min-docks-all').active, true);
+  assert.equal(controls.chips.find((chip) => chip.id === 'min-docks-3').params.minDocks, '3');
+  assert.equal(controls.chips.find((chip) => chip.id === 'min-docks-all').group, 'Docks');
+  bikeshareLayer.setParams({ minAvailable: '5', minDocks: '3' });
   const after = bikeshareLayer.getRowControls();
   assert.equal(after.chips.find((chip) => chip.id === 'min-available-5').active, true);
   assert.equal(after.chips.filter((chip) => String(chip.id).startsWith('min-available-') && chip.active).length, 1);
+  assert.equal(after.chips.find((chip) => chip.id === 'min-docks-3').active, true);
+  assert.equal(after.chips.filter((chip) => String(chip.id).startsWith('min-docks-') && chip.active).length, 1);
   _resetBikeshareSystemPickerForTest();
 });
 
@@ -1077,6 +1115,244 @@ test('min-available persists with the bikeshare layer and adds no new endpoint',
     bikeshareLayer.setParams({ minAvailable: '5' });
     assert.equal(storage.get(BIKESHARE_MIN_AVAILABLE_STORAGE_KEY), '5');
     assert.equal(bikeshareLayer.getParams().minAvailable, '5');
+    assert.equal(bikeshareLayer.getParams().hideEmpty, false);
+    assert.equal(bikeshareLayer.getParams().hideFull, false);
+    assert.equal(bikeshareLayer.getParams().hideClosed, false);
+    assert.equal(bikeshareLayer.getParams().minDocks, 'all');
+    assert.match(buildGbfsProxyUrl('https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json'), /^\/api\/gbfs\//);
+  } finally {
+    _resetBikeshareSystemPickerForTest();
+  }
+});
+
+test('All is the default min-docks floor and matches the current dots', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const full = makeStationRecord({
+    key: `${cityId}:full`,
+    cityId,
+    stationId: 'full',
+    bikesAvailable: 8,
+    docksAvailable: 0,
+  });
+  const two = makeStationRecord({
+    key: `${cityId}:two`,
+    cityId,
+    stationId: 'two',
+    docksAvailable: 2,
+  });
+  const three = makeStationRecord({
+    key: `${cityId}:three`,
+    cityId,
+    stationId: 'three',
+    docksAvailable: 3,
+  });
+  const unknown = makeStationRecord({
+    key: `${cityId}:unknown`,
+    cityId,
+    stationId: 'unknown',
+    docksAvailable: null,
+  });
+  _seedBikeshareStationsForTest([full, two, three, unknown], { cityId });
+
+  assert.equal(DEFAULT_BIKESHARE_MIN_DOCKS, 'all');
+  assert.equal(bikeshareLayer.getParams().minDocks, 'all');
+  assert.equal(_getBikeshareStationShowForTest(full.key), true);
+  assert.equal(_getBikeshareStationShowForTest(two.key), true);
+  assert.equal(_getBikeshareStationShowForTest(three.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true);
+
+  const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+  bikeshareLayer.setParams({ hideFull: true });
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+  assert.equal(_getBikeshareStationShowForTest(full.key), false,
+    'Hide full stays independent while All docks is selected');
+  assert.equal(_getBikeshareStationShowForTest(two.key), true);
+  assert.equal(_getBikeshareStationShowForTest(three.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true);
+
+  bikeshareLayer.setParams({ hideFull: false });
+  assert.equal(_getBikeshareStationShowForTest(full.key), true);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('3+ hides 0–2 dock stations; 5+ is stricter; unknown docks stay visible', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const zero = makeStationRecord({
+    key: `${cityId}:zero`,
+    cityId,
+    stationId: 'zero',
+    docksAvailable: 0,
+  });
+  const two = makeStationRecord({
+    key: `${cityId}:two`,
+    cityId,
+    stationId: 'two',
+    docksAvailable: 2,
+  });
+  const three = makeStationRecord({
+    key: `${cityId}:three`,
+    cityId,
+    stationId: 'three',
+    docksAvailable: 3,
+  });
+  const five = makeStationRecord({
+    key: `${cityId}:five`,
+    cityId,
+    stationId: 'five',
+    docksAvailable: 5,
+  });
+  const unknown = makeStationRecord({
+    key: `${cityId}:unknown`,
+    cityId,
+    stationId: 'unknown',
+    docksAvailable: Number.NaN,
+  });
+  _seedBikeshareStationsForTest([zero, two, three, five, unknown], { cityId });
+
+  const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+  assert.equal(bikeshareLayer.setParams({ minDocks: '3' }), true);
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore,
+    'chip change must filter cached status, not refetch GBFS');
+  assert.equal(bikeshareLayer.getParams().minDocks, '3');
+  assert.equal(_getBikeshareStationShowForTest(zero.key), false);
+  assert.equal(_getBikeshareStationShowForTest(two.key), false);
+  assert.equal(_getBikeshareStationShowForTest(three.key), true);
+  assert.equal(_getBikeshareStationShowForTest(five.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true,
+    'missing / non-finite docksAvailable stay visible');
+
+  assert.equal(bikeshareLayer.setParams({ minDocks: '5' }), true);
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+  assert.equal(_getBikeshareStationShowForTest(three.key), false, '5+ is stricter than 3+');
+  assert.equal(_getBikeshareStationShowForTest(five.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true);
+
+  assert.equal(bikeshareLayer.setParams({ minDocks: 'all' }), true);
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+  assert.equal(_getBikeshareStationShowForTest(zero.key), true);
+  assert.equal(_getBikeshareStationShowForTest(two.key), true);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('min-docks predicate keeps selected below-floor stations and unknown counts', () => {
+  const oneDock = { key: 'austin-capmetro:one', docksAvailable: 1 };
+  assert.equal(stationMatchesBikeshareMinDocks(oneDock, 'all'), true);
+  assert.equal(stationMatchesBikeshareMinDocks(oneDock, '3'), false);
+  assert.equal(shouldShowBikeshareStation(oneDock, { minDocks: '3' }), false);
+  assert.equal(shouldShowBikeshareStation(oneDock, {
+    minDocks: '3',
+    selectedKey: 'austin-capmetro:one',
+  }), true);
+  assert.equal(shouldShowBikeshareStation({ docksAvailable: Number.NaN }, { minDocks: '5' }), true);
+  assert.equal(shouldShowBikeshareStation({ docksAvailable: null }, { minDocks: '5' }), true);
+  assert.equal(normalizeBikeshareMinDocks('nope'), null);
+  assert.equal(normalizeBikeshareMinDocks(3), '3');
+});
+
+test('selected 1-dock station stays visible when 3+ docks is on', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const key = `${cityId}:3790`;
+  const record = makeStationRecord({
+    key,
+    cityId,
+    stationId: '3790',
+    docksAvailable: 1,
+  });
+  const other = makeStationRecord({
+    key: `${cityId}:other`,
+    cityId,
+    stationId: 'other',
+    docksAvailable: 1,
+  });
+  const viewer = { entities: new Cesium.EntityCollection() };
+  const overlayHost = {
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  };
+  _setBikeshareSelectionStateForTest({ viewer, key, record, overlayHost });
+  _seedBikeshareStationsForTest([record, other], { cityId });
+  try {
+    _selectBikeshareStationForTest(key);
+    assert.equal(record.point.show, false);
+    assert.equal(viewer.entities.values.length, 1);
+
+    const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+    bikeshareLayer.setParams({ minDocks: '3' });
+    assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+    assert.equal(viewer.entities.values.length, 1, 'selected highlight stays below the floor');
+    assert.equal(viewer.entities.values[0].show, true, 'selected 1-dock station stays drawn');
+    assert.equal(record.point.show, false);
+    assert.equal(_getBikeshareStationShowForTest(other.key), false);
+
+    _clearBikeshareSelectionForTest();
+    assert.equal(record.point.show, false, 'deselected 1-dock station is hidden while 3+ is on');
+  } finally {
+    _clearBikeshareSelectionForTest();
+    _resetBikeshareSystemPickerForTest();
+  }
+});
+
+test('status refresh keeps the min-docks floor without a new GBFS chip fetch', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const tight = makeStationRecord({
+    key: `${cityId}:tight`,
+    cityId,
+    stationId: 'tight',
+    docksAvailable: 6,
+  });
+  const open = makeStationRecord({
+    key: `${cityId}:open`,
+    cityId,
+    stationId: 'open',
+    docksAvailable: 6,
+  });
+  const unknown = makeStationRecord({
+    key: `${cityId}:unknown`,
+    cityId,
+    stationId: 'unknown',
+    docksAvailable: 6,
+  });
+  _seedBikeshareStationsForTest([tight, open, unknown], { cityId });
+  const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+  bikeshareLayer.setParams({ minDocks: '5' });
+  assert.equal(_getBikeshareStationShowForTest(tight.key), true);
+  assert.equal(_getBikeshareStationShowForTest(open.key), true);
+
+  _applyBikeshareStatusForTest(cityId, new Map([
+    ['tight', { bikesAvailable: 4, docksAvailable: 2, isInstalled: true, isRenting: true, isReturning: true }],
+    ['open', { bikesAvailable: 4, docksAvailable: 7, isInstalled: true, isRenting: true, isReturning: true }],
+    // Missing status → docksAvailable stays non-finite and must remain visible.
+  ]));
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore,
+    'status apply must reuse cached stations, not increment the chip fetch counter');
+  assert.equal(_getBikeshareStationShowForTest(tight.key), false,
+    'refresh that drops below the floor hides the station');
+  assert.equal(_getBikeshareStationShowForTest(open.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true,
+    'missing docks after refresh stay visible');
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('min-docks persists with the bikeshare layer and adds no new endpoint', () => {
+  const storage = new Map();
+  const store = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => { storage.set(key, value); },
+  };
+  _setBikeshareSystemStorageForTest(store);
+  try {
+    assert.equal(writePersistedBikeshareMinDocks('3', store), '3');
+    assert.equal(storage.get(BIKESHARE_MIN_DOCKS_STORAGE_KEY), '3');
+    assert.equal(readPersistedBikeshareMinDocks(store), '3');
+    bikeshareLayer.setParams({ minDocks: '5' });
+    assert.equal(storage.get(BIKESHARE_MIN_DOCKS_STORAGE_KEY), '5');
+    assert.equal(bikeshareLayer.getParams().minDocks, '5');
+    assert.equal(bikeshareLayer.getParams().minAvailable, 'all');
     assert.equal(bikeshareLayer.getParams().hideEmpty, false);
     assert.equal(bikeshareLayer.getParams().hideFull, false);
     assert.equal(bikeshareLayer.getParams().hideClosed, false);

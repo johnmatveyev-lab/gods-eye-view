@@ -26,6 +26,12 @@ import {
   stationMatchesBikeshareMinAvailable,
 } from './bikeshareMinAvailable.js';
 import {
+  BIKESHARE_MIN_DOCKS_FLOORS,
+  DEFAULT_BIKESHARE_MIN_DOCKS,
+  normalizeBikeshareMinDocks,
+  stationMatchesBikeshareMinDocks,
+} from './bikeshareMinDocks.js';
+import {
   DEFAULT_BIKESHARE_SYSTEM_ID,
   bikeshareSystemPickerLabel,
   buildGbfsProxyUrl,
@@ -38,11 +44,13 @@ import {
   readPersistedBikeshareHideEmpty,
   readPersistedBikeshareHideFull,
   readPersistedBikeshareMinAvailable,
+  readPersistedBikeshareMinDocks,
   readPersistedBikeshareSystem,
   writePersistedBikeshareHideClosed,
   writePersistedBikeshareHideEmpty,
   writePersistedBikeshareHideFull,
   writePersistedBikeshareMinAvailable,
+  writePersistedBikeshareMinDocks,
   writePersistedBikeshareSystem,
 } from './bikeshareSystems.js';
 
@@ -571,6 +579,8 @@ let _hideFull = false;
 let _hideClosed = false;
 /** Min-available bike floor chip. Default All — no numeric floor. */
 let _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
+/** Min-open-docks floor chip. Default All — no numeric floor. */
+let _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
 /** Optional storage override for picker persistence tests. */
 let _storageOverride = null;
 /** Manager callback when picker state changes. */
@@ -619,17 +629,18 @@ function isClosedBikeshareStation(record) {
 
 /**
  * Whether a station should stay on the globe under Hide empty / Hide full /
- * Hide closed / min-available. Unknown / non-finite counts stay visible
- * for empty, full, and the bike floor. Unknown operational flags stay
- * visible for Hide closed. A selected station stays visible even after
- * it goes empty, full, closed, or below the floor, until deselected.
- * The filters AND independently.
+ * Hide closed / min-available / min-docks. Unknown / non-finite counts stay
+ * visible for empty, full, the bike floor, and the dock floor. Unknown
+ * operational flags stay visible for Hide closed. A selected station stays
+ * visible even after it goes empty, full, closed, or below a floor, until
+ * deselected. The filters AND independently.
  * @param {Object|null|undefined} record
  * @param {{
  *   hideEmpty?: boolean,
  *   hideFull?: boolean,
  *   hideClosed?: boolean,
  *   minAvailable?: string|number|null,
+ *   minDocks?: string|number|null,
  *   selectedKey?: string|null,
  * }} [options]
  * @returns {boolean}
@@ -639,6 +650,7 @@ export function shouldShowBikeshareStation(record, {
   hideFull = false,
   hideClosed = false,
   minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE,
+  minDocks = DEFAULT_BIKESHARE_MIN_DOCKS,
   selectedKey = null,
 } = {}) {
   if (record?.key && record.key === selectedKey) return true;
@@ -652,6 +664,9 @@ export function shouldShowBikeshareStation(record, {
     return false;
   }
   if (!stationMatchesBikeshareMinAvailable(record, minAvailable)) {
+    return false;
+  }
+  if (!stationMatchesBikeshareMinDocks(record, minDocks)) {
     return false;
   }
   return true;
@@ -674,6 +689,7 @@ function applyStationVisibility(record) {
     hideFull: _hideFull,
     hideClosed: _hideClosed,
     minAvailable: _minAvailable,
+    minDocks: _minDocks,
     selectedKey: _selectedKey,
   });
   if (isSelected) {
@@ -726,6 +742,16 @@ function setMinAvailable(nextValue) {
   if (next == null || next === _minAvailable) return false;
   _minAvailable = next;
   writePersistedBikeshareMinAvailable(next, safeBikeshareStorage());
+  applyAllStationVisibility();
+  notifyRowControlsChanged();
+  return true;
+}
+
+function setMinDocks(nextValue) {
+  const next = normalizeBikeshareMinDocks(nextValue);
+  if (next == null || next === _minDocks) return false;
+  _minDocks = next;
+  writePersistedBikeshareMinDocks(next, safeBikeshareStorage());
   applyAllStationVisibility();
   notifyRowControlsChanged();
   return true;
@@ -1819,6 +1845,8 @@ const bikeshareLayer = {
     _hideClosed = readPersistedBikeshareHideClosed(safeBikeshareStorage()) === true;
     _minAvailable = readPersistedBikeshareMinAvailable(safeBikeshareStorage())
       || DEFAULT_BIKESHARE_MIN_AVAILABLE;
+    _minDocks = readPersistedBikeshareMinDocks(safeBikeshareStorage())
+      || DEFAULT_BIKESHARE_MIN_DOCKS;
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -1952,9 +1980,10 @@ const bikeshareLayer = {
 
   /**
    * Picker of allowlisted systems plus Hide empty / Hide full / Hide closed
-   * and All | 3+ | 5+ chips. The picker stays Plan 68: it still switches
-   * allowlisted systems. The chips are draw filters on already-fetched
-   * status, not a new feed.
+   * and All | 3+ | 5+ bike / dock chips. The picker stays Plan 68: it still
+   * switches allowlisted systems. The chips are draw filters on
+   * already-fetched status, not a new feed. Manager hides this row while
+   * the bike layer is off.
    * @returns {{ picker: object, chips: Array<object> }}
    */
   getRowControls() {
@@ -1999,7 +2028,15 @@ const bikeshareLayer = {
         label: floor.label,
         title: floor.title,
         active: _minAvailable === floor.id,
+        group: 'Bikes',
         params: { minAvailable: floor.id },
+      })), ...BIKESHARE_MIN_DOCKS_FLOORS.map((floor) => ({
+        id: `min-docks-${floor.id}`,
+        label: floor.label,
+        title: floor.title,
+        active: _minDocks === floor.id,
+        group: 'Docks',
+        params: { minDocks: floor.id },
       }))],
     };
   },
@@ -2010,13 +2047,14 @@ const bikeshareLayer = {
       hideFull: _hideFull,
       hideClosed: _hideClosed,
       minAvailable: _minAvailable,
+      minDocks: _minDocks,
     };
   },
 
   /**
-   * Apply Hide empty / Hide full / Hide closed / min-available without
-   * refetching GBFS. System switching stays on setSelectedSystem (Plan 68)
-   * and is not accepted here.
+   * Apply Hide empty / Hide full / Hide closed / min-available / min-docks
+   * without refetching GBFS. System switching stays on setSelectedSystem
+   * (Plan 68) and is not accepted here.
    * @param {Object} [params]
    * @returns {boolean}
    */
@@ -2037,6 +2075,10 @@ const bikeshareLayer = {
     if (Object.hasOwn(params, 'minAvailable')) {
       const next = normalizeBikeshareMinAvailable(params.minAvailable);
       if (next !== null) setMinAvailable(next);
+    }
+    if (Object.hasOwn(params, 'minDocks')) {
+      const next = normalizeBikeshareMinDocks(params.minDocks);
+      if (next !== null) setMinDocks(next);
     }
     return true;
   },
@@ -2143,6 +2185,7 @@ export function _resetBikeshareSystemPickerForTest() {
   _hideFull = false;
   _hideClosed = false;
   _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
+  _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
   _unavailable = false;
   _error = null;
   _enabled = false;
