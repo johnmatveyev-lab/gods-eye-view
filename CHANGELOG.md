@@ -31,11 +31,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   or an empty payload shows unavailable copy and does not fetch NASA from the
   client. The required FIRMS acknowledgement stays on the panel. Traffic
   Live/Sim is unchanged. No extra `/api` route.
+- Added a Sites control that lists mapped installations already returned for
+  the current 10° view. Clicking a row flies to that feature through the
+  existing `focusById` path. Empty bbox stays empty. No new `/api`, person
+  search, or bbox-cap change. Measure mode is independent.
+- Keyboard users can yaw with **Q/E** and pitch with **R / Page Up / Page Down**.
+  WASD still pans. Lock tilt blocks the pitch keys. **F** still opens the
+  data panel (fullscreen stays the button + Escape). The shortcuts overlay
+  (`?`) lists these keys.
 - Added a DISPLAY-rail Lock tilt control. When on, user rotate changes
   heading only and pitch stays (keep horizon). Unlock restores free tumble.
   The choice persists as `meridian.lockTilt` and defaults off. Home and
   cockpit still set their own pitch. Wheel zoom / invert scroll stay
   wheel-only. No `/api`.
+
 - Added a DISPLAY-rail Keep above ground control. After the camera moves, if
   `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
   below terrain plus a small margin, the camera is lifted. The preference

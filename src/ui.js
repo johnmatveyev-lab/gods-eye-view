@@ -18,6 +18,13 @@ import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
 import { handleKeyboardPanKeyDown } from './keyboardPan.js';
+import { handleLookKeyDown } from './cameraLookKeys.js';
+import {
+  handleShortcutsOverlayKeyDown,
+  isKeyboardShortcutsOverlayOpen,
+  renderKeyboardShortcutsOverlay,
+  setKeyboardShortcutsOverlayOpen,
+} from './keyboardShortcutsOverlay.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -200,6 +207,12 @@ import {
   shouldHideCollapsedRightPanels,
 } from './rightRailPolicy.js';
 import { applyContactsRosterToggle } from './data/contactsRosterToggle.js';
+import {
+  applyInstallationViewportList,
+  flyToInstallationFromList,
+  listViewportInstallations,
+  nextInstallationListOpen,
+} from './data/installationsViewportList.js';
 import {
   allocatePanelStackHeights,
   panelStackAutoCollapseIndices,
@@ -2596,6 +2609,9 @@ export class StyleManager {
     this._radioStationHomepage = document.getElementById('radio-station-homepage');
     this._globalContextFlightsBtn = document.getElementById('global-context-flights-btn');
     this._contactsRosterToggle = document.getElementById('contacts-roster-toggle');
+    this._installationsListToggle = document.getElementById('installations-list-toggle');
+    this._installationsListPanel = document.getElementById('installations-viewport-list');
+    this._installationsListOpen = false;
     this._globalContextMissionsBtn = document.getElementById('global-context-missions-btn');
     this._contextModeStandby = document.getElementById('context-mode-standby');
     this._contextFlightsView = document.getElementById('context-flights-view');
@@ -3669,9 +3685,10 @@ export class StyleManager {
 
   /**
    * Wires up all primary UI event listeners: style buttons, keyboard shortcuts
-   * (1-8 style keys, WASD/arrow pan, H/O/V/F/D/C hotkeys, Escape), AI prompt
-   * input with debounce, bloom/sharpen/HUD toggles, detection density slider,
-   * and clean-view toggle.
+   * (1-8 style keys, WASD/arrow pan, Q/E heading, R/PageUp/PageDown pitch,
+   * H/O/V/F/D/C hotkeys, ? overlay, Escape), AI prompt input with
+   * debounce, bloom/sharpen/HUD toggles, detection density slider, and
+   * clean-view toggle.
    * @returns {void}
    */
   _initUI() {
@@ -3685,7 +3702,9 @@ export class StyleManager {
       this.cycleLook();
     });
 
-    // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
+    // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Q/E heading,
+    // R/PageUp/PageDown pitch (not F), ? overlay, Escape
+    renderKeyboardShortcutsOverlay();
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
@@ -3695,9 +3714,28 @@ export class StyleManager {
         || e.target === this._locationSearch;
       if (isFormControl && e.key !== 'Escape') return;
 
+      if (e.key === 'Escape' && isKeyboardShortcutsOverlayOpen()) {
+        setKeyboardShortcutsOverlayOpen(false);
+      }
+      if (handleShortcutsOverlayKeyDown(e)) return;
+
       // WASD / arrows pan the globe. Must run before letter hotkeys so D
       // does not also cycle detection. Ignores typing targets internally.
       if (handleKeyboardPanKeyDown(e, this.viewer)) return;
+
+      const look = handleLookKeyDown(e, this.viewer, {
+        cockpitActive: this.cockpitView?.active,
+        storage: globalThis.localStorage,
+      });
+      if (look) {
+        e.preventDefault();
+        if (look.kind !== 'blocked') {
+          interruptCameraMotion('look-keys');
+          this._stopOrbit();
+          this.viewer.scene?.requestRender?.();
+        }
+        return;
+      }
 
       const keyMap = {
         '1': 'normal', '2': 'retro', '3': 'surveillance',
@@ -4955,6 +4993,9 @@ export class StyleManager {
             this._datacenterInViewList?.refresh();
           }
         }
+        if (this._installationsListOpen && change?.layerId === 'military-installations') {
+          this._syncInstallationsViewportList();
+        }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
       });
@@ -5202,6 +5243,27 @@ export class StyleManager {
     showAfterStartupCover();
   }
 
+  _toggleInstallationsViewportList() {
+    this._installationsListOpen = nextInstallationListOpen(this._installationsListOpen);
+    this._syncInstallationsViewportList();
+  }
+
+  _syncInstallationsViewportList() {
+    const records = this._dataManager?.layers?.get('military-installations')?.module?.getViewportRecords()
+      || militaryInstallationsLayer.getViewportRecords()
+      || [];
+    applyInstallationViewportList({
+      open: this._installationsListOpen,
+      toggle: this._installationsListToggle,
+      panel: this._installationsListPanel,
+      rows: listViewportInstallations(records),
+    });
+  }
+
+  _flyToListedInstallation(id) {
+    return flyToInstallationFromList(militaryInstallationsLayer, id);
+  }
+
   _setContactsRosterControlsDisabled(disabled) {
     const value = Boolean(disabled);
     this._globalContextFlightsBtn && (this._globalContextFlightsBtn.disabled = value);
@@ -5248,6 +5310,14 @@ export class StyleManager {
     }));
     this._contactsRosterToggle?.addEventListener('click', () => {
       this._toggleContactsRoster();
+    });
+    this._installationsListToggle?.addEventListener('click', () => {
+      this._toggleInstallationsViewportList();
+    });
+    this._installationsListPanel?.addEventListener('click', (event) => {
+      const target = event.target?.closest?.('[data-installation-id]');
+      if (!target) return;
+      this._flyToListedInstallation(target.dataset.installationId);
     });
     this._globalContextFlightsBtn?.addEventListener('click', () => {
       this._toggleContactsRoster();
