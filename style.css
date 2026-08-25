@@ -7253,6 +7253,31 @@ body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-v
   display: none !important;
 }
 
+#command-dock #look-cycle-btn {
+  position: absolute;
+  top: 50%;
+  right: 0.55rem;
+  z-index: 2;
+  display: inline-flex !important;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  padding: 0.18rem 0.4rem;
+  border: 1px solid rgba(123, 189, 211, 0.32);
+  border-radius: 0.28rem;
+  background: rgba(8, 24, 34, 0.78);
+  color: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  transform: translateY(-50%);
+}
+
+#command-dock #look-cycle-btn:hover,
+#command-dock #look-cycle-btn:focus-visible {
+  border-color: rgba(0, 212, 255, 0.62);
+  outline: none;
+}
+
 #command-dock #control-panel.collapsed .button-grid,
 #command-dock #location-bar.collapsed .location-city-row {
   display: flex !important;

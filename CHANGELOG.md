@@ -19,6 +19,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Look control that cycles the existing sensor styles — CRT, NVG,
+  FLIR, Noir, Snow, then default — through the same setter the share URL and
+  voice already use. No new looks.
 - Hosted globe honors `prefers-reduced-motion` and a persistable DISPLAY
   Still toggle (`meridian.reduceMotion`). Reduce-motion cuts idle orbit,
   pulsing brackets, and trail flourish; fly-to Home and other functional

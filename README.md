@@ -53,7 +53,8 @@ The dev server binds to **localhost** — your keys stay on your machine.
 - **Click-to-track:** Camera locks on, draws a fading trail, surfaces metadata.
 - **Voice whiteboard:** Speak annotations onto the world. Clear them from the globe chrome when marks are present.
 - **3D hangar:** Per-class aircraft models as you close in.
-- **Sensor looks:** CRT, NVG, FLIR/thermal, Noir, Snow.
+- **Sensor looks:** CRT, NVG, FLIR/thermal, Noir, Snow. A Look control on
+  Visual Presets cycles those existing styles; voice still sets the same ids.
 - **Share links:** Camera, style, layers, and one tracked target serialize into a URL.
 
 ---
