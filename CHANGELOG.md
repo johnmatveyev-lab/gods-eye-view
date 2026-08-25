@@ -26,6 +26,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ### Added
 
 - Satellites row can pick a CelesTrak TLE group (stations, weather, visual, GPS, GLONASS, Galileo, GEO). Changing the group refetches `/api/celestrak/<group>` and replaces the layer. The choice persists as `meridian.satGroup` (`stations` default). Invalid groups are not listed. Space Missions still uses `/api/celestrak/active` independently; the Launches panel stays on `/api/launches`. No new `/api`.
+- Contact Labels on/off (declutter) hides ambient callsign billboards on
+  busy FIRs. Dots, models, and trails stay. Selected/tracked ident cards stay.
+  Density still only changes detections. Persists `meridian.contactLabels`
+  (default on). Display only; no `/api`.
 - DISPLAY Grid toggle draws a local lat/lon graticule (`meridian.grid`,
   default off). The step coarsens when zoomed out so a planet view stays
   readable. Clean view may keep the lines; required credits stay on. Not a
