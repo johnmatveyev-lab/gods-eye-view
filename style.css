@@ -7166,6 +7166,16 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   margin-right: 2px;
 }
 
+.data-toggle-row-break {
+  flex-basis: 100%;
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .data-toggle-chip:disabled {
   cursor: not-allowed;
   opacity: 0.45;

@@ -2598,7 +2598,10 @@ easier to meet (detection is now on more often), but does not create it.
   decoded client-side (`flowTiles.js`), matched onto Overpass roads
   (`flowMatch.js`), and rendered as green/amber/red dot color + speed/density
   scaling (`trafficFlowStyle.js`); closures spawn no dots; unmatched roads stay
-  white. Road fetch bounds center on the camera look-at point (`trafficBounds.js`).
+  white unless Uncovered is Hide (then they spawn nothing). The Uncovered:
+  Sim | Hide control writes the existing `setParams({ uncoveredRoads })`
+  (`meridian.uncoveredRoads`, default Sim) and does not change Live | Sim.
+  Road fetch bounds center on the camera look-at point (`trafficBounds.js`).
 - Development captures opened with `?trafficDebug=1` mint an interaction anchor
   from the exact `camera.changed` event that arms each debounced load, then emit
   scheduling-correlated User Timing entries for production `response.json`, road
