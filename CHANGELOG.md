@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Street Traffic has a client-only **Jams only** toggle next to Live | Sim,
+  Uncovered Sim | Hide, and Jam Density | Heatline | Both | Off. Default
+  off matches the current mixed live paint. On (live mode only) spawns
+  dots only when already-stamped `flowBucket(road.flow.level)` is `jam`
+  — free-flow, slow, and missing / non-finite levels hide. Closures still
+  spawn nothing and Uncovered hide still applies (AND). Simulation and
+  keyless mode are unchanged. Chip changes re-apply from in-memory roads
+  — no extra TomTom fetch and no new `/api`. Preference persists as
+  `meridian.trafficJamsOnly`. Hidden when the traffic layer is off, and
+  in Sim. Refresh keeps the toggle. Off restores free-flow dots.
 - AIS has a client-only **Hide no IMO** toggle next to Hide unnamed.
   Default off matches the current harbor view. On skips in-memory vessels
   whose `imo` is missing, empty, or whitespace-only (trim first). Vessels
