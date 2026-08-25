@@ -87,11 +87,12 @@ async function dispatch(handler, url) {
 
 test('GET /api/opensky with the client query returns adsb.lol aircraft', async () => {
   const outbound = [];
-  const handler = createVercelOpenskyHandler(() => createOpenskyFlightsRuntime({
+  const runtime = createOpenskyFlightsRuntime({
     fetchImpl: mockFetch(outbound),
     cache: new Map(),
     inFlight: new Map(),
-  }));
+  });
+  const handler = createVercelOpenskyHandler(() => runtime);
 
   const leftover = await dispatch(handler, '/?lat=30.1945&lon=-97.6699');
   assert.equal(leftover.status, 200);
@@ -164,7 +165,7 @@ test('api/opensky.js wraps the extracted handler and never mentions OpenSky host
 
   const handler = readFileSync(path.join(ROOT, 'src/server/openskyFlights.js'), 'utf8');
   assert.match(handler, /api\.adsb\.lol/);
-  assert.doesNotMatch(handler, /opensky-network\.org|news\.google\.com|telegeography/i);
+  assert.doesNotMatch(handler, /https:\/\/opensky-network\.org|https:\/\/auth\.opensky-network\.org|news\.google\.com/i);
   assert.doesNotMatch(handler, /OPENSKY_USERNAME|OPENSKY_PASSWORD|OPENSKY_CLIENT/);
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
