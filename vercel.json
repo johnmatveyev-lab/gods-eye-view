@@ -11,6 +11,9 @@
     },
     "api/stripe/webhook.js": {
       "maxDuration": 15
+    },
+    "api/terrain/heights.js": {
+      "maxDuration": 30
     }
   }
 }
