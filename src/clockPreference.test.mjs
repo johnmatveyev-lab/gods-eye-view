@@ -200,6 +200,7 @@ test('Units, compass, and Home stay on their existing chrome', () => {
   assert.match(html, /id="cockpit-speed-value"[\s\S]*?KTS/);
   assert.match(html, /id="cockpit-altitude-value"[\s\S]*?FT/);
   assert.match(html, /id="cockpit-compass-tape"/);
+  assert.match(html, /id="home-view"[^>]*aria-label="Home view"/);
   assert.match(html, /id="reset-globe-view"[^>]*aria-label="Reset to full globe view"/);
   assert.match(html, /id="cockpit-reset-globe"[^>]*aria-label="Reset cockpit to full globe view"/);
 
