@@ -234,8 +234,8 @@ test('FIRMS module does not pull OpenSky, Google News, or cables', () => {
 });
 
 test('Vite plugin still forwards to the shared FIRMS handler', () => {
-  const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
-  assert.match(vite, /import \{ firmsProxy \} from '\.\/src\/data\/firms\.js'/);
-  assert.match(vite, /firmsProxy\(\)/);
-  assert.doesNotMatch(vite, /function firmsProxy\(/);
+  const live = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
+  assert.match(live, /import \{ firmsProxy \} from '\.\.\/data\/firms\.js'/);
+  assert.match(live, /firmsProxy\(\)/);
+  assert.doesNotMatch(live, /function firmsProxy\(/);
 });
