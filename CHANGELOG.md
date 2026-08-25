@@ -7,6 +7,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a hosted `/api/adsbdb` enrichment proxy (`api/adsbdb/[...path].js`)
+  that forwards route and aircraft lookups to `api.adsbdb.com` only, with a
+  24h in-memory cache, 404 negative-cache, last-good on error, and optional
+  `/tmp` persist. Dev/preview still use the Vite plugin. OpenSky is not used.
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.

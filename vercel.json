@@ -7,6 +7,9 @@
     },
     "api/stripe/webhook.js": {
       "maxDuration": 15
+    },
+    "api/adsbdb/[...path].js": {
+      "maxDuration": 15
     }
   }
 }

@@ -23,11 +23,15 @@ test('commercial flights are adsb.lol-only; OpenSky and Google News stay off', (
 
 test('production proxies never fetch OpenSky or Google News RSS', () => {
   const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
-  assert.doesNotMatch(vite, /https:\/\/opensky-network\.org/);
-  assert.doesNotMatch(vite, /https:\/\/auth\.opensky-network\.org/);
-  assert.doesNotMatch(vite, /news\.google\.com/);
+  const adsbdb = readFileSync(path.join(ROOT, 'src/data/adsbdb.js'), 'utf8');
+  for (const source of [vite, adsbdb]) {
+    assert.doesNotMatch(source, /https:\/\/opensky-network\.org/);
+    assert.doesNotMatch(source, /https:\/\/auth\.opensky-network\.org/);
+    assert.doesNotMatch(source, /news\.google\.com/);
+  }
   assert.match(vite, /api\.adsb\.lol/);
   assert.match(vite, /api\.gdeltproject\.org/);
+  assert.match(adsbdb, /api\.adsbdb\.com/);
 });
 
 test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
@@ -36,6 +40,7 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.ok(!keys.includes('google-news-rss'));
   assert.ok(!keys.includes('telegeography'));
   assert.ok(keys.includes('adsblol'));
+  assert.ok(keys.includes('adsbdb'));
   assert.ok(keys.includes('gdelt'));
   assert.ok(keys.includes('open-meteo'));
   assert.ok(keys.includes('tfl-cctv'));
@@ -52,6 +57,7 @@ test('flights proxy plugin is still installed for the compatibility path', () =>
   const config = createViteConfig({ mode: 'test' });
   const byName = new Map(config.plugins.map((plugin) => [plugin.name, plugin]));
   assert.equal(typeof byName.get('opensky-proxy')?.configureServer, 'function');
+  assert.equal(typeof byName.get('adsbdb-proxy')?.configureServer, 'function');
   assert.equal(typeof byName.get('meridian-billing')?.configureServer, 'function');
 });
 

@@ -35,6 +35,13 @@ export const DATA_CREDITS = [
       '(ODbL 1.0)',
   },
   {
+    key: 'adsbdb',
+    html:
+      'Flight route and aircraft-type enrichment: ' +
+      '<a href="https://www.adsbdb.com" target="_blank" rel="noopener">adsbdb</a> ' +
+      '(community API; courtesy)',
+  },
+  {
     key: 'aisstream',
     html:
       'Live vessels (AIS): ' +
