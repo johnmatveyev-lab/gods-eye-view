@@ -2681,6 +2681,8 @@ export class StyleManager {
     this._radioEnableBtn = document.getElementById('radio-enable-btn');
     this._radioFilter = document.getElementById('radio-filter');
     this._radioBitrateBtns = [...document.querySelectorAll('#radio-bitrate-floor [data-radio-bitrate]')];
+    this._radioFavoritesOnlyBtn = document.getElementById('radio-favorites-only');
+    this._radioFavoriteBtn = document.getElementById('radio-favorite-btn');
     this._radioStationSearch = document.getElementById('radio-station-search');
     this._radioStationSearchCount = document.getElementById('radio-station-search-count');
     this._radioStationList = document.getElementById('radio-station-list');
@@ -6597,6 +6599,23 @@ export class StyleManager {
         refreshTunerBand({ force: true });
       });
     }
+    this._radioFavoritesOnlyBtn?.addEventListener('click', () => {
+      const presentation = radioLayer.getUIState();
+      if (!presentation.presentationActive) return;
+      if (this._radioTunerDragging) finishTuner(false);
+      if (!radioLayer.setFavoritesOnly(!presentation.favoritesOnly)) return;
+      this._radioTunerBandPinnedForNavigation = false;
+      this._radioTunerPool = [];
+      this._radioDirectoryListSignature = '';
+      refreshTunerBand({ force: true });
+    });
+    this._radioFavoriteBtn?.addEventListener('click', () => {
+      const presentation = radioLayer.getUIState();
+      if (!presentation.presentationActive) return;
+      if (!radioLayer.toggleFavorite(presentation.selected?.id)) return;
+      this._radioDirectoryListSignature = '';
+      refreshTunerBand({ force: true });
+    });
     this._radioStationSearch?.addEventListener('input', () => {
       const presentation = radioLayer.getUIState();
       if (!presentation.presentationActive) {
@@ -6845,7 +6864,7 @@ export class StyleManager {
   _syncRadioStationList(state, interactive) {
     const directory = radioLayer.getDirectoryStations?.() || [];
     const query = state?.stationSearch || '';
-    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.minBitrate || 'all'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
+    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.minBitrate || 'all'}:${state?.favoritesOnly ? '1' : '0'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
     if (this._radioStationSearch && document.activeElement !== this._radioStationSearch) {
       this._radioStationSearch.value = query;
     }
@@ -6980,6 +6999,12 @@ export class StyleManager {
       button.setAttribute('aria-checked', String(active));
       button.disabled = !interactive || !state.stationCount;
     }
+    if (this._radioFavoritesOnlyBtn) {
+      const active = Boolean(state.favoritesOnly);
+      this._radioFavoritesOnlyBtn.classList.toggle('active', active);
+      this._radioFavoritesOnlyBtn.setAttribute('aria-pressed', String(active));
+      this._radioFavoritesOnlyBtn.disabled = !interactive || !state.stationCount;
+    }
     this._syncRadioStationList(state, interactive);
 
     const tunerAvailable = interactive && state.filteredCount > 0;
@@ -7007,6 +7032,17 @@ export class StyleManager {
     }
 
     if (this._radioStationName) this._radioStationName.textContent = selected?.name || 'NO STATION SELECTED';
+    if (this._radioFavoriteBtn) {
+      const favorited = Boolean(state.selectedFavorite);
+      this._radioFavoriteBtn.disabled = !interactive || !selected;
+      this._radioFavoriteBtn.setAttribute('aria-pressed', String(favorited));
+      this._radioFavoriteBtn.setAttribute(
+        'aria-label',
+        favorited ? 'Remove selected station from favorites' : 'Favorite selected station',
+      );
+      this._radioFavoriteBtn.title = favorited ? 'Unfavorite' : 'Favorite';
+      this._radioFavoriteBtn.textContent = favorited ? '★' : '☆';
+    }
     if (this._radioStationMeta) {
       const place = selected ? [selected.state, selected.countryCode].filter(Boolean).join(' · ') : '';
       const signal = selected ? [selected.codec, selected.bitrate ? `${selected.bitrate} kbps` : ''].filter(Boolean).join(' · ') : '';

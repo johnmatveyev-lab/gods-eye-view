@@ -1197,11 +1197,14 @@
             </div>
             <div class="radio-bitrate-row">
               <span class="radio-filter-label" id="radio-bitrate-label">MIN BITRATE</span>
-              <div id="radio-bitrate-floor" class="radio-bitrate-seg" role="radiogroup" aria-labelledby="radio-bitrate-label">
-                <button type="button" class="pp-mode-btn active" data-radio-bitrate="all" role="radio" aria-checked="true">All</button>
-                <button type="button" class="pp-mode-btn" data-radio-bitrate="64" role="radio" aria-checked="false">64+</button>
-                <button type="button" class="pp-mode-btn" data-radio-bitrate="128" role="radio" aria-checked="false">128+</button>
-                <button type="button" class="pp-mode-btn" data-radio-bitrate="192" role="radio" aria-checked="false">192+</button>
+              <div class="radio-directory-filter-chips">
+                <div id="radio-bitrate-floor" class="radio-bitrate-seg" role="radiogroup" aria-labelledby="radio-bitrate-label">
+                  <button type="button" class="pp-mode-btn active" data-radio-bitrate="all" role="radio" aria-checked="true">All</button>
+                  <button type="button" class="pp-mode-btn" data-radio-bitrate="64" role="radio" aria-checked="false">64+</button>
+                  <button type="button" class="pp-mode-btn" data-radio-bitrate="128" role="radio" aria-checked="false">128+</button>
+                  <button type="button" class="pp-mode-btn" data-radio-bitrate="192" role="radio" aria-checked="false">192+</button>
+                </div>
+                <button type="button" id="radio-favorites-only" class="pp-mode-btn radio-favorites-chip" aria-pressed="false" aria-label="Show favorite stations only" disabled>Favorites</button>
               </div>
             </div>
             <div class="radio-station-search-wrap">
@@ -1220,7 +1223,10 @@
             </div>
             <div id="radio-station-list" class="radio-station-list" role="listbox" aria-label="Current Radio Browser stations" hidden></div>
             <div id="radio-station-card" class="radio-station-card" aria-live="polite">
-              <strong id="radio-station-name">NO STATION SELECTED</strong>
+              <div class="radio-station-card-head">
+                <strong id="radio-station-name">NO STATION SELECTED</strong>
+                <button type="button" id="radio-favorite-btn" class="radio-favorite-btn" aria-pressed="false" aria-label="Favorite selected station" title="Favorite" disabled>☆</button>
+              </div>
               <span id="radio-station-meta">Enable Radio, then choose a globe marker or use next.</span>
               <span id="radio-station-tags"></span>
             </div>

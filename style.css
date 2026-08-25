@@ -6805,6 +6805,27 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: grid;
   gap: 4px;
 }
+.radio-directory-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: stretch;
+}
+.radio-directory-filter-chips #radio-bitrate-floor {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+.radio-favorites-chip {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 5.5rem;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.radio-favorites-chip:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
 .radio-bitrate-seg {
   display: flex;
   flex-wrap: wrap;
@@ -6895,6 +6916,36 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   border-radius: 7px;
   background: rgba(2, 15, 20, .48);
   overflow-wrap: anywhere;
+}
+.radio-station-card-head {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+}
+.radio-station-card-head strong {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.radio-favorite-btn {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(65, 220, 231, .28);
+  border-radius: 5px;
+  color: #c5faff;
+  background: rgba(5, 24, 31, .88);
+  font: 14px/1 var(--font-mono);
+  cursor: pointer;
+}
+.radio-favorite-btn[aria-pressed="true"] {
+  color: #ffd166;
+  border-color: rgba(255, 209, 102, .45);
+  background: rgba(255, 209, 102, .12);
+}
+.radio-favorite-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
 }
 .radio-station-card strong {
   color: #e8feff;

@@ -38,6 +38,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Radio can pin stations on the selected card. Ids persist as
+  `meridian.radioFavorites` (cap 20). A Favorites-only chip ANDs with
+  genre, search, and min-bitrate on the already-fetched Radio Browser
+  directory for map dots and prev/next. Playing a non-favorite stays
+  audible until Stop or Next. No `/api/radio` change.
 - Street Traffic has Density and Speed sliders on the existing layer row.
   Density (0.2–2.5, default 1.0) changes dot spawn; Speed (0.3–3.0,
   default 1.0) scales ambient/live motion. Both write the existing
