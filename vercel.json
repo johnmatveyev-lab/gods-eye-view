@@ -17,6 +17,12 @@
     },
     "api/stripe/webhook.js": {
       "maxDuration": 15
+    },
+    "api/firms/index.js": {
+      "maxDuration": 60
+    },
+    "api/firms/status.js": {
+      "maxDuration": 15
     }
   }
 }
