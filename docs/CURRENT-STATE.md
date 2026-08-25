@@ -2,6 +2,25 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — layer Retry chip (plan 112)** (`src/data/manager.js`).
+> An enabled Data Layers row whose feed is `unavailable` / `stale`, or that
+> already presents `error` / `lastError` / `managerRefreshError`, shows a
+> **RETRY** chip. The click calls the existing `dataManager.refreshLayer(layerId)`
+> so operators do not wait on `retry Ns` or toggle the layer off and on.
+> Healthy (nominal / loading / guidance) rows hide it. While
+> `entry.refreshing` is true the chip is disabled and a second click is
+> ignored. Sat dense `DENSE ✕` remains the catalog-load retry; this chip is
+> the feed refresh. Client chrome only — no poll-interval change, no proxy,
+> no `/api`.
+
+> **2026-08-25 — flight ident watchlist (plan 92)** (`src/data/watchlist.js`,
+> `#watchlist-toggle` / `#watchlist-panel`, `#selected-contact-ident-watch`).
+> Operators pin up to 10 public aircraft idents (callsign or hex already on
+> the selected card). When a watched ident is in the current adsb.lol flights
+> payload it uses the existing track highlight style. Clicking a row tracks
+> if present, otherwise toasts `not in view` and does not invent a position.
+> Persistence is `meridian.watchlist`. No `/api`, person-search, or OpenSky.
+
 > **2026-08-25 — camera crosshair (plan 80)** (`src/cameraCrosshair.js`).
 > DISPLAY-rail Crosshair draws a CSS plus at the canvas center — the hosted
 > aim point for copy-coords (`src/copyCameraCoords.js`, still
@@ -1951,7 +1970,7 @@ silently demoting every later lookup for the session.
 - The expanded desktop header omits the redundant `ON` label; the active mode button carries state. Expanded Contact results also omit the duplicate `GLOBAL CONTEXT` / `CONTEXT ONLY` status row and begin with the selected subject and its 250 km scope. Global Context does not fabricate a selected-entity model preview: the provisional hand-authored aircraft wireframe was removed because it was not geometry extracted from the selected entity's actual asset.
 - Dependency ownership is reversible: disabling Global Context releases only dependencies it enabled, while user-enabled layers remain on. This also removes the Military-layer suppression handoff when Global Context owned Military, allowing an already-enabled civilian Flights layer to resume its normal mixed rendering. If OpenSky is unavailable and has no last-good cache, Flights requests a capped 250 nm adsb.lol point snapshot around the current view anchor and labels that provenance explicitly; it never relabels military-feed rows as civilian data. If both inputs fail, Flights remains `UNKNOWN`.
 - Space Missions is replay-isolated: Rocket Launches and Satellites are the only Data Layers permitted while the mode is active. Direct UI and voice entry capture the same pre-entry snapshot; internal dependency and restoration enables do not create a user-owned Context session. Entry waits for incompatible layers to shut down, direct incompatible enables are blocked before lifecycle work, and the entry gate remains active through the complete Rocket Launches enable. A newer same-target ON request takes ownership of the pending entry without releasing its isolation snapshot, including when it arrives while the prior request is awaiting the adoption guard. A caller abort, resource cancellation, newer OFF, or layer teardown waits for exact manager settlement and restores that snapshot without resurrecting Rocket Launches. If an abort lands after only part of a restore settles, Context completes the same exact target without the stale caller signal and then replays newer explicit layer intent. Dedicated Voice Context cancellation reports a stable cancelled result plus the current Context state; generic layer visibility additionally exposes manager phase, reason, successor, and lifecycle details. Once an exact voice visibility intent commits, a newer voice turn cannot relabel it as cancelled while Context settlement completes; pre-commit aborts remain cancellable and final lifecycle mismatches remain failures. Clear Selected Layers reserves its complete captured OFF set before sequential teardown; a newer absolute request of any origin supersedes only its layer reservation and remains authoritative. A rejected layer teardown retains the truthful enabled state, rolls already-stopped siblings back to the captured pre-entry set, and aborts replay; rapid exit/re-entry serializes the full Satellite enabled-state and parameter restore before a new snapshot is taken. Contacts remains additive and restores user-enabled layers normally.
-- Enabled Data Layer controls report normalized feed health on the button (`LOADING`, `DEGRADED`, `STALE`, `FALLBACK`, or `UNAVAILABLE`) while the metadata line retains the source and reason. A partial CelesTrak group failure keeps the usable catalog and reports `DEGRADED`; a total outage keeps last-good catalog data visible but reports `UNAVAILABLE`.
+- Enabled Data Layer controls report normalized feed health on the button (`LOADING`, `DEGRADED`, `STALE`, `FALLBACK`, or `UNAVAILABLE`) while the metadata line retains the source and reason. A partial CelesTrak group failure keeps the usable catalog and reports `DEGRADED`; a total outage keeps last-good catalog data visible but reports `UNAVAILABLE`. Unavailable, stale, or presented-error rows also offer a manager-owned **RETRY** chip that calls `refreshLayer()` immediately and disables itself while that refresh is in flight.
 - On activation it focuses the nearest currently observed aircraft across the civilian and military feeds, with military winning an exact distance tie; if none are available, it focuses an observed AIS vessel. The aircraft search is deliberately uncapped and one refresh-tick retry handles initially empty feeds. This is an attention-priority navigation shortcut, not a high-risk, affiliation, or threat classification.
 - A selected aircraft, AIS vessel, or mapped installation gets a 250 km **context window** with nearby cohort counts, nearest examples, source labels, and stale/unavailable reasons. It emits `NEARBY` or `UNKNOWN`; no detection, engagement, affiliation, or sensor-activity conclusion is calculated.
 - For a selected live aircraft or vessel, the context window refreshes from the existing tracker/feed position every 750 ms, so nearest distances and cohort counts follow the subject without introducing a duplicate poll loop.

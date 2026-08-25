@@ -38,6 +38,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the board. Undo does not bump the clear() generation or abort in-flight
   annotate. Disabled when the board is empty. Clear still empties all. No
   new `/api`, GeoJSON export, or voice/LLM change.
+- Failed or stale Data Layers rows now expose a Retry chip that calls the
+  existing `refreshLayer()` path immediately. Healthy rows stay quiet; a
+  click while a refresh is in flight is ignored. Operators no longer have
+  to wait on the `retry Ns` countdown or toggle the layer. No `/api`.
+- Radio has a client-side min-bitrate floor (All / 64+ / 128+ / 192+ kbps)
+  on the already-fetched Radio Browser directory. Default All keeps the
+  current list. Null bitrate stays visible. A station already playing stays
+  audible until Stop or Next. Genre and search still AND with the floor.
+  Preference persists on the existing radio layer options. No `/api`.
+- Added a Watch list of up to 10 public aircraft idents (callsign or hex
+  already on the selected contact). Add from the selected card; remove from
+  the list. When a watched ident is in the current flights payload it uses
+  the existing track highlight. Clicking a row tracks that contact if
+  present, otherwise toasts `not in view` without inventing a position. The
+  list persists as `meridian.watchlist`. No `/api`, person-search, or OpenSky.
 - Street Traffic has an Uncovered: Sim | Hide control. Sim keeps today's
   white ambient dots on roads TomTom has no flow for. Hide spawns nothing
   on those roads; colored live flow stays. Applies on the next camera-driven

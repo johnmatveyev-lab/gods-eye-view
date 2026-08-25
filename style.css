@@ -94,7 +94,8 @@ html, body {
 }
 #selected-contact-ident[hidden] { display: none; }
 .selected-contact-ident-value,
-.selected-contact-ident-copy {
+.selected-contact-ident-copy,
+.selected-contact-ident-watch {
   pointer-events: auto;
   margin: 0;
   padding: 0;
@@ -109,7 +110,8 @@ html, body {
   overflow: hidden;
   text-align: left;
 }
-.selected-contact-ident-copy {
+.selected-contact-ident-copy,
+.selected-contact-ident-watch {
   flex: 0 0 22px;
   width: 22px;
   height: 22px;
@@ -119,18 +121,26 @@ html, body {
   color: rgba(232, 240, 244, 0.92);
   border-radius: 3px;
 }
-.selected-contact-ident-copy .material-symbols-outlined {
+#selected-contact-ident-watch[hidden],
+.selected-contact-ident-watch[hidden] { display: none; }
+.selected-contact-ident-copy .material-symbols-outlined,
+.selected-contact-ident-watch .material-symbols-outlined {
   font-size: 15px;
   line-height: 1;
 }
 .selected-contact-ident-value:hover,
 .selected-contact-ident-value:focus-visible,
 .selected-contact-ident-copy:hover,
-.selected-contact-ident-copy:focus-visible {
+.selected-contact-ident-copy:focus-visible,
+.selected-contact-ident-watch:hover,
+.selected-contact-ident-watch:focus-visible {
   outline: none;
 }
 .selected-contact-ident-copy:hover,
-.selected-contact-ident-copy:focus-visible {
+.selected-contact-ident-copy:focus-visible,
+.selected-contact-ident-watch:hover,
+.selected-contact-ident-watch:focus-visible,
+.selected-contact-ident-watch[aria-pressed="true"] {
   color: #fff;
   background: rgba(107, 232, 255, 0.16);
 }
@@ -1654,6 +1664,7 @@ body.ui-clean-view #clean-view-exit {
 body.ui-clean-view #title-bar,
 body.ui-clean-view #style-indicator,
 body.ui-clean-view #top-center-actions,
+body.ui-clean-view #watchlist-panel,
 body.ui-clean-view #measure-readout,
 body.ui-clean-view #installations-viewport-list,
 body.ui-clean-view #launches-panel,
@@ -2264,6 +2275,8 @@ body.ui-clean-view #scene-runtime.active {
 
 #contacts-roster-toggle.active,
 #contacts-roster-toggle[aria-pressed="true"],
+#watchlist-toggle.active,
+#watchlist-toggle[aria-pressed="true"],
 #launches-panel-toggle.active,
 #launches-panel-toggle[aria-pressed="true"] {
   color: var(--accent);
@@ -2271,6 +2284,7 @@ body.ui-clean-view #scene-runtime.active {
   background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
 }
 
+#watchlist-toggle,
 #installations-list-toggle {
   width: auto;
   min-width: 36px;
@@ -2281,6 +2295,98 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
+}
+
+#watchlist-toggle .watchlist-toggle-label {
+  line-height: 1;
+}
+
+#watchlist-panel {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 100;
+  width: min(280px, calc(100vw - 24px));
+  transform: translateX(-50%);
+  padding: 10px 12px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-secondary);
+}
+
+#watchlist-panel[hidden] { display: none; }
+
+#watchlist-panel .watchlist-header {
+  margin-bottom: 8px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-primary);
+}
+
+#watchlist-items {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.watchlist-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.watchlist-item-select {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  font: 600 12px "JetBrains Mono", ui-monospace, monospace;
+  text-align: left;
+  cursor: pointer;
+}
+
+.watchlist-item-select:hover,
+.watchlist-item-select:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  outline: none;
+}
+
+.watchlist-item-remove {
+  flex: 0 0 22px;
+  width: 22px;
+  height: 22px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.watchlist-item-remove:hover,
+.watchlist-item-remove:focus-visible {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.watchlist-empty {
+  padding: 6px 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 #installations-list-toggle .installations-list-toggle-label {
@@ -4716,7 +4822,7 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-help span { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
-  #title-bar, #style-indicator, #top-center-actions, #installations-viewport-list, #launches-panel, #earthquake-list-panel, #traffic-sync-chip, #cctv-sync-chip,
+  #title-bar, #style-indicator, #top-center-actions, #watchlist-panel, #installations-viewport-list, #launches-panel, #earthquake-list-panel, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
@@ -6611,6 +6717,27 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   background: rgba(5, 24, 31, .88);
   font: 9px/1.2 var(--font-mono);
 }
+.radio-bitrate-row {
+  display: grid;
+  gap: 4px;
+}
+.radio-bitrate-seg {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+.radio-bitrate-seg .pp-mode-btn {
+  flex: 1 1 22%;
+  min-width: 0;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.radio-bitrate-seg .pp-mode-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
 .radio-station-search-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -8120,6 +8247,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 body.recording-mode #title-bar,
 body.recording-mode #style-indicator,
 body.recording-mode #top-center-actions,
+body.recording-mode #watchlist-panel,
 body.recording-mode #measure-readout,
 body.recording-mode #installations-viewport-list,
 body.recording-mode #launches-panel,

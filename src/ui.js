@@ -102,7 +102,16 @@ import {
   setKeyholeFadeTuning,
 } from './celestialRing.js';
 import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
-import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import {
+  destroySelectedContactIdent,
+  initSelectedContactIdent,
+  resolveCopyableSelection,
+} from './selectedContactIdent.js';
+import {
+  bindWatchlist,
+  hydrateWatchlist,
+  watchIdentFromContact,
+} from './data/watchlist.js';
 import {
   hydrateTrailsEnabled,
   setTrailsEnabled,
@@ -2656,6 +2665,7 @@ export class StyleManager {
     this._radioLayerState = document.getElementById('radio-layer-state');
     this._radioEnableBtn = document.getElementById('radio-enable-btn');
     this._radioFilter = document.getElementById('radio-filter');
+    this._radioBitrateBtns = [...document.querySelectorAll('#radio-bitrate-floor [data-radio-bitrate]')];
     this._radioStationSearch = document.getElementById('radio-station-search');
     this._radioStationSearchCount = document.getElementById('radio-station-search-count');
     this._radioStationList = document.getElementById('radio-station-list');
@@ -2678,6 +2688,10 @@ export class StyleManager {
     this._radioStationHomepage = document.getElementById('radio-station-homepage');
     this._globalContextFlightsBtn = document.getElementById('global-context-flights-btn');
     this._contactsRosterToggle = document.getElementById('contacts-roster-toggle');
+    this._watchlistToggle = document.getElementById('watchlist-toggle');
+    this._watchlistPanel = document.getElementById('watchlist-panel');
+    this._watchlistItems = document.getElementById('watchlist-items');
+    this._selectedContactWatch = document.getElementById('selected-contact-ident-watch');
     this._installationsListToggle = document.getElementById('installations-list-toggle');
     this._installationsListPanel = document.getElementById('installations-viewport-list');
     this._installationsListOpen = false;
@@ -3043,6 +3057,7 @@ export class StyleManager {
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
     });
+    this._initWatchlist();
     initMeasure(viewer, {
       onChange: (state) => this._syncMeasureUi(state),
     });
@@ -5178,6 +5193,9 @@ export class StyleManager {
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
+        if (change?.layerId === 'flights' || change?.layerId === 'military') {
+          this._watchlistBinder?.refresh();
+        }
       });
     }
     this._updateGlobalLoadingFeedback(performance.now());
@@ -6522,6 +6540,22 @@ export class StyleManager {
       this._radioDirectoryListSignature = '';
       refreshTunerBand({ force: true });
     });
+    for (const button of this._radioBitrateBtns) {
+      button.addEventListener('click', () => {
+        const presentation = radioLayer.getUIState();
+        if (!presentation.presentationActive) return;
+        if (this._radioTunerDragging) finishTuner(false);
+        if (!this._dataManager?.setLayerParams('radio', {
+          minBitrate: button.dataset.radioBitrate,
+        }, { origin: 'user' })) {
+          return;
+        }
+        this._radioTunerBandPinnedForNavigation = false;
+        this._radioTunerPool = [];
+        this._radioDirectoryListSignature = '';
+        refreshTunerBand({ force: true });
+      });
+    }
     this._radioStationSearch?.addEventListener('input', () => {
       const presentation = radioLayer.getUIState();
       if (!presentation.presentationActive) {
@@ -6770,7 +6804,7 @@ export class StyleManager {
   _syncRadioStationList(state, interactive) {
     const directory = radioLayer.getDirectoryStations?.() || [];
     const query = state?.stationSearch || '';
-    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
+    const signature = `${state?.acceptedCatalogGeneration || ''}:${state?.filter || 'all'}:${state?.minBitrate || 'all'}:${state?.selected?.id || ''}:${directory.map((station) => station.id).join(',')}`;
     if (this._radioStationSearch && document.activeElement !== this._radioStationSearch) {
       this._radioStationSearch.value = query;
     }
@@ -6897,6 +6931,13 @@ export class StyleManager {
       const activeCategory = state.categories.find((category) => category.id === prior);
       this._radioFilter.style.color = activeCategory?.color || '';
       this._radioFilter.disabled = !interactive || !state.stationCount;
+    }
+    const floor = state.minBitrate || 'all';
+    for (const button of this._radioBitrateBtns || []) {
+      const active = button.dataset.radioBitrate === floor;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+      button.disabled = !interactive || !state.stationCount;
     }
     this._syncRadioStationList(state, interactive);
 
@@ -11354,6 +11395,40 @@ export class StyleManager {
   }
 
   /**
+   * Watch list of pinned aircraft idents. Add from the selected card; rows
+   * track when the ident is in the current flights payload.
+   */
+  _initWatchlist() {
+    hydrateWatchlist();
+    this._watchlistBinder = bindWatchlist({
+      toggle: this._watchlistToggle,
+      panel: this._watchlistPanel,
+      items: this._watchlistItems,
+      addButton: this._selectedContactWatch,
+      getFlights: () => [
+        ...(flightsLayer.getAnalystRecords?.() || []),
+        ...(militaryFlightsLayer.getAnalystRecords?.() || []),
+      ],
+      getSelectedContact: () => {
+        const selection = resolveCopyableSelection();
+        if (!selection) return null;
+        return {
+          kind: selection.kind,
+          callsign: watchIdentFromContact({
+            kind: selection.kind,
+            callsign: selection.ident,
+          }),
+        };
+      },
+      trackById: (icao24) => (
+        flightsLayer.trackById(icao24, { origin: 'user' })
+        || militaryFlightsLayer.trackById(icao24, { origin: 'user' })
+      ),
+      showToast: (text) => this._showToast(text),
+    });
+  }
+
+  /**
    * In-view OSM datacenter list. Reads the existing layer payload and flies
    * with the same stem-click destination. Installations stay on their own list.
    */
@@ -12155,6 +12230,8 @@ export class StyleManager {
       document.removeEventListener('gev:radio-selected', this._radioSelectedHandler);
       this._radioSelectedHandler = null;
     }
+    this._watchlistBinder?.destroy();
+    this._watchlistBinder = null;
     destroySelectedContactIdent();
     destroyCameraCoords();
     destroyTrackedReadout();
