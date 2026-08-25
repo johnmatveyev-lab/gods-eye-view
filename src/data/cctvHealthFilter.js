@@ -11,6 +11,7 @@
 
 import { sourceMatchesCityFilter } from './cctvCityFilter.js';
 import { sourceMatchesHeadingConfidence } from './cctvHeadingConfidenceFilter.js';
+import { sourceMatchesFeedTypeFilter as sourceMatchesFeedTypeChips } from './cctvFeedTypeFilter.js';
 
 export const CCTV_HIDE_UNHEALTHY_STORAGE_KEY = 'meridian.cctvHideUnhealthy';
 
@@ -86,19 +87,15 @@ export function sourceMatchesNoFeedFilter(source, hideNoFeed, selectedId) {
 }
 
 /**
- * Feed-type chip: empty / all keeps the catalog. `video` is mp4/hls/webm.
- * @param {{feedType?: string}|null|undefined} source
+ * Image | MJPEG | Video chips. Empty / all keeps the catalog.
+ * `video` is mp4 | hls | webm. Selected camera stays.
+ * @param {{feedType?: string, id?: string}|null|undefined} source
  * @param {unknown} feedType
+ * @param {unknown} [selectedId]
  * @returns {boolean}
  */
-export function sourceMatchesFeedTypeFilter(source, feedType) {
-  const want = String(feedType || '').trim().toLowerCase();
-  if (!want || want === 'all') return true;
-  const actual = String(source?.feedType || '').trim().toLowerCase();
-  const isVideo = actual === 'mp4' || actual === 'hls' || actual === 'webm';
-  if (want === 'video') return isVideo;
-  if (want === 'image') return !isVideo;
-  return actual === want;
+export function sourceMatchesFeedTypeFilter(source, feedType, selectedId) {
+  return sourceMatchesFeedTypeChips(source, feedType, { keepCameraId: selectedId ?? null });
 }
 
 /**
@@ -126,6 +123,7 @@ export function sourceMatchesHealthFilter(source, hideUnhealthy, selectedId, hea
  *   hideUnhealthy?: unknown,
  *   hideNoFeed?: unknown,
  *   feedType?: unknown,
+ *   feedTypes?: unknown,
  *   headingConfidence?: unknown,
  *   selectedId?: unknown,
  *   healthById?: Map<string, {status?: string}|string>|Record<string, {status?: string}|string>|null,
@@ -138,7 +136,9 @@ export function sourceMatchesVisibleCctvFilters(source, prefs = {}) {
     return false;
   }
   if (!sourceMatchesNoFeedFilter(source, prefs.hideNoFeed, prefs.selectedId)) return false;
-  if (!sourceMatchesFeedTypeFilter(source, prefs.feedType)) return false;
+  if (!sourceMatchesFeedTypeFilter(source, prefs.feedTypes ?? prefs.feedType, prefs.selectedId)) {
+    return false;
+  }
   if (!sourceMatchesHeadingConfidence(source, prefs.headingConfidence, {
     selectedId: prefs.selectedId,
   })) {
@@ -154,6 +154,7 @@ export function sourceMatchesVisibleCctvFilters(source, prefs = {}) {
  *   hideUnhealthy?: unknown,
  *   hideNoFeed?: unknown,
  *   feedType?: unknown,
+ *   feedTypes?: unknown,
  *   headingConfidence?: unknown,
  *   selectedId?: unknown,
  *   healthById?: Map<string, {status?: string}|string>|Record<string, {status?: string}|string>|null,

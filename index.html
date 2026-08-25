@@ -1066,10 +1066,15 @@
         <button id="cctv-enable-btn" class="scene-btn">CCTV OFF</button>
         <button id="cctv-nearest-btn" class="scene-btn">NEAREST</button>
       </div>
-      <div class="cctv-controls">
+      <div class="cctv-controls cctv-catalog-filters">
         <select id="cctv-city-filter" aria-label="CCTV city or source">
           <option value="">All sources</option>
         </select>
+        <div id="cctv-feed-type-filter" class="cctv-feed-type-seg" role="group" aria-label="CCTV feed type">
+          <button type="button" class="pp-mode-btn active" data-cctv-feed-type="image" aria-pressed="true">Image</button>
+          <button type="button" class="pp-mode-btn active" data-cctv-feed-type="mjpeg" aria-pressed="true">MJPEG</button>
+          <button type="button" class="pp-mode-btn active" data-cctv-feed-type="video" aria-pressed="true">Video</button>
+        </div>
         <button id="cctv-hide-no-feed-btn" class="scene-btn" type="button" aria-pressed="false" title="Hide cameras with no live feed">Hide no feed</button>
       </div>
       <div class="cctv-controls" id="cctv-visibility-filters">

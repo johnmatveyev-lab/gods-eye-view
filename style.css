@@ -8027,6 +8027,31 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   margin-bottom: 0;
 }
 
+.cctv-catalog-filters {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.cctv-feed-type-seg {
+  display: flex;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+
+.cctv-feed-type-seg .pp-mode-btn {
+  min-width: 3.2rem;
+  letter-spacing: 0.2px;
+}
+
+.cctv-feed-type-seg .pp-mode-btn:not(.active) { opacity: 0.55; }
+
+.cctv-feed-type-seg .pp-mode-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
+
 .cctv-calibration-block {
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 9px;
