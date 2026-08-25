@@ -11,6 +11,15 @@ import {
   setOverlayEntries,
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
+import {
+  datacenterHideNoOperatorChipModel,
+  datacenterOperatorText,
+  datacenterPassesOperatorFilter,
+  getDatacenterHideNoOperator,
+  hydrateDatacenterHideNoOperator,
+  normalizeDatacenterHideNoOperator,
+  setDatacenterHideNoOperator,
+} from './datacenterOperatorFilter.js';
 
 const DEFAULT_LABEL_MAX = 900;
 const DEFAULT_LABEL_GRID_PX = 132;
@@ -67,11 +76,7 @@ export function localInfrastructureOverlayCopy(properties, layerId) {
   const details = [];
 
   if (layerId === 'local-datacenters') {
-    const operator = firstClean([
-      tags.operator,
-      props.operator,
-      tags['operator:short'],
-    ]);
+    const operator = datacenterOperatorText(props);
     const capacity = firstClean([
       tags['capacity:it_load'],
       tags.it_load,
@@ -297,6 +302,7 @@ export function createLocalGeoJsonLayer({
 }) {
   let _dataSource = null;
   let _enabled = false;
+  let _viewer = null;
   let _clickHandler = null;
   let _count = 0;
   /** @type {number|null} Timestamp of the last successful dataset load. */
@@ -356,6 +362,28 @@ export function createLocalGeoJsonLayer({
     host: overlayHost,
   });
 
+  const isDatacenterLayer = id === 'local-datacenters';
+
+  function selectedRecordId() {
+    const selected = _viewer?.selectedEntity;
+    if (!selected || selected.__localLayerId !== id) return null;
+    return String(selected.id ?? '');
+  }
+
+  function recordPassesOperatorFilter(record) {
+    if (!isDatacenterLayer) return true;
+    return datacenterPassesOperatorFilter(record, getDatacenterHideNoOperator(), {
+      selectedId: selectedRecordId(),
+    });
+  }
+
+  function requestOperatorFilterRefresh() {
+    _lastVisibilityUpdate = Number.NEGATIVE_INFINITY;
+    _viewer?.scene?.requestRender?.();
+  }
+
+  if (isDatacenterLayer) hydrateDatacenterHideNoOperator();
+
   const disableLayer = (viewer) => {
     _enabled = false;
     clearGroundRetryRender();
@@ -375,7 +403,7 @@ export function createLocalGeoJsonLayer({
     }
   };
 
-  return {
+  const api = {
     id,
     name,
     icon,
@@ -413,6 +441,8 @@ export function createLocalGeoJsonLayer({
         const record = _stemRecords[i];
         const carto = record.carto;
         if (!carto) continue;
+        const kept = recordPassesOperatorFilter(record);
+        const selectedId = selectedRecordId();
         listed.push({
           id: String(record.id),
           label: record.entry?.title || featureLabelFromProperties(
@@ -421,7 +451,8 @@ export function createLocalGeoJsonLayer({
           ),
           latitude: Number(Cesium.Math.toDegrees(carto.latitude).toFixed(6)),
           longitude: Number(Cesium.Math.toDegrees(carto.longitude).toFixed(6)),
-          visible: record.entity?.show !== false,
+          visible: kept && (record.entity?.show !== false || Boolean(selectedId
+            && String(record.id) === selectedId)),
         });
       }
       return listed;
@@ -447,6 +478,7 @@ export function createLocalGeoJsonLayer({
 
     enable: async (viewer) => {
       if (_destroyed) return;
+      _viewer = viewer;
       _enabled = true;
       _stemGeometryDirty = true;
       _lastVisibilityUpdate = Number.NEGATIVE_INFINITY;
@@ -582,6 +614,7 @@ export function createLocalGeoJsonLayer({
             const priority = labelPriorityFromProperties(properties, id);
             _stemRecords.push({
               id: recordId,
+              operator: isDatacenterLayer ? datacenterOperatorText(properties) : '',
               entity: feature,
               carto,
               base,
@@ -717,7 +750,8 @@ export function createLocalGeoJsonLayer({
                 < GROUND_SAMPLE_MAX_DISTANCE_M) {
               groundRetryPending = true;
             }
-            const isVisible = occluder.isPointVisible(record.base);
+            const isVisible = occluder.isPointVisible(record.base)
+              && recordPassesOperatorFilter(record);
             if (record.entity.show !== isVisible) record.entity.show = isVisible;
             if (isVisible && record.entry) visibleOverlayRecords.push(record);
           }
@@ -776,12 +810,34 @@ export function createLocalGeoJsonLayer({
       }
       _overlayPublisher.destroy();
       _dataSource = null;
+      _viewer = null;
       _stemRecords = [];
       _count = 0;
       _lastUpdate = null;
       _error = null;
-    }
+    },
   };
+
+  if (isDatacenterLayer) {
+    api.getParams = () => ({
+      hideNoOperator: getDatacenterHideNoOperator(),
+    });
+    api.setParams = (params = {}) => {
+      if (!params || typeof params !== 'object') return false;
+      if (!Object.hasOwn(params, 'hideNoOperator')) return true;
+      const next = normalizeDatacenterHideNoOperator(params.hideNoOperator);
+      if (next == null) return false;
+      if (next === getDatacenterHideNoOperator()) return true;
+      setDatacenterHideNoOperator(next);
+      requestOperatorFilterRefresh();
+      return true;
+    };
+    api.getRowControls = () => ({
+      chips: [datacenterHideNoOperatorChipModel(getDatacenterHideNoOperator())],
+    });
+  }
+
+  return api;
 }
 
 function flyToLocalFeature(viewer, carto) {
