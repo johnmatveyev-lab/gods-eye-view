@@ -76,8 +76,17 @@
     <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
+    <button id="north-up-compass" type="button" aria-label="Set heading north-up" title="North-up (N)" aria-keyshortcuts="N">
+      <span class="north-up-compass-rose" aria-hidden="true">
+        <span class="north-up-needle">N</span>
+      </span>
+    </button>
     <button id="home-view" type="button" aria-label="Home view" title="Home view (Home)" aria-keyshortcuts="Home">
       <span class="material-symbols-outlined" aria-hidden="true">home</span>
+    </button>
+    <button id="stop-tracking" type="button" hidden aria-label="Stop tracking" title="Stop tracking and leave the camera where it is">
+      <span class="material-symbols-outlined" aria-hidden="true">location_disabled</span>
+      Stop tracking
     </button>
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
@@ -506,6 +515,12 @@
       </div>
     </div>
     <div class="pp-toggle-group">
+      <button class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true" title="Tracked-target trail — hide the fading path without stopping track">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">timeline</span>
+        <span class="pp-label">Trails</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="scope-toggle" title="Scope — the circular viewport mask" aria-pressed="true">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">adjust</span>
         <span class="pp-label">Scope</span>
@@ -525,6 +540,12 @@
       <button class="pp-toggle-btn" id="celestial-toggle" title="Celestial ring — reveal the full globe" aria-pressed="false">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">flare</span>
         <span class="pp-label">Celestial</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="live-sun-toggle" title="Live sun — real-time terminator" aria-pressed="false">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">wb_sunny</span>
+        <span class="pp-label">Sun</span>
       </button>
     </div>
     <button class="pp-toggle-btn" id="clean-view-toggle" title="Hide UI chrome">
@@ -684,6 +705,14 @@
         />
       </div>
       <div id="data-toggles" class="data-toggle-list"></div>
+      <div id="datacenter-in-view" class="in-view-site-list" hidden>
+        <div class="in-view-site-list-header">
+          <strong>DATACENTERS IN VIEW</strong>
+          <output id="datacenter-in-view-count" aria-live="polite">0</output>
+        </div>
+        <div id="datacenter-in-view-items" class="in-view-site-list-items" role="list"></div>
+        <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
+      </div>
     </div>
   </div>
 
@@ -704,6 +733,11 @@
       <div class="cctv-controls">
         <button id="cctv-enable-btn" class="scene-btn">CCTV OFF</button>
         <button id="cctv-nearest-btn" class="scene-btn">NEAREST</button>
+      </div>
+      <div class="cctv-controls">
+        <select id="cctv-city-filter" aria-label="CCTV city or source">
+          <option value="">All sources</option>
+        </select>
       </div>
       <div class="cctv-controls">
         <button id="cctv-prev-btn" class="scene-btn">PREV</button>
@@ -880,6 +914,21 @@
                 <option value="all">All</option>
               </select>
             </div>
+            <div class="radio-station-search-wrap">
+              <label class="radio-filter-label" for="radio-station-search">SEARCH STATIONS</label>
+              <input
+                type="search"
+                id="radio-station-search"
+                placeholder="Name, country, or tag…"
+                autocomplete="off"
+                spellcheck="false"
+                aria-label="Search stations by name, country, or tag"
+                aria-controls="radio-station-list"
+                disabled
+              />
+              <span id="radio-station-search-count" class="radio-station-search-count"></span>
+            </div>
+            <div id="radio-station-list" class="radio-station-list" role="listbox" aria-label="Current Radio Browser stations" hidden></div>
             <div id="radio-station-card" class="radio-station-card" aria-live="polite">
               <strong id="radio-station-name">NO STATION SELECTED</strong>
               <span id="radio-station-meta">Enable Radio, then choose a globe marker or use next.</span>

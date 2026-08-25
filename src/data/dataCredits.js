@@ -168,10 +168,10 @@ export const DATA_CREDITS = [
 /**
  * Conditional credits — registered via `registerDynamicCredit` only when the
  * corresponding capability actually activates (deliberately NOT part of
- * DATA_CREDITS, which is always-on). TomTom terms require attribution when
- * their flow data is displayed; AISStream is courtesy-credited only after a
- * live snapshot actually lands. Keyless or hosted-empty installs never show
- * either credit.
+ * DATA_CREDITS, which is always-on). TomTom terms require attribution only
+ * when Live actually painted a flow tile; AISStream is courtesy-credited only
+ * after a live snapshot actually lands. Keyless, Sim-forced, or hosted-empty
+ * installs never show either credit.
  * @type {{ key: string, html: string }}
  */
 export const AISSTREAM_CREDIT = {

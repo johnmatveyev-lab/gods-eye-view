@@ -78,6 +78,12 @@
     },
     "api/terrain/heights.js": {
       "maxDuration": 30
+    },
+    "api/realtime/token.js": {
+      "maxDuration": 15
+    },
+    "api/openai/hud-summary.js": {
+      "maxDuration": 15
     }
   },
   "rewrites": [

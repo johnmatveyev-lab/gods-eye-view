@@ -2277,7 +2277,20 @@ export class DataLayerManager {
     const controls = layer.enabled ? this._rowControlsFor(layer.id) : null;
     const chips = controls?.chips || [];
     const legend = controls?.legend || [];
-    container.hidden = chips.length === 0 && legend.length === 0;
+    const headingText = typeof controls?.heading === 'string' ? controls.heading.trim() : '';
+    container.hidden = chips.length === 0 && legend.length === 0 && !headingText;
+
+    let heading = container.querySelector?.('.data-toggle-heading');
+    if (headingText) {
+      if (!heading) {
+        heading = document.createElement('span');
+        heading.className = 'data-toggle-heading';
+        container.insertBefore(heading, container.firstChild);
+      }
+      if (heading.textContent !== headingText) heading.textContent = headingText;
+    } else if (heading) {
+      heading.remove();
+    }
 
     for (const node of [...container.children]) {
       if (String(node.className).split(/\s+/).includes('data-toggle-legend-item')) node.remove();

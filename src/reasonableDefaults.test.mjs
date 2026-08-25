@@ -272,3 +272,12 @@ test('a share link that carries detection OFF still restores OFF', () => {
   assert.equal(dense.detectionMode, 'DENSE');
   assert.equal(dense.detectionDensity, 75);
 });
+
+test('first run opens with tracked-target trails on', () => {
+  assert.match(indexHtml, /class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true"/,
+    'index.html: Trails paints lit before ui.js hydrates storage');
+  assert.match(uiSource, /this\._trailsEnabled = true;/,
+    'ui.js: the DISPLAY rail believes Trails is on before hydrate');
+  assert.match(uiSource, /hydrateTrailsEnabled\(\)/,
+    'ui.js: a stored meridian.trails value still wins over the default');
+});
