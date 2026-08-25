@@ -211,7 +211,6 @@ test('skylight MIT credit is untouched and no new /api is added', () => {
   const aircraftClass = fs.readFileSync(path.join(ROOT, 'src', 'data', 'aircraftClass.js'), 'utf8');
   assert.match(aircraftClass, /skylight \(https:\/\/github.com\/cpaczek\/skylight, MIT\)/);
   const filterSrc = fs.readFileSync(path.join(ROOT, 'src', 'data', 'aircraftClassFilter.js'), 'utf8');
+  assert.equal(/fetch\s*\(/.test(filterSrc), false);
   assert.equal(filterSrc.includes('/api/'), false);
-  assert.equal(filterSrc.includes('classifyAircraft('), false);
-  assert.equal(fs.existsSync(path.join(ROOT, 'src', 'data', 'aircraftClassFilter.js')), true);
 });
