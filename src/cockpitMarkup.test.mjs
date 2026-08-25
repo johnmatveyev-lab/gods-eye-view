@@ -265,6 +265,7 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
   assert.match(sceneDirector, /styleManager\.setRecordingMode\(false\);\s*document\.body\.classList\.remove\('scene-playback-mode'\);/);
   assert.equal((html.match(/id="hud-toggle"/g) || []).length, 1, 'HUD control must have one stateful DOM owner');
   assert.equal((html.match(/id="detection-toggle"/g) || []).length, 1, 'Detection control must have one stateful DOM owner');
+  assert.equal((html.match(/id="contact-labels-toggle"/g) || []).length, 1, 'Labels control must have one stateful DOM owner');
   assert.equal((html.match(/id="models3d-toggle"/g) || []).length, 1, '3D control must have one stateful DOM owner');
   assert.doesNotMatch(html, /id="cockpit-(?:hud|detection|models3d)-toggle"/);
   assert.match(html, /id="cockpit-radio-toggle-btn"[^>]*aria-controls="cockpit-radio-panel"/);
