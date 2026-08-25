@@ -66,6 +66,10 @@ import {
 } from './celestialRing.js';
 import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
 import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import {
+  hydrateTrailsEnabled,
+  setTrailsEnabled,
+} from './data/trailPreference.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -2758,6 +2762,10 @@ export class StyleManager {
     // button and the armed layer in agreement.
     this._models3dEnabled = true;
     this._models3dMode = 'proximity'; // 'proximity' (nearest in view) | 'all' (every in-view plane)
+    this._trailsBtn = document.getElementById('trails-toggle');
+    // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
+    // existing tracked-target trail renderer without stopping track.
+    this._trailsEnabled = true;
 
     // The shared world-overlay host must own its one postRender lane before
     // detection and tracked-readout initialize. It stays transparent until a
@@ -2799,6 +2807,7 @@ export class StyleManager {
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initTrailsToggle();
     this._initLiveSunToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
@@ -10471,6 +10480,25 @@ export class StyleManager {
     // tech reported was an unpressed-looking control over an armed layer.
     // Mirrors #scope-toggle, which has always carried aria-pressed.
     this._models3dBtn?.setAttribute('aria-pressed', String(this._models3dEnabled));
+  }
+
+  /**
+   * Wires the DISPLAY-rail Trails toggle to the existing trail renderer.
+   * Off hides drawing (body + already-drawn path) and persists `meridian.trails`.
+   * Stop tracking still clears the target; this control does not.
+   */
+  _initTrailsToggle() {
+    this._trailsEnabled = hydrateTrailsEnabled();
+    this._trailsBtn?.addEventListener('click', () => {
+      this._trailsEnabled = setTrailsEnabled(!this._trailsEnabled);
+      this._syncTrailsButtonState();
+    });
+    this._syncTrailsButtonState();
+  }
+
+  _syncTrailsButtonState() {
+    this._trailsBtn?.classList.toggle('active', this._trailsEnabled);
+    this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
   }
 
   _initHUDToggle() {

@@ -8,6 +8,11 @@ import {
   isTrackingSelectionGesture,
 } from './trackingClickGesture.js';
 import { createTrail } from './trailRenderer.js';
+import {
+  getTrailsEnabled,
+  subscribeTrailsEnabled,
+  trailDrawingVisible,
+} from './trailPreference.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
 import {
   screenProjectedRotation,
@@ -466,8 +471,7 @@ function _setCockpitContactMode(active) {
   // aircraft silhouette until a ready model takes over; far contacts are pips.
   // Never bulk-destroy here: that stalls the renderer exactly as cockpit begins.
   if (_modelCollection) _modelCollection.show = true;
-  _trail?.setVisible(!next);
-  if (_trailHeadEntity) _trailHeadEntity.show = !next;
+  _applyTrailDrawing();
   for (const [icao24, bb] of _billboards) _applyFleetBillboardPresentation(icao24, bb);
   _lastCamPoseSig = '';
   _lastFleetTickMs = 0;
@@ -502,6 +506,23 @@ let _trailHeadSeq = 0;
 let _trailPositions = [];
 /** @type {number} Monotonic token — invalidates in-flight backfill responses */
 let _trailBackfillToken = 0;
+
+/** Whether the existing trail renderer should draw for the tracked contact. */
+function _trailShouldDraw() {
+  return trailDrawingVisible({
+    trailsEnabled: getTrailsEnabled(),
+    cockpitContactMode: _cockpitContactMode,
+  });
+}
+
+/** Hide or show the live trail body and head without discarding history. */
+function _applyTrailDrawing() {
+  const show = _trailShouldDraw();
+  _trail?.setVisible(show);
+  if (_trailHeadEntity) _trailHeadEntity.show = show;
+}
+
+subscribeTrailsEnabled(_applyTrailDrawing);
 
 // ---------------------------------------------------------------------------
 // Render-behind smoothing (mirrors flights.js): the fleet renders at
@@ -872,6 +893,20 @@ export function _applyPendingMilitaryTrackingRestoreForTest() {
 /** Set the exact Cockpit subject through the production state transition for focused tests. */
 export function _setCockpitDetectionSubjectForTest(active, subjectId = null) {
   _applyCockpitState({ active, subjectId });
+}
+
+/** Inject the live trail handles so tests can exercise hide-without-stop. */
+export function _setMilitaryTrailDrawingStateForTest({
+  trail = null,
+  trailHeadEntity = null,
+  positions,
+  cockpitContactMode = false,
+} = {}) {
+  _cockpitContactMode = cockpitContactMode === true;
+  _trail = trail;
+  _trailHeadEntity = trailHeadEntity;
+  if (Array.isArray(positions)) _trailPositions = [...positions];
+  _applyTrailDrawing();
 }
 
 /** Evaluate the TRACKED contact's zoom regime through the production predicate.
@@ -2130,7 +2165,7 @@ function _startTrail(icao24) {
   if (!_trail && _viewer) {
     _trail = createTrail(_viewer, { color: TRAIL_COLOR, width: 2.5 });
   }
-  _trail?.setVisible(!_cockpitContactMode);
+  _applyTrailDrawing();
   // Live head segment: last DISPLAYED body point → current dead-reckoned icon, updated
   // every frame via a CallbackProperty (Cesium updates entity-polyline positions cheaply,
   // unlike the trail primitive which fully rebuilds on setPositions). Keeps the head glued
@@ -2140,7 +2175,7 @@ function _startTrail(icao24) {
       // 'gev-trail' namespace (round 6): claimed by trailRenderer's pick
       // owner so a click on the head segment never reads as empty space.
       id: `gev-trail:mil-head-${++_trailHeadSeq}`,
-      show: !_cockpitContactMode,
+      show: _trailShouldDraw(),
       polyline: {
         positions: new Cesium.CallbackProperty(() => {
           // Need ≥2 accumulated points: the body draws all-but-newest, so the head must

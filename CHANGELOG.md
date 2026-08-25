@@ -20,6 +20,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Display Trails on/off control for the existing tracked-target trail.
+  The preference persists as `meridian.trails` and defaults on. Off hides the
+  already-drawn path without stopping track; stop tracking still clears the
+  target. No API changes.
 - Street Traffic has a Traffic: Live | Sim control. Live uses the existing
   `/api/tomtom` tiles when `status.hasKey`; Sim is the built-in model and
   does not request tiles. Without a key, Live stays disabled. A 429 budget

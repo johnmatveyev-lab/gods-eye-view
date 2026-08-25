@@ -522,6 +522,9 @@ test('no mission writes a preference the visitor did not choose by picking it', 
     '_setModels3dParams',
     '_applyStoredModelsPreference',
     'writeModelsPreference',
+    'setTrailsEnabled',
+    'hydrateTrailsEnabled',
+    '_initTrailsToggle',
     'setFeather',
   ]) {
     assert.doesNotMatch(code, new RegExp(forbidden), `a mission must never touch ${forbidden}`);
