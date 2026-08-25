@@ -7,6 +7,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Hosted CelesTrak disk cache writes `/tmp/meridian-celestrak` on Netlify /
+  Vercel / Lambda instead of `cwd/.gev-cache` (`/var/task` is read-only). A
+  seeded body plus upstream miss is 200 `STALE-ERROR`, not 502 `NONE`. Write
+  failures stay memory-only. Distinct from the debug-log `/tmp` fix.
 - Hosted `POST /api/realtime/debug-log` writes `/tmp/meridian-gev-logs` on
   Netlify / Vercel / Lambda instead of mkdir `/var/task/.gev-logs` (400
   ENOENT). A write failure still returns empty 204 and warns, so the voice

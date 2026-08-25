@@ -30,11 +30,14 @@ export const config = {
 const TRAVERSAL_RE = /(?:^|[\\/])\.\.(?:[\\/]|$)/;
 
 /**
- * Hosted Vercel isolates can write /tmp; local Vite keeps `.gev-cache`.
- * Disk is optional — a read-only filesystem still serves from memory.
+ * Hosted Vercel / Netlify / Lambda isolates can write /tmp; cwd is often
+ * `/var/task` (read-only). Local Vite keeps `.gev-cache`. Disk is optional —
+ * a read-only filesystem still serves from memory.
  */
 export function defaultCelestrakCacheDir({ env = process.env, cwd = process.cwd() } = {}) {
-  if (env.VERCEL) return path.join('/tmp', 'meridian-celestrak');
+  if (env.VERCEL || env.NETLIFY || env.AWS_LAMBDA_FUNCTION_NAME) {
+    return path.join('/tmp', 'meridian-celestrak');
+  }
   return path.join(cwd, '.gev-cache');
 }
 
