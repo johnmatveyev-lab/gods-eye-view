@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Bikeshare has client-only **All | 15m | 60m** last-reported chips next to
+  Hide empty / Hide full / Hide closed / E-bikes only / min-bikes /
+  min-docks. Default **All** matches the current dots. **15m** hides
+  stations whose cached GBFS `last_reported` (POSIX seconds, already on
+  the status map) is older than 15 minutes. **60m** is looser. Missing or
+  non-finite `lastReported` stays visible. A selected station stays. Chip
+  changes re-filter in memory and AND with hide empty, hide full, hide
+  closed, min-available, min-docks, and E-bikes only — no extra
+  `/api/gbfs` fetch and no new endpoint. Preference persists as
+  `meridian.bikeshareLastReported`. Hidden when the bike layer is off.
+  Refresh keeps the chip set.
 - Space Missions roster has a client-only **Hide unknown site** toggle next
   to the probability chips. Default off matches the current 30-day roster.
   On hides missions whose normalized `launchSite` is missing, whitespace
