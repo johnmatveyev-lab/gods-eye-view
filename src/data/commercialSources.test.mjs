@@ -25,17 +25,21 @@ test('production proxies never fetch OpenSky or Google News RSS', () => {
   const flights = readFileSync(path.join(ROOT, 'src/server/openskyFlights.js'), 'utf8');
   const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
   const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
-  for (const source of [flights, proxies, vite]) {
+  const voice = readFileSync(path.join(ROOT, 'src/voice/gevActions.js'), 'utf8');
+  for (const source of [flights, proxies, vite, voice]) {
     assert.doesNotMatch(source, /https:\/\/opensky-network\.org/);
     assert.doesNotMatch(source, /https:\/\/auth\.opensky-network\.org/);
     assert.doesNotMatch(source, /news\.google\.com/);
   }
   assert.match(flights, /api\.adsb\.lol/);
   assert.match(proxies, /api\.gdeltproject\.org/);
+  assert.match(proxies, /Civilian flights are adsb\.lol only/);
+  assert.match(proxies, /Cockpit headlines are GDELT only/);
 });
 
 test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   const keys = DATA_CREDITS.map((credit) => credit.key);
+  const html = DATA_CREDITS.map((credit) => credit.html).join('\n');
   assert.ok(!keys.includes('opensky'));
   assert.ok(!keys.includes('google-news-rss'));
   assert.ok(!keys.includes('telegeography'));
@@ -43,6 +47,28 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.ok(keys.includes('gdelt'));
   assert.ok(keys.includes('open-meteo'));
   assert.ok(keys.includes('tfl-cctv'));
+  assert.match(html, /GDELT Project/);
+  assert.doesNotMatch(html, /Google News/i);
+  assert.doesNotMatch(html, /OpenSky Network/i);
+});
+
+test('UI has no OpenSky toggle and cockpit news attributes GDELT not Google News', () => {
+  const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const ui = readFileSync(path.join(ROOT, 'src/ui.js'), 'utf8');
+  const flights = readFileSync(path.join(ROOT, 'src/data/flights.js'), 'utf8');
+  assert.equal(flightsLayer.id, 'flights');
+  assert.equal(flightsLayer.name, 'Live Flights');
+  assert.equal(flightsLayer.source, 'adsb.lol');
+  assert.doesNotMatch(html, /OpenSky/i);
+  assert.doesNotMatch(html, /Google News/i);
+  assert.doesNotMatch(ui, /data-layer-id=["']opensky["']/i);
+  assert.doesNotMatch(ui, /opensky-toggle|OpenSky toggle/i);
+  assert.doesNotMatch(ui, /GOOGLE NEWS RSS/i);
+  assert.doesNotMatch(ui, /news\.google\.com/);
+  assert.match(ui, /GDELT PROJECT · LOCATION QUERY · RECENT/);
+  assert.match(ui, /cockpitHeadlineSourceLabel/);
+  assert.doesNotMatch(flights, /https:\/\/opensky-network\.org/);
+  assert.doesNotMatch(flights, /news\.google\.com/);
 });
 
 test('TeleGeography cable GeoJSON is not present on disk', () => {

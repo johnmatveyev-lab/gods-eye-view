@@ -58,15 +58,19 @@ function check(name, ok, detail) {
 // Substrings that MUST be present across the registered per-layer credits.
 const REQUIRED_CREDIT_SUBSTRINGS = [
   'OpenStreetMap contributors', // ODbL — datacenters/dams/roads
-  'adsb.lol',                    // ODbL — military traces
-  'TeleGeography',               // CC BY-NC-SA — cables
+  'adsb.lol',                    // ODbL — civilian + military flights
   'NASA FIRMS',                  // fires
   'CelesTrak',                   // satellites
   'U.S. Geological Survey',      // earthquakes
-  'OpenSky Network',             // flights
+  'GDELT Project',               // cockpit headlines
   'AISStream',                   // vessels
   'City of Austin',              // CCTV
   'Radio Browser',               // internet-radio directory
+];
+const FORBIDDEN_CREDIT_SUBSTRINGS = [
+  'OpenSky Network',
+  'Google News',
+  'TeleGeography',
 ];
 
 async function main() {
@@ -132,6 +136,10 @@ async function main() {
   for (const sub of REQUIRED_CREDIT_SUBSTRINGS) {
     const found = registeredHtml.some((h) => h.includes(sub));
     check(`credit present: "${sub}"`, found, found ? '' : 'MISSING');
+  }
+  for (const sub of FORBIDDEN_CREDIT_SUBSTRINGS) {
+    const found = registeredHtml.some((h) => h.includes(sub));
+    check(`credit omitted: "${sub}"`, !found, found ? 'MUST NOT appear' : '');
   }
 
   // ── (i) H11: credits render in the "Data attribution" lightbox ─────

@@ -1044,6 +1044,53 @@ test('generic layer visibility exposes lifecycle truth for every manager phase a
   });
 });
 
+test('voice OpenSky aliases enable adsb.lol flights and never fetch OpenSky or Google News URLs', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const fetched = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    fetched.push(String(url));
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  try {
+    const { viewer, styleManager } = createVoiceNavigationHarness();
+    let enabledLayer = null;
+    const dataManager = {
+      layers: new Map([['flights', { module: { source: 'adsb.lol' } }]]),
+      isEnabled: (layerId) => enabledLayer === layerId,
+      getLayerLifecycleState: (layerId) => (
+        enabledLayer === layerId
+          ? { enabled: true, lifecycleState: 'enabled', uncertain: false }
+          : { enabled: false, lifecycleState: 'disabled', uncertain: false }
+      ),
+      getAll: () => [{
+        id: 'flights',
+        name: 'Live Flights',
+        source: 'adsb.lol',
+        enabled: enabledLayer === 'flights',
+      }],
+      async setEnabled(layerId, enabled) {
+        enabledLayer = enabled ? layerId : null;
+        return true;
+      },
+    };
+    const runner = createGevActionRunner({ viewer, styleManager, dataManager });
+    for (const layerId of ['opensky', 'OpenSky', 'open sky', 'opensky network']) {
+      enabledLayer = null;
+      const result = await runner('set_layer_visibility', { layerId, enabled: true });
+      assert.equal(result.ok, true, `${layerId} must resolve`);
+      assert.equal(result.layerId, 'flights', `${layerId} must enable the adsb.lol flights layer`);
+      assert.equal(result.label, 'Live Flights');
+      assert.equal(enabledLayer, 'flights');
+    }
+    assert.equal(fetched.length, 0, 'voice OpenSky must not contact any URL');
+    assert.ok(fetched.every((url) => !/opensky-network\.org|news\.google\.com/i.test(url)));
+  } finally {
+    if (originalFetch) globalThis.fetch = originalFetch;
+    else delete globalThis.fetch;
+  }
+});
+
 test('generic voice visibility maps Space Missions to the explicit mission layer', async () => {
   globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
   const viewer = {
