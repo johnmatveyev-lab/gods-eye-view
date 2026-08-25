@@ -429,16 +429,17 @@
       <div id="param-sliders"></div>
     </div>
     <div class="pp-toggle-group">
-      <!-- 3D aircraft is DEFAULT-ON in Proximity (product invariant 2026-08-22), so the
-           button ships lit and the mode row ships open — the same markup-carries-the-default
-           convention as #scope-toggle. ui.js re-syncs both from durable layer state, which
-           is what flips them back for a share link or a stored session carrying 3D off. -->
-      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="3D aircraft — flat icons zoomed out, 3D models up close">
+      <!-- Hangar models are DEFAULT-ON in Proximity (product invariant 2026-08-22),
+           persisted as meridian.models = on|off. The button ships lit and the mode
+           row ships open — the same markup-carries-the-default convention as
+           #scope-toggle. ui.js re-syncs from meridian.models and durable layer
+           state, which flips them back for a share link or a stored Off session. -->
+      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="Hangar 3D models — on loads per-class GLBs up close; off keeps 2D billboards">
         <span class="pp-icon">&#x2708;</span>
-        <span class="pp-label">3D</span>
+        <span class="pp-label">Models</span>
       </button>
       <div class="pp-slider-row visible" id="models3d-mode-row">
-        <span class="pp-slider-mini-label">Models</span>
+        <span class="pp-slider-mini-label">Coverage</span>
         <div class="pp-mode-seg" role="radiogroup" aria-label="3D model coverage">
           <button class="pp-mode-btn active" id="models3d-mode-proximity" data-mode="proximity" role="radio" aria-checked="true">Proximity</button>
           <button class="pp-mode-btn" id="models3d-mode-all" data-mode="all" role="radio" aria-checked="false">All</button>
