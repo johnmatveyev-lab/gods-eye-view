@@ -55,7 +55,8 @@ import {
 } from '../data/launches.js';
 import { trackBackfillProxies } from '../data/trackBackfill.js';
 import { approximateDistanceM, handleNearbyPlacesHttp } from '../google/nearbyPlaces.js';
-import { handleHudSummary, handleRealtimeToken, readRequestBody } from '../voice/openaiApi.js';
+import { handleHudSummaryHttp } from '../hud/summary.js';
+import { handleRealtimeToken, readRequestBody } from '../voice/openaiApi.js';
 
 export { LL2_CACHE_TTL_MS, launchLibraryRequestHeaders };
 
@@ -1175,7 +1176,7 @@ function openAiRealtimeProxy() {
   function install(middlewares) {
     middlewares.use('/api/openai/hud-summary', async (req, res) => {
       if (!enforceOptInRateLimit(openAiRateLimiter(), req, res)) return;
-      await handleHudSummary(req, res);
+      await handleHudSummaryHttp(req, res);
     });
 
     middlewares.use('/api/realtime/debug-log', async (req, res) => {

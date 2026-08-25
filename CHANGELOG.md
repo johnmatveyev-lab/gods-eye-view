@@ -144,9 +144,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `Meridian-celestrak-proxy/1.0 (+https://github.com/johnmatveyev-lab/gods-eye-view)`.
 - Added dedicated Vercel Node functions `api/realtime/token.js` and
   `api/openai/hud-summary.js` that mint ephemeral OpenAI sessions / HUD
-  summaries with the server `OPENAI_API_KEY`. Free stays gated; Pro and
-  self-host BYOK keep working. The long-lived key is never injected into
-  the client bundle.
+  summaries with the server `OPENAI_API_KEY`. HUD logic lives in
+  `src/hud/summary.js`. Hosted/Vercel spend fails closed without Clerk +
+  Pro; local self-host BYOK stays. Hosted Free/anonymous MIC is locked to
+  the existing upgrade/sign-in modal. The long-lived key is never injected
+  into the client bundle.
 
 ### Changed
 

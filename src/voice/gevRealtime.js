@@ -1,3 +1,4 @@
+import { PLANS } from '../billing/plans.js';
 import { createGevActionRunner, readLayerLifecycleSummary } from './gevActions.js';
 import {
   DEFAULT_VOICE_TIER,
@@ -335,6 +336,9 @@ export class GevRealtimeController {
 
   async start({ pushToTalk = false } = {}) {
     if (this.isActive()) return;
+    if (!voiceSessionAllowed(window.__meridianAccount?.entitlement, window.__meridianAccount)) {
+      return;
+    }
     this.pauseRadioForVoice();
     const pushToTalkKeyHeld = pushToTalk && this.pushToTalkKeyHeld;
     const spaceKeyHeld = this.spaceKeyHeld;
@@ -506,6 +510,11 @@ export class GevRealtimeController {
       }
       const diagnostics = this.connectionDiagnostics();
       this.stop({ preserveStatus: true });
+      const hostMessage = error?.realtimeHostMessage || describeRealtimeTokenHttpError(error?.status);
+      if (hostMessage) {
+        this.setStatus('error', hostMessage);
+        return;
+      }
       this.reportError('Realtime connection', error, diagnostics);
     }
   }
@@ -2331,13 +2340,22 @@ async function fetchRealtimeToken(tier = DEFAULT_VOICE_TIER) {
     || null;
   const servedTier = response.headers?.get?.('X-GEV-Voice-Tier') || null;
   if (!response.ok) {
+    const hostMessage = describeRealtimeTokenHttpError(response.status);
+    if (hostMessage) {
+      const error = new Error(hostMessage);
+      error.status = response.status;
+      error.realtimeHostMessage = hostMessage;
+      throw error;
+    }
     // OpenAI error bodies are objects ({error:{message,type,...}}); only the
     // key-absent server case is a bare string. Render either without the
     // "[object Object]" that String(object) produces (H9).
     const reason = typeof data?.error === 'string'
       ? data.error
       : data?.error?.message;
-    throw new Error(reason || `Realtime token failed: HTTP ${response.status}`);
+    const error = new Error(reason || `Realtime token failed: HTTP ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
   const token = data?.value || data?.client_secret?.value || data?.client_secret;
   if (!token) throw new Error('Realtime token response did not include a client secret');
@@ -2484,6 +2502,45 @@ export function shouldHandlePushToTalkKeyDown(event) {
  */
 export function shouldIgnoreVoiceButtonClick(spaceKeyHeld) {
   return Boolean(spaceKeyHeld);
+}
+
+/**
+ * Hosted Free/anonymous never start a Realtime session. Self-host BYOK stays on.
+ */
+export function voiceSessionAllowed(entitlement, account = null) {
+  if (entitlement?.plan === PLANS.SELF_HOST) return true;
+  const hosted = Boolean(account?.config?.hosted || account?.clerk);
+  if (hosted) return Boolean(entitlement?.voice);
+  if (!entitlement) return true;
+  return Boolean(entitlement.voice);
+}
+
+/** Click action when MIC is locked on a hosted plan. */
+export function voiceGateAction(entitlement, account = null) {
+  if (voiceSessionAllowed(entitlement, account)) return 'start';
+  return entitlement?.signedIn ? 'upgrade' : 'signin';
+}
+
+export function describeRealtimeTokenHttpError(status) {
+  if (Number(status) === 404) return 'Voice is not available on this host yet';
+  if (Number(status) === 503) return 'Voice is not configured';
+  return null;
+}
+
+export function shouldRetryRealtimeToken(status) {
+  return describeRealtimeTokenHttpError(status) == null;
+}
+
+export function applyVoiceMicChrome(ui, entitlement, account = null) {
+  const allowed = voiceSessionAllowed(entitlement, account);
+  if (ui?.button) {
+    ui.button.setAttribute('aria-disabled', allowed ? 'false' : 'true');
+    ui.button.classList.toggle('gev-voice-locked', !allowed);
+  }
+  if (ui?.root) {
+    ui.root.dataset.voiceLocked = allowed ? 'false' : 'true';
+  }
+  return allowed;
 }
 
 /**

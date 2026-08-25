@@ -2134,7 +2134,7 @@ silently demoting every later lookup for the session.
 
 `Meridian MIC` button (bottom UI) starts an OpenAI Realtime session over WebRTC:
 
-- **Token flow**: browser fetches a short-lived client secret from `/api/realtime/token`. Shared handlers in `src/voice/openaiApi.js` hold `OPENAI_API_KEY` and post the full session config (instructions, tool schemas, VAD, truncation) to `api.openai.com/v1/realtime/client_secrets`. Vite middleware and Vercel Node (`api/realtime/token.js`) use the same handler. SDP exchange goes directly to `api.openai.com/v1/realtime/calls` with the ephemeral token.
+- **Token flow**: browser fetches a short-lived client secret from `/api/realtime/token`. Shared handlers in `src/voice/openaiApi.js` hold `OPENAI_API_KEY` and post the full session config (instructions, tool schemas, VAD, truncation) to `api.openai.com/v1/realtime/client_secrets`. Vite middleware and Vercel Node (`api/realtime/token.js`) use the same handler. Hosted/Vercel minting fails closed unless Clerk is configured and the user is Pro; local self-host without Clerk stays BYOK. SDP exchange goes directly to `api.openai.com/v1/realtime/calls` with the ephemeral token.
 - **Session defaults** (env-tunable): model `gpt-realtime-2` (or `gpt-realtime-2.1-mini` when the MINI tier is selected — see the model-tier entry below), voice `marin`, reasoning effort `low`, semantic VAD with low eagerness, no response interruption, context window truncated to ~3,000 post-instruction tokens with 0.5 retention ratio — the conversational window stays short because map state is fetched live per turn.
 - **Twenty-eight tools** (schemas defined server-side in `src/voice/realtimeTools.js`, executed client-side in `src/voice/gevActions.js`): `fly_to_location`, `select_nearest_aircraft`, `adjust_camera_zoom`, `zoom_to_globe`, `set_layer_visibility`, `show_data_layers_menu`, `set_panel_open`, `set_visual_style`, `get_entity_context`, `get_current_view_state`, `set_hud`, `set_detection`, `set_map_stack`, `set_post_processing`, `control_scene`, `control_cctv`, `set_context_mode`, `control_cockpit`, `control_radio`, `track_entity`, `stop_tracking`, `frame_overhead`, `annotate_map`, `clear_annotations`, `move_camera`, `fly_route`, `analyst_query`, and `next_iss_pass`.
 > **Reading `npm test` totals:** the count depends on the Node major. The two
@@ -2184,7 +2184,7 @@ silently demoting every later lookup for the session.
 
 ### AI HUD Summary (June 2026)
 
-- HUD `SUMMARY` readout requests a five-word intelligence-style summary from `/api/openai/hud-summary` (model `OPENAI_HUD_SUMMARY_MODEL`, default `gpt-5-nano`, minimal reasoning). The same handler runs in Vite preview and as `api/openai/hud-summary.js` on Vercel.
+- HUD `SUMMARY` readout requests a five-word intelligence-style summary from `/api/openai/hud-summary` (model `OPENAI_HUD_SUMMARY_MODEL`, default `gpt-5-nano`, minimal reasoning). Shared handler: `src/hud/summary.js`. The same handler runs in Vite preview and as `api/openai/hud-summary.js` on Vercel. Labels-only prompt path; hosted spend uses the same Clerk + Pro gate as voice.
 - Input is the live basemap label context (place/street/nearby-place labels + enabled layers) — the model is instructed not to infer from coordinates.
 - Output is sanitized to exactly five words; falls back to the deterministic telemetry summary on error/timeout (5s abort); typewriter animation on update.
 

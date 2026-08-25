@@ -8,12 +8,7 @@ import { BILLING_CODES } from '../billing/entitlements.js';
 import { createBillingRuntime } from '../billing/http.js';
 import { PLANS } from '../billing/plans.js';
 import { createAccountStore } from '../billing/store.js';
-import {
-  extractOpenAiResponseText,
-  handleHudSummary,
-  handleRealtimeToken,
-  toFiveWordHudSummary,
-} from './openaiApi.js';
+import { handleRealtimeToken } from './openaiApi.js';
 import tokenHandler, { config as tokenConfig } from '../../api/realtime/token.js';
 import hudHandler, { config as hudConfig } from '../../api/openai/hud-summary.js';
 
@@ -96,25 +91,6 @@ async function dispatchToken(options = {}, deps = {}) {
   };
 }
 
-async function dispatchHud(options = {}, deps = {}) {
-  const req = mockReq({
-    url: '/api/openai/hud-summary',
-    body: { place: 'Austin', layers: ['flights'] },
-    ...options,
-  });
-  const res = mockRes();
-  await handleHudSummary(req, res, {
-    env: { OPENAI_API_KEY: SERVER_KEY, ...deps.env },
-    fetchImpl: deps.fetchImpl,
-    runtime: deps.runtime,
-  });
-  return {
-    status: res.statusCode,
-    body: res.body,
-    json: res.body ? JSON.parse(res.body) : null,
-  };
-}
-
 test('token mint posts the server key to OpenAI and returns only the ephemeral secret', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
   const { status, json, body, headers } = await dispatchToken({ method: 'POST' }, {
@@ -186,54 +162,15 @@ test('self-host without Clerk still mints a token when OPENAI_API_KEY is set', a
   assert.equal(calls.length, 1);
 });
 
-test('HUD summary uses the server key and returns five words without leaking it', async () => {
+test('Vercel without Clerk fails closed and never mints a token', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
-  const { status, json, body } = await dispatchHud({}, {
-    runtime: createBillingRuntime({ env: {} }),
+  const { status, json } = await dispatchToken({}, {
+    runtime: createBillingRuntime({ env: { VERCEL: '1' } }),
     fetchImpl,
   });
-  assert.equal(status, 200);
-  assert.equal(json.summary, 'Austin skyline flights visible');
-  assert.equal(calls.length, 1);
-  assert.match(calls[0].url, /\/v1\/responses$/);
-  assert.equal(calls[0].init.headers.Authorization, `Bearer ${SERVER_KEY}`);
-  assert.doesNotMatch(body, new RegExp(SERVER_KEY));
-});
-
-test('hosted Free is forbidden for HUD summary; Pro is allowed', async () => {
-  const free = mockOpenAiFetch();
-  const denied = await dispatchHud({
-    headers: { authorization: 'Bearer sess_test' },
-  }, {
-    runtime: hostedRuntime(),
-    fetchImpl: free.fetchImpl,
-  });
-  assert.equal(denied.status, 403);
-  assert.equal(denied.json.code, BILLING_CODES.VOICE_REQUIRES_PRO);
-  assert.equal(free.calls.length, 0);
-
-  const pro = mockOpenAiFetch();
-  const allowed = await dispatchHud({
-    headers: { authorization: 'Bearer sess_test' },
-  }, {
-    runtime: hostedRuntime({
-      getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.PRO } }),
-    }),
-    fetchImpl: pro.fetchImpl,
-  });
-  assert.equal(allowed.status, 200);
-  assert.equal(allowed.json.summary, 'Austin skyline flights visible');
-});
-
-test('HUD helpers sanitize model output to five words', () => {
-  assert.equal(
-    extractOpenAiResponseText({ output_text: '  Hello there, world.  ' }),
-    'Hello there, world.',
-  );
-  assert.equal(
-    toFiveWordHudSummary('Austin, Texas — flights and fires visible now!!! extra'),
-    'Austin Texas flights and fires',
-  );
+  assert.equal(status, 401);
+  assert.equal(json.code, BILLING_CODES.AUTH_REQUIRED);
+  assert.equal(calls.length, 0);
 });
 
 test('Vercel Node entrypoints exist for token and HUD summary', () => {

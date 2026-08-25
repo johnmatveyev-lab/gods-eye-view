@@ -1,4 +1,5 @@
 import { getBillingRuntime, rejectIfVoiceForbidden } from '../billing/http.js';
+import { BILLING_CODES } from '../billing/entitlements.js';
 import { isKnownVoiceTier, resolveVoiceModel, VOICE_MODELS } from './voiceCost.js';
 import { realtimeInstructions } from './realtimeInstructions.js';
 import { GEV_REALTIME_TOOLS } from './realtimeTools.js';
@@ -9,15 +10,6 @@ export const OPENAI_REALTIME_VOICE_DEFAULT = 'marin';
 export const OPENAI_REALTIME_REASONING_DEFAULT = 'low';
 export const OPENAI_REALTIME_CONTEXT_TOKENS_DEFAULT = 3000;
 export const OPENAI_REALTIME_CONTEXT_RETENTION_DEFAULT = 0.5;
-export const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';
-
-const HUD_SUMMARY_INSTRUCTIONS = [
-  'Write one concise intelligence-HUD summary for Meridian.',
-  'Use only the supplied place, street, nearby-place, and enabled-layer text labels.',
-  'Prefer the clearest named place and include a relevant enabled layer only when useful.',
-  'Do not infer from coordinates or invent a place.',
-  'Output exactly five words with no title, punctuation, markdown, or introductory phrase.',
-].join(' ');
 
 /**
  * Mint an ephemeral OpenAI Realtime client secret. Used by Vite middleware
@@ -39,7 +31,7 @@ export async function handleRealtimeToken(req, res, {
     writeJson(res, 503, { error: 'OPENAI_API_KEY is not set' });
     return;
   }
-  if (await rejectIfVoiceForbidden(req, res, runtime)) return;
+  if (await rejectIfRealtimeSpendForbidden(req, res, runtime)) return;
 
   const requestedTier = readQueryParam(req, 'tier');
   const resolved = resolveVoiceModel(requestedTier);
@@ -75,52 +67,20 @@ export async function handleRealtimeToken(req, res, {
 }
 
 /**
- * Five-word HUD summary via OpenAI Responses. Used by Vite middleware and
- * the Vercel Node function at /api/openai/hud-summary.
+ * Fail closed on hosted/Vercel spend: no ephemeral token or HUD call unless
+ * Clerk is configured. Local self-host without Clerk keeps BYOK.
  */
-export async function handleHudSummary(req, res, {
-  env = process.env,
-  fetchImpl = fetch,
-  runtime = getBillingRuntime(),
-} = {}) {
-  if ((req.method || 'GET') !== 'POST') {
-    writeJson(res, 405, { error: 'Method not allowed' });
-    return;
-  }
-
-  const apiKey = String(env.OPENAI_API_KEY || '').trim();
-  if (!apiKey) {
-    writeJson(res, 503, { error: 'OPENAI_API_KEY is not set' });
-    return;
-  }
-  if (await rejectIfVoiceForbidden(req, res, runtime)) return;
-
-  try {
-    const raw = await readRequestBody(req, 64 * 1024);
-    const context = JSON.parse(raw || '{}');
-    const response = await fetchImpl('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: env.OPENAI_HUD_SUMMARY_MODEL || OPENAI_HUD_SUMMARY_MODEL_DEFAULT,
-        instructions: HUD_SUMMARY_INSTRUCTIONS,
-        input: JSON.stringify(context),
-        reasoning: { effort: 'minimal' },
-        max_output_tokens: 100,
-      }),
+export async function rejectIfRealtimeSpendForbidden(req, res, runtime = getBillingRuntime()) {
+  const config = runtime?.config || {};
+  const hostedSpend = Boolean(config.vercel || config.hostedIntent);
+  if (hostedSpend && !config.clerkConfigured) {
+    writeJson(res, 401, {
+      error: 'Sign in required for voice.',
+      code: BILLING_CODES.AUTH_REQUIRED,
     });
-    const data = await response.json().catch(() => ({}));
-    const summary = toFiveWordHudSummary(extractOpenAiResponseText(data));
-    writeJson(res, response.ok && summary ? 200 : response.status || 502, {
-      summary: summary || null,
-      error: response.ok ? null : data.error?.message || 'OpenAI HUD summary request failed',
-    });
-  } catch (error) {
-    writeJson(res, 502, { error: error?.message || 'OpenAI HUD summary request failed' });
+    return true;
   }
+  return rejectIfVoiceForbidden(req, res, runtime);
 }
 
 export function buildRealtimeSessionConfig({ env = process.env, model } = {}) {
@@ -163,28 +123,6 @@ export function buildRealtimeSessionConfig({ env = process.env, model } = {}) {
       tool_choice: 'auto',
     },
   };
-}
-
-export function extractOpenAiResponseText(data) {
-  if (typeof data?.output_text === 'string' && data.output_text.trim()) {
-    return data.output_text.trim();
-  }
-  if (!Array.isArray(data?.output)) return '';
-  return data.output
-    .flatMap((item) => (Array.isArray(item?.content) ? item.content : []))
-    .map((part) => part?.text || part?.output_text || '')
-    .join(' ')
-    .trim();
-}
-
-export function toFiveWordHudSummary(value) {
-  return String(value || '')
-    .replace(/[^\p{L}\p{N}\s-]/gu, ' ')
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 5)
-    .join(' ');
 }
 
 export function readRequestBody(req, maxBytes = 1024 * 1024) {

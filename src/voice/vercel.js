@@ -1,4 +1,5 @@
-import { handleHudSummary, handleRealtimeToken } from './openaiApi.js';
+import { handleHudSummaryHttp } from '../hud/summary.js';
+import { handleRealtimeToken } from './openaiApi.js';
 
 export const config = {
   api: {
@@ -14,7 +15,7 @@ export function createRealtimeTokenHandler(deps = {}) {
 
 export function createHudSummaryHandler(deps = {}) {
   return async function handler(req, res) {
-    await handleHudSummary(req, res, deps);
+    await handleHudSummaryHttp(req, res, deps);
   };
 }
 
