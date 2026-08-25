@@ -68,6 +68,11 @@ import {
   subscribeReduceMotion,
 } from './reduceMotion.js';
 import {
+  bindInvertScrollToggle,
+  getInvertScroll,
+  installWheelZoomSign,
+} from './invertScroll.js';
+import {
   CelestialRing,
   getKeyholeFadeTuning,
   isCelestialRingStyleSupported,
@@ -2449,6 +2454,13 @@ export class StyleManager {
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
+    this._invertScrollBtn = document.getElementById('invert-scroll-toggle');
+    this._removeInvertScrollZoom = installWheelZoomSign(
+      this.viewer?.scene?.screenSpaceCameraController,
+      () => getInvertScroll(),
+      Cesium.CameraEventType.WHEEL,
+    );
+    this._unbindInvertScroll = bindInvertScrollToggle(this._invertScrollBtn);
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -11117,6 +11129,10 @@ export class StyleManager {
     this._stopLoadingFeedbackTicker();
     this._reduceMotionUnsubscribe?.();
     this._reduceMotionUnsubscribe = null;
+    this._unbindInvertScroll?.();
+    this._unbindInvertScroll = null;
+    this._removeInvertScrollZoom?.();
+    this._removeInvertScrollZoom = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
