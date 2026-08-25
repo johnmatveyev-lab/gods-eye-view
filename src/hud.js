@@ -19,6 +19,7 @@ import { CITY_POIS } from './locations.js';
 import { composeLocalityTag } from './hudLocality.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import { canPoll } from './pollPresence.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -65,8 +66,9 @@ export class IntelHUD {
    * @param {Cesium.Viewer} viewer - The Cesium Viewer instance used for
    *   camera telemetry and coordinate derivation.
    */
-  constructor(viewer) {
+  constructor(viewer, options = {}) {
     this.viewer = viewer;
+    this._canPoll = typeof options.canPoll === 'function' ? options.canPoll : canPoll;
     this._visible = false;
     this._autoMode = true; // auto show/hide based on style
     this._currentStyle = 'normal';
@@ -213,27 +215,29 @@ export class IntelHUD {
    */
   _startTimers() {
     // Timestamp — every second
-    this._timestampInterval = setInterval(() => {
+    this._timestampInterval ??= setInterval(() => {
       const el = document.getElementById('hud-timestamp');
       if (el) el.textContent = this._formatUTC();
     }, 1000);
 
     // REC blink — every 800ms
-    this._recBlinkInterval = setInterval(() => {
+    this._recBlinkInterval ??= setInterval(() => {
       this._recBlinkState = !this._recBlinkState;
       const dot = document.getElementById('hud-rec-dot');
       if (dot) dot.style.visibility = this._recBlinkState ? 'visible' : 'hidden';
     }, 800);
 
     // Camera-derived data — 4 updates/second (250ms)
-    this._updateInterval = setInterval(() => {
+    this._updateInterval ??= setInterval(() => {
       if (!this._visible) return;
       this._updateCameraData();
     }, 250);
 
-    // Semantic summary refresh cadence
-    this._summaryInterval = setInterval(() => {
+    // Semantic summary refresh cadence. Same handle stays armed while the
+    // tab is hidden or offline; the tick no-ops until resumePausedSummary.
+    this._summaryInterval ??= setInterval(() => {
       if (!this._visible) return;
+      if (!this._canPoll()) return;
       void this._updateSummary(true);
     }, HUD_SUMMARY_INTERVAL_MS);
   }
@@ -619,6 +623,7 @@ export class IntelHUD {
    *   by character; otherwise sets it instantly.
    */
   async _updateSummary(animate = false, force = false) {
+    if (!this._canPoll()) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
@@ -753,6 +758,16 @@ export class IntelHUD {
         this.hide();
       }
     }
+  }
+
+  /**
+   * One HUD-summary refresh after the tab is visible and online again.
+   * Does not create a second summary timer.
+   */
+  resumePausedSummary() {
+    if (!this._visible || !this._canPoll()) return Promise.resolve();
+    this._markSummaryDirty();
+    return this._updateSummary(true, true);
   }
 
   /** Make the HUD visible and immediately refresh all readouts. */

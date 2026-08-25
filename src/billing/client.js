@@ -1,4 +1,5 @@
 import { MERIDIAN_TERMS, PLANS, PRO_PRICE_USD } from './plans.js';
+import { canPoll } from '../pollPresence.js';
 import { formatRemainingBudget } from './usage.js';
 import { decodeShareViewUrl, encodeShareViewUrl } from '../sharelink.js';
 import {
@@ -438,7 +439,7 @@ async function startPortal(account, root) {
 
 function startHeartbeat(account) {
   const tick = async () => {
-    if (document.hidden) return;
+    if (!canPoll()) return;
     if (!account.clerk?.user) return;
     const token = await account.getAccessToken();
     if (!token) return;

@@ -33,6 +33,7 @@ import {
 import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
+import { installPollPresence } from './pollPresence.js';
 
 initLogoGaze();
 const meridianAccountReady = initMeridianAccount();
@@ -312,6 +313,16 @@ async function init() {
     // already hidden, and waiting for the next transition would leave the
     // loop burning behind a hidden tab. (perf wave 2 fix)
     syncVisibilitySuspension();
+
+    // Pause live polls while hidden or offline. Same interval handles stay
+    // armed; one resume refresh runs when the tab is visible and online.
+    // Active voice is left alone.
+    installPollPresence({
+      onResume() {
+        dataManager.resumePausedPolls();
+        styleManager.hud?.resumePausedSummary?.();
+      },
+    });
 
     window.__godsEyeView = {
       viewer,
