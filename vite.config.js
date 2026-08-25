@@ -1,1 +1,1 @@
-file:///agent/gods-eye-view/vite.config.js
+@/agent/gods-eye-view/vite.config.js
