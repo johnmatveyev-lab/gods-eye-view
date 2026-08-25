@@ -1589,6 +1589,84 @@ test('calibration-source catalog visibility hides raw-prior when Raw is off and 
   }
 });
 
+test('FOV catalog visibility isolates Wide 75+ / Tight <70 and keeps the selected camera', () => {
+  const wide = {
+    camera: { id: 'wide-cam', name: 'Wide', lat: 30.26, lon: -97.74, headingDeg: 0, fovDeg: 82, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  const tight = {
+    camera: { id: 'tight-cam', name: 'Tight', lat: 30.27, lon: -97.75, headingDeg: 10, fovDeg: 66, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  const mid = {
+    camera: { id: 'mid-cam', name: 'Mid', lat: 30.28, lon: -97.76, headingDeg: 20, fovDeg: 72, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  try {
+    _setCctvCoverageStateForTest({
+      records: [wide, tight, mid],
+      activeCameraId: 'wide-cam',
+      fov: 'all',
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(cctvLayer.getParams().fov, 'all');
+    assert.equal(wide.billboard.show, true, 'All restores the current catalog');
+    assert.equal(tight.billboard.show, true);
+    assert.equal(mid.billboard.show, true);
+
+    _setCctvCoverageStateForTest({
+      records: [wide, tight, mid],
+      activeCameraId: 'wide-cam',
+      fov: 'wide',
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(wide.billboard.show, true, 'fovDeg 82 matches Wide');
+    assert.equal(tight.billboard.show, false, 'fovDeg 66 fails Wide');
+    assert.equal(tight.coverageEntities[0].show, false);
+    assert.equal(mid.billboard.show, false, '70–75 band is not Wide');
+
+    _setCctvCoverageStateForTest({
+      records: [wide, tight, mid],
+      activeCameraId: 'wide-cam',
+      fov: 'tight',
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(tight.billboard.show, true, 'fovDeg 66 matches Tight');
+    assert.equal(wide.billboard.show, false, 'fovDeg 82 fails Tight');
+    assert.equal(mid.billboard.show, false, '70–75 band is not Tight');
+
+    _setCctvCoverageStateForTest({
+      records: [wide, tight, mid],
+      activeCameraId: 'tight-cam',
+      fov: 'wide',
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    tight.billboard.show = false;
+    applyCctvCatalogVisibility();
+    assert.equal(tight.billboard.show, true, 'selected tight camera stays');
+    assert.equal(wide.billboard.show, true);
+    assert.equal(mid.billboard.show, false);
+  } finally {
+    _setCctvCoverageStateForTest({
+      enabled: false,
+      fov: 'all',
+    });
+  }
+});
+
 test('heading-confidence visibility re-applies from memory and does not refetch sources or health', () => {
   const source = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), 'cctv.js'),
@@ -1612,6 +1690,28 @@ test('heading-confidence visibility re-applies from memory and does not refetch 
   assert.match(source, /params\.headingConfidence != null/);
   assert.match(source, /applyCatalogVisibility\(\)/);
   assert.doesNotMatch(source, /\/api\/cctv\/heading/);
+});
+
+test('FOV visibility re-applies from memory and does not refetch sources or health', () => {
+  const source = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'cctv.js'),
+    'utf8',
+  );
+  assert.match(source, /from '\.\/cctvFovFilter\.js'/);
+  assert.match(source, /sourceMatchesCctvFov/);
+  assert.match(source, /_fovFilter/);
+  const apply = extractNamedFunction(source, 'applyCatalogVisibility');
+  assert.doesNotMatch(apply, /loadCameraSources/);
+  assert.doesNotMatch(apply, /syncHealthState/);
+  assert.doesNotMatch(apply, /SOURCE_ENDPOINT|HEALTH_ENDPOINT/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/sources/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/health/);
+  assert.match(apply, /refreshHorizonCulling/);
+  assert.match(apply, /refreshCoverageStyles/);
+  assert.match(apply, /refreshAmbientCards/);
+  assert.match(source, /params\.fov != null/);
+  assert.match(source, /applyCatalogVisibility\(\)/);
+  assert.doesNotMatch(source, /\/api\/cctv\/fov/);
 });
 
 test('calibration-source visibility re-applies from memory and does not refetch sources or health', () => {
