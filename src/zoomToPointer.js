@@ -6,10 +6,15 @@
  * Lock-tilt / look / rotate are out of scope.
  */
 import { isPickedWorldPosition } from './data/scenePick.js';
+import {
+  INVERT_SCROLL_STORAGE_KEY,
+  readInvertScroll,
+  signedWheelZoomDelta,
+} from './invertScroll.js';
 
 export const ZOOM_TO_POINTER_STORAGE_KEY = 'meridian.zoomToPointer';
 export const ZOOM_TO_POINTER_DEFAULT = 'off';
-export const INVERT_SCROLL_STORAGE_KEY = 'meridian.invertScroll';
+export { INVERT_SCROLL_STORAGE_KEY };
 
 /**
  * @param {unknown} value
@@ -72,12 +77,7 @@ export function writeZoomToPointerPreference(storage, value) {
  * @returns {boolean}
  */
 export function invertScrollEnabled(storage) {
-  try {
-    const raw = storage?.getItem?.(INVERT_SCROLL_STORAGE_KEY);
-    return raw === 'on' || raw === '1' || raw === true || raw === 'true';
-  } catch {
-    return false;
-  }
+  return readInvertScroll(storage);
 }
 
 /**
@@ -86,9 +86,7 @@ export function invertScrollEnabled(storage) {
  * @returns {number}
  */
 export function signedWheelDelta(deltaY, invertScroll = false) {
-  const y = Number(deltaY);
-  if (!Number.isFinite(y) || y === 0) return 0;
-  return invertScroll ? -y : y;
+  return signedWheelZoomDelta(deltaY, invertScroll);
 }
 
 /**
