@@ -36,6 +36,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the adsb.lol military feed (ODbL). The Vite plugin forwards to
   `src/data/adsblolMil.js`: 12s memory cache, stale-on-error, User-Agent
   `Meridian-adsblol-proxy/1.0`. This extract does not wrap AIS or enable OpenSky.
+- Added dedicated Vercel Node function `api/cctv/[...path].js` for the
+  existing public CCTV catalog/proxy (`sources`, `health`, `stream`,
+  `frame`/`media`). Helpers live in `src/data/cctvProxy.js`; Vite still
+  forwards the same plugin. Does not wrap AIS or Google text-search.
 
 ### Fixed
 

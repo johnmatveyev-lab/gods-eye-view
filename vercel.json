@@ -12,6 +12,10 @@
     "api/gbfs/[...target].js": {
       "maxDuration": 15
     },
+    "api/cctv/[...path].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
     "api/billing/[...path].js": {
       "maxDuration": 15
     },
