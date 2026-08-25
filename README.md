@@ -50,6 +50,7 @@ The dev server binds to **localhost** — your keys stay on your machine.
 
 - **Cockpit view:** Ride inside a tracked flight.
 - **Contacts:** A 250 km roster of nearby live aircraft. The Contacts control shows and hides that existing list.
+- **Watch list:** Pin up to 10 aircraft callsigns or hexes from the selected card. Watched idents highlight when they reappear in the current flights payload.
 - **Click-to-track:** Camera locks on, draws a fading trail, surfaces metadata. Display **Trails** hides that path without stopping track.
 - **Voice whiteboard:** Speak annotations onto the world. Clear them from the globe chrome when marks are present.
 - **3D hangar:** Per-class aircraft models as you close in.

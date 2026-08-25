@@ -38,6 +38,7 @@ import {
   subscribeTrailsEnabled,
   trailDrawingVisible,
 } from './trailPreference.js';
+import { isWatchHighlighted, subscribeWatchlist } from './watchlist.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
 import {
   screenProjectedRotation,
@@ -130,6 +131,32 @@ const GROUND_SCALE = 0.8;
 function _fleetBillboardColor(icao24) {
   return isMilitaryIcao(icao24) ? MIL_TINT : Cesium.Color.WHITE;
 }
+
+/** Existing track highlight (cyan / 24px) for a watched ident in this payload. */
+function _watchHighlightActive(icao24, info = _flightData.get(icao24)) {
+  return icao24 !== _trackedIcao && isWatchHighlighted({
+    icao24,
+    callsign: info?.callsign,
+  });
+}
+
+function _contactHighlightSize(icao24, info) {
+  return icao24 === _trackedIcao || _watchHighlightActive(icao24, info) ? 24 : 20;
+}
+
+function _contactHighlightColor(icao24, info) {
+  if (icao24 === _trackedIcao || _watchHighlightActive(icao24, info)) return Cesium.Color.CYAN;
+  return _fleetBillboardColor(icao24);
+}
+
+function _refreshWatchHighlights() {
+  if (!_billboards) return;
+  for (const [icao24, bb] of _billboards) {
+    if (icao24 === _trackedIcao) continue;
+    _applyFleetBillboardPresentation(icao24, bb);
+  }
+}
+subscribeWatchlist(_refreshWatchHighlights);
 
 /** Fleet billboard scale: per-class scale, ×GROUND_SCALE while grounded. */
 function _fleetBillboardScale(icao24, klass) {
@@ -498,11 +525,11 @@ function _applyFleetBillboardPresentation(icao24, bb) {
 
   const meta = _flightData.get(icao24);
   bb.image = aircraftIcon(_iconKind(icao24, meta?.klass), bb._gevIconLarge ? TRACKED_ICON_PX : undefined);
-  bb.width = icao24 === _trackedIcao ? 24 : 20;
-  bb.height = icao24 === _trackedIcao ? 24 : 20;
+  bb.width = _contactHighlightSize(icao24, meta);
+  bb.height = _contactHighlightSize(icao24, meta);
   bb.scale = _fleetBillboardScale(icao24, meta?.klass) * limbScale;
   bb.scaleByDistance = _normalBillboardScaleByDistance();
-  bb.color = _fleetBillboardColor(icao24).withAlpha(bb.color?.alpha ?? 1);
+  bb.color = _contactHighlightColor(icao24, meta).withAlpha(bb.color?.alpha ?? 1);
 }
 
 /**
@@ -2771,7 +2798,7 @@ function _fleetTick() {
     const isCockpitNear = _cockpitContactMode && _cockpitNearContacts.has(icao24);
     const baseColor = _cockpitContactMode && !isCockpitNear
       ? (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR)
-      : _fleetBillboardColor(icao24);
+      : _contactHighlightColor(icao24, info);
     const treatment = applyAircraftBillboardTreatment({
       billboard: bb,
       baseScale: _cockpitContactMode && !isCockpitNear ? 1 : _fleetBillboardScale(icao24, info?.klass),
@@ -4487,7 +4514,7 @@ const flightsLayer = {
           if (!isTracked) {
             // Refresh affiliation hue without clobbering the tick-owned
             // freshness × focus × horizon alpha composition.
-            bb.color = _fleetBillboardColor(icao24).withAlpha(bb.color?.alpha ?? 1);
+            bb.color = _contactHighlightColor(icao24, meta).withAlpha(bb.color?.alpha ?? 1);
           }
           if (prevMeta?.klass !== meta.klass || groundFlipped || _cockpitContactMode) {
             _applyFleetBillboardPresentation(icao24, bb);
@@ -4499,13 +4526,13 @@ const flightsLayer = {
           const bb = _billboardCollection.add({
             position,
             image: aircraftIcon(_iconKind(icao24, meta.klass)),
-            width: isTracked ? 24 : 20,
-            height: isTracked ? 24 : 20,
+            width: _contactHighlightSize(icao24, meta),
+            height: _contactHighlightSize(icao24, meta),
             scale: _fleetBillboardScale(icao24, meta.klass),
             // Screen-projected rotation lands on the next fleet tick.
             rotation: 0,
             alignedAxis: Cesium.Cartesian3.ZERO,
-            color: isTracked ? Cesium.Color.CYAN : _fleetBillboardColor(icao24),
+            color: _contactHighlightColor(icao24, meta),
             sizeInMeters: false,
             scaleByDistance: _normalBillboardScaleByDistance(),
             // Grounded/near-surface planes sit at/below the photoreal tile

@@ -20,6 +20,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Watch list of up to 10 public aircraft idents (callsign or hex
+  already on the selected contact). Add from the selected card; remove from
+  the list. When a watched ident is in the current flights payload it uses
+  the existing track highlight. Clicking a row tracks that contact if
+  present, otherwise toasts `not in view` without inventing a position. The
+  list persists as `meridian.watchlist`. No `/api`, person-search, or OpenSky.
 - Camera chrome shows **Stop tracking** while a contact is followed. The
   control calls the existing untrack/clear-target action and leaves the camera
   where it is. Hidden when nothing is tracked. Home still does the full

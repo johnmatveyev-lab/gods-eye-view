@@ -13,6 +13,7 @@ import {
   subscribeTrailsEnabled,
   trailDrawingVisible,
 } from './trailPreference.js';
+import { isWatchHighlighted, subscribeWatchlist } from './watchlist.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
 import {
   screenProjectedRotation,
@@ -402,7 +403,31 @@ function _militaryBillboardScale(icao24) {
   return BILLBOARD_SCALE * (CLASS_SCALE_2D[meta?.klass] || 1) * (meta?.onGround ? GROUND_SCALE : 1);
 }
 
-/** Apply the current normal/cockpit visual contract to one owned fleet billboard. */
+function _watchHighlightActive(icao24, info = _flightData.get(icao24)) {
+  return icao24 !== _trackedIcao && isWatchHighlighted({
+    icao24,
+    callsign: info?.callsign,
+  });
+}
+
+function _contactHighlightSize(icao24, info) {
+  return icao24 === _trackedIcao || _watchHighlightActive(icao24, info) ? 24 : 20;
+}
+
+function _contactHighlightColor(icao24, info) {
+  if (icao24 === _trackedIcao || _watchHighlightActive(icao24, info)) return TRACKED_ICON_COLOR;
+  return MIL_ICON_COLOR;
+}
+
+function _refreshWatchHighlights() {
+  if (!_billboards) return;
+  for (const [icao24, bb] of _billboards) {
+    if (icao24 === _trackedIcao) continue;
+    _applyFleetBillboardPresentation(icao24, bb);
+  }
+}
+subscribeWatchlist(_refreshWatchHighlights);
+
 function _applyFleetBillboardPresentation(icao24, bb) {
   if (!bb) return;
   const limbScale = _billboardLimbScale.get(bb) ?? 1;
@@ -422,11 +447,11 @@ function _applyFleetBillboardPresentation(icao24, bb) {
 
   const meta = _flightData.get(icao24);
   bb.image = aircraftIcon(_iconKind(icao24, meta?.klass), bb._gevIconLarge ? TRACKED_ICON_PX : undefined);
-  bb.width = icao24 === _trackedIcao ? 24 : 20;
-  bb.height = icao24 === _trackedIcao ? 24 : 20;
+  bb.width = _contactHighlightSize(icao24, meta);
+  bb.height = _contactHighlightSize(icao24, meta);
   bb.scale = _militaryBillboardScale(icao24) * limbScale;
   bb.scaleByDistance = _normalBillboardScaleByDistance();
-  bb.color = MIL_ICON_COLOR.withAlpha(bb.color?.alpha ?? 1);
+  bb.color = _contactHighlightColor(icao24, meta).withAlpha(bb.color?.alpha ?? 1);
 }
 
 /** Refresh the AIR-only Cockpit near band independently from model admission. */
@@ -1974,7 +1999,7 @@ function _fleetTick() {
       billboard: bb,
       baseScale: _cockpitContactMode && !isCockpitNear ? 1 : _militaryBillboardScale(icao24),
       baseAlpha: _missingPolls.get(icao24) ? 0.45 : 1,
-      baseColor: MIL_ICON_COLOR,
+      baseColor: _contactHighlightColor(icao24, _flightData.get(icao24)),
       focusFactor: focus.factor,
       cameraDistanceM,
       cameraHeightM: camera.positionCartographic?.height,
@@ -3134,13 +3159,13 @@ const militaryFlightsLayer = {
           const bb = _billboardCollection.add({
             position,
             image: aircraftIcon(_iconKind(icao24, meta.klass)),
-            width: isTracked ? 24 : 20,
-            height: isTracked ? 24 : 20,
+            width: _contactHighlightSize(icao24, meta),
+            height: _contactHighlightSize(icao24, meta),
             scale: BILLBOARD_SCALE * (CLASS_SCALE_2D[meta.klass] || 1) * (meta.onGround ? GROUND_SCALE : 1),
             // Screen-projected rotation lands on the next fleet tick.
             rotation: 0,
             alignedAxis: Cesium.Cartesian3.ZERO,
-            color: isTracked ? TRACKED_ICON_COLOR : MIL_ICON_COLOR,
+            color: _contactHighlightColor(icao24, meta),
             sizeInMeters: false,
             scaleByDistance: _normalBillboardScaleByDistance(),
             // Grounded/near-surface planes sit at/below the photoreal tile

@@ -16,6 +16,7 @@ const VESSEL_OVERLAY_SOURCE_ID = 'ais-live-vessels';
 export const SELECTED_CONTACT_IDENT_ROOT_ID = 'selected-contact-ident';
 export const SELECTED_CONTACT_IDENT_VALUE_ID = 'selected-contact-ident-value';
 export const SELECTED_CONTACT_IDENT_COPY_ID = 'selected-contact-ident-copy';
+export const SELECTED_CONTACT_IDENT_WATCH_ID = 'selected-contact-ident-watch';
 
 const COPYABLE_LAYER_IDS = Object.freeze({
   flights: 'aircraft',
@@ -34,12 +35,14 @@ const TITLE_ROW_RATIO = 0.38;
 const TITLE_ROW_MIN_PX = 22;
 const TITLE_ROW_MAX_PX = 28;
 const COPY_BUTTON_SIZE_PX = 22;
+const WATCH_BUTTON_SIZE_PX = 22;
 
 let _viewer = null;
 let _showToast = null;
 let _root = null;
 let _valueButton = null;
 let _copyButton = null;
+let _watchButton = null;
 let _getPaintRect = null;
 let _getActiveTrackedId = null;
 let _getSelectedContext = getSelectedEntityContext;
@@ -216,6 +219,7 @@ export function initSelectedContactIdent(options = {}) {
   _root = options.root || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_ROOT_ID);
   _valueButton = options.identButton || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_VALUE_ID);
   _copyButton = options.copyButton || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_COPY_ID);
+  _watchButton = options.watchButton || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_WATCH_ID);
   if (!_root || !_valueButton || !_copyButton) return;
 
   _valueButton.addEventListener('click', onCopyClick);
@@ -251,6 +255,7 @@ export function destroySelectedContactIdent() {
   _root = null;
   _valueButton = null;
   _copyButton = null;
+  _watchButton = null;
   _clipboard = null;
   _active = null;
   _getPaintRect = null;
@@ -277,6 +282,12 @@ export function syncSelectedContactIdent() {
   _root.removeAttribute?.('hidden');
   _root.dataset.kind = selection.kind;
   _root.dataset.ident = selection.ident;
+  if (_watchButton) {
+    const showWatch = selection.kind === 'aircraft';
+    _watchButton.hidden = !showWatch;
+    if (showWatch) _watchButton.removeAttribute?.('hidden');
+    else _watchButton.setAttribute?.('hidden', '');
+  }
   _valueButton.textContent = selection.ident;
   _valueButton.setAttribute('aria-label', `Copy ${selection.ident}`);
   _copyButton.setAttribute('aria-label', `Copy ${selection.ident}`);
@@ -328,6 +339,10 @@ function hideControl() {
   delete _root.dataset?.kind;
   delete _root.dataset?.ident;
   if (_valueButton) _valueButton.textContent = '';
+  if (_watchButton) {
+    _watchButton.hidden = true;
+    _watchButton.setAttribute?.('hidden', '');
+  }
 }
 
 function cardPaintRect(selection) {
@@ -351,7 +366,10 @@ function positionControl(selection) {
   );
   _root.style.left = `${Math.round(rect.x)}px`;
   _root.style.top = `${Math.round(rect.y)}px`;
-  _root.style.width = `${Math.round(rect.w + COPY_BUTTON_SIZE_PX + 4)}px`;
+  const watchExtra = selection?.kind === 'aircraft' && _watchButton && !_watchButton.hidden
+    ? WATCH_BUTTON_SIZE_PX
+    : 0;
+  _root.style.width = `${Math.round(rect.w + COPY_BUTTON_SIZE_PX + watchExtra + 4)}px`;
   _root.style.height = `${titleH}px`;
   if (_valueButton) {
     _valueButton.style.width = `${Math.max(8, Math.round(rect.w - 8))}px`;

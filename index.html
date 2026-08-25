@@ -22,6 +22,9 @@
     <button type="button" id="selected-contact-ident-copy" class="selected-contact-ident-copy" aria-label="Copy ident" title="Copy ident">
       <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
     </button>
+    <button type="button" id="selected-contact-ident-watch" class="selected-contact-ident-watch" hidden aria-label="Watch ident" title="Watch ident">
+      <span class="material-symbols-outlined" aria-hidden="true">bookmark</span>
+    </button>
   </div>
   <div id="world-overlay-actions" class="world-overlay-accessibility" role="region" aria-label="Visible map targets">
     <div id="world-overlay-action-list"></div>
@@ -67,6 +70,17 @@
       <span class="material-symbols-outlined" aria-hidden="true">radar</span>
       <span class="contacts-roster-toggle-label">CONTACTS</span>
     </button>
+    <button
+      id="watchlist-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="watchlist-panel"
+      aria-label="Watch list — pinned aircraft idents"
+      title="Watch list of pinned aircraft idents"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">visibility</span>
+      <span class="watchlist-toggle-label">WATCH</span>
+    </button>
     <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>
@@ -93,6 +107,10 @@
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
   </nav>
+  <aside id="watchlist-panel" hidden>
+    <div class="watchlist-header">WATCH</div>
+    <div id="watchlist-items" role="list"></div>
+  </aside>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
     <span id="global-loading-detail"></span>
