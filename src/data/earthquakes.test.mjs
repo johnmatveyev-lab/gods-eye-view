@@ -10,12 +10,14 @@ import {
   DEFAULT_EARTHQUAKE_EVENT_TYPES,
   DEFAULT_EARTHQUAKE_FELT_ONLY,
   DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
+  DEFAULT_EARTHQUAKE_NETWORKS,
   DEFAULT_EARTHQUAKE_PAGER_ALERTS,
   DEFAULT_EARTHQUAKE_REVIEWED_ONLY,
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
   EARTHQUAKE_DEPTH_BANDS,
   EARTHQUAKE_EVENT_TYPES,
   EARTHQUAKE_MAGNITUDE_FLOORS,
+  EARTHQUAKE_NETWORKS,
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
   EARTHQUAKE_PAGER_ALERTS,
@@ -29,6 +31,7 @@ import {
   filterEarthquakeFeaturesByEventType,
   filterEarthquakeFeaturesByFeltReports,
   filterEarthquakeFeaturesByMagnitudeFloor,
+  filterEarthquakeFeaturesByNetwork,
   filterEarthquakeFeaturesByPagerAlert,
   filterEarthquakeFeaturesByReviewedStatus,
   filterEarthquakeFeaturesByTimeWindow,
@@ -37,6 +40,7 @@ import {
   mapAnalystRecord,
   normalizeEarthquakeEventTypes,
   normalizeEarthquakeFeltOnly,
+  normalizeEarthquakeNetworks,
   normalizeEarthquakePagerAlerts,
   normalizeEarthquakeReviewedOnly,
   normalizeEarthquakeTimeWindowHours,
@@ -44,6 +48,7 @@ import {
   selectEarthquakeOverlayCohort,
   toggleEarthquakeDepthBand,
   toggleEarthquakeEventType,
+  toggleEarthquakeNetwork,
   toggleEarthquakePagerAlert,
 } from './earthquakes.js';
 import { DataLayerManager } from './manager.js';
@@ -2600,6 +2605,343 @@ test('Felt only chip sits next to mag/depth/time/tsunami/PAGER/reviewed/type, pe
     assert.equal(layer.getParams().tsunamiOnly, false);
     assert.equal(layer.getParams().pagerAlerts, 'GYORN');
     assert.equal(layer.getParams().eventTypes, 'QERO');
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 174: contributing-network chips (client-side, same USGS all_day) ─────
+
+function netFeature(id, mag, net, {
+  depthKm = 8.2,
+  tsunami,
+  alert,
+  type,
+  status,
+  felt,
+  time = 1_753_600_000_000,
+} = {}) {
+  const properties = { mag, place: String(id), time };
+  if (net !== undefined) properties.net = net;
+  if (tsunami !== undefined) properties.tsunami = tsunami;
+  if (alert !== undefined) properties.alert = alert;
+  if (type !== undefined) properties.type = type;
+  if (status !== undefined) properties.status = status;
+  if (felt !== undefined) properties.felt = felt;
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties,
+  };
+}
+
+const MIXED_NETWORK_DAY = Object.freeze({
+  features: Object.freeze([
+    netFeature('us-lo', 3.1, 'us'),
+    netFeature('us-sig', 5.4, 'US', { depthKm: 80 }),
+    netFeature('ak-lo', 4.2, 'ak'),
+    netFeature('ci-lo', 3.6, 'ci'),
+    netFeature('nc-lo', 4.1, 'nc'),
+    netFeature('tx-rare', 3.3, 'tx'),
+    netFeature('missing-net', 4.0),
+    netFeature('us-micro', 2.4, 'us'),
+    netFeature('us-tsunami', 4.4, 'us', {
+      tsunami: 1,
+      alert: 'green',
+      type: 'earthquake',
+      status: 'reviewed',
+      felt: 6,
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+    netFeature('tx-tsunami', 4.0, 'tx', { tsunami: 1 }),
+    netFeature('us-old', 4.6, 'us', { time: 1_800_000_000_000 - 20 * HOUR_MS }),
+    netFeature('us-fresh', 4.7, 'us', {
+      alert: 'green',
+      status: 'reviewed',
+      felt: 9,
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+  ]),
+});
+
+test('network chips default all on and match the current mag/depth/time/tsunami/PAGER/reviewed/type/felt view', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_NETWORKS, 'UACNO');
+  assert.deepEqual([...EARTHQUAKE_NETWORKS], ['us', 'ak', 'ci', 'nc', 'other']);
+  assert.equal(normalizeEarthquakeNetworks(undefined), 'UACNO');
+  assert.equal(normalizeEarthquakeNetworks('U'), 'U');
+  assert.equal(normalizeEarthquakeNetworks('bogus'), null);
+  assert.equal(toggleEarthquakeNetwork('UACNO', 'us'), 'ACNO');
+  assert.equal(toggleEarthquakeNetwork('ACNO', 'us'), 'UACNO');
+  assert.equal(toggleEarthquakeNetwork('U', 'us'), '0');
+
+  const current = filterEarthquakeFeatures(MIXED_NETWORK_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    timeWindowHours: 24,
+    tsunamiOnly: false,
+    reviewedOnly: false,
+    feltOnly: false,
+    pagerAlerts: DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+  }).map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByNetwork(MIXED_NETWORK_DAY.features, DEFAULT_EARTHQUAKE_NETWORKS)
+      .map((feature) => feature.id),
+    MIXED_NETWORK_DAY.features.map((feature) => feature.id),
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_NETWORK_DAY.features, {
+      magnitudeFloor: 2.5,
+      networks: DEFAULT_EARTHQUAKE_NETWORKS,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_NETWORK_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().networks, 'UACNO');
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('US off hides US-net events; Other off hides unlabeled', async () => {
+  const noUs = filterEarthquakeFeaturesByNetwork(MIXED_NETWORK_DAY.features, 'ACNO')
+    .map((feature) => feature.id);
+  assert.ok(noUs.includes('ak-lo'));
+  assert.ok(noUs.includes('ci-lo'));
+  assert.ok(noUs.includes('tx-rare'));
+  assert.ok(noUs.includes('missing-net'));
+  assert.ok(!noUs.includes('us-lo'));
+  assert.ok(!noUs.includes('us-sig'));
+  assert.ok(!noUs.includes('us-tsunami'));
+
+  const noOther = filterEarthquakeFeaturesByNetwork(MIXED_NETWORK_DAY.features, 'UACN')
+    .map((feature) => feature.id);
+  assert.ok(noOther.includes('us-lo'));
+  assert.ok(noOther.includes('ak-lo'));
+  assert.ok(!noOther.includes('tx-rare'));
+  assert.ok(!noOther.includes('missing-net'));
+  assert.ok(!noOther.includes('tx-tsunami'));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_NETWORK_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ networks: 'ACNO' }), true);
+    let ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('ak-lo'));
+    assert.ok(ids.includes('tx-rare'));
+    assert.ok(!ids.includes('us-lo'));
+    assert.equal(layer.setParams({ networks: 'U' }), true);
+    ids = entityIds(viewer._dataSources[0]);
+    assert.deepEqual(ids, [
+      'us-fresh',
+      'us-lo',
+      'us-old',
+      'us-sig',
+      'us-tsunami',
+    ]);
+    assert.ok(!ids.includes('ak-lo'));
+    assert.ok(!ids.includes('tx-rare'));
+    assert.ok(!layer.getListRecords().some((row) => row.id.startsWith('tx-')));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('selected event stays visible when its network chip is off', async () => {
+  assert.deepEqual(
+    filterEarthquakeFeaturesByNetwork(MIXED_NETWORK_DAY.features, 'U', {
+      selectedId: 'tx-rare',
+    }).map((feature) => feature.id),
+    [
+      'us-lo',
+      'us-sig',
+      'tx-rare',
+      'us-micro',
+      'us-tsunami',
+      'us-old',
+      'us-fresh',
+    ],
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_NETWORK_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ selectedId: 'tx-rare', networks: 'U' }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('tx-rare'));
+    assert.ok(ids.includes('us-lo'));
+    assert.ok(!ids.includes('ak-lo'));
+    assert.ok(layer.getListRecords().some((row) => row.id === 'tx-rare'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('network chips AND with mag/depth/time/tsunami/PAGER/reviewed/type/felt and redraw from cached geojson', async () => {
+  const now = 1_800_000_000_000;
+  const anded = filterEarthquakeFeatures(MIXED_NETWORK_DAY.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 1,
+    tsunamiOnly: true,
+    reviewedOnly: true,
+    feltOnly: true,
+    pagerAlerts: 'G',
+    eventTypes: 'Q',
+    networks: 'U',
+    now,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['us-tsunami']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(MIXED_NETWORK_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({
+      magnitudeFloor: 4.0,
+      depthBands: 'S',
+      timeWindowHours: 1,
+      tsunamiOnly: true,
+      reviewedOnly: true,
+      feltOnly: true,
+      pagerAlerts: 'G',
+      eventTypes: 'Q',
+      networks: 'U',
+    }), true);
+    assert.equal(feed.fetches, 1, 'network chips must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['us-tsunami']);
+    assert.equal(layer.getParams().networks, 'U');
+    assert.equal(layer.getParams().eventTypes, 'Q');
+    assert.equal(layer.getParams().feltOnly, true);
+    assert.equal(layer.getParams().reviewedOnly, true);
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+    assert.equal(layer.getParams().timeWindowHours, 1);
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('USGS refresh keeps the network chip set applied to the new payload', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const first = stubUsgs(MIXED_NETWORK_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ networks: 'U' }), true);
+    assert.ok(entityIds(viewer._dataSources[0]).every((id) => id.startsWith('us-')));
+    first.restore();
+    const second = stubUsgs({
+      features: [
+        netFeature('fresh-us', 3.3, 'us'),
+        netFeature('fresh-tx', 4.4, 'tx'),
+        netFeature('us-lo', 3.1, 'us'),
+      ],
+    });
+    try {
+      assert.equal(await layer.update(viewer), true);
+      assert.equal(layer.getParams().networks, 'U');
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['fresh-us', 'us-lo']);
+      assert.ok(!entityIds(viewer._dataSources[0]).includes('fresh-tx'));
+    } finally {
+      second.restore();
+    }
+  } finally {
+    first.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('network chips sit next to mag/depth/time/tsunami/PAGER/reviewed/type/felt, persist, and hide with the layer', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('./earthquakeNetworkFilter.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-network-chips"/);
+  assert.match(html, /data-earthquake-network="us"/);
+  assert.match(html, /data-earthquake-network="ak"/);
+  assert.match(html, /data-earthquake-network="ci"/);
+  assert.match(html, /data-earthquake-network="nc"/);
+  assert.match(html, /data-earthquake-network="other"/);
+  assert.match(html, /id="earthquake-type-chips"/);
+  assert.match(html, /id="earthquake-felt-chips"/);
+  assert.match(html, /id="earthquake-reviewed-chips"/);
+  assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(ui, /earthquake-network-chips|data-earthquake-network/);
+  assert.match(ui, /_earthquakeNetworkChips\.hidden = !enabled/);
+  assert.match(css, /earthquake-network-chip/);
+  assert.match(helper, /properties\.net/);
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+  assert.doesNotMatch(helper, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const nets = chips.filter((chip) => chip.id.startsWith('network-'));
+    assert.deepEqual(nets.map((chip) => chip.label), ['US', 'AK', 'CI', 'NC', 'Other']);
+    assert.ok(nets.every((chip) => chip.active === true));
+    assert.ok(nets.every((chip) => chip.group === 'Network'));
+    assert.equal(layer.getParams().networks, 'UACNO');
+    assert.equal(layer.setParams({ networks: 'U' }), true);
+    assert.deepEqual(
+      layer.getRowControls().chips.filter((chip) => chip.id.startsWith('network-')).map((chip) => chip.active),
+      [true, false, false, false, false],
+    );
+    assert.equal(layer.setParams({ networks: 'bogus' }), false);
+    assert.equal(layer.getParams().networks, 'U');
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(layer.getParams().reviewedOnly, false);
+    assert.equal(layer.getParams().feltOnly, false);
+    assert.equal(layer.getParams().eventTypes, 'QERO');
+    assert.equal(layer.getParams().pagerAlerts, 'GYORN');
   } finally {
     layer.destroy(viewer);
   }
