@@ -22,6 +22,7 @@ export function adaptFirmsRecords(records) {
     const lat = Number(record?.lat);
     const lon = Number(record?.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    const daynight = typeof record.daynight === 'string' ? record.daynight.trim().toUpperCase() : '';
     fires.push({
       index: fires.length,
       lat,
@@ -29,7 +30,8 @@ export function adaptFirmsRecords(records) {
       frp: finiteNumber(record.frp),
       confidence: normalizeConfidence(record.confidence),
       brightness: finiteNumber(record.brightness),
-      night: record.daynight === 'N',
+      night: daynight === 'N',
+      daynight: daynight === 'N' || daynight === 'D' ? daynight : '',
       acqMs: parseAcquisitionMs(record.acqDate, record.acqTime, acqCache),
       sensor: normalizeSensor(record.instrument),
       satellite: typeof record.satellite === 'string' ? record.satellite : '',

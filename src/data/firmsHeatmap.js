@@ -19,6 +19,11 @@ import {
   unregisterPickOwner,
 } from './pickRegistry.js';
 import { adaptFirmsRecords } from './firmsAdapt.js';
+import {
+  filterFiresByDayNight,
+  fireMeetsDayNight,
+  firmsDayNightChipModels,
+} from './firmsDayNightFilter.js';
 import { fireAnchorHeight, warmFireAnchorFloors } from './fireAnchors.js';
 import { horizonOccluder } from './iconOrientation.js';
 import {
@@ -245,9 +250,11 @@ export function createFirmsHeatmapLayer({
   let _error = null;
   let _fires = [];
   let _firesByFrp = [];
-  /** Last-good fetch stays in `_fires`; `_firesByFrp` is the floor-filtered view. */
+  /** Last-good fetch stays in `_fires`; `_firesByFrp` is the operator-filtered view. */
   let _frpFloor = 'all';
   let _confidenceFloor = 'all';
+  let _showDay = true;
+  let _showNight = true;
   let _rowControlsListener = null;
   let _count = 0;
   let _cellCount = 0;
@@ -375,6 +382,8 @@ export function createFirmsHeatmapLayer({
       _firesByFrp = [];
       _frpFloor = 'all';
       _confidenceFloor = 'all';
+      _showDay = true;
+      _showNight = true;
       _rowControlsListener = null;
       _cellCacheByGrid.clear();
       _count = 0;
@@ -536,24 +545,40 @@ export function createFirmsHeatmapLayer({
     },
 
     /**
-     * FRP / confidence floors for the data-panel chips. Re-filters in-memory
-     * `_fires` — never hits /api/firms. The two floors AND.
-     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number }} [params]
+     * FRP / confidence / Day | Night chips. Re-filters in-memory `_fires` —
+     * never hits /api/firms. The three filters AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, showDay?: boolean, showNight?: boolean }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
       const hasFrp = Object.hasOwn(params, 'frpFloor');
       const hasConf = Object.hasOwn(params, 'confidenceFloor');
-      if (!hasFrp && !hasConf) return true;
+      const hasDay = Object.hasOwn(params, 'showDay');
+      const hasNight = Object.hasOwn(params, 'showNight');
+      if (!hasFrp && !hasConf && !hasDay && !hasNight) return true;
       return applyVisibleFloors({
         frpFloor: hasFrp ? params.frpFloor : undefined,
         confidenceFloor: hasConf ? params.confidenceFloor : undefined,
+        showDay: hasDay ? params.showDay : undefined,
+        showNight: hasNight ? params.showNight : undefined,
       });
     },
 
-    /** @returns {{ frpFloor: 'all'|'10'|'50'|'100', confidenceFloor: 'all'|'0.5'|'0.8' }} */
+    /**
+     * @returns {{
+     *   frpFloor: 'all'|'10'|'50'|'100',
+     *   confidenceFloor: 'all'|'0.5'|'0.8',
+     *   showDay: boolean,
+     *   showNight: boolean,
+     * }}
+     */
     getParams() {
-      return { frpFloor: _frpFloor, confidenceFloor: _confidenceFloor };
+      return {
+        frpFloor: _frpFloor,
+        confidenceFloor: _confidenceFloor,
+        showDay: _showDay,
+        showNight: _showNight,
+      };
     },
 
     getRowControls() {
@@ -575,6 +600,7 @@ export function createFirmsHeatmapLayer({
             group: 'Conf',
             params: { confidenceFloor: chip.id },
           })),
+          ...firmsDayNightChipModels({ showDay: _showDay, showNight: _showNight }),
         ],
       };
     },
@@ -680,24 +706,29 @@ export function createFirmsHeatmapLayer({
 
   /** Rebuild the FRP-sorted visible index from last-good `_fires`. */
   function applyVisibleIndex() {
-    const visible = filterFiresByConfidenceFloor(
-      filterFiresByFrpFloor(_fires, _frpFloor),
-      _confidenceFloor,
+    const visible = filterFiresByDayNight(
+      filterFiresByConfidenceFloor(
+        filterFiresByFrpFloor(_fires, _frpFloor),
+        _confidenceFloor,
+      ),
+      { showDay: _showDay, showNight: _showNight },
     );
     _firesByFrp = visible.sort((a, b) => b.frp - a.frp);
     _count = visible.length;
   }
 
-  /** True when the detection clears both operator floors. */
+  /** True when the detection clears FRP, confidence, and Day | Night. */
   function fireMeetsVisibleFloors(fire) {
     const minMw = frpFloorThresholdMw(_frpFloor);
     if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
-    return fireMeetsConfidenceFloor(fire, _confidenceFloor);
+    if (!fireMeetsConfidenceFloor(fire, _confidenceFloor)) return false;
+    return fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight });
   }
 
   /**
-   * Change FRP and/or confidence floors and re-render from memory. Never fetches.
-   * @param {{ frpFloor?: *, confidenceFloor?: * }} next
+   * Change FRP / confidence / Day | Night and re-render from memory.
+   * Never fetches.
+   * @param {{ frpFloor?: *, confidenceFloor?: *, showDay?: *, showNight?: * }} next
    * @returns {boolean}
    */
   function applyVisibleFloors(next = {}) {
@@ -711,6 +742,16 @@ export function createFirmsHeatmapLayer({
       const floor = normalizeConfidenceFloor(next.confidenceFloor);
       if (floor !== _confidenceFloor) changed = true;
       _confidenceFloor = floor;
+    }
+    if (next.showDay !== undefined) {
+      const showDay = next.showDay !== false;
+      if (showDay !== _showDay) changed = true;
+      _showDay = showDay;
+    }
+    if (next.showNight !== undefined) {
+      const showNight = next.showNight !== false;
+      if (showNight !== _showNight) changed = true;
+      _showNight = showNight;
     }
     applyVisibleIndex();
     _cellCacheByGrid.clear();
