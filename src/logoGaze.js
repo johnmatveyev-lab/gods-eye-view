@@ -1,3 +1,5 @@
+import { isReduceMotionEnabled } from './reduceMotion.js';
+
 const MAX_GAZE_SVG_UNITS = 34;
 const FULL_GAZE_DISTANCE_PX = 320;
 const GAZE_EASING = 0.2;
@@ -43,7 +45,7 @@ export function initLogoGaze(root = document) {
   const logos = [...root.querySelectorAll('[data-logo-gaze]')];
   if (!logos.length) return () => {};
 
-  const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const reducedMotion = isReduceMotionEnabled();
   const states = logos.map((element) => ({
     element,
     parts: [],

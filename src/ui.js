@@ -48,6 +48,11 @@ import {
 import { renderMapStackChips, syncMapStackChips } from './mapStackChips.js';
 import { OrbitController } from './orbit.js';
 import {
+  isReduceMotionEnabled,
+  setReduceMotionOverride,
+  subscribeReduceMotion,
+} from './reduceMotion.js';
+import {
   CelestialRing,
   getKeyholeFadeTuning,
   isCelestialRingStyleSupported,
@@ -2379,6 +2384,9 @@ export class StyleManager {
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
+    this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
+    this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
+    this._syncReduceMotionButton();
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -3586,6 +3594,11 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.addEventListener('click', () => this.toggleCleanView());
     }
+
+    this._reduceMotionBtn?.addEventListener('click', () => {
+      setReduceMotionOverride(!isReduceMotionEnabled());
+      this._syncReduceMotionButton();
+    });
     if (this._cleanViewExitBtn) {
       this._cleanViewExitBtn.addEventListener('click', () => this.toggleCleanView(false));
     }
@@ -8416,6 +8429,9 @@ export class StyleManager {
       this._stopOrbit();
       return { ok: true, orbiting: false };
     }
+    if (isReduceMotionEnabled()) {
+      return { ok: false, orbiting: false, error: 'Orbit is off while reduced motion is on' };
+    }
     if (!this._currentTarget) {
       return { ok: false, orbiting: false, error: 'No active landmark to orbit — fly to a landmark first' };
     }
@@ -8854,6 +8870,7 @@ export class StyleManager {
         visible: !!this.celestialRing?.visible,
       },
       orbiting: !!this.orbitController?.active,
+      reduceMotion: isReduceMotionEnabled(),
       recording: !!this._recordingMode,
       cleanView: document.body.classList.contains('ui-clean-view'),
     };
@@ -9899,11 +9916,27 @@ export class StyleManager {
   }
 
   /**
-   * Toggles the orbit controller around the current POI target. Shows a toast
-   * if no target position has been set (user must fly to a POI first).
+   * Mirror OS reduce-motion (or the persist override) on the DISPLAY toggle.
+   * Turning reduce-motion on also stops leftover idle orbit.
+   * @returns {void}
+   */
+  _syncReduceMotionButton() {
+    const enabled = isReduceMotionEnabled();
+    this._reduceMotionBtn?.classList.toggle('active', enabled);
+    this._reduceMotionBtn?.setAttribute('aria-pressed', String(enabled));
+    if (enabled) this._stopOrbit();
+  }
+
+  /**
+   * Toggles idle orbit around the current POI. Decorative spin is refused
+   * while reduced motion is on; fly-to Home is unaffected.
    * @returns {void}
    */
   _toggleOrbit() {
+    if (isReduceMotionEnabled()) {
+      this._showToast('Orbit is off while reduced motion is on');
+      return;
+    }
     if (!this._currentTarget) {
       this._showToast('Fly to a POI first');
       return;
@@ -9922,9 +9955,9 @@ export class StyleManager {
    * @returns {void}
    */
   _stopOrbit() {
-    if (this.orbitController.active) {
+    if (this.orbitController?.active) {
       this.orbitController.stop();
-      this._orbitIndicator.classList.remove('active');
+      this._orbitIndicator?.classList.remove('active');
     }
   }
 
@@ -10613,6 +10646,8 @@ export class StyleManager {
       this._loadingVisibilityHandler = null;
     }
     this._stopLoadingFeedbackTicker();
+    this._reduceMotionUnsubscribe?.();
+    this._reduceMotionUnsubscribe = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
