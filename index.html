@@ -135,6 +135,9 @@
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
+    <button id="earthquake-list-toggle" type="button" aria-label="Quakes" title="Recent earthquakes" aria-expanded="false" aria-controls="earthquake-list-panel" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">landslide</span>
+    </button>
   </nav>
   <aside id="installations-viewport-list" hidden aria-label="Mapped installations in the current view">
     <div class="installations-viewport-list-header">
@@ -159,6 +162,16 @@
         <div class="launches-panel-empty">LOADING 30-DAY MISSION INDEX</div>
       </div>
     </div>
+  </aside>
+  <aside id="earthquake-list-panel" hidden>
+    <div class="earthquake-list-header">
+      <div>
+        <strong>QUAKES</strong>
+        <span>USGS · 24H · M2.5+</span>
+      </div>
+      <output id="earthquake-list-count" data-earthquake-list-count>—</output>
+    </div>
+    <div id="earthquake-list" class="earthquake-list" role="list" aria-live="polite"></div>
   </aside>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>

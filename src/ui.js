@@ -18,7 +18,7 @@ import {
   allOffLiveLayers,
 } from './allOffLayers.js';
 import { flyToHomeView } from './camera.js';
-import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
+import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
@@ -174,6 +174,7 @@ import {
   nextLaunchesPanelOpen,
   renderLaunchesPanelList,
 } from './data/launchesPanel.js';
+import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   aggregateLayerLoading,
   canPresentDeferredStatusNotice,
@@ -2688,6 +2689,10 @@ export class StyleManager {
     this._launchesPanelLoadToken = 0;
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._stopTrackingBtn = document.getElementById('stop-tracking');
+    this._earthquakeListToggle = document.getElementById('earthquake-list-toggle');
+    this._earthquakeListPanel = document.getElementById('earthquake-list-panel');
+    this._earthquakeList = document.getElementById('earthquake-list');
+    this._earthquakeListCount = document.getElementById('earthquake-list-count');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -2995,6 +3000,7 @@ export class StyleManager {
     this._initStopTrackingButton();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
+    this._initEarthquakeListControl();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initZoomToPointer();
@@ -5046,6 +5052,9 @@ export class StyleManager {
         }
         if (this._installationsListOpen && change?.layerId === 'military-installations') {
           this._syncInstallationsViewportList();
+        }
+        if (change?.layerId === 'earthquakes') {
+          this._earthquakeListControl?.refresh();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -10816,6 +10825,43 @@ export class StyleManager {
     );
   }
 
+  /**
+   * Hosted Quakes list — rows come from the USGS payload the earthquakes
+   * layer already fetched. Click flies to that event. Empty/fail is
+   * UNAVAILABLE and never waits on the feed.
+   */
+  _initEarthquakeListControl() {
+    this._earthquakeListControl = initEarthquakeListControl({
+      button: this._earthquakeListToggle,
+      panel: this._earthquakeListPanel,
+      list: this._earthquakeList,
+      count: this._earthquakeListCount,
+      getRecords: () => {
+        const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+        return typeof layer?.getListRecords === 'function' ? layer.getListRecords() : [];
+      },
+      getError: () => {
+        const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+        return layer?.getStats?.()?.error || null;
+      },
+      ensureLayer: () => {
+        if (!this._dataManager?.isEnabled?.('earthquakes')) {
+          void this._dataManager?.setEnabled?.('earthquakes', true, { origin: 'user' });
+        }
+      },
+      flyTo: (options) => this._runExplicitNavigation('quake', () => {
+        flyToLandmark(this.viewer, options.lat, options.lon, {
+          range: options.range,
+          pitch: options.pitch,
+          heading: options.heading,
+          buildingHeight: options.buildingHeight,
+          duration: options.duration,
+        });
+        return true;
+      }),
+    });
+  }
+
   /** Wire the top-center panic All off control. Does not move the camera. */
   _initClearSelectedLayersButton() {
     if (!this._clearSelectedLayersBtn) return;
@@ -11605,6 +11651,8 @@ export class StyleManager {
     this._dataManagerVisibilityRequestUnsubscribe = null;
     this._dataManagerUnsubscribe?.();
     this._dataManagerUnsubscribe = null;
+    this._earthquakeListControl?.destroy();
+    this._earthquakeListControl = null;
     if (this._globeResetHandler) {
       this._resetGlobeBtn?.removeEventListener('click', this._globeResetHandler);
       this._cockpitResetGlobeBtn?.removeEventListener('click', this._globeResetHandler);

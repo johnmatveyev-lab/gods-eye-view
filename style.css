@@ -1607,6 +1607,7 @@ body.ui-clean-view #style-indicator,
 body.ui-clean-view #top-center-actions,
 body.ui-clean-view #installations-viewport-list,
 body.ui-clean-view #launches-panel,
+body.ui-clean-view #earthquake-list-panel,
 body.ui-clean-view #global-loading-status,
 body.ui-clean-view #traffic-sync-chip,
 body.ui-clean-view #cctv-sync-chip,
@@ -2511,6 +2512,96 @@ body.ui-clean-view #scene-runtime.active {
 }
 #top-center-actions #camera-coords-copy .material-symbols-outlined {
   font-size: 16px;
+}
+
+#earthquake-list-panel {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 120px));
+  padding: 10px 10px 8px;
+  transform: translateX(-50%);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-secondary);
+}
+#earthquake-list-panel[hidden] { display: none; }
+.earthquake-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.earthquake-list-header strong {
+  display: block;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+.earthquake-list-header span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.earthquake-list-header output {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+.earthquake-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.earthquake-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.earthquake-list-item:hover,
+.earthquake-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+}
+.earthquake-list-item strong {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.earthquake-list-item span {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.earthquake-list-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
 }
 
 #global-loading-status {
@@ -4517,12 +4608,12 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-help span { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
-  #title-bar, #style-indicator, #top-center-actions, #installations-viewport-list, #launches-panel, #traffic-sync-chip, #cctv-sync-chip,
+  #title-bar, #style-indicator, #top-center-actions, #installations-viewport-list, #launches-panel, #earthquake-list-panel, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -7805,6 +7896,7 @@ body.recording-mode #style-indicator,
 body.recording-mode #top-center-actions,
 body.recording-mode #installations-viewport-list,
 body.recording-mode #launches-panel,
+body.recording-mode #earthquake-list-panel,
 body.recording-mode #global-loading-status,
 body.recording-mode #traffic-sync-chip,
 body.recording-mode #cctv-sync-chip,
@@ -7830,7 +7922,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 

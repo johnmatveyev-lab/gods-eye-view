@@ -35,6 +35,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   camera. `meridian.lastView` is not cleared. The next enable is manual.
   First-visit layer defaults still apply only on a fresh profile. Banned
   layers stay off. No `/api`.
+- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
+  a row to fly to that event (cap 50). Empty or failed feed shows
+  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
 - Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
   camera-center aim point copy-coords and measure already use. Default off.
   Persists as `meridian.crosshair`. Clean view may keep it; credits stay
