@@ -614,6 +614,7 @@ export class GevRealtimeController {
       this.releasePushToTalkKey();
     };
     this.shortcutVisibilityHandler = () => {
+      // Hidden tab: release push-to-talk only. Do not stop() an active call.
       if (document.visibilityState === 'hidden') this.shortcutBlurHandler();
     };
     document.addEventListener('keydown', this.shortcutKeyDownHandler);

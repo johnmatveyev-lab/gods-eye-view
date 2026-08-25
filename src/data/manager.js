@@ -1,4 +1,5 @@
 import { governorRequestRender } from '../renderGovernor.js';
+import { isDocumentHidden, subscribePageVisibility } from '../pageVisibility.js';
 import { markDetectionSourcesChanged } from './detection.js';
 function cloneLayerParams(value) {
   if (Array.isArray(value)) return value.map(cloneLayerParams);
@@ -127,6 +128,9 @@ export class DataLayerManager {
     this._registrationDispositions = null;
     this._allowQaRegistration = allowQaRegistration === true;
     this._qaLayerIds = new Set();
+    this._pollsSuspended = false;
+    this._unsubscribePageVisibility = subscribePageVisibility(() => this._syncPollSuspension());
+    this._syncPollSuspension();
   }
 
   register(layerModule) {
@@ -212,6 +216,9 @@ export class DataLayerManager {
       // interval is armed after the user already turned the layer off, and a
       // subsequent enable arms a SECOND interval → 2× poll → OpenSky 429 (M1).
       toggleChain: Promise.resolve(),
+      // Hidden-tab scheduler: the existing interval handle is cleared while
+      // document.visibilityState is hidden, then re-armed on return.
+      pollHandlePaused: false,
     });
   }
 
@@ -519,19 +526,64 @@ export class DataLayerManager {
     }
   }
 
-  _armUpdateLoop(layerId, entry) {
+  _entryDataPollMs(entry) {
     const configuredRefreshInterval = Number(entry.module.refreshInterval);
     const updateInterval = Number(entry.module.updateInterval);
-    const refreshInterval = configuredRefreshInterval > 0
-      ? configuredRefreshInterval
-      : (updateInterval > 0 ? updateInterval : 0);
-    if (refreshInterval > 0) {
+    if (configuredRefreshInterval > 0) return configuredRefreshInterval;
+    if (updateInterval > 0) return updateInterval;
+    return 0;
+  }
+
+  _syncPollSuspension() {
+    if (isDocumentHidden()) this._pausePollHandles();
+    else this._resumePollHandles();
+  }
+
+  _pausePollHandles() {
+    this._pollsSuspended = true;
+    for (const entry of this.layers.values()) {
+      if (entry.intervalId == null) continue;
+      clearInterval(entry.intervalId);
+      entry.intervalId = null;
+      entry.pollHandlePaused = true;
+    }
+  }
+
+  _resumePollHandles() {
+    this._pollsSuspended = false;
+    for (const [layerId, entry] of this.layers) {
+      if (!entry.enabled || entry.lifecycleState !== 'enabled' || entry.destroying) {
+        entry.pollHandlePaused = false;
+        continue;
+      }
+      if (entry.intervalId != null) continue;
+      const wantsDataRefresh = entry.pollHandlePaused && this._entryDataPollMs(entry) > 0;
+      entry.pollHandlePaused = false;
+      if (wantsDataRefresh) void this._runPeriodicUpdate(layerId, entry);
+      this._armUpdateLoop(layerId, entry);
+    }
+  }
+
+  _armUpdateLoop(layerId, entry) {
+    if (this._pollsSuspended) {
+      entry.pollHandlePaused = true;
+      return;
+    }
+    if (entry.intervalId) {
+      clearInterval(entry.intervalId);
+      entry.intervalId = null;
+    }
+    const dataPollMs = this._entryDataPollMs(entry);
+    if (dataPollMs > 0) {
       entry.intervalId = setInterval(() => {
+        if (this._pollsSuspended) return;
         void this._runPeriodicUpdate(layerId, entry);
-      }, refreshInterval);
-    } else if (updateInterval === 0) {
+      }, dataPollMs);
+      return;
+    }
+    if (Number(entry.module.updateInterval) === 0) {
       entry.intervalId = setInterval(() => {
-        if (!entry.enabled) return;
+        if (this._pollsSuspended || !entry.enabled) return;
         this._refreshTogglePanel();
       }, entry.module.statsRefreshInterval || 1000);
     }
@@ -1893,6 +1945,8 @@ export class DataLayerManager {
    * Should be called when the viewer is being torn down.
    */
   async destroyAll() {
+    this._unsubscribePageVisibility?.();
+    this._unsubscribePageVisibility = null;
     for (const layerId of [...this.layers.keys()]) {
       await this.destroyLayer(layerId);
     }

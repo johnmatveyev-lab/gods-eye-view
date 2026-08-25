@@ -26,6 +26,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).
   `/api/opensky-track` stays 410. No `OPENSKY_*` env.
 
+### Changed
+
+- Hidden tabs pause flight/layer poll timers and the HUD summary interval.
+  Returning to the tab runs one immediate refresh, then the normal cadence.
+  An active voice session is not stopped. Client scheduler only; no `/api`
+  or data-source changes.
+
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).

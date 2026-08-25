@@ -18,6 +18,7 @@ import {
 import { warmFireAnchorFloors } from './fireAnchors.js';
 import { normalizeMilitaryInstallations } from './militaryInstallationData.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
+import { shouldDeferBackgroundNetwork } from '../pageVisibility.js';
 
 const LAYER_ID = 'military-installations';
 const REQUEST_DEBOUNCE_MS = 500;
@@ -440,7 +441,7 @@ async function loadInstallations() {
     // "current viewport only" context claim.
     const records = normalized.records.filter((record) => installationWithinViewport(record, box));
     let placesError = null;
-    if (state.googleSearchRequested) {
+    if (state.googleSearchRequested && !shouldDeferBackgroundNetwork()) {
       state.googleSearchRequested = false;
       const latitude = (box.south + box.north) / 2;
       const longitude = (box.west + box.east) / 2;
