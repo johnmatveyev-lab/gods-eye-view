@@ -526,6 +526,10 @@
               <span>TEMP</span>
               <div class="cockpit-local-temp-readout">
                 <strong id="cockpit-local-temperature">—</strong>
+                <span class="weather-feels-toggle" role="group" aria-label="Actual or feels-like temperature" hidden>
+                  <button type="button" data-weather-feels="actual" aria-pressed="true">Actual</button>
+                  <button type="button" data-weather-feels="feels" aria-pressed="false">Feels</button>
+                </span>
                 <span class="weather-unit-toggle" role="group" aria-label="Temperature units">
                   <button type="button" data-weather-units="C" aria-pressed="true">°C</button>
                   <button type="button" data-weather-units="F" aria-pressed="false">°F</button>

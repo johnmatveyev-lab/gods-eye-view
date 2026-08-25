@@ -478,6 +478,14 @@ import {
   subscribeWeatherUnits,
 } from './data/weatherUnits.js';
 import {
+  bindWeatherFeelsToggle,
+  formatApparentTemperatureC,
+  getWeatherFeelsMode,
+  initWeatherFeelsMode,
+  subscribeWeatherFeelsMode,
+  weatherFeelsChipsHidden,
+} from './data/weatherFeelsMode.js';
+import {
   bindWeatherPrecipUnitToggle,
   formatPrecipitationMm,
   initWeatherPrecipUnits,
@@ -1103,6 +1111,8 @@ class CockpitViewController {
     this.localPlace = document.getElementById('cockpit-local-place');
     this.localCoordinates = document.getElementById('cockpit-local-coordinates');
     this.localTemperature = document.getElementById('cockpit-local-temperature');
+    this.weatherFeelsToggle = this.signalStream?.querySelector?.('.weather-feels-toggle')
+      || document.querySelector('.weather-feels-toggle');
     this.weatherUnitToggle = this.signalStream?.querySelector?.('.weather-unit-toggle')
       || document.querySelector('.weather-unit-toggle');
     this.localWind = document.getElementById('cockpit-local-wind');
@@ -1177,6 +1187,7 @@ class CockpitViewController {
     });
     this.syncWeatherToggle(getWxEnabled());
     initWeatherUnits();
+    initWeatherFeelsMode();
     this._unbindWeatherUnits = bindWeatherUnitToggle(this.weatherUnitToggle || this.signalStream, {
       onChange: () => this.paintLocalTemperature(this.regionalBrief?.weather),
     });
@@ -1185,6 +1196,14 @@ class CockpitViewController {
       this.paintLocalTemperature(this.regionalBrief?.weather);
     });
     this._listenerRemovers.push(() => this._weatherUnitsUnsubscribe?.());
+    this._unbindWeatherFeels = bindWeatherFeelsToggle(this.weatherFeelsToggle || this.signalStream, {
+      onChange: () => this.paintLocalTemperature(this.regionalBrief?.weather),
+    });
+    this._listenerRemovers.push(() => this._unbindWeatherFeels?.());
+    this._weatherFeelsUnsubscribe = subscribeWeatherFeelsMode(() => {
+      this.paintLocalTemperature(this.regionalBrief?.weather);
+    });
+    this._listenerRemovers.push(() => this._weatherFeelsUnsubscribe?.());
     this.paintLocalTemperature(this.regionalBrief?.weather);
     initWindUnits();
     this._unbindWindUnitToggle = bindWindUnitToggle(this.windUnitToggle, {
@@ -2280,10 +2299,18 @@ class CockpitViewController {
     this.scheduleContextLayout();
   }
 
-  /** Re-apply °C / °F from the in-memory observation. Does not refetch. */
+  /** Re-apply °C / °F and Actual | Feels from the in-memory observation. Does not refetch. */
   paintLocalTemperature(weather) {
     if (!this.localTemperature) return;
-    this.localTemperature.textContent = formatTemperatureC(weather?.temperatureC);
+    this.localTemperature.textContent = getWeatherFeelsMode() === 'feels'
+      ? formatApparentTemperatureC(weather?.apparentTemperatureC)
+      : formatTemperatureC(weather?.temperatureC);
+    if (this.weatherFeelsToggle) {
+      this.weatherFeelsToggle.hidden = weatherFeelsChipsHidden({
+        weather,
+        hudHidden: this.hud?.hidden === true,
+      });
+    }
   }
 
   /**
