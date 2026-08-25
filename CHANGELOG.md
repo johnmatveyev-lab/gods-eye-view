@@ -48,6 +48,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   proxy plugin forward to the same handler. Cache, rate limit, and the
   Open-Meteo-only credit are unchanged. This change does not wrap
   `/api/terrain/heights`.
+- Added hosted CelesTrak TLE function `api/celestrak/[...group].js` with a
+  6-hour memory + optional `/tmp` cache and stale-on-failure. Vite forwards
+  through `src/data/celestrak.js`. User-Agent is
+  `Meridian-celestrak-proxy/1.0 (+https://github.com/johnmatveyev-lab/gods-eye-view)`.
 
 ### Changed
 
