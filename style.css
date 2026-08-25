@@ -4564,6 +4564,34 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   min-height: 0;
 }
 
+.data-layer-filter-wrap {
+  flex: 0 0 auto;
+  margin: 0 0 8px;
+}
+
+#data-layer-filter {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  letter-spacing: 0.3px;
+  outline: none;
+  caret-color: var(--accent);
+}
+
+#data-layer-filter::placeholder {
+  color: var(--text-dim);
+}
+
+#data-layer-filter:focus {
+  border-color: rgba(0, 212, 255, 0.45);
+}
+
 .data-toggle-list {
   display: flex;
   flex-direction: column;
@@ -6790,6 +6818,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 #control-panel.collapsed .button-grid,
 #data-panel.collapsed .data-toggle-list,
+#data-panel.collapsed .data-layer-filter-wrap,
 #global-context-panel.collapsed #radio-panel,
 #global-context-panel.collapsed #military-awareness-panel,
 #global-context-panel.collapsed .global-context-actions,

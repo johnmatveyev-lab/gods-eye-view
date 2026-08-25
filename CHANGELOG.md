@@ -12,6 +12,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a filter field at the top of the Data Layers list. It matches the
+  visible layer name plus existing voice common-names (fires, ships, bikes,
+  traffic, cameras, and the rest of that map). Empty query shows the full
+  legal list. TeleGeography cables, OpenSky, and Google News stay off the
+  list; the cables layer remains a registered no-op and is hidden from the
+  panel. UI filter only — no new `/api` routes or data sources.
 - Added a copy control on the selected-contact card for the visible asset
   ident (aircraft callsign, else registration/hex; vessel name or MMSI;
   satellite name or NORAD). Clicking the ident or the copy control copies it
