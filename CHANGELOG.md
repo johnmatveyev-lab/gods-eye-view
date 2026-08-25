@@ -33,6 +33,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added an Export annotations control next to Clear/Undo on the globe chrome.
+  It builds a GeoJSON FeatureCollection from `engine.list()` (pin/highlight
+  → Point, arrow/route → LineString, area → Polygon or Point) with only
+  id, type, label, and color, and downloads `meridian-annotations.geojson`
+  in the same tab. Disabled when the board is empty. Clear and Undo update
+  enablement via the same `onChange`. No upload, no `/api`, and no
+  voice/LLM change.
 - Added a Copy snapshot control next to Copy view link. It captures the
   Cesium canvas plus the on-screen `#cesium-credits` strip (Google / Cesium
   / data attribution) as a local PNG. Clipboard image write first; a

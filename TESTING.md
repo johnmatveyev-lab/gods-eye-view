@@ -74,6 +74,7 @@ settled and not applicable because no Google 3D tileset is active.
   - `window.__gevAnnotations.count()` — how many marks are live
   - **Clear annotations** (top-center globe chrome) — same erase, no mic. Disabled when the board is empty.
   - **Undo last annotation** (next to Clear) — drops only the last mark. Disabled when the board is empty. Does not cancel an in-flight annotate.
+  - **Export annotations** (next to Undo) — downloads `meridian-annotations.geojson` from the live board. Disabled when the board is empty.
 
 ---
 
