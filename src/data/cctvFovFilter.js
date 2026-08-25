@@ -46,15 +46,21 @@ function resolveStorage(injected) {
  * }|null|undefined} source
  * @returns {number|null}
  */
+function finiteDegrees(value) {
+  if (value == null || value === '') return null;
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function effectiveCctvFovDeg(source) {
   if (!source || typeof source !== 'object') return null;
-  const live = Number(source.fovDeg);
-  if (source.basePose && Number.isFinite(live)) return live;
+  const live = finiteDegrees(source.fovDeg);
+  if (source.basePose && live != null) return live;
 
-  const catalog = Number.isFinite(live) ? live : Number(source.basePose?.fovDeg);
-  if (!Number.isFinite(catalog)) return null;
-  const offset = Number(source.calibration?.fovDeg);
-  return Number.isFinite(offset) ? catalog + offset : catalog;
+  const catalog = live ?? finiteDegrees(source.basePose?.fovDeg);
+  if (catalog == null) return null;
+  const offset = finiteDegrees(source.calibration?.fovDeg);
+  return offset == null ? catalog : catalog + offset;
 }
 
 /**

@@ -1637,7 +1637,7 @@ test('FOV catalog visibility isolates Wide 75+ / Tight <70 and keeps the selecte
 
     _setCctvCoverageStateForTest({
       records: [wide, tight, mid],
-      activeCameraId: 'wide-cam',
+      activeCameraId: 'tight-cam',
       fov: 'tight',
       coverageMode: 'on',
       showProjection: false,
