@@ -6,6 +6,15 @@ import {
 } from './data/detectionPolicy.js';
 import { clampScopeTerminusPct } from './scopeMask.js';
 import { decodeLayerStateParams, encodeLayerStateParams } from './data/layerState.js';
+import {
+  LAST_VIEW_THROTTLE_MS,
+  persistLastViewHash,
+  readLastView,
+  resolveBootShareHash,
+} from './lastView.js';
+import { decodeShareViewUrl, encodeShareViewUrl } from './shareViewUrl.js';
+
+export { decodeShareViewUrl, encodeShareViewUrl } from './shareViewUrl.js';
 
 /**
  * Share Links — URL Hash State Management
@@ -91,6 +100,8 @@ export class ShareLinkManager {
     onRestore,
     isNavigationCurrent,
     cancelOwnedNavigation,
+    storage,
+    lastViewThrottleMs,
   } = {}) {
     this.viewer = viewer;
     this._onRestore = onRestore; // callback: ({ style, bloom, sharpen }) => void
@@ -141,18 +152,29 @@ export class ShareLinkManager {
     this._cancelOwnedNavigation = typeof cancelOwnedNavigation === 'function'
       ? cancelOwnedNavigation
       : null;
+    this._storage = storage || (typeof window !== 'undefined' ? window.localStorage : null);
+    this._lastViewThrottleMs = Number.isFinite(lastViewThrottleMs)
+      ? lastViewThrottleMs
+      : LAST_VIEW_THROTTLE_MS;
+    this._lastViewTimer = null;
 
     // Listen for camera changes
     this._removeCameraChanged = this.viewer.camera.changed.addEventListener(() => {
       this._scheduleUpdate();
     });
+    this._removeMoveEnd = this.viewer.camera.moveEnd?.addEventListener?.(() => {
+      this._scheduleLastViewPersist();
+    }) || null;
   }
 
   /**
    * Parse URL hash on page load. Returns parsed state or null.
    */
   parseInitialHash() {
-    const hash = window.location.hash.slice(1);
+    const hash = resolveBootShareHash(
+      window.location.hash.slice(1),
+      readLastView(this._storage),
+    );
     if (!hash) return null;
 
     const params = new URLSearchParams(hash);
@@ -442,15 +464,22 @@ export class ShareLinkManager {
     this._scheduleUpdate();
   }
 
+  /** Snapshot the current camera, style, and layers as a share URL. */
+  currentShareUrl({ nowMs = Date.now(), includeCreatedAt = false } = {}) {
+    const params = this._buildHashParams();
+    if (!params) return null;
+    if (includeCreatedAt) {
+      params.set(SHARE_CREATED_AT_PARAM, String(Math.floor(nowMs / 1000)));
+    }
+    return encodeShareViewUrl(window.location.href, params.toString());
+  }
+
   /** Copy a current-state snapshot with a copy-time timestamp. Returns true on success. */
   async copyLink({ nowMs = Date.now() } = {}) {
-    const params = this._buildHashParams();
-    if (!params) return false;
-    params.set(SHARE_CREATED_AT_PARAM, String(Math.floor(nowMs / 1000)));
-    const copiedUrl = new URL(window.location.href);
-    copiedUrl.hash = params.toString();
+    const copiedUrl = this.currentShareUrl({ nowMs, includeCreatedAt: true });
+    if (!copiedUrl) return false;
     try {
-      await navigator.clipboard.writeText(copiedUrl.href);
+      await navigator.clipboard.writeText(copiedUrl);
       return true;
     } catch {
       return false;
@@ -461,6 +490,28 @@ export class ShareLinkManager {
     if (this._destroyed || this._initialRestorePending) return;
     clearTimeout(this._debounceTimer);
     this._debounceTimer = setTimeout(() => this._updateHash(), DEBOUNCE_MS);
+  }
+
+  _scheduleLastViewPersist() {
+    if (this._destroyed || this._initialRestorePending) return;
+    const persist = () => this._persistLastView();
+    if (this._lastViewThrottleMs <= 0) {
+      persist();
+      return;
+    }
+    clearTimeout(this._lastViewTimer);
+    this._lastViewTimer = setTimeout(persist, this._lastViewThrottleMs);
+  }
+
+  _persistLastView() {
+    if (this._destroyed || this._initialRestorePending) return;
+    const params = this._buildHashParams();
+    if (!params) return;
+    persistLastViewHash(
+      this._storage,
+      window.location.href,
+      params.toString(),
+    );
   }
 
   _updateHash() {
@@ -536,8 +587,12 @@ export class ShareLinkManager {
     this._destroyed = true;
     clearTimeout(this._debounceTimer);
     this._debounceTimer = null;
+    clearTimeout(this._lastViewTimer);
+    this._lastViewTimer = null;
     this._removeCameraChanged?.();
     this._removeCameraChanged = null;
+    this._removeMoveEnd?.();
+    this._removeMoveEnd = null;
     this._layerStateProvider = null;
     this._panelStateProvider = null;
     this._styleParamStateProvider = null;

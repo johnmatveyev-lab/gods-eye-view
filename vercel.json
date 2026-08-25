@@ -2,6 +2,23 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "functions": {
+    "api/opensky.js": {
+      "maxDuration": 15
+    },
+    "api/[...path].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
+    "api/gbfs/[...target].js": {
+      "maxDuration": 15
+    },
+    "api/cctv/[...path].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
+    "api/celestrak/[...group].js": {
+      "maxDuration": 20
+    },
     "api/billing/[...path].js": {
       "maxDuration": 15
     },
@@ -10,6 +27,27 @@
     },
     "api/launches.js": {
       "maxDuration": 30
+    },
+    "api/firms/index.js": {
+      "maxDuration": 60
+    },
+    "api/firms/status.js": {
+      "maxDuration": 15
+    },
+    "api/adsblol/trace.js": {
+      "maxDuration": 15
+    },
+    "api/opensky-track.js": {
+      "maxDuration": 10
+    },
+    "api/adsblol/mil.js": {
+      "maxDuration": 15
+    },
+    "api/route.js": {
+      "maxDuration": 20
+    },
+    "api/weather-effects.js": {
+      "maxDuration": 15
     }
   }
 }
