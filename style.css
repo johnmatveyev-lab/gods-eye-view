@@ -5029,7 +5029,8 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-local-temp-readout,
 .cockpit-local-wind-readout,
-.cockpit-local-precip-readout {
+.cockpit-local-precip-readout,
+.cockpit-local-visibility-readout {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -5039,7 +5040,8 @@ body.cockpit-mode #view-switcher button {
 .cockpit-local-grid .weather-unit-toggle,
 .cockpit-local-grid .weather-feels-toggle,
 .cockpit-local-grid .wind-unit-toggle,
-.cockpit-local-grid .weather-precip-toggle {
+.cockpit-local-grid .weather-precip-toggle,
+.cockpit-local-grid .weather-visibility-toggle {
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
@@ -5055,7 +5057,8 @@ body.cockpit-mode #view-switcher button {
 .cockpit-local-grid .weather-unit-toggle button,
 .cockpit-local-grid .weather-feels-toggle button,
 .cockpit-local-grid .wind-unit-toggle button,
-.cockpit-local-grid .weather-precip-toggle button {
+.cockpit-local-grid .weather-precip-toggle button,
+.cockpit-local-grid .weather-visibility-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -5068,11 +5071,13 @@ body.cockpit-mode #view-switcher button {
 .cockpit-local-grid .weather-unit-toggle button[aria-pressed="true"],
 .cockpit-local-grid .weather-feels-toggle button[aria-pressed="true"],
 .cockpit-local-grid .wind-unit-toggle button[aria-pressed="true"],
-.cockpit-local-grid .weather-precip-toggle button[aria-pressed="true"] {
+.cockpit-local-grid .weather-precip-toggle button[aria-pressed="true"],
+.cockpit-local-grid .weather-visibility-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
-.cockpit-local-grid .weather-feels-toggle[hidden] {
+.cockpit-local-grid .weather-feels-toggle[hidden],
+.cockpit-local-grid .weather-visibility-toggle[hidden] {
   display: none;
 }
 

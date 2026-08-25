@@ -250,7 +250,7 @@ test('Local Info hosts Actual | Feels next to TEMP; other unit chips stay put', 
   assert.match(ui, /bindWeatherFeelsToggle|formatWeatherHudTemperature|initWeatherFeelsMode/);
   assert.match(ui, /paintLocalTemperature|regionalBrief\?\.weather/);
   assert.doesNotMatch(helper, /from ['"]\.\.\/units\.js['"]|setDistanceUnit|setWxEnabled|setTemperatureUnit|setWindUnit|setPrecipUnit/);
-  assert.doesNotMatch(helper, /['"]meridian\.units['"]|['"]meridian\.weatherUnits['"]|['"]meridian\.weatherWind['"]|['"]meridian\.weatherPrecipUnits['"]/);
+  assert.doesNotMatch(helper, /['"]meridian\.units['"]|['"]meridian\.weatherUnits['"]|['"]meridian\.weatherWind['"]|['"]meridian\.weatherPrecipUnits['"]|['"]meridian\.weatherVisibility['"]/);
 });
 
 test('chip wiring re-paints from the in-memory brief and adds no /api', () => {

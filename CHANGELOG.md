@@ -7,6 +7,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Local Info VIS has client-only **km | mi** chips next to the Open-Meteo
+  visibility readout. Default **km**. The chips reformat already-fetched
+  `visibilityM` (`m / 1000` or `m / 1609.344`) — 8000 m reads **8 km** or
+  **5 mi**. Missing or non-finite visibility stays UNAVAILABLE. Chip
+  changes re-apply the in-memory observation and do not refetch
+  `/api/weather-effects` or `/api/regional-brief`. Preference persists as
+  `meridian.weatherVisibility`, separate from °C/°F, wind, precip, feels,
+  and the km/nm/mi distance key. Hidden when the HUD or weather row is
+  off. Refresh keeps the chip. Not an alert service.
 - Earthquake **US | AK | CI | NC | Other** chips sit next to the event-type
   row. Default all on matches the current USGS all_day discs. Chips filter
   cached `properties.net`: `us`, `ak`, `ci`, and `nc` each have a chip;

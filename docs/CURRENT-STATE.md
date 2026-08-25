@@ -2,6 +2,16 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — weather visibility units (plan 185)** (`src/data/weatherVisibilityUnits.js`,
+> Local Info VIS). Exclusive **km | mi** chips next to the Open-Meteo
+> visibility readout, default **km**. Reformats already-fetched
+> `visibilityM` (`m / 1000` or `m / 1609.344`). 8000 m reads **8 km** or
+> **5 mi**. Missing / non-finite stays UNAVAILABLE. Chip change re-applies
+> the in-memory observation — no extra fetch and no `/api` change.
+> Persists `meridian.weatherVisibility`, separate from °C/°F, wind,
+> precip, feels, and km/nm/mi. Hidden when the HUD or weather row is off.
+> Refresh keeps the chip. Client-only; not an alert service.
+
 > **2026-08-25 — launch probability floor (plan 178)** (`src/data/launchProbabilityFilter.js`,
 > `#space-mission-roster`). Exclusive **All | 50+ | 80+** chips next to
 > Webcast only, default **All**. Filters already-normalized `probability`

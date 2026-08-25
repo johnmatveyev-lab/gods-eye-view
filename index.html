@@ -584,7 +584,13 @@
             </div>
             <div id="cockpit-local-visibility-cell" hidden>
               <span>VIS</span>
-              <strong id="cockpit-local-visibility">UNAVAILABLE</strong>
+              <div class="cockpit-local-visibility-readout">
+                <strong id="cockpit-local-visibility">UNAVAILABLE</strong>
+                <span class="weather-unit-toggle weather-visibility-toggle" role="group" aria-label="Visibility units" hidden>
+                  <button type="button" data-weather-visibility="km" aria-pressed="true">km</button>
+                  <button type="button" data-weather-visibility="mi" aria-pressed="false">mi</button>
+                </span>
+              </div>
               <small>OPEN-METEO</small>
             </div>
           </div>

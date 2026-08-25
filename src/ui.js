@@ -352,7 +352,6 @@ import {
 import { AWARENESS_RADIUS_M, formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
 import {
   formatDistanceMeters,
-  formatWeatherVisibility,
   getDistanceUnit,
   initDistanceUnits,
   setDistanceUnit,
@@ -512,6 +511,13 @@ import {
   initWeatherPrecipUnits,
   subscribeWeatherPrecipUnits,
 } from './data/weatherPrecipUnits.js';
+import {
+  bindWeatherVisibilityUnitToggle,
+  formatVisibilityM,
+  initWeatherVisibilityUnits,
+  subscribeWeatherVisibilityUnits,
+  weatherVisibilityChipsHidden,
+} from './data/weatherVisibilityUnits.js';
 import {
   altitudeRulerCurveInset,
   altitudeRulerTicks,
@@ -1146,6 +1152,8 @@ class CockpitViewController {
       || document.querySelector('.weather-precip-toggle');
     this.localVisibility = document.getElementById('cockpit-local-visibility');
     this.localVisibilityCell = document.getElementById('cockpit-local-visibility-cell');
+    this.weatherVisibilityToggle = this.signalStream?.querySelector?.('.weather-visibility-toggle')
+      || document.querySelector('.weather-visibility-toggle');
     this.weatherCredit = document.querySelector('.cockpit-weather-credit');
     this.signalCollapsed = false;
     this.signalUserCollapsed = false;
@@ -1246,6 +1254,16 @@ class CockpitViewController {
     });
     this._listenerRemovers.push(() => this._weatherPrecipUnitsUnsubscribe?.());
     this.paintLocalPrecipitation(this.regionalBrief?.weather);
+    initWeatherVisibilityUnits();
+    this._unbindWeatherVisibilityUnits = bindWeatherVisibilityUnitToggle(this.weatherVisibilityToggle || this.signalStream, {
+      onChange: () => this.paintWeatherVisibility(this.regionalBrief?.weather),
+    });
+    this._listenerRemovers.push(() => this._unbindWeatherVisibilityUnits?.());
+    this._weatherVisibilityUnitsUnsubscribe = subscribeWeatherVisibilityUnits(() => {
+      this.paintWeatherVisibility(this.regionalBrief?.weather);
+    });
+    this._listenerRemovers.push(() => this._weatherVisibilityUnitsUnsubscribe?.());
+    this.paintWeatherVisibility(this.regionalBrief?.weather);
     this._listen(this.entry, 'click', () => {
       this.onEnterRequest();
     });
@@ -1977,18 +1995,23 @@ class CockpitViewController {
 
   refreshDistanceUnits() {
     if (this._lastContextInfo) this.updateContext(this._lastContextInfo, this._lastContextHeading);
-    this.paintWeatherVisibility(this.regionalBrief?.weather);
   }
 
   /**
-   * Re-print stored visibilityM with the current km/nm/mi toggle.
+   * Re-print stored visibilityM with the current km | mi chips.
    * Uses the in-memory regional observation — no weather-effects refetch.
    * @param {{visibilityM?: unknown}|null|undefined} weather
    */
   paintWeatherVisibility(weather) {
-    const text = formatWeatherVisibility(weather?.visibilityM);
+    const text = formatVisibilityM(weather?.visibilityM);
     if (this.localVisibility) this.localVisibility.textContent = text;
     if (this.localVisibilityCell) this.localVisibilityCell.hidden = text === 'UNAVAILABLE';
+    if (this.weatherVisibilityToggle) {
+      this.weatherVisibilityToggle.hidden = weatherVisibilityChipsHidden({
+        weather,
+        hudHidden: this.hud?.hidden === true,
+      });
+    }
   }
 
   updateContext(info, heading) {
