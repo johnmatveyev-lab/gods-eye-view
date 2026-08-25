@@ -84,8 +84,9 @@ export {
   radioProxyDestination,
 } from '../data/radioDirectory.js';
 
-/** Repo root — this module lives in src/server. */
-const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+/** Repo root — this module lives in src/server. Not named __dirname: Netlify
+ *  esbuild already injects that binding into the function bundle. */
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 // ---------------------------------------------------------------------------
 // Civilian flights: adsb.lol only (OpenSky is disabled in this commercial fork)
@@ -734,7 +735,7 @@ const AISSTREAM_DOWN_RETRY_MS = 900_000;
 const AISSTREAM_AUTH_PROBE_MS = 3_600_000;
 /** How often the watchdog re-evaluates without request traffic. */
 const AISSTREAM_TICK_MS = 15_000;
-const REALTIME_DEBUG_LOG_DIR = path.join(__dirname, '.gev-logs');
+const REALTIME_DEBUG_LOG_DIR = path.join(repoRoot, '.gev-logs');
 const REALTIME_DEBUG_LOG_FILE = path.join(REALTIME_DEBUG_LOG_DIR, 'realtime-conversations.jsonl');
 const REALTIME_DEBUG_LOG_MAX_BYTES = 8 * 1024 * 1024;
 
