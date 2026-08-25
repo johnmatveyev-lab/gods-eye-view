@@ -259,6 +259,10 @@
           <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
           <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
         </span>
+        <span class="wx-mode-toggle" role="group" aria-label="Weather effects">
+          <button type="button" data-wx-mode="off" aria-pressed="true">WX OFF</button>
+          <button type="button" data-wx-mode="on" aria-pressed="false">WX ON</button>
+        </span>
       </span>
       <span id="cockpit-position">--° · --°</span>
     </div>
@@ -302,6 +306,7 @@
           id="cockpit-weather-toggle"
           class="cockpit-context-weather"
           type="button"
+          data-wx-toggle
           aria-label="Enable cockpit weather effects"
           aria-pressed="false"
           title="Enable cockpit weather effects"
