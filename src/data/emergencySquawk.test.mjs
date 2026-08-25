@@ -280,7 +280,7 @@ test('DISPLAY ships an Emergency highlight toggle; click still tracks', () => {
 
   const persist = ui.slice(
     ui.indexOf('_initEmergencyHighlightToggle() {'),
-    ui.indexOf('_initHUDToggle() {'),
+    ui.indexOf('_initKeepAboveToggle() {'),
   );
   assert.match(persist, /hydrateEmergencyHighlightEnabled/);
   assert.match(persist, /setEmergencyHighlightEnabled\(!this\._emergencyHighlightEnabled/);
@@ -306,7 +306,7 @@ test('client-side only: no \/api, OpenSky, Google News, or invented incidents', 
   assert.match(moduleSource, /current payload field only/);
   assert.doesNotMatch(uiInit.slice(
     uiInit.indexOf('_initEmergencyHighlightToggle() {'),
-    uiInit.indexOf('_initHUDToggle() {'),
+    uiInit.indexOf('_initKeepAboveToggle() {'),
   ), /opensky-network|news\.google|\/api\//i);
 });
 

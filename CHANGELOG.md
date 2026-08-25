@@ -7,6 +7,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Hosted MIC stays locked for Free, anonymous, and exhausted sessions and
+  reuses the existing upgrade / sign-in / budget modal. A 404/503 token
+  response shows “Voice is not available on this host yet” or
+  “Voice is not configured” instead of a generic ERROR. Self-host BYOK MIC
+  is unchanged. Token and HUD mint handlers are not modified in this slice.
 - Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
   the Radio layer also silences it. Starting a station unmutes. Compact
   Context and Cockpit transports now expose the same control. No voice ducking
@@ -14,6 +19,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- A first hosted visit with no lastView, share-URL layers, or saved layer
+  prefs now starts with the globe plus civilian flights only. Returning
+  lastView / share URLs that include layers, and saved `gev:layer-state:v2`
+  prefs, keep that set. No new `/api` routes or sources. Cables, OpenSky,
+  and Google News stay off.
 - Hosted CCTV frames use the rest catch-all `api/cctv/[...path].js` plus dedicated `frame|stream|media/[id].js` entries so `/api/cctv/frame/:id` is not a Vercel platform 404. The client URL is unchanged. Austin / Caltrans / TfL only.
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
 - Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
@@ -27,6 +37,83 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   visibility still hides out-of-band contacts even when the squawk is
   emergency. Client-side current payload only — not an alert service and
   not a verified emergency. No `/api`.
+- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
+  a row to fly to that event (cap 50). Empty or failed feed shows
+  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
+- Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
+  camera-center aim point copy-coords and measure already use. Default off.
+  Persists as `meridian.crosshair`. Clean view may keep it; credits stay
+  on. Not a Cesium layer, not a geo entity, and no `/api`.
+- Added a left-stack **FIRES** list from the existing trailing-24h NASA FIRMS
+  payload (`/api/firms` `fires[]`). Up to 50 detections nearest the camera;
+  clicking a row flies there with the current world-focus helper. Keyless 503
+  or an empty payload shows unavailable copy and does not fetch NASA from the
+  client. The required FIRMS acknowledgement stays on the panel. Traffic
+  Live/Sim is unchanged. No extra `/api` route.
+- Added a Sites control that lists mapped installations already returned for
+  the current 10° view. Clicking a row flies to that feature through the
+  existing `focusById` path. Empty bbox stays empty. No new `/api`, person
+  search, or bbox-cap change. Measure mode is independent.
+- Keyboard users can yaw with **Q/E** and pitch with **R / Page Up / Page Down**.
+  WASD still pans. Lock tilt blocks the pitch keys. **F** still opens the
+  data panel (fullscreen stays the button + Escape). The shortcuts overlay
+  (`?`) lists these keys.
+- Added a DISPLAY-rail Lock tilt control. When on, user rotate changes
+  heading only and pitch stays (keep horizon). Unlock restores free tumble.
+  The choice persists as `meridian.lockTilt` and defaults off. Home and
+  cockpit still set their own pitch. Wheel zoom / invert scroll stay
+  wheel-only. No `/api`.
+
+- Added a DISPLAY-rail Keep above ground control. After the camera moves, if
+  `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
+  below terrain plus a small margin, the camera is lifted. The preference
+  persists as `meridian.keepAbove` and defaults on. Cockpit interior still
+  owns the camera. A terrain 503 skips the lift. No new API.
+- Added a Clean view control on the globe chrome that toggles the existing
+  `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
+  Google Maps and Data attribution stay on. No new hide system and no `/api`.
+- Contact Labels on/off (declutter) hides ambient callsign billboards on
+  busy FIRs. Dots, models, and trails stay. Selected/tracked ident cards stay.
+  Density still only changes detections. Persists `meridian.contactLabels`
+  (default on). Display only; no `/api`.
+- DISPLAY Grid toggle draws a local lat/lon graticule (`meridian.grid`,
+  default off). The step coarsens when zoomed out so a planet view stays
+  readable. Clean view may keep the lines; required credits stay on. Not a
+  data layer and no `/api`.
+- Added a Launches panel that lists the existing Launch Library 2 results
+  the globe already fetches (`/api/launches`). Clicking a row flies to the
+  pad when coordinates are present, otherwise the row is only selected.
+  Empty or failed payloads use the existing unavailable/empty language and
+  do not hang. No new vendor or `/api`.
+- Satellites row can pick a CelesTrak TLE group (stations, weather, visual, GPS, GLONASS, Galileo, GEO). Changing the group refetches `/api/celestrak/<group>` and replaces the layer. The choice persists as `meridian.satGroup` (`stations` default). Invalid groups are not listed. Space Missions still uses `/api/celestrak/active` independently; the Launches panel stays on `/api/launches`. No new `/api`.
+- Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
+  Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
+  The choice persists as `meridian.power`. Data polls, the idle render
+  governor, and required credits are unchanged. Clean view still keeps
+  Google Maps and Data attribution on screen.
+- Added a DISPLAY Zoom to pointer control. On, the wheel zooms about the
+  globe pick under the cursor so a city stays under the pointer. Off keeps
+  today's center zoom. No pick falls back to center. Invert scroll still
+  only flips direction. The choice persists as `meridian.zoomToPointer`
+  and defaults off.
+- Added a camera-center lat,lon copy control next to Copy view link. It shows
+  the pose already computed from `positionCartographic` (same source as the
+  share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept
+  as the secondary GIS order. Height is not shown, so the units toggle is
+  unused. No /api and no place names.
+- Hosted WX OFF | ON chrome sits next to the HUD and cockpit clocks and
+  toggles the existing cockpit weather-effects render flag
+  (`godsEyeView.cockpitWeatherEffects.enabled`). Off removes globe FX;
+  Local Info still fetches Open-Meteo and shows the credit when weather
+  values are on screen. Hidden-tab and offline pauses still apply. No new
+  weather vendor or `/api`.
+- Added a bike-share system picker for the existing allowlisted GBFS city list.
+  Switching a system uses the current `/api/gbfs` URL builder only, persists
+  the last system locally, and does not add hosts or open the proxy.
+- Added a top-center north-up compass. Click or `N` sets heading 0 and keeps
+  the current target, range, and tilt. The needle tracks camera heading.
+  Home still returns the full default pose. Share links keep using the
+  existing `heading` field.
 - Hosted `/api/military-installations` on Vercel through the existing live
   catch-all (`api/[...path].js`), forwarding the GET handler extracted to
   `src/data/militaryInstallationsHttp.js`. Keeps the non-dateline ≤10° bbox
@@ -115,6 +202,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
   "Offline — showing last data". AIS is not wrapped. No service worker.
+- Radio volume is a 0–100 slider on the existing Radio Browser audio element.
+  The level persists as `meridian.radioVolume`. Mute sets 0 and unmute
+  restores the prior level. Disabling the Radio layer still stops audio.
+  Station search and play are unchanged. No new `/api` and no voice ducking.
 
 ### Changed
 
