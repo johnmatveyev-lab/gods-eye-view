@@ -33,6 +33,7 @@ import {
   releaseContinuousRender,
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
+import { installCameraCrosshair, readCrosshairPreference } from './cameraCrosshair.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { initResponsibleUseNotice } from './responsibleUseNotice.js';
 import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
@@ -306,6 +307,11 @@ async function init() {
     // see src/scopeMask.js. Installed before the UI so the DISPLAY-rail
     // toggle finds it live.
     installScopeMask(viewer);
+    // CSS plus at the same canvas-center pick copy-coords / measure use.
+    // Installed before the UI so the DISPLAY-rail toggle finds it live.
+    let storedCrosshair = false;
+    try { storedCrosshair = readCrosshairPreference(window.localStorage); } catch { /* default off */ }
+    installCameraCrosshair(viewer, { enabled: storedCrosshair });
 
     // The follow camera recomputes the tracked target's dead-reckon position
     // every frame — tracking anything is a per-frame animation. (perf wave 2)
@@ -336,7 +342,7 @@ async function init() {
     // loop burning behind a hidden tab. (perf wave 2 fix)
     syncVisibilitySuspension();
 
-    window.__godsEyeView = {
+    window.__meridian = {
       viewer,
       styleManager,
       tileset,
@@ -352,8 +358,9 @@ async function init() {
       getPowerMode: () => styleManager.getPowerMode(),
       setPowerMode: (mode) => styleManager.setPowerMode(mode),
     };
-    window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
-    void meridianAccountReady.then((account) => attachVoiceGate(window.__godsEyeView.voiceCommands, account));
+    window.__godsEyeView = window.__meridian;
+    window.__meridian.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
+    void meridianAccountReady.then((account) => attachVoiceGate(window.__meridian.voiceCommands, account));
 
   } catch (error) {
     console.error('Meridian initialization failed:', error);

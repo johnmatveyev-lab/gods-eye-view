@@ -2729,8 +2729,9 @@ test('destroy settles an explicit refresh waiting behind invalidated periodic wo
 // disagree with the layer's real state.
 
 /** DOM double rich enough for the row-controls render path. */
-function makeControlElement() {
+function makeControlElement(tagName = 'div') {
   const element = {
+    tagName: String(tagName).toLowerCase(),
     children: [],
     className: '',
     dataset: {},
@@ -2768,6 +2769,12 @@ function makeControlElement() {
     addEventListener(name, handler) { this.listeners[name] = handler; },
     setAttribute(name, value) { this.attributes[name] = String(value); },
     closest(selector) {
+      if (selector.includes('.')) {
+        const [tag, ...classes] = selector.split('.');
+        const tagOk = !tag || this.tagName === tag;
+        const classOk = classes.every((name) => String(this.className).split(/\s+/).includes(name));
+        return tagOk && classOk ? this : null;
+      }
       const className = selector.slice(1);
       return String(this.className).split(/\s+/).includes(className) ? this : null;
     },
@@ -2776,9 +2783,13 @@ function makeControlElement() {
         const id = selector.slice(16, -2);
         return this.children.find((child) => child.dataset.layerId === id) || null;
       }
+      const tag = selector.includes('.') || selector.startsWith('.') || selector.startsWith('[')
+        ? ''
+        : selector.toLowerCase();
       const className = selector.startsWith('.') ? selector.slice(1) : '';
       const visit = (node) => {
-        if (String(node.className).split(/\s+/).includes(className)) return node;
+        if (tag && node.tagName === tag) return node;
+        if (className && String(node.className).split(/\s+/).includes(className)) return node;
         for (const child of node.children || []) {
           const found = visit(child);
           if (found) return found;
@@ -2807,6 +2818,7 @@ function collectByClass(node, className) {
 /** A layer that declares a two-state chip plus a legend, like satellites. */
 function makeRowControlLayer() {
   let mode = 'core';
+  let group = 'stations';
   return {
     get mode() { return mode; },
     module: {
@@ -2820,8 +2832,11 @@ function makeRowControlLayer() {
       disable() {},
       async update() {},
       getStats() { return { count: 3, lastUpdate: Date.now() }; },
-      setParams(params) { if (params.catalog) mode = params.catalog; },
-      getParams() { return { catalog: mode }; },
+      setParams(params) {
+        if (params.catalog) mode = params.catalog;
+        if (params.satGroup) group = params.satGroup;
+      },
+      getParams() { return { catalog: mode, satGroup: group }; },
       getRowControls() {
         const dense = mode === 'dense';
         return {
@@ -2841,6 +2856,18 @@ function makeRowControlLayer() {
               params: { catalog: 'dense' },
             },
           ],
+          selects: [{
+            id: 'sat-group',
+            label: 'Sats',
+            title: 'CelesTrak TLE group',
+            param: 'satGroup',
+            value: group,
+            options: [
+              { value: 'stations', label: 'Stations' },
+              { value: 'weather', label: 'Weather' },
+              { value: 'geo', label: 'GEO' },
+            ],
+          }],
           legend: [
             { klass: 'nav', label: 'NAV', color: '#4fd8ff', blurb: 'GNSS', count: 2 },
             { klass: 'geo', label: 'GEO', color: '#c89bff', blurb: 'belt', count: 5 },
@@ -2880,6 +2907,15 @@ test('a layer that declares row controls renders its chips and color legend', as
     assert.equal(chips[1].dataset.chipId, 'catalog-dense');
     assert.equal(chips[1].attributes['aria-pressed'], 'false');
     assert.equal(chips[1].title, 'toggle the dense catalog');
+
+    const picker = collectByClass(controls, 'data-toggle-select')[0];
+    assert.ok(picker, 'the sats group select is on the row');
+    assert.equal(picker.value, 'stations');
+    assert.equal(picker.dataset.selectId, 'sat-group');
+    const optionValues = picker.children.map((child) => child.value);
+    assert.deepEqual(optionValues, ['stations', 'weather', 'geo']);
+    assert.equal(optionValues.includes('active'), false);
+    assert.equal(optionValues.includes('../etc'), false);
 
     const swatches = collectByClass(controls, 'data-toggle-legend-swatch');
     assert.deepEqual(swatches.map((s) => s.style.background), ['#4fd8ff', '#c89bff'],
@@ -2926,6 +2962,33 @@ test('clicking a row chip applies the params it declared and re-renders', async 
         .find((chip) => chip.dataset.chipId === 'catalog-core').attributes['aria-pressed'],
       'true',
     );
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('changing the sats group select writes satGroup and leaves launches alone', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  mgr.register(layer.module);
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    const controls = container
+      .querySelector('[data-layer-id="satellites"]')
+      .querySelector('.data-toggle-controls');
+    const select = collectByClass(controls, 'data-toggle-select')[0];
+    select.value = 'weather';
+    controls.listeners.change({ target: select });
+    assert.equal(layer.module.getParams().satGroup, 'weather');
+    assert.equal(collectByClass(controls, 'data-toggle-select')[0].value, 'weather');
+    assert.equal(layer.module.getParams().catalog, 'core', 'DENSE / launches catalog is independent');
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;
@@ -3182,6 +3245,78 @@ test('a system picker stays visible while the layer is off and does not write la
     controls.listeners.change({ target: select });
     assert.equal(selected, 'nyc-citibike');
     assert.equal(paramsCalls.length, 0, 'picker must not go through setLayerParams');
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
+test('a chip group heading wraps a second Sim|Hide pair under the first heading', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const paramsCalls = [];
+  mgr.register({
+    id: 'traffic',
+    name: 'Street Traffic',
+    icon: '',
+    source: 'OpenStreetMap',
+    updateInterval: 0,
+    async init() {},
+    enable() {},
+    disable() {},
+    async update() {},
+    getStats() { return { count: 4, lastUpdate: Date.now() }; },
+    setParams(params) { paramsCalls.push({ ...params }); },
+    getParams() { return {}; },
+    getRowControls() {
+      return {
+        heading: 'Traffic',
+        chips: [
+          { id: 'traffic-source-live', label: 'Live', active: true, params: { trafficSource: 'live' } },
+          { id: 'traffic-source-sim', label: 'Sim', active: false, params: { trafficSource: 'sim' } },
+          {
+            id: 'uncovered-sim',
+            label: 'Sim',
+            active: true,
+            group: 'Uncovered',
+            params: { uncoveredRoads: 'sim' },
+          },
+          {
+            id: 'uncovered-hide',
+            label: 'Hide',
+            active: false,
+            group: 'Uncovered',
+            params: { uncoveredRoads: 'hide' },
+          },
+        ],
+      };
+    },
+  });
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('traffic', true), true);
+    mgr._refreshTogglePanel();
+    const controls = container
+      .querySelector('[data-layer-id="traffic"]')
+      .querySelector('.data-toggle-controls');
+    const headings = collectByClass(controls, 'data-toggle-heading');
+    assert.deepEqual(headings.map((node) => node.textContent), ['Traffic', 'Uncovered']);
+    assert.equal(collectByClass(controls, 'data-toggle-row-break').length, 1);
+    const chips = collectByClass(controls, 'data-toggle-chip');
+    assert.deepEqual(chips.map((chip) => chip.dataset.chipId), [
+      'traffic-source-live',
+      'traffic-source-sim',
+      'uncovered-sim',
+      'uncovered-hide',
+    ]);
+
+    const hide = chips.find((chip) => chip.dataset.chipId === 'uncovered-hide');
+    controls.listeners.click({ target: hide });
+    assert.deepEqual(paramsCalls, [{ uncoveredRoads: 'hide' }]);
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;

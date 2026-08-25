@@ -38,6 +38,20 @@ import {
   subscribeTrailsEnabled,
   trailDrawingVisible,
 } from './trailPreference.js';
+import {
+  EMERGENCY_HIGHLIGHT_CSS,
+  getEmergencyHighlightEnabled,
+  normalizeSquawk,
+  shouldPaintEmergencyHighlight,
+  subscribeEmergencyHighlightEnabled,
+} from './emergencySquawk.js';
+import {
+  aircraftMatchesAltitudeBand,
+  getAltitudeBand,
+  hydrateAltitudeBand,
+  setAltitudeBand,
+  subscribeAltitudeBand,
+} from './flightAltitudeBand.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
 import {
   screenProjectedRotation,
@@ -104,6 +118,9 @@ const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
 /** Amber tint for known-military aircraft rendered by this layer (matches the military layer's icon color). */
 const MIL_TINT = Cesium.Color.fromCssColorString('#FFB800');
+/** Existing annotation alert red for public emergency squawks 7500/7600/7700. */
+const EMERGENCY_HIGHLIGHT_COLOR = Cesium.Color.fromCssColorString(EMERGENCY_HIGHLIGHT_CSS);
+const EMERGENCY_TRANSPARENT = EMERGENCY_HIGHLIGHT_COLOR.withAlpha(0);
 
 // --- Ground traffic (product change 2026-07-03: "absolutely we should see planes
 // taxiing and landing") -----------------------------------------------------------
@@ -126,9 +143,25 @@ const MIL_TINT = Cesium.Color.fromCssColorString('#FFB800');
 const GROUND_SCALE = 0.8;
 
 /** Fleet (untracked) billboard tint: amber for known-military, white otherwise.
- *  Ground traffic gets NO special tint (validated behavior 2026-07-03 field test). */
-function _fleetBillboardColor(icao24) {
+ *  Ground traffic gets NO special tint (validated behavior 2026-07-03 field test).
+ *  Public emergency squawks 7500/7600/7700 use the existing alert-red token
+ *  when Emergency highlight is on. Altitude-band hide still wins. */
+function _contactUsesEmergencyHighlight(icao24) {
+  return shouldPaintEmergencyHighlight({
+    squawk: _flightData.get(icao24)?.squawk,
+    highlightEnabled: getEmergencyHighlightEnabled(),
+    inAltitudeBand: _inAltitudeBand(icao24),
+  });
+}
+
+function _contactIconColor(icao24, { tracked = false } = {}) {
+  if (_contactUsesEmergencyHighlight(icao24)) return EMERGENCY_HIGHLIGHT_COLOR;
+  if (tracked || icao24 === _trackedIcao) return Cesium.Color.CYAN;
   return isMilitaryIcao(icao24) ? MIL_TINT : Cesium.Color.WHITE;
+}
+
+function _fleetBillboardColor(icao24) {
+  return _contactIconColor(icao24);
 }
 
 /** Fleet billboard scale: per-class scale, ×GROUND_SCALE while grounded. */
@@ -491,7 +524,9 @@ function _applyFleetBillboardPresentation(icao24, bb) {
     bb.height = COCKPIT_CONTACT_SIZE_PX;
     bb.scale = limbScale;
     bb.scaleByDistance = _cockpitBillboardScaleByDistance();
-    bb.color = (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR).withAlpha(freshnessAlpha);
+    bb.color = (_contactUsesEmergencyHighlight(icao24)
+      ? EMERGENCY_HIGHLIGHT_COLOR
+      : (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR)).withAlpha(freshnessAlpha);
     bb.rotation = 0;
     return;
   }
@@ -606,6 +641,63 @@ function _applyTrailDrawing() {
 }
 
 subscribeTrailsEnabled(_applyTrailDrawing);
+
+/** Restyle fleet billboards/models when Emergency highlight flips. Click still tracks. */
+function _applyEmergencyHighlightPaint() {
+  if (typeof _billboardCollection?.add !== 'function') return;
+  for (const [icao24, bb] of _billboards) {
+    _applyFleetBillboardPresentation(icao24, bb);
+  }
+  if (!_irBoost) {
+    for (const [icao24, model] of _models) {
+      if (model?.color) model.color = _modelColor(icao24);
+    }
+  }
+  _viewer?.scene?.requestRender?.();
+}
+
+subscribeEmergencyHighlightEnabled(_applyEmergencyHighlightPaint);
+
+hydrateAltitudeBand();
+subscribeAltitudeBand(_applyAltitudeBandVisibility);
+
+/** Whether this contact is inside the current flights altitude band. */
+function _inAltitudeBand(icao24, info = _flightData.get(icao24)) {
+  return aircraftMatchesAltitudeBand({
+    altitudeM: Number.isFinite(info?.altitude) ? info.altitude : null,
+    onGround: info?.onGround === true,
+  }, getAltitudeBand());
+}
+
+/** Reveal an untracked fleet billboard only when the altitude band allows it. */
+function _revealUntrackedBillboard(icao24, bb) {
+  if (!bb || icao24 === _trackedIcao) return;
+  bb.show = _inAltitudeBand(icao24);
+}
+
+/**
+ * Hide out-of-band fleet contacts immediately. In-band contacts are shown
+ * unless a 3D model already owns the visual; the next fleet tick re-applies
+ * the horizon cull. Empty band → zero visible, no hang.
+ * Emergency squawk does not punch through this hide.
+ */
+function _applyAltitudeBandVisibility() {
+  if (!_billboards) return;
+  let visible = 0;
+  for (const [icao24, bb] of _billboards) {
+    const inBand = _inAltitudeBand(icao24);
+    if (inBand) visible += 1;
+    if (icao24 === _trackedIcao) continue;
+    if (!inBand) {
+      if (bb.show) bb.show = false;
+      const model = _models.get(icao24);
+      if (model && model.show) model.show = false;
+      continue;
+    }
+    if (!_modelOwnsVisual(icao24)) bb.show = true;
+  }
+  _count = visible;
+}
 
 // ---------------------------------------------------------------------------
 // Render-behind smoothing (PRD WS-C C2 — approved product decision):
@@ -1490,8 +1582,7 @@ function _resetTrackedDisplay() {
 
 /** Model tint, mirroring the billboard color rules. */
 function _modelColor(icao24) {
-  if (icao24 === _trackedIcao) return Cesium.Color.CYAN;
-  return isMilitaryIcao(icao24) ? MIL_TINT : Cesium.Color.WHITE;
+  return _contactIconColor(icao24, { tracked: icao24 === _trackedIcao });
 }
 
 /** The FLEET's 3D-model regime: models3d enabled AND the camera zoomed in past the altitude
@@ -1705,13 +1796,13 @@ function _modelDisplayPosition(icao24, pos, result) {
  * belongs to a model that is about to draw, not to one still waiting. */
 function _driveFleetModelHandoff(icao24, model, bb, pos, course, beforeShow) {
   if (!model) {
-    bb.show = true;
+    _revealUntrackedBillboard(icao24, bb);
     return false;
   }
   const displayPos = _modelDisplayPosition(icao24, pos, _scratchGroundPos);
   if (!displayPos) {
     model.show = false; // no ground evidence → nothing safe to place a depth-tested model at
-    bb.show = true;
+    _revealUntrackedBillboard(icao24, bb);
     return false;
   }
   // The matrix is written BEFORE the readiness test on purpose: a model can flip
@@ -1720,7 +1811,7 @@ function _driveFleetModelHandoff(icao24, model, bb, pos, course, beforeShow) {
   _modelMatrix(displayPos, course, model.modelMatrix);
   if (!model.ready) {
     model.show = false; // not loaded yet → keep the 2D icon, no half-model flash
-    bb.show = true;
+    _revealUntrackedBillboard(icao24, bb);
     return false;
   }
   beforeShow?.();
@@ -2329,7 +2420,7 @@ function _syncModelToClass(icao24) {
   const current = _models.get(icao24);
   if ((current && current._gevSpecKey !== key) || (!current && _modelPending.has(icao24))) {
     const bb = _billboards.get(icao24);
-    if (bb && icao24 !== _trackedIcao) bb.show = true;
+    if (bb && icao24 !== _trackedIcao) _revealUntrackedBillboard(icao24, bb);
     _releaseModel(icao24);
   }
   if (icao24 === _trackedIcao && _trackedModel && _trackedModel._gevSpecKey !== key) {
@@ -2382,7 +2473,7 @@ function _drainIrReloadQueue() {
     const model = _models.get(icao);
     if (!model || model._gevIrBoost === _irBoost) continue; // already right state
     const bb = _billboards.get(icao);
-    if (bb && icao !== _trackedIcao) bb.show = true;
+    if (bb && icao !== _trackedIcao) _revealUntrackedBillboard(icao, bb);
     _releaseModel(icao);
   }
   if (_irReloadQueue.length === 0) _irReloadQueue = null;
@@ -2740,11 +2831,14 @@ function _fleetTick() {
     // otherwise it reappears wearing its stale (often creation-north) nose for
     // up to ROTATION_REFRESH_MS. (Model-handed-off planes also read show=false
     // here; harmless — the model branch below `continue`s past the rotation.)
-    const revealed = !beyondHorizon && !bb.show;
-    if (bb.show === beyondHorizon) bb.show = !beyondHorizon;
-    if (beyondHorizon) {
+    const inBand = _inAltitudeBand(icao24, info);
+    const hideFleet = beyondHorizon || !inBand;
+    const revealed = !hideFleet && !bb.show;
+    if (bb.show === hideFleet) bb.show = !hideFleet;
+    if (hideFleet) {
       // Also hide any 3D model — otherwise a model that crossed the limb would keep
-      // rendering through the hidden globe at its last matrix.
+      // rendering through the hidden globe at its last matrix. Out-of-band
+      // contacts stay in the current payload; they just do not draw.
       const m = _models.get(icao24);
       if (m && m.show) m.show = false;
       continue;
@@ -2770,7 +2864,9 @@ function _fleetTick() {
     );
     const isCockpitNear = _cockpitContactMode && _cockpitNearContacts.has(icao24);
     const baseColor = _cockpitContactMode && !isCockpitNear
-      ? (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR)
+      ? (_contactUsesEmergencyHighlight(icao24)
+        ? EMERGENCY_HIGHLIGHT_COLOR
+        : (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR))
       : _fleetBillboardColor(icao24);
     const treatment = applyAircraftBillboardTreatment({
       billboard: bb,
@@ -3173,7 +3269,7 @@ function _clearTracking(skipViewerUntrack = false, {
   // ROTATION_REFRESH_MS of a wrong (possibly reversed) nose on release.
   if (_billboards.has(_trackedIcao)) {
     const bb = _billboards.get(_trackedIcao);
-    bb.show = true;
+    bb.show = _inAltitudeBand(_trackedIcao);
     bb.width = 20;
     bb.height = 20;
     // Ground/military-aware restore (a plane untracked while taxiing must come
@@ -3336,7 +3432,7 @@ function _refreshTr3bContact(icao24) {
     // an already-loaded model would otherwise linger with the billboard hidden.
     if (_models.has(id) || _modelPending.has(id)) _releaseModel(id);
     const bb = _billboards.get(id);
-    if (bb && id !== _trackedIcao) bb.show = true; // horizon cull re-asserts next tick
+    if (bb && id !== _trackedIcao) _revealUntrackedBillboard(id, bb); // horizon cull re-asserts next tick
     if (id === _trackedIcao) {
       _releaseTrackedModel();
       _syncTracked2dRotation();
@@ -3492,7 +3588,15 @@ export function _updateTrackedModelForTest() {
 
 /** Evaluate the production tracked-billboard handoff colour for focused tests. */
 export function _trackedBillboardColorForTest() {
-  return _modelOwnsVisual(_trackedIcao) ? CYAN_TRANSPARENT : Cesium.Color.CYAN;
+  if (_modelOwnsVisual(_trackedIcao)) {
+    return _contactUsesEmergencyHighlight(_trackedIcao) ? EMERGENCY_TRANSPARENT : CYAN_TRANSPARENT;
+  }
+  return _contactIconColor(_trackedIcao, { tracked: true });
+}
+
+/** Evaluate the production fleet/emergency icon colour for focused tests. */
+export function _contactIconColorForTest(icao24, options) {
+  return _contactIconColor(icao24, options);
 }
 
 /** Drive the exact fleet billboard-to-model handoff used by `_fleetTick`. */
@@ -3608,9 +3712,12 @@ function _trackFlight(icao24, { origin = 'programmatic' } = {}) {
       scale: CLASS_SCALE_2D[_flightData.get(_trackedIcao)?.klass] || 1,
       // Solid cyan when the billboard is the visual (zoomed out, 3D off, or model still loading);
       // transparent once the STANDALONE tracked model is actually up (ready + shown).
-      color: new Cesium.CallbackProperty(() => (
-        _modelOwnsVisual(_trackedIcao) ? CYAN_TRANSPARENT : Cesium.Color.CYAN
-      ), false),
+      color: new Cesium.CallbackProperty(() => {
+        const paint = _contactIconColor(_trackedIcao, { tracked: true });
+        return _modelOwnsVisual(_trackedIcao)
+          ? (_contactUsesEmergencyHighlight(_trackedIcao) ? EMERGENCY_TRANSPARENT : CYAN_TRANSPARENT)
+          : paint;
+      }, false),
       sizeInMeters: false,
       scaleByDistance: new Cesium.NearFarScalar(1000, 3.0, 8000000, 0.5),
       alignedAxis: Cesium.Cartesian3.ZERO,
@@ -3718,7 +3825,7 @@ function _onMilitaryActiveChange(active) {
       _groundSnap.forget(icao24);
       _missingPolls.delete(icao24);
     }
-    _count = _billboards.size;
+    _count = [..._billboards.keys()].filter((icao24) => _inAltitudeBand(icao24)).length;
   } else if (_billboardCollection.show) {
     // Fire-and-forget refresh; only while the layer is actually enabled.
     void flightsLayer.update(_viewer);
@@ -4188,7 +4295,8 @@ const flightsLayer = {
       // [4] last_contact, [5] longitude, [6] latitude, [7] baro_altitude,
       // [8] on_ground, [9] velocity, [10] true_track, [11] vertical_rate,
       // [12] sensors, [13] geo_altitude (WGS84 ellipsoidal — the CORRECT
-      // globe-render height when present; height-datum fix Task 6).
+      // globe-render height when present; height-datum fix Task 6),
+      // [14] squawk (public transponder code; 7500/7600/7700 paint only).
       // Keep military classification fresh while the military layer is off
       refreshMilitaryRegistryIfStale();
 
@@ -4197,6 +4305,7 @@ const flightsLayer = {
         const icao24 = _normalizeTrackedIcao(rawIcao24);
         const category = Number.isFinite(state[17]) ? state[17] : null; // extended=1 emitter category
         const vertical_rate = Number.isFinite(state[11]) ? state[11] : null; // m/s, + = climbing
+        const squawk = normalizeSquawk(state[14]);
         acceptedSnapshotIcaos.add(icao24);
         const onGround = on_ground === true;
 
@@ -4385,6 +4494,9 @@ const flightsLayer = {
           // Analyst seam: OpenSky origin_country (state[2]) — additive, sticky
           // like callsign so a transient blank row doesn't blank the field.
           originCountry: stickyText(origin_country, prevMeta?.originCountry) || null,
+          // Current-payload public squawk only. Not sticky: a dropped field
+          // is not treated as an ongoing emergency.
+          squawk,
           // OpenSky distinguishes the last position epoch from the last
           // transponder message. The fleet coast horizon uses this actual
           // contact time so a temporarily old position does not hard-freeze
@@ -4505,7 +4617,9 @@ const flightsLayer = {
             // Screen-projected rotation lands on the next fleet tick.
             rotation: 0,
             alignedAxis: Cesium.Cartesian3.ZERO,
-            color: isTracked ? Cesium.Color.CYAN : _fleetBillboardColor(icao24),
+            color: isTracked
+              ? _contactIconColor(icao24, { tracked: true })
+              : _fleetBillboardColor(icao24),
             sizeInMeters: false,
             scaleByDistance: _normalBillboardScaleByDistance(),
             // Grounded/near-surface planes sit at/below the photoreal tile
@@ -4513,7 +4627,7 @@ const flightsLayer = {
             // close (_groundDepthDistance).
             disableDepthTestDistance: _groundDepthDistance(),
             id: icao24,
-            show: !isTracked, // hidden if currently tracked (entity replaces it)
+            show: !isTracked && _inAltitudeBand(icao24, meta), // hidden if tracked or out-of-band
           });
           _billboards.set(icao24, bb);
           _applyFleetBillboardPresentation(icao24, bb);
@@ -4614,7 +4728,7 @@ const flightsLayer = {
       // in place is safe (the DR extrapolates a zero-velocity fix).
       _refloorStaleGroundedContacts(currentIcaos);
 
-      _count = _billboards.size;
+      _count = [...currentIcaos].filter((icao24) => _inAltitudeBand(icao24)).length;
       // Freshness belongs to the source snapshot, not the moment this browser
       // received a cached 200 response.
       _lastUpdate = sourceEpochMs ?? Date.now();
@@ -4749,7 +4863,9 @@ const flightsLayer = {
         // Restore fleet billboards (the horizon-cull pass re-asserts next tick), but NEVER the
         // tracked plane's own fleet billboard — its tracked entity is the visual, so re-showing it
         // here would double-image the tracked plane when 3D is turned off mid-track.
-        if (_billboardCollection) for (const [icao, bb] of _billboards) { if (icao !== _trackedIcao) bb.show = true; }
+        if (_billboardCollection) {
+          for (const [icao, bb] of _billboards) _revealUntrackedBillboard(icao, bb);
+        }
       }
     }
     if ((params.models3dMode === 'proximity' || params.models3dMode === 'all') && params.models3dMode !== _models3dMode) {

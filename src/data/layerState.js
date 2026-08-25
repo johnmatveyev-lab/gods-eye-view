@@ -212,6 +212,10 @@ const OPTION_GROUPS = Object.freeze({
   ]),
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),
+    // Default ON matches the long-standing hardcoded ring visibility. This is a
+    // new token, so omitted `o` means the same thing existing v2 links already
+    // showed: rings on.
+    booleanOption('showOrbits', 'o', true),
     integerOption('selectedSatTrackingId', 't', null),
   ]),
   cctv: Object.freeze([
@@ -239,6 +243,14 @@ const OPTION_GROUPS = Object.freeze({
       normalize: normalizeVolume,
       encode: (value) => String(Math.round(value * 100)),
       decode: (value) => (/^\d{1,3}$/.test(value) ? normalizeVolume(Number(value) / 100) : null),
+    }),
+  ]),
+  'local-firms': Object.freeze([
+    enumOption('frpFloor', 'f', 'all', ['all', '10', '50', '100'], {
+      all: 'a',
+      10: '1',
+      50: '5',
+      100: 'c',
     }),
   ]),
 });
@@ -282,7 +294,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   Object.freeze({ id: 'flights', token: 'f', disposition: 'enabled+options', optionOwner: 'flights' }),
   Object.freeze({ id: 'local-dams', token: 'q', disposition: 'enabled-only' }),
   Object.freeze({ id: 'local-datacenters', token: 'd', disposition: 'enabled-only' }),
-  Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled-only' }),
+  Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled+options', optionOwner: 'local-firms' }),
   Object.freeze({ id: 'military', token: 'm', disposition: 'enabled+mirrored-options', optionOwner: 'flights' }),
   Object.freeze({ id: 'military-awareness', token: 'g', disposition: 'enabled-only' }),
   Object.freeze({ id: 'military-installations', token: 'i', disposition: 'enabled-only' }),
@@ -370,6 +382,27 @@ export function validateLayerStateRegistry(registry = LAYER_STATE_REGISTRY) {
 }
 
 validateLayerStateRegistry();
+
+/**
+ * Whether this browser already has a durable layer profile.
+ * An explicit empty enabled set is still a profile — All off wrote it.
+ */
+export function hasStoredLayerProfile(storage) {
+  try {
+    return parseStoredLayerState(storage?.getItem?.(LAYER_STATE_STORAGE_KEY)) != null;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * First-visit layer defaults (PLAN 89) apply only on a fresh profile.
+ * All off persists the empty enabled set, so a later boot must not
+ * re-apply those defaults.
+ */
+export function shouldApplyFirstVisitLayerDefault(storage) {
+  return !hasStoredLayerProfile(storage);
+}
 
 /**
  * First hosted visit only: globe is already on, and civilian flights are the
@@ -626,10 +659,12 @@ export class LayerStateCoordinator {
     // Clean boot only. lastView and share URLs arrive as shareLayerState;
     // gev:layer-state:v2 arrives as stored local prefs. Neither is rewritten
     // to the first-visit set.
-    if (!selected && this._source === 'defaults') {
+    if (!selected && this._source === 'defaults' && shouldApplyFirstVisitLayerDefault(this.storage)) {
       selected = createFirstVisitLayerState();
     }
     this._durableState = selected || createDefaultLayerState();
+    // First-visit defaults may run only when nothing was stored. All off
+    // writes an empty enabled set; that is a profile, not a fresh visit.
     this.shareLinkManager?.setLayerStateProvider?.(() => this.getDurableState());
     this.shareLinkManager?.onLayerStateChange?.();
     this._notifyDurableState();

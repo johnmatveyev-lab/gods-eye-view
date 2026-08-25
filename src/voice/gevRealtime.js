@@ -1,4 +1,5 @@
-import { PLANS } from '../billing/plans.js';
+import { BILLING_CODES, voiceDenial } from '../billing/entitlements.js';
+import { PLANS, PRO_PRICE_USD } from '../billing/plans.js';
 import { createGevActionRunner, readLayerLifecycleSummary } from './gevActions.js';
 import {
   DEFAULT_VOICE_TIER,
@@ -10,6 +11,7 @@ import {
   resolveVoiceModel,
   serializeCostLimits,
 } from './voiceCost.js';
+import { prefKey, readPrefKey, writePrefKey } from '../prefStorage.js';
 
 const TOKEN_URL = '/api/realtime/token';
 const REALTIME_CALLS_URL = 'https://api.openai.com/v1/realtime/calls';
@@ -34,10 +36,10 @@ const VIEWPORT_MAX_ENCODED_BYTES = 200 * 1024; // ~200 KB encoded ceiling
 const ERROR_LOG_LIMIT = 30;
 const ERROR_STORAGE_KEY = 'gev-realtime-errors';
 const DEBUG_LOG_URL = '/api/realtime/debug-log';
-// Voice cost control (repo-wide `godsEyeView.<feature>.<field>` convention;
+// Voice cost control (repo-wide `meridian.<feature>.<field>` convention;
 // the neighbouring ERROR_STORAGE_KEY predates it).
-const VOICE_TIER_STORAGE_KEY = 'godsEyeView.voiceCost.tier';
-const VOICE_LIMITS_STORAGE_KEY = 'godsEyeView.voiceCost.limits';
+const VOICE_TIER_STORAGE_KEY = prefKey('voiceCost.tier');
+const VOICE_LIMITS_STORAGE_KEY = prefKey('voiceCost.limits');
 // The input meter is intentionally stricter than the assistant-output meter:
 // microphones carry room tone even after browser noise suppression, whereas the
 // incoming Realtime stream is already clean speech audio.
@@ -60,7 +62,7 @@ function voiceStorage(storage) {
  */
 export function readStoredVoiceTier(storage) {
   try {
-    const raw = voiceStorage(storage)?.getItem(VOICE_TIER_STORAGE_KEY);
+    const raw = readPrefKey(voiceStorage(storage), VOICE_TIER_STORAGE_KEY);
     return isKnownVoiceTier(raw) ? resolveVoiceModel(raw).tier : DEFAULT_VOICE_TIER;
   } catch {
     return DEFAULT_VOICE_TIER;
@@ -71,7 +73,7 @@ export function readStoredVoiceTier(storage) {
 export function writeStoredVoiceTier(tier, storage) {
   const resolved = resolveVoiceModel(tier).tier;
   try {
-    voiceStorage(storage)?.setItem(VOICE_TIER_STORAGE_KEY, resolved);
+    writePrefKey(voiceStorage(storage), VOICE_TIER_STORAGE_KEY, resolved);
   } catch {
     /* best effort */
   }
@@ -84,7 +86,7 @@ export function writeStoredVoiceTier(tier, storage) {
  */
 export function readStoredVoiceLimits(storage) {
   try {
-    const raw = voiceStorage(storage)?.getItem(VOICE_LIMITS_STORAGE_KEY);
+    const raw = readPrefKey(voiceStorage(storage), VOICE_LIMITS_STORAGE_KEY);
     if (!raw) return normalizeCostLimits(null);
     return normalizeCostLimits(JSON.parse(raw));
   } catch {
@@ -103,7 +105,8 @@ export function readStoredVoiceLimits(storage) {
 export function writeStoredVoiceLimits(limits, storage) {
   const normalized = normalizeCostLimits(limits);
   try {
-    voiceStorage(storage)?.setItem(
+    writePrefKey(
+      voiceStorage(storage),
       VOICE_LIMITS_STORAGE_KEY,
       JSON.stringify(serializeCostLimits(normalized))
     );
@@ -1450,13 +1453,14 @@ export class GevRealtimeController {
     this.ui.root.dataset.status = status;
     if (status === 'error') this.ui.root.classList.remove('error-dismissed');
     this.updateVoiceButtonLabel();
-    this.ui.status.textContent = STATUS[status] || STATUS.idle;
     const resolvedDetail = status === 'listening' && this.pushToTalkMode
       ? (this.pushToTalkKeyHeld ? 'Release Space to send' : 'Hold Space to talk')
       : detail;
-    const primaryDetail = status === 'error'
-      ? 'VOICE UNAVAILABLE'
-      : (resolvedDetail || (status === 'idle' ? 'VOICE STANDBY' : 'VOICE ACTIVE'));
+    const errorChrome = status === 'error' ? voiceHostErrorChrome(resolvedDetail) : null;
+    this.ui.status.textContent = errorChrome?.statusLabel || STATUS[status] || STATUS.idle;
+    const primaryDetail = errorChrome?.detail
+      || resolvedDetail
+      || (status === 'idle' ? 'VOICE STANDBY' : 'VOICE ACTIVE');
     this.ui.detail.textContent = primaryDetail;
     this.ui.detail.title = primaryDetail;
     if (this.ui.errorDetail) {
@@ -2189,7 +2193,7 @@ function isSecretLikeKey(key) {
 }
 
 async function captureViewportImage() {
-  const viewer = window.__godsEyeView?.viewer;
+  const viewer = window.__meridian?.viewer;
   const source = viewer?.scene?.canvas || document.querySelector('#cesiumContainer .cesium-widget canvas');
   if (!source || !source.width || !source.height) return null;
   // No fresh frame (hidden, or the bounded render wait timed out) → no
@@ -2518,7 +2522,40 @@ export function voiceSessionAllowed(entitlement, account = null) {
 /** Click action when MIC is locked on a hosted plan. */
 export function voiceGateAction(entitlement, account = null) {
   if (voiceSessionAllowed(entitlement, account)) return 'start';
+  const code = voiceDenial(entitlement)?.code;
+  if (code === BILLING_CODES.AUTH_REQUIRED) return 'signin';
+  if (code === BILLING_CODES.BUDGET_EXHAUSTED) return 'exhausted';
+  if (code === BILLING_CODES.VOICE_REQUIRES_PRO) return 'upgrade';
   return entitlement?.signedIn ? 'upgrade' : 'signin';
+}
+
+/** Existing upgrade / sign-in / budget modal copy for a locked MIC click. */
+export function voiceGateModalCopy(entitlement, account = null) {
+  const action = voiceGateAction(entitlement, account);
+  if (action === 'start') return null;
+  const denial = voiceDenial(entitlement);
+  if (action === 'signin') {
+    return {
+      action: 'signin',
+      title: 'Voice is a Pro feature',
+      body: denial?.error || 'Sign in for a capped Free demo, then upgrade to Pro for voice.',
+      primary: 'Sign in',
+    };
+  }
+  if (action === 'exhausted') {
+    return {
+      action: entitlement?.plan === PLANS.PRO ? 'close' : 'upgrade',
+      title: 'Daily budget used',
+      body: denial?.error || 'Daily Pro budget used. Try again after UTC midnight or manage your plan.',
+      primary: entitlement?.plan === PLANS.PRO ? 'Close' : 'Upgrade to Pro',
+    };
+  }
+  return {
+    action: 'upgrade',
+    title: 'Voice is a Pro feature',
+    body: denial?.error || `Upgrade to Pro ($${PRO_PRICE_USD}/mo) for hands-free voice on this host. The globe stays available on Free.`,
+    primary: 'Upgrade to Pro',
+  };
 }
 
 export function describeRealtimeTokenHttpError(status) {
@@ -2529,6 +2566,17 @@ export function describeRealtimeTokenHttpError(status) {
 
 export function shouldRetryRealtimeToken(status) {
   return describeRealtimeTokenHttpError(status) == null;
+}
+
+/** Hosted 404/503 token failures are a short unavailable line, not generic ERROR. */
+export function voiceHostErrorChrome(detail) {
+  if (
+    detail === describeRealtimeTokenHttpError(404)
+    || detail === describeRealtimeTokenHttpError(503)
+  ) {
+    return { statusLabel: 'UNAVAILABLE', detail };
+  }
+  return { statusLabel: STATUS.error, detail: 'VOICE UNAVAILABLE' };
 }
 
 export function applyVoiceMicChrome(ui, entitlement, account = null) {

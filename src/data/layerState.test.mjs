@@ -45,6 +45,7 @@ function paramsForLayer(id) {
       calibration: { cameraId: 'secret-camera', values: { heading: 12 } },
     };
   }
+  if (id === 'local-firms') return { frpFloor: 'all' };
   if (id === 'radio') {
     return {
       filter: 'all',
@@ -284,8 +285,24 @@ test('unknown and forbidden option fields are ignored while missing options use 
   const serialized = `${encode(raw)} ${serializeStoredLayerState(raw)}`;
   for (const forbidden of [
     'private-camera', 'calibration', 'autoHopSec', 'irBoost', 'showPoints',
-    'showOrbits', 'private-station', 'audioState', 'voiceDucked', 'secret',
+    'private-station', 'audioState', 'voiceDucked', 'secret',
   ]) assert.equal(serialized.includes(forbidden), false, forbidden);
+});
+
+test('FIRMS FRP floor is a cheap local-firms enum that defaults to All', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['local-firms'].frpFloor, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=w'));
+  assert.equal(omitted.options['local-firms'].frpFloor, 'all', 'existing w links stay All');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['local-firms'],
+    options: { 'local-firms': { frpFloor: '50' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /w\.f\.5/);
+  assert.equal(decodeLayerStateParams(params).options['local-firms'].frpFloor, '50');
 });
 
 test('Radio genre ids with spaces and ampersands round-trip through v2', () => {
@@ -335,7 +352,7 @@ test('compact URL omits absent-meaning option state and still resolves to it', (
   // URL-omission test. The default's own value is pinned in the fresh-boot test
   // below, and the divergence itself in the two codec tests above.
   state.options.flights = { models3d: false, models3dMode: 'proximity', selectedFlightsTrackingId: null, selectedMilitaryTrackingId: null };
-  state.options.satellites = { catalog: 'core', showPoints: true, showOrbits: true, selectedSatTrackingId: null };
+  state.options.satellites = { catalog: 'core', showOrbits: true, showPoints: true, selectedSatTrackingId: null };
   const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
   assert.equal(params.has('lo'), false);
   const roundTrip = decodeLayerStateParams(params);
@@ -343,7 +360,50 @@ test('compact URL omits absent-meaning option state and still resolves to it', (
   assert.equal(roundTrip.options.flights.models3dMode, 'proximity');
   assert.deepEqual(roundTrip.options.flights.selectedFlightsTrackingId, null);
   assert.deepEqual(roundTrip.options.flights.selectedMilitaryTrackingId, null);
+  assert.equal(roundTrip.options.satellites.catalog, 'core');
+  assert.equal(roundTrip.options.satellites.showOrbits, true);
   assert.deepEqual(roundTrip.options.satellites.selectedSatTrackingId, null);
+});
+
+test('satellite orbit rings persist through share links and local reload', async () => {
+  assert.equal(createDefaultLayerState().options.satellites.showOrbits, true);
+
+  const off = normalizeLayerState({
+    enabledLayerIds: ['satellites'],
+    options: { satellites: { catalog: 'dense', showOrbits: false } },
+  });
+  assert.equal(off.options.satellites.catalog, 'dense');
+  assert.equal(off.options.satellites.showOrbits, false);
+  const encoded = encode(off);
+  assert.match(encoded, /s\.c\.d/);
+  assert.match(encoded, /s\.o\.0/);
+  const shared = decodeLayerStateParams(new URLSearchParams(encoded));
+  assert.equal(shared.options.satellites.catalog, 'dense');
+  assert.equal(shared.options.satellites.showOrbits, false);
+
+  const stored = serializeStoredLayerState(off);
+  assert.match(stored, /"showOrbits":false/);
+  assert.equal(parseStoredLayerState(stored).options.satellites.showOrbits, false);
+
+  const storage = memoryStorage();
+  const manager = productionManager();
+  const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage });
+  await coordinator.start();
+  await manager.setEnabled('satellites', true, { origin: 'user' });
+  assert.equal(manager.setLayerParams('satellites', { showOrbits: false }, { origin: 'user' }), true);
+  assert.equal(coordinator.getDurableState().options.satellites.showOrbits, false);
+  assert.equal(coordinator.getDurableState().options.satellites.catalog, 'core');
+  coordinator.destroy();
+
+  const reloaded = productionManager();
+  const restored = new LayerStateCoordinator(reloaded, shareSink(), {
+    storage: memoryStorage(storage.getItem(LAYER_STATE_STORAGE_KEY)),
+  });
+  await restored.start();
+  assert.equal(restored.getDurableState().options.satellites.showOrbits, false);
+  assert.equal(reloaded.getLayerParams('satellites').showOrbits, false);
+  assert.equal(reloaded.getLayerParams('satellites').catalog, 'core');
+  restored.destroy();
 });
 
 test('a fresh profile enables only the first-visit default: civilian flights', async () => {

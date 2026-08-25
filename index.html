@@ -68,6 +68,17 @@
       <span class="contacts-roster-toggle-label">CONTACTS</span>
     </button>
     <button
+      id="installations-list-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="installations-viewport-list"
+      aria-label="Sites — mapped installations in view"
+      title="Sites — list mapped installations already loaded for this view"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">location_away</span>
+      <span class="installations-list-toggle-label">SITES</span>
+    </button>
+    <button
       id="launches-panel-toggle"
       type="button"
       aria-pressed="false"
@@ -78,8 +89,26 @@
       <span class="material-symbols-outlined" aria-hidden="true">rocket_launch</span>
       <span class="launches-panel-toggle-label">LAUNCHES</span>
     </button>
-    <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
+    <button
+      id="clear-selected-layers"
+      type="button"
+      data-all-off
+      aria-label="All off — disable every live data layer"
+      title="All off — live layers off, camera stays"
+    >
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
+      <span class="all-off-layers-label">ALL OFF</span>
+    </button>
+    <button
+      id="restore-live-layers"
+      type="button"
+      hidden
+      data-restore-live-layers
+      aria-label="Restore layers from before All off"
+      title="Restore the layers that were on before All off. Does not move the globe."
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">layers</span>
+      <span class="restore-live-layers-label">RESTORE</span>
     </button>
     <button id="clear-annotations" type="button" aria-label="Clear annotations" title="Erase whiteboard marks" disabled>
       <span class="material-symbols-outlined" aria-hidden="true">ink_eraser</span>
@@ -102,6 +131,9 @@
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
+    <button id="measure-toggle" type="button" aria-label="Measure distance" title="Measure distance" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">straighten</span>
+    </button>
     <div id="camera-coords">
       <button type="button" id="camera-coords-value" class="camera-coords-value" aria-label="Copy camera coordinates" title="Copy lat,lon">—, —</button>
       <button type="button" id="camera-coords-copy" class="camera-coords-copy" aria-label="Copy lat,lon" title="Copy lat,lon">
@@ -117,7 +149,24 @@
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
+    <button id="earthquake-list-toggle" type="button" aria-label="Quakes" title="Recent earthquakes" aria-expanded="false" aria-controls="earthquake-list-panel" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">landslide</span>
+    </button>
   </nav>
+  <div id="measure-readout" hidden>
+    <span id="measure-readout-label">Click two globe points</span>
+    <button id="measure-clear" type="button">Clear</button>
+  </div>
+  <aside id="installations-viewport-list" hidden aria-label="Mapped installations in the current view">
+    <div class="installations-viewport-list-header">
+      <div>
+        <strong>MAPPED SITES</strong>
+        <span>Current view · public mapped features</span>
+      </div>
+      <output data-installations-list-count>—</output>
+    </div>
+    <div class="installations-viewport-list-body" data-installations-list></div>
+  </aside>
   <aside id="launches-panel" hidden aria-label="Upcoming launches">
     <div class="launches-panel-inner">
       <div class="launches-panel-header">
@@ -131,6 +180,16 @@
         <div class="launches-panel-empty">LOADING 30-DAY MISSION INDEX</div>
       </div>
     </div>
+  </aside>
+  <aside id="earthquake-list-panel" hidden>
+    <div class="earthquake-list-header">
+      <div>
+        <strong>QUAKES</strong>
+        <span>USGS · 24H · M2.5+</span>
+      </div>
+      <output id="earthquake-list-count" data-earthquake-list-count>—</output>
+    </div>
+    <div id="earthquake-list" class="earthquake-list" role="list" aria-live="polite"></div>
   </aside>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
@@ -148,6 +207,12 @@
 
   <!-- Toast notification -->
   <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="keyboard-shortcuts-overlay" hidden role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="keyboard-shortcuts-title">
+    <h2 id="keyboard-shortcuts-title">Keyboard shortcuts</h2>
+    <p class="keyboard-shortcuts-note">Pitch is R / Page Up / Page Down. F opens the data panel. Fullscreen is the button + Escape.</p>
+    <dl id="keyboard-shortcuts-list"></dl>
+  </div>
 
   <!-- Safe frame guides for recording composition -->
   <div id="safe-frame-overlay">
@@ -483,6 +548,16 @@
           <button class="pp-mode-btn" id="units-mi" data-units="mi" role="radio" aria-checked="false">mi</button>
         </div>
       </div>
+      <div class="pp-slider-row visible" id="alt-band-row">
+        <span class="pp-slider-mini-label">Alt</span>
+        <div class="pp-mode-seg alt-band-seg" role="radiogroup" aria-label="Flight altitude band">
+          <button class="pp-mode-btn active" id="alt-band-all" data-alt-band="all" role="radio" aria-checked="true">All</button>
+          <button class="pp-mode-btn" id="alt-band-surface" data-alt-band="surface" role="radio" aria-checked="false">Surface</button>
+          <button class="pp-mode-btn" id="alt-band-lt10k" data-alt-band="lt10k" role="radio" aria-checked="false">&lt;3.0 km</button>
+          <button class="pp-mode-btn" id="alt-band-mid" data-alt-band="mid" role="radio" aria-checked="false">3.0 km–9.1 km</button>
+          <button class="pp-mode-btn" id="alt-band-gt30k" data-alt-band="gt30k" role="radio" aria-checked="false">&gt;9.1 km</button>
+        </div>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="scale-bar-toggle" title="Scale bar — on-globe distance in the current unit" aria-pressed="true">
@@ -570,6 +645,12 @@
       </button>
     </div>
     <div class="pp-toggle-group">
+      <button class="pp-toggle-btn active" id="emergency-highlight-toggle" aria-pressed="true" title="Emergency highlight — public squawk 7500/7600/7700. Not a verified emergency. Public squawk field only. Click still tracks.">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">sos</span>
+        <span class="pp-label">Emergency</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="scope-toggle" title="Scope — the circular viewport mask" aria-pressed="true">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">adjust</span>
         <span class="pp-label">Scope</span>
@@ -584,6 +665,12 @@
         <input type="range" class="pp-slider" id="scope-feather-slider" min="0" max="100" value="11" title="Scope edge feather as a percentage of the keyhole radius" />
         <span class="pp-slider-value" id="scope-feather-value">11%</span>
       </div>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn active" id="keep-above-toggle" aria-pressed="true" title="Keep camera above ground — lift if a zoom or tilt clips into the mesh">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">vertical_align_top</span>
+        <span class="pp-label">Above</span>
+      </button>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="celestial-toggle" title="Celestial ring — reveal the full globe" aria-pressed="false">
@@ -603,6 +690,12 @@
         <span class="pp-label">Grid</span>
       </button>
     </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="crosshair-toggle" title="Crosshair — mark the camera-center aim point" aria-pressed="false">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">add</span>
+        <span class="pp-label">Crosshair</span>
+      </button>
+    </div>
     <button class="pp-toggle-btn" id="clean-view-toggle" title="Hide UI chrome">
       <span class="pp-icon">&#x25A1;</span>
       <span class="pp-label">Clean UI</span>
@@ -617,6 +710,12 @@
       <button class="pp-toggle-btn" id="invert-scroll-toggle" type="button" title="Invert scroll zoom" aria-pressed="false" aria-label="Invert scroll zoom">
         <span class="pp-icon" aria-hidden="true">&#x2195;</span>
         <span class="pp-label">Invert scroll</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="lock-tilt-toggle" type="button" title="Lock tilt — rotate heading only" aria-pressed="false" aria-label="Lock tilt">
+        <span class="pp-icon" aria-hidden="true">&#x29BF;</span>
+        <span class="pp-label">Lock tilt</span>
       </button>
     </div>
     <div class="pp-toggle-group">
@@ -786,6 +885,29 @@
         <div id="datacenter-in-view-items" class="in-view-site-list-items" role="list"></div>
         <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
       </div>
+      <div id="dams-in-view" class="in-view-site-list" hidden>
+        <div class="in-view-site-list-header">
+          <strong>DAMS IN VIEW</strong>
+          <output id="dams-in-view-count" aria-live="polite">0</output>
+        </div>
+        <div id="dams-in-view-items" class="in-view-site-list-items" role="list"></div>
+        <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Nearby NASA FIRMS fires (trailing 24h payload; click flies to the detection) -->
+  <div id="fires-panel" class="panel-collapsible collapsed" data-panel-id="fires-panel">
+    <div class="panel-glow"></div>
+    <div class="fires-panel-inner">
+      <div class="panel-header">
+        <span class="panel-title">FIRES</span>
+        <span class="panel-divider"></span>
+        <button class="panel-collapse-btn" data-collapse-target="fires-panel" title="Collapse panel">+</button>
+      </div>
+      <div id="fires-list-meta" class="fires-list-meta">Enable FIRMS Active Fires to list nearby detections.</div>
+      <ol id="fires-list" class="fires-list" aria-label="Nearby NASA FIRMS fires"></ol>
+      <p id="fires-list-ack" class="fires-list-ack">We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Earth Observing System Data and Information System (EOSDIS).</p>
     </div>
   </div>
 
@@ -1115,7 +1237,7 @@
     <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: sign in for a Free demo. Voice is a Pro feature on hosted Meridian.</p>
   </aside>
 
-  <p id="meridian-terms">Meridian is independent, based on the MIT-licensed God's Eye View project. It is not affiliated with Bilawal Sidhu or the God's Eye View series.</p>
+  <p id="meridian-terms">Meridian is independent, based on the MIT-licensed God's Eye View project. It is not affiliated with, endorsed by, or an official continuation of Bilawal Sidhu or the God's Eye View series.</p>
 
   <div id="billing-exhausted" hidden>
     <div class="billing-exhausted-card">

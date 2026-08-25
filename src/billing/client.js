@@ -12,7 +12,7 @@ import {
   saveCurrentView,
   shouldShowSavedViewsButton,
 } from './savedViews.js';
-import { applyVoiceMicChrome, voiceGateAction } from '../voice/gevRealtime.js';
+import { applyVoiceMicChrome, voiceGateModalCopy } from '../voice/gevRealtime.js';
 
 const HEARTBEAT_MS = 30_000;
 const HEARTBEAT_SECONDS = 30;
@@ -86,18 +86,16 @@ export function attachVoiceGate(voiceController, account = window.__meridianAcco
   account.voiceController = voiceController;
   button.addEventListener('click', (event) => {
     const entitlement = account.entitlement;
-    const action = voiceGateAction(entitlement, account);
+    const copy = voiceGateModalCopy(entitlement, account);
     applyVoiceMicChrome(voiceController.ui, entitlement, account);
-    if (action === 'start') return;
+    if (!copy) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     openModal(document.getElementById('billing-modal'), {
-      title: 'Voice is a Pro feature',
-      body: entitlement?.signedIn
-        ? `Upgrade to Pro ($${PRO_PRICE_USD}/mo) for hands-free voice on this host. The globe stays available on Free.`
-        : 'Sign in for a capped Free demo, then upgrade to Pro for voice.',
-      primary: entitlement?.signedIn ? 'Upgrade to Pro' : 'Sign in',
-    }, account, { primaryAction: action });
+      title: copy.title,
+      body: copy.body,
+      primary: copy.primary,
+    }, account, { primaryAction: copy.action });
   }, true);
 }
 
@@ -373,14 +371,14 @@ function formatSavedViewWhen(createdAt) {
 }
 
 function captureCurrentShareUrl() {
-  const manager = window.__godsEyeView?.styleManager?.shareLinkManager;
+  const manager = window.__meridian?.styleManager?.shareLinkManager;
   const captured = manager?.currentShareUrl?.();
   if (captured) return captured;
   return encodeShareViewUrl(window.location.href, window.location.hash);
 }
 
 function applySavedViewUrl(url) {
-  const manager = window.__godsEyeView?.styleManager?.shareLinkManager;
+  const manager = window.__meridian?.styleManager?.shareLinkManager;
   const hash = decodeShareViewUrl(url);
   if (manager && hash) {
     window.location.hash = hash;

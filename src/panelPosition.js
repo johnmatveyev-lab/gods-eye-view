@@ -1,9 +1,20 @@
 /**
  * Client-only panel position persistence helpers.
  *
- * Leftover `godsEyeView.v6` / `v7` panelPos keys are read and clamped in
- * place. This cycle does not rename those keys to the current version.
+ * Current keys are `meridian.{version}.panelPos.{id}`. Leftover
+ * `godsEyeView.v6` / `v7` (and leftover current-version) panelPos keys are
+ * copied once onto the matching Meridian key and left in place. This cycle
+ * does not rewrite leftover versions onto the current version.
  */
+
+import {
+  legacyPrefKey,
+  panelCollapsedSuffix,
+  panelPositionSuffix,
+  prefKey,
+  readPrefKey,
+  writePrefKey,
+} from './prefStorage.js';
 
 export const PANEL_POSITION_INSET_PX = 6;
 export const LEGACY_PANEL_POSITION_STORAGE_VERSIONS = Object.freeze(['v6', 'v7']);
@@ -18,7 +29,17 @@ export const DEFAULT_COLLAPSED_PANEL_SIZE = Object.freeze({ width: 176, height: 
  * @returns {string}
  */
 export function panelPositionStorageKey(panelId, version) {
-  return `godsEyeView.${version}.panelPos.${panelId}`;
+  return prefKey(panelPositionSuffix(version, panelId));
+}
+
+/**
+ * Versioned leftover localStorage key for a panel's saved top-left position.
+ * @param {string} panelId
+ * @param {string} version
+ * @returns {string}
+ */
+export function leftoverPanelPositionStorageKey(panelId, version) {
+  return legacyPrefKey(panelPositionSuffix(version, panelId));
 }
 
 /**
@@ -28,7 +49,17 @@ export function panelPositionStorageKey(panelId, version) {
  * @returns {string}
  */
 export function panelCollapsedStorageKey(panelId, version = PANEL_COLLAPSE_STORAGE_VERSION) {
-  return `godsEyeView.${version}.panelCollapsed.${panelId}`;
+  return prefKey(panelCollapsedSuffix(version, panelId));
+}
+
+/**
+ * Versioned leftover localStorage key for a panel's collapsed flag.
+ * @param {string} panelId
+ * @param {string} [version]
+ * @returns {string}
+ */
+export function leftoverPanelCollapsedStorageKey(panelId, version = PANEL_COLLAPSE_STORAGE_VERSION) {
+  return legacyPrefKey(panelCollapsedSuffix(version, panelId));
 }
 
 /**
@@ -97,7 +128,8 @@ export function clampPanelPosition({
 }
 
 /**
- * Locate a stored panel position without writing a newer version key.
+ * Locate a stored panel position. Copies a leftover `godsEyeView.*` value
+ * onto the matching Meridian key once and does not invent a newer version.
  * @param {{ getItem: (key: string) => string|null }} storage
  * @param {string} panelId
  * @param {string} currentVersion
@@ -107,12 +139,7 @@ export function resolveStoredPanelPosition(storage, panelId, currentVersion) {
   if (!storage) return null;
   for (const version of panelPositionReadVersions(currentVersion)) {
     const key = panelPositionStorageKey(panelId, version);
-    let raw;
-    try {
-      raw = storage.getItem(key);
-    } catch {
-      return null;
-    }
+    const raw = readPrefKey(storage, key);
     if (raw == null) continue;
     return { version, key, pos: parseStoredPanelPosition(raw) };
   }
@@ -135,7 +162,7 @@ export function restoredPanelPosition(storage, panelId, currentVersion, box) {
 
 /**
  * Remove one panel's leftover and current pos keys plus its collapsed flag.
- * Other `godsEyeView.*` keys are left untouched.
+ * Other preference keys are left untouched.
  * @param {{ removeItem: (key: string) => void }} storage
  * @param {string} panelId
  * @param {string} currentVersion
@@ -149,12 +176,14 @@ export function resetStoredPanelLayout(storage, panelId, currentVersion) {
   for (const version of versions) {
     try {
       storage.removeItem(panelPositionStorageKey(panelId, version));
+      storage.removeItem(leftoverPanelPositionStorageKey(panelId, version));
     } catch {
       // storage unavailable
     }
   }
   try {
     storage.removeItem(panelCollapsedStorageKey(panelId));
+    storage.removeItem(leftoverPanelCollapsedStorageKey(panelId));
   } catch {
     // storage unavailable
   }
@@ -162,7 +191,7 @@ export function resetStoredPanelLayout(storage, panelId, currentVersion) {
 
 /**
  * On boot, clamp or reset any restored panel whose stored position is
- * off-viewport. Writes stay on the same leftover/current key.
+ * off-viewport. Writes stay on the matching Meridian leftover/current key.
  * @param {object} input
  * @param {{ getItem: Function, setItem: Function, removeItem: Function }} input.storage
  * @param {string[]} input.panelIds
@@ -201,7 +230,7 @@ export function sanitizeStoredPanelPositions({
 
     let collapsed = false;
     try {
-      collapsed = storage.getItem(panelCollapsedStorageKey(panelId)) === '1';
+      collapsed = readPrefKey(storage, panelCollapsedStorageKey(panelId)) === '1';
     } catch {
       collapsed = false;
     }
@@ -224,7 +253,7 @@ export function sanitizeStoredPanelPositions({
       continue;
     }
     try {
-      storage.setItem(resolved.key, JSON.stringify(clamped));
+      writePrefKey(storage, resolved.key, JSON.stringify(clamped));
     } catch {
       resetStoredPanelLayout(storage, panelId, currentVersion);
       results.push({ panelId, action: 'reset', reason: 'storage' });

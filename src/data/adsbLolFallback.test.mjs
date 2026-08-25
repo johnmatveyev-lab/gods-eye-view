@@ -19,6 +19,7 @@ test('normalizes adsb.lol units into an OpenSky-compatible state vector', () => 
     seen_pos: 2,
     seen: 1,
     category: 'A3',
+    squawk: '1200',
   }, 1000);
 
   assert.equal(state[0], 'a1b2c3');
@@ -32,6 +33,7 @@ test('normalizes adsb.lol units into an OpenSky-compatible state vector', () => 
   assert.equal(state[10], 90);
   assert.ok(Math.abs(state[11] - 3.048) < 0.001);
   assert.equal(state[13], 3108.96);
+  assert.equal(state[14], '1200');
   assert.equal(state[17], 4);
 });
 

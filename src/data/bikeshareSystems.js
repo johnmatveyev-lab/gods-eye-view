@@ -12,6 +12,8 @@ import { GBFS_ALLOWED_HOSTS } from './gbfs.js';
 
 /** localStorage key for the last picked allowlisted system. */
 export const BIKESHARE_SYSTEM_STORAGE_KEY = 'meridian.bikeshare.system';
+/** localStorage key for the Hide empty station filter. Default omitted = OFF. */
+export const BIKESHARE_HIDE_EMPTY_STORAGE_KEY = 'meridian.bikeshare.hideEmpty';
 
 /** Default system: the app's first-run city. */
 export const DEFAULT_BIKESHARE_SYSTEM_ID = 'austin-capmetro';
@@ -116,4 +118,43 @@ export function bikeshareSystemPickerLabel(system) {
   const provider = String(system?.provider || '').trim();
   if (city && provider) return `${city} · ${provider}`;
   return city || provider || 'GBFS';
+}
+
+/**
+ * @param {unknown} value
+ * @returns {boolean|null}
+ */
+export function normalizeBikeshareHideEmpty(value) {
+  if (value === true || value === 1 || value === '1' || value === 'true') return true;
+  if (value === false || value === 0 || value === '0' || value === 'false') return false;
+  return null;
+}
+
+/**
+ * @param {{getItem?: Function}|null} storage
+ * @returns {boolean|null}
+ */
+export function readPersistedBikeshareHideEmpty(storage) {
+  if (!storage || typeof storage.getItem !== 'function') return null;
+  try {
+    return normalizeBikeshareHideEmpty(storage.getItem(BIKESHARE_HIDE_EMPTY_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {{setItem?: Function}|null} storage
+ * @returns {boolean|null}
+ */
+export function writePersistedBikeshareHideEmpty(value, storage) {
+  const normalized = normalizeBikeshareHideEmpty(value);
+  if (normalized == null || !storage || typeof storage.setItem !== 'function') return null;
+  try {
+    storage.setItem(BIKESHARE_HIDE_EMPTY_STORAGE_KEY, normalized ? '1' : '0');
+    return normalized;
+  } catch {
+    return null;
+  }
 }

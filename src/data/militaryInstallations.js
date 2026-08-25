@@ -17,7 +17,7 @@ import {
 // sequentially so overlapping renders cannot stack requests on the proxy.
 import { warmFireAnchorFloors } from './fireAnchors.js';
 import { normalizeMilitaryInstallations } from './militaryInstallationData.js';
-import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
+import { isSceneClickCaptured, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 
 const LAYER_ID = 'military-installations';
 const REQUEST_DEBOUNCE_MS = 500;
@@ -348,7 +348,7 @@ function installInteraction(viewer) {
   if (state.clickHandler) return;
   state.clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   state.clickHandler.setInputAction((click) => {
-    if (!state.enabled) return;
+    if (!state.enabled || isSceneClickCaptured()) return;
     const picked = viewer.scene.pick(click.position);
     const id = typeof picked?.id?.id === 'string' ? picked.id.id : null;
     if (id && state.recordById.has(id)) selectRecord(id);
@@ -560,6 +560,13 @@ const militaryInstallationsLayer = {
     clearRendered();
     if (state.dataSource && viewer) viewer.dataSources.remove(state.dataSource, true);
     state.dataSource = null;
+  },
+  /**
+   * Snapshot the current bbox payload. Does not fetch.
+   * @returns {Array<object>} In-memory records for the last successful view.
+   */
+  getViewportRecords() {
+    return state.records.slice();
   },
   getNearby(center, rangeM, maxCount = 50) {
     if (!center) return [];

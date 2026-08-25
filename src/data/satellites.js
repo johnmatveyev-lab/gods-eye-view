@@ -1,6 +1,6 @@
 import * as Cesium from 'cesium';
 import { twoline2satrec, propagate, gstime, eciToGeodetic, degreesLong, degreesLat } from 'satellite.js';
-import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, resolvePickId } from './pickRegistry.js';
+import { registerPickOwner, unregisterPickOwner, isOwnedByOtherLayer, isSceneClickCaptured, resolvePickId } from './pickRegistry.js';
 import { findNextIssPass } from './issPass.js';
 import {
   advanceSpriteFocus,
@@ -33,6 +33,12 @@ import {
 } from './contextStore.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
+import {
+  getSatGroup,
+  listSatGroups,
+  satGroupSpec,
+  setSatGroup,
+} from './satGroup.js';
 
 /**
  * Satellite Orbits — Real-time positions via CelesTrak TLE + SGP4 propagation.
@@ -160,6 +166,12 @@ const POINT_STYLES = {
   geo: {
     pixelSize: 5,
     color: _classColor('geo'),
+    outlineColor: POINT_OUTLINE,
+    outlineWidth: 0,
+  },
+  weather: {
+    pixelSize: 5,
+    color: _classColor('weather'),
     outlineColor: POINT_OUTLINE,
     outlineWidth: 0,
   },
@@ -1331,11 +1343,12 @@ export function _runSatellitePreRenderForTest() {
  * Seed the minimum render state a dense-catalog load needs, so a test can
  * exercise the real async load/settle/fail path (and the row-control states it
  * drives) without constructing a WebGL viewer.
- * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, trackedNorad?: number|null, coreSats?: Array<{noradId: number, name: string, group?: string, satrec?: object, point?: object}> }} [options]
+ * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, trackedNorad?: number|null, coreSats?: Array<{noradId: number, name: string, group?: string, satrec?: object, point?: object}> }} [options]
  */
 export function _setDenseCatalogStateForTest({
   catalog = 'core',
   showPoints = true,
+  showOrbits = false,
   trackedNorad = null,
   coreSats = [],
 } = {}) {
@@ -1371,7 +1384,7 @@ export function _setDenseCatalogStateForTest({
   _catalogRevision++;
   _trackedNorad = trackedNorad;
   _cancelPendingTrackingRestore();
-  _params = { catalog, showPoints, showOrbits: false };
+  _params = { catalog, showPoints, showOrbits };
   _enabled = true;
 }
 
@@ -1399,6 +1412,53 @@ export function _clearDenseCatalogStateForTest() {
 /** Catalog group tag recorded for a satellite, for ingestion-path assertions. */
 export function _catalogGroupForTest(noradId) {
   return _catalog.get(Number(noradId))?.group;
+}
+
+/**
+ * Seed points + orbit-ring primitives without a WebGL viewer, so presentation
+ * tests can exercise `setParams({ showOrbits })` independently of catalog load.
+ * @param {{
+ *   catalog?: 'core'|'dense',
+ *   showPoints?: boolean,
+ *   showOrbits?: boolean,
+ *   points?: number[],
+ *   orbits?: number[],
+ * }} [options]
+ */
+export function _setSatellitePresentationForTest({
+  catalog = 'core',
+  showPoints = true,
+  showOrbits = true,
+  points = [],
+  orbits = [],
+} = {}) {
+  _setDenseCatalogStateForTest({ catalog, showPoints, showOrbits });
+  for (const noradId of points) {
+    const id = Number(noradId);
+    const group = id === 44444 ? 'dense' : 'stations';
+    _catalog.set(id, { name: `SAT-${id}`, satrec: {}, group });
+    _points.set(id, _pointCollection.add({ id, show: true }));
+    if (group === 'dense') _denseIds.push(id);
+  }
+  for (const noradId of orbits) {
+    _orbitPaths.set(Number(noradId), { primitive: { show: showOrbits }, gmstAtBake: 0 });
+  }
+  if (_pointCollection) _pointCollection.show = satelliteVisualsVisible(_enabled, _params.showPoints);
+  _catalogRevision++;
+}
+
+/** Live presentation snapshot for orbit/point toggle tests. */
+export function _satelliteVisualStateForTest() {
+  return {
+    catalog: _params.catalog,
+    showPoints: _params.showPoints,
+    showOrbits: _params.showOrbits,
+    pointCollectionShow: _pointCollection ? Boolean(_pointCollection.show) : null,
+    pointIds: [..._points.keys()],
+    orbitShows: Object.fromEntries(
+      [..._orbitPaths].map(([id, path]) => [id, Boolean(path.primitive?.show)]),
+    ),
+  };
 }
 
 /** Seed ISS/tracking state while retaining the production track and host paths. */
@@ -1648,9 +1708,10 @@ const satellitesLayer = {
       : resourceController.signal;
     try {
       updateSignal.throwIfAborted();
-      // Load all core groups in parallel; a failed/empty group degrades
-      // gracefully (parseTLE of an upstream error body yields []).
-      const results = await Promise.all(CATALOG_GROUPS.map(async (groupDef) => {
+      // Load the persisted CelesTrak group (meridian.satGroup). The picker
+      // lists only proxy-safe groups the client already requests, plus weather.
+      const groupDef = satGroupSpec(getSatGroup());
+      const results = await Promise.all([groupDef].map(async (groupDef) => {
         try {
           const res = await fetch(`/api/celestrak/${groupDef.path}`, { signal: updateSignal });
           if (!res.ok) return { ...groupDef, entries: [], ok: false };
@@ -2078,12 +2139,18 @@ const satellitesLayer = {
    * Runtime params (DataLayerManager.setLayerParams path).
    * catalog: 'core' (default, ~840 sats) | 'dense' (adds the Starlink shell
    * as points-only extras on a relaxed propagation budget).
-   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null }} [params]
+   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string }} [params]
    */
-  setParams(params = {}, { origin = 'programmatic' } = {}) {
+  setParams(params = {}, { origin = 'programmatic', storage } = {}) {
     if (isExplicitLayerStateOrigin(origin)
         && !Object.hasOwn(params, 'selectedSatTrackingId')) {
       _cancelPendingTrackingRestore();
+    }
+    let satGroupChanged = false;
+    if (Object.hasOwn(params, 'satGroup')) {
+      const previous = getSatGroup(storage);
+      const next = setSatGroup(params.satGroup, storage);
+      satGroupChanged = next !== previous;
     }
     const catalog = params.catalog;
     if (catalog !== undefined && catalog !== 'core' && catalog !== 'dense') return false;
@@ -2112,6 +2179,13 @@ const satellitesLayer = {
       _denseError = null;
     }
     if (catalogChanged) console.log(`[Data:Satellites] Catalog mode: ${catalog}`);
+    if (satGroupChanged) {
+      console.log(`[Data:Satellites] CelesTrak group: ${getSatGroup(storage)}`);
+      _notifyRowControls();
+      if (_enabled && _viewer) {
+        void this.update(_viewer);
+      }
+    }
     if (Object.hasOwn(params, 'selectedSatTrackingId')) {
       const requested = _normalizeTrackedNorad(params.selectedSatTrackingId);
       if (requested === _trackedNorad) {
@@ -2129,10 +2203,11 @@ const satellitesLayer = {
     return true;
   },
 
-  /** @returns {{ catalog: string }} Current runtime params. */
+  /** @returns {{ catalog: string, satGroup: string }} Current runtime params. */
   getParams() {
     return {
       catalog: _params.catalog,
+      satGroup: getSatGroup(),
       showPoints: _params.showPoints,
       showOrbits: _params.showOrbits,
       selectedSatTrackingId: _trackedNorad,
@@ -2141,32 +2216,56 @@ const satellitesLayer = {
 
   /**
    * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
-   * Dense catalog chips plus a class legend so the point colors are learnable
-   * without a new panel.
+   * Dense catalog chips, the Plan 65 Sats group picker, an ORBITS chip over
+   * the existing `showOrbits` param, plus a class legend.
    *
    * The chips are stateless — they declare the params to apply and the manager
    * owns the write, so the Space Missions snapshot/restore path (which drives
-   * the same `catalog` param) stays the single source of truth.
+   * the same `catalog` / `showOrbits` params) stays the single source of truth.
    *
    * Dense reports the LOAD state, not the catalog param: the param flips
    * synchronously while the Starlink shell takes seconds to arrive and
    * frequently 502s, so ACTIVE means "dense points are on screen" and nothing
    * less. The legend tally is cached against the catalog revision.
-   * @returns {{ chips: Array<object>, legend: Array<object> }} Row controls.
+   * @returns {{ chips: Array<object>, legend: Array<object>, selects: Array<object> }} Row controls.
    */
   getRowControls() {
     // A dependency owner (Space Missions) borrows this layer for TLE lookup
     // with showPoints:false. Nothing is rendered, so a legend would describe an
     // empty sky and a chip write would be silently reverted by that owner's
     // restore. Surrender the row rather than lie about it.
-    if (!_params.showPoints) return { chips: [], legend: [] };
+    if (!_params.showPoints) return { chips: [], legend: [], selects: [] };
 
+    const catalog = satelliteCatalogControls({
+      catalog: _params.catalog,
+      denseStatus: _denseStatus,
+      denseError: _denseError,
+    });
     return {
-      ...satelliteCatalogControls({
-        catalog: _params.catalog,
-        denseStatus: _denseStatus,
-        denseError: _denseError,
-      }),
+      ...catalog,
+      chips: [
+        ...catalog.chips,
+        {
+          id: 'orbits',
+          label: 'ORBITS',
+          active: _params.showOrbits,
+          busy: false,
+          disabled: false,
+          state: _params.showOrbits ? 'active' : 'idle',
+          title: _params.showOrbits
+            ? 'Hide orbital path rings — satellite points stay visible'
+            : 'Show orbital path rings',
+          params: { showOrbits: !_params.showOrbits },
+        },
+      ],
+      selects: [{
+        id: 'sat-group',
+        label: 'Sats',
+        title: 'CelesTrak TLE group',
+        param: 'satGroup',
+        value: getSatGroup(),
+        options: listSatGroups().map((group) => ({ value: group.id, label: group.label })),
+      }],
       legend: satelliteClassLegend(_classTally()),
     };
   },
@@ -2224,7 +2323,7 @@ function _installClickHandler(viewer) {
 
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    if (!_enabled) return;
+    if (!_enabled || isSceneClickCaptured()) return;
     const picked = viewer.scene.pick(click.position);
 
     if (picked) {

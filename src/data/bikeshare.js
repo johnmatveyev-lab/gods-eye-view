@@ -13,7 +13,7 @@
 import * as Cesium from 'cesium';
 import { governorRequestRender } from '../renderGovernor.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
-import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
+import { isSceneClickCaptured, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -24,8 +24,11 @@ import {
   bikeshareSystemPickerLabel,
   buildGbfsProxyUrl,
   listPickerSystems,
+  normalizeBikeshareHideEmpty,
   normalizeBikeshareSystemId,
+  readPersistedBikeshareHideEmpty,
   readPersistedBikeshareSystem,
+  writePersistedBikeshareHideEmpty,
   writePersistedBikeshareSystem,
 } from './bikeshareSystems.js';
 
@@ -546,10 +549,14 @@ let _unavailable = false;
 let _limitWarned = false;
 /** Currently selected allowlisted system id. */
 let _selectedSystemId = DEFAULT_BIKESHARE_SYSTEM_ID;
+/** Hide stations whose last-good bikesAvailable is exactly 0. Default OFF. */
+let _hideEmpty = false;
 /** Optional storage override for picker persistence tests. */
 let _storageOverride = null;
 /** Manager callback when picker state changes. */
 let _rowControlsListener = null;
+/** Count of `/api/gbfs` fetches — hide-empty must not increment this. */
+let _gbfsFetchCount = 0;
 
 /**
  * Convert an upstream GBFS URL into a local proxy URL.
@@ -576,6 +583,62 @@ function notifyRowControlsChanged() {
   } catch {
     // no-op
   }
+}
+
+/**
+ * Whether a station should stay on the globe under the Hide empty filter.
+ * Unknown / non-finite bike counts stay visible. A selected station stays
+ * visible even after it goes empty, until the operator deselects it.
+ * @param {Object|null|undefined} record
+ * @param {{ hideEmpty?: boolean, selectedKey?: string|null }} [options]
+ * @returns {boolean}
+ */
+export function shouldShowBikeshareStation(record, { hideEmpty = false, selectedKey = null } = {}) {
+  if (!hideEmpty) return true;
+  if (record?.key && record.key === selectedKey) return true;
+  if (!Number.isFinite(record?.bikesAvailable)) return true;
+  return record.bikesAvailable !== 0;
+}
+
+function isSelectedStationRecord(record) {
+  if (!_selectedKey || !record) return false;
+  if (record.key === _selectedKey) return true;
+  return _stationRenderMap.get(_selectedKey) === record;
+}
+
+function applyStationVisibility(record) {
+  if (!record?.point) return;
+  const isSelected = isSelectedStationRecord(record);
+  const shouldDraw = shouldShowBikeshareStation({
+    ...record,
+    key: record.key || (isSelected ? _selectedKey : record.key),
+  }, {
+    hideEmpty: _hideEmpty,
+    selectedKey: _selectedKey,
+  });
+  if (isSelected) {
+    record.point.show = false;
+    if (_selectedEntity) _selectedEntity.show = shouldDraw;
+    return;
+  }
+  record.point.show = shouldDraw;
+}
+
+function applyAllStationVisibility() {
+  governorRequestRender('bikeshare-hide-empty');
+  for (const record of _stationRenderMap.values()) {
+    applyStationVisibility(record);
+  }
+}
+
+function setHideEmpty(nextValue) {
+  const next = nextValue === true;
+  if (next === _hideEmpty) return false;
+  _hideEmpty = next;
+  writePersistedBikeshareHideEmpty(next, safeBikeshareStorage());
+  applyAllStationVisibility();
+  notifyRowControlsChanged();
+  return true;
 }
 
 /**
@@ -930,6 +993,7 @@ function parseStationStatus(payload) {
  * @throws {Error} On non-OK HTTP status or malformed JSON.
  */
 async function fetchGbfsJson(upstreamUrl, { signal, fetchImpl } = {}) {
+  _gbfsFetchCount += 1;
   const request = fetchImpl || fetch;
   const response = await request(toProxyUrl(upstreamUrl), {
     method: 'GET',
@@ -1178,12 +1242,7 @@ export function createBikeshareSelectedOverlayEntry(key, record) {
  * Re-shows the hidden point primitive and removes the highlight entity.
  */
 function _clearSelection() {
-  if (_selectedKey) {
-    const record = _stationRenderMap.get(_selectedKey);
-    if (record?.point) {
-      record.point.show = true;
-    }
-  }
+  const previous = _selectedKey ? _stationRenderMap.get(_selectedKey) : null;
 
   if (_selectedEntity && _viewer) {
     _viewer.entities.remove(_selectedEntity);
@@ -1192,6 +1251,7 @@ function _clearSelection() {
   _selectedKey = null;
   _selectedEntity = null;
   _overlayHost.clearSource(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID);
+  if (previous) applyStationVisibility(previous);
 }
 
 /**
@@ -1227,6 +1287,7 @@ function _selectStation(key) {
       BIKESHARE_SELECTED_OVERLAY_SOURCE_OPTIONS,
     );
   }
+  applyStationVisibility(record);
 }
 
 /**
@@ -1240,6 +1301,7 @@ function _installClickHandler(viewer) {
 
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
+    if (isSceneClickCaptured()) return;
     const picked = viewer.scene.pick(click.position);
 
     if (picked) {
@@ -1420,6 +1482,7 @@ function applyStatusToPoints(cityId, statusMap) {
     // Update visual properties based on current status
     record.point.pixelSize = capacityToPixelSize(capacity);
     record.point.color = statusToColor(status, capacity);
+    applyStationVisibility(record);
   }
 }
 
@@ -1661,6 +1724,7 @@ const bikeshareLayer = {
     _selectedSystemId = readPersistedBikeshareSystem(safeBikeshareStorage(), systems)
       || DEFAULT_BIKESHARE_SYSTEM_ID;
     writePersistedBikeshareSystem(_selectedSystemId, safeBikeshareStorage(), systems);
+    _hideEmpty = readPersistedBikeshareHideEmpty(safeBikeshareStorage()) === true;
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -1793,9 +1857,10 @@ const bikeshareLayer = {
   },
 
   /**
-   * Picker of allowlisted systems. Not a Radio search and not a layer-state filter.
-   * Visible while the layer is off so hosted users can choose before enabling.
-   * @returns {{ picker: object }}
+   * Picker of allowlisted systems plus the Hide empty chip.
+   * The picker stays Plan 68: it still switches allowlisted systems.
+   * Hide empty is a draw filter on already-fetched status, not a new feed.
+   * @returns {{ picker: object, chips: Array<object> }}
    */
   getRowControls() {
     const systems = listBikeshareSystems();
@@ -1810,7 +1875,35 @@ const bikeshareLayer = {
         })),
         ariaLabel: 'Bike-share system',
       },
+      chips: [{
+        id: 'hide-empty',
+        label: 'Hide empty',
+        active: _hideEmpty,
+        title: _hideEmpty
+          ? 'Hiding zero-bike stations — click to show empty docks too'
+          : 'Hide stations with zero bikes available',
+        params: { hideEmpty: !_hideEmpty },
+      }],
     };
+  },
+
+  getParams() {
+    return { hideEmpty: _hideEmpty };
+  },
+
+  /**
+   * Apply Hide empty without refetching GBFS. System switching stays on
+   * setSelectedSystem (Plan 68) and is not accepted here.
+   * @param {Object} [params]
+   * @returns {boolean}
+   */
+  setParams(params = {}) {
+    if (!params || typeof params !== 'object') return true;
+    if (Object.hasOwn(params, 'hideEmpty')) {
+      const next = normalizeBikeshareHideEmpty(params.hideEmpty);
+      if (next !== null) setHideEmpty(next);
+    }
+    return true;
   },
 
   setRowControlsListener(listener) {
@@ -1911,20 +2004,50 @@ export function _setBikeshareSystemStorageForTest(storage) {
 
 export function _resetBikeshareSystemPickerForTest() {
   _selectedSystemId = DEFAULT_BIKESHARE_SYSTEM_ID;
+  _hideEmpty = false;
   _unavailable = false;
   _error = null;
   _enabled = false;
   _activeCityIds = new Set();
+  _cityRuntime = new Map();
+  _stationRenderMap = new Map();
   _stationInfoCache = new Map();
   _statusCache = new Map();
+  _selectedKey = null;
+  _selectedEntity = null;
   _count = 0;
   _lastUpdate = null;
   _loading = false;
   _loadingOps = 0;
+  _gbfsFetchCount = 0;
   _storageOverride = null;
   _rowControlsListener = null;
   _proximityGeneration = 0;
   abortAllInFlight();
+}
+
+/** Seed already-fetched station records so Hide empty can filter without GBFS. */
+export function _seedBikeshareStationsForTest(records, { cityId } = {}) {
+  _stationRenderMap = new Map();
+  _cityRuntime = new Map();
+  const runtime = cityId ? ensureCityRuntime(cityId) : null;
+  for (const record of records) {
+    _stationRenderMap.set(record.key, record);
+    runtime?.stationKeys.add(record.key);
+  }
+  applyAllStationVisibility();
+}
+
+export function _applyBikeshareStatusForTest(cityId, statusMap) {
+  applyStatusToPoints(cityId, statusMap);
+}
+
+export function _getBikeshareStationShowForTest(key) {
+  return _stationRenderMap.get(key)?.point?.show;
+}
+
+export function _getBikeshareGbfsFetchCountForTest() {
+  return _gbfsFetchCount;
 }
 
 export default bikeshareLayer;

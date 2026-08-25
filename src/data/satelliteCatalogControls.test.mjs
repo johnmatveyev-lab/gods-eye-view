@@ -11,6 +11,7 @@ import {
   normalizeLayerState,
 } from './layerState.js';
 import { satelliteCatalogControls } from './satelliteCatalogControls.js';
+import { listSatGroups } from './satGroup.js';
 import satellitesLayer, {
   CORE_CATALOG_GROUPS,
   _catalogGroupForTest,
@@ -118,13 +119,14 @@ test('the layer default is Core and Core does not fetch Starlink', async () => {
     };
     await satellitesLayer.update({ scene: { primitives: { add: (p) => p, remove() {} } } });
     assert.equal(satellitesLayer.getParams().catalog, 'core');
-    assert.ok(fetched.every((url) => CORE_PATHS.some((group) => url.endsWith(`/api/celestrak/${group}`))));
+    assert.ok(fetched.every((url) => url.endsWith('/api/celestrak/stations')),
+      'Core uses the Plan 65 selected group, not Starlink');
     assert.equal(fetched.some((url) => url.endsWith('/api/celestrak/starlink')), false);
     assert.equal(_catalogGroupForTest(ISS_NORAD), 'stations');
-    assert.equal(_catalogGroupForTest(32222), 'gps-ops');
+    assert.equal(_catalogGroupForTest(32222), undefined, 'other core groups stay on the picker');
     assert.equal(_catalogGroupForTest(44444), undefined);
     assert.equal(catalogChip('catalog-core').active, true);
-    assert.equal(satellitesLayer.getStats().count, 2);
+    assert.equal(satellitesLayer.getStats().count, 1);
   } finally {
     console.log = log;
     console.warn = warn;
@@ -227,20 +229,21 @@ test('failed /api/celestrak/starlink leaves Core intact and reports feed-unavail
   }
 });
 
-test('Plan 65 group picker, if present, still filters core groups only', () => {
+test('Plan 65 group picker still filters core groups only', () => {
   _setDenseCatalogStateForTest({});
   try {
     const controls = satellitesLayer.getRowControls();
-    if (!controls.picker) {
-      assert.equal(controls.picker, undefined);
-      assert.equal(controls.chips.some((chip) => CORE_PATHS.includes(chip.id)), false,
-        'Core | Dense is not a CelesTrak group picker');
-      return;
-    }
-    const values = (controls.picker.options || []).map((option) => option.value);
-    assert.ok(values.every((value) => CORE_PATHS.includes(value)),
-      'picker options stay inside the six core groups');
+    const picker = (controls.selects || []).find((entry) => entry.id === 'sat-group');
+    assert.ok(picker, 'Plan 65 Sats picker stays on the row');
+    const values = (picker.options || []).map((option) => option.value);
+    const allowed = new Set(listSatGroups().map((group) => group.id));
+    assert.ok(values.every((value) => allowed.has(value)),
+      'picker options stay inside the Plan 65 allowlist');
     assert.equal(values.includes('starlink'), false);
+    assert.equal(values.includes('active'), false);
+    assert.equal(controls.chips.some((chip) => chip.id === 'catalog-dense'), true);
+    assert.equal(controls.chips.some((chip) => CORE_PATHS.includes(chip.id)), false,
+      'Core | Dense is not a CelesTrak group picker');
   } finally {
     _clearDenseCatalogStateForTest();
   }

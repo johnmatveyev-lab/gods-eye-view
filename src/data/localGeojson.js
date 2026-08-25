@@ -5,6 +5,7 @@ import {
   registerEntityContext,
   selectEntityContext,
 } from './contextStore.js';
+import { isSceneClickCaptured } from './pickRegistry.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -626,7 +627,7 @@ export function createLocalGeoJsonLayer({
         if (!_clickHandler) {
           _clickHandler = screenSpaceEventHandlerFactory(viewer.scene.canvas);
           _clickHandler.setInputAction((click) => {
-            if (!_enabled) return;
+            if (!_enabled || isSceneClickCaptured()) return;
             const picked = viewer.scene.pick(click.position);
             
             if (picked && picked.id && picked.id.__localLayerId === id) {
