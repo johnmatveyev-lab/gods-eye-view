@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Datacenters have a client-only **Hide no operator** toggle on the layer
+  row. Default off matches the current OSM pin set. On hides pins whose
+  cleaned overlay operator string is missing, empty, or whitespace — the
+  same `tags.operator` / `props.operator` / `operator:short` fields
+  overlay copy already reads. Named operators stay. A selected or fly-to
+  pin stays even if it would be filtered. Toggle changes re-filter
+  already-loaded local GeoJSON and do not touch dams. No extra GeoJSON
+  fetch and no new `/api`. Preference persists as
+  `meridian.datacenterHideNoOperator`. Hidden when the Datacenters layer
+  is off. Refresh keeps the toggle.
 - AIS has a client-only **Hide no IMO** toggle next to Hide unnamed.
   Default off matches the current harbor view. On skips in-memory vessels
   whose `imo` is missing, empty, or whitespace-only (trim first). Vessels
