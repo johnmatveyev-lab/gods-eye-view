@@ -117,6 +117,9 @@ export function normalizeRadioBrowserStation(raw) {
     ? normalizedCode
     : normalizeRadioCountryInput(cleanRadioText(raw?.country, 80));
   const bitrate = Number(raw?.bitrate);
+  const lastCheckOk = raw?.lastcheckok === 1 || raw?.lastcheckok === true
+    ? true
+    : (raw?.lastcheckok === 0 || raw?.lastcheckok === false ? false : undefined);
   return {
     id,
     name,
@@ -135,6 +138,7 @@ export function normalizeRadioBrowserStation(raw) {
     codec,
     bitrate: Number.isInteger(bitrate) && bitrate >= 8 && bitrate <= 1024 ? bitrate : null,
     clickCount: Math.max(0, Math.min(10_000_000, Number(raw?.clickcount) || 0)),
+    ...(lastCheckOk === undefined ? {} : { lastCheckOk }),
   };
 }
 
@@ -154,6 +158,9 @@ export function publicRadioStation(station) {
     metadataTrust: station.metadataTrust,
     codec: station.codec,
     bitrate: station.bitrate,
+    ...(station.lastCheckOk === true || station.lastCheckOk === false
+      ? { lastCheckOk: station.lastCheckOk }
+      : {}),
   };
 }
 

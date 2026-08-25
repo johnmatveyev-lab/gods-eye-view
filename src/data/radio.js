@@ -87,6 +87,15 @@ import {
   writeRadioEnglishOnly,
 } from './radioEnglishFilter.js';
 import {
+  DEFAULT_RADIO_HIDE_OFFLINE,
+  filterRadioStationsByOffline,
+  normalizeRadioHideOffline,
+  normalizeRadioLastCheckOk,
+  readRadioHideOffline,
+  stationMatchesRadioOfflineFilter,
+  writeRadioHideOffline,
+} from './radioOfflineFilter.js';
+import {
   DEFAULT_RADIO_VOLUME_PCT,
   radioMuteToggle,
   radioVolumePctToUnit,
@@ -252,6 +261,7 @@ let _favoritesOnly = false;
 let _country = DEFAULT_RADIO_COUNTRY;
 let _state = DEFAULT_RADIO_STATE;
 let _englishOnly = DEFAULT_RADIO_ENGLISH_ONLY;
+let _hideOffline = DEFAULT_RADIO_HIDE_OFFLINE;
 let _selectedId = null;
 let _selectedEntity = null;
 let _selectionGeneration = 0;
@@ -389,6 +399,7 @@ function isValidRadioDirectoryStation(station) {
 }
 
 function freezeRadioStation(station) {
+  const lastCheckOk = normalizeRadioLastCheckOk(station.lastCheckOk ?? station.lastcheckok);
   return Object.freeze({
     id: station.id,
     name: station.name,
@@ -404,6 +415,7 @@ function freezeRadioStation(station) {
     metadataTrust: station.metadataTrust,
     codec: station.codec,
     bitrate: station.bitrate,
+    ...(lastCheckOk === undefined ? {} : { lastCheckOk }),
   });
 }
 
@@ -778,6 +790,10 @@ function applyPersistedRadioState() {
 
 function applyPersistedRadioEnglishOnly() {
   _englishOnly = readRadioEnglishOnly();
+}
+
+function applyPersistedRadioHideOffline() {
+  _hideOffline = readRadioHideOffline();
 }
 
 function commitUserVolume(volume) {
@@ -1269,30 +1285,37 @@ function playingStationKeepId() {
 
 function directoryStations({ keepPlaying = true } = {}) {
   const keepStationId = keepPlaying ? playingStationKeepId() : null;
-  return filterRadioStationsByEnglish(
-    filterRadioStationsByState(
-      filterRadioStationsByCountry(
-        filterRadioStationsByFavorites(
-          filterRadioStationsByCodec(
-            filterRadioStationsByBitrateFloor(
-              filterRadioStations(_stations, _filter),
-              _bitrateFloor,
+  const keepOfflineStationId = keepPlaying
+    ? [_audioStationId, _selectedId].filter(Boolean)
+    : null;
+  return filterRadioStationsByOffline(
+    filterRadioStationsByEnglish(
+      filterRadioStationsByState(
+        filterRadioStationsByCountry(
+          filterRadioStationsByFavorites(
+            filterRadioStationsByCodec(
+              filterRadioStationsByBitrateFloor(
+                filterRadioStations(_stations, _filter),
+                _bitrateFloor,
+                { keepStationId },
+              ),
+              _codecFilter,
               { keepStationId },
             ),
-            _codecFilter,
-            { keepStationId },
+            _favoriteIds,
+            { favoritesOnly: _favoritesOnly },
           ),
-          _favoriteIds,
-          { favoritesOnly: _favoritesOnly },
+          _country,
+          { keepStationId },
         ),
-        _country,
+        _state,
         { keepStationId },
       ),
-      _state,
+      _englishOnly,
       { keepStationId },
     ),
-    _englishOnly,
-    { keepStationId },
+    _hideOffline,
+    { keepStationId: keepOfflineStationId },
   );
 }
 
@@ -1313,7 +1336,10 @@ function stationMatchesCurrentDirectory(station, { keepPlaying = true } = {}) {
     && stationMatchesRadioFavorites(station, _favoriteIds, { favoritesOnly: _favoritesOnly })
     && stationMatchesRadioCountry(station, _country, { keepStationId })
     && stationMatchesRadioState(station, _state, { keepStationId })
-    && stationMatchesRadioEnglishFilter(station, _englishOnly, { keepStationId });
+    && stationMatchesRadioEnglishFilter(station, _englishOnly, { keepStationId })
+    && stationMatchesRadioOfflineFilter(station, _hideOffline, {
+      keepStationId: keepPlaying ? [_audioStationId, _selectedId].filter(Boolean) : null,
+    });
 }
 
 function viewportRadioAnchor() {
@@ -1355,7 +1381,7 @@ export function radioStationResolutionMatches(frozenStation, currentStation) {
   if (!frozenStation || !currentStation) return false;
   for (const key of [
     'id', 'name', 'lat', 'lon', 'streamUrl', 'homepage', 'state', 'country',
-    'countryCode', 'metadataTrust', 'codec', 'bitrate',
+    'countryCode', 'metadataTrust', 'codec', 'bitrate', 'lastCheckOk',
   ]) {
     if (frozenStation[key] !== currentStation[key]) return false;
   }
@@ -1394,6 +1420,7 @@ export function getRadioUIState() {
     codecs: Object.freeze({ ..._codecFilter }),
     favoritesOnly: _favoritesOnly,
     englishOnly: _englishOnly,
+    hideOffline: _hideOffline,
     favoriteIds: Object.freeze([..._favoriteIds]),
     selectedFavorite: Boolean(selected && isRadioFavorite(selected.id, _favoriteIds)),
     categories: _categories,
@@ -2695,6 +2722,18 @@ export function setRadioEnglishOnly(enabled) {
   return true;
 }
 
+/** Hide known-offline stations without fetching or stopping audio. */
+export function setRadioHideOffline(enabled) {
+  if (!radioPresentationAllowed()) return false;
+  const next = normalizeRadioHideOffline(enabled);
+  const changed = next !== _hideOffline;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _hideOffline = writeRadioHideOffline(next);
+  if (changed) applyRadioDirectoryFilterChange();
+  emitState();
+  return true;
+}
+
 /** Pin or unpin the selected (or playing) station. Caps at 20 stored ids. */
 export function toggleRadioFavorite(stationId) {
   if (!radioPresentationAllowed()) return false;
@@ -2936,6 +2975,7 @@ export const radioLayer = {
     applyPersistedRadioCountry();
     applyPersistedRadioState();
     applyPersistedRadioEnglishOnly();
+    applyPersistedRadioHideOffline();
     installAudio();
     if (!_dataSource) {
       _dataSource = new Cesium.CustomDataSource('Radio stations');
@@ -3151,6 +3191,7 @@ export const radioLayer = {
     _country = DEFAULT_RADIO_COUNTRY;
     _state = DEFAULT_RADIO_STATE;
     _englishOnly = DEFAULT_RADIO_ENGLISH_ONLY;
+    _hideOffline = DEFAULT_RADIO_HIDE_OFFLINE;
     _renderById.clear();
     resetRadioClusterOverlayIdentities();
     _lastHorizonCameraPosition = null;
@@ -3221,6 +3262,7 @@ export const radioLayer = {
   setCodecs: setRadioCodecs,
   setFavoritesOnly: setRadioFavoritesOnly,
   setEnglishOnly: setRadioEnglishOnly,
+  setHideOffline: setRadioHideOffline,
   toggleFavorite: toggleRadioFavorite,
   selectStation: selectRadioStation,
   selectRequestedStation: selectRequestedRadioStation,
