@@ -45,6 +45,9 @@
     },
     "api/weather-effects.js": {
       "maxDuration": 15
+    },
+    "api/regional-brief.js": {
+      "maxDuration": 15
     }
   }
 }

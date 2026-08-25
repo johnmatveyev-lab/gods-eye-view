@@ -760,6 +760,7 @@ class CockpitViewController {
     this.localCondition = document.getElementById('cockpit-local-condition');
     this.localCloud = document.getElementById('cockpit-local-cloud');
     this.localPrecipitation = document.getElementById('cockpit-local-precipitation');
+    this.weatherCredit = document.querySelector('.cockpit-weather-credit');
     this.signalCollapsed = false;
     this.signalUserCollapsed = false;
     this.signalItems = [];
@@ -1791,6 +1792,7 @@ class CockpitViewController {
     if (status === 'unavailable') this.newsList?.replaceChildren();
     if (this.localPlace && status === 'loading') this.localPlace.textContent = 'RESOLVING REGION';
     if (this.localPlace && status === 'unavailable') this.localPlace.textContent = 'REGION UNAVAILABLE';
+    this.updateWeatherCredit(null);
     this.updateLocalPosition(info);
   }
 
@@ -1824,6 +1826,7 @@ class CockpitViewController {
     if (this.localPlace) this.localPlace.textContent = placeLabel.toUpperCase();
     this.updateLocalPosition(info);
     const weather = payload?.weather;
+    this.updateWeatherCredit(weather);
     if (this.localTemperature) {
       this.localTemperature.textContent = Number.isFinite(weather?.temperatureC)
         ? `${Math.round(weather.temperatureC)}°C` : '—';
@@ -1849,6 +1852,13 @@ class CockpitViewController {
       this.briefSource.textContent = `${String(payload?.newsSource || 'REGIONAL NEWS').toUpperCase()} · LOCATION QUERY`;
     }
     this.scheduleContextLayout();
+  }
+
+  /** Open-Meteo credit is required only while weather values are on screen. */
+  updateWeatherCredit(weather) {
+    if (!this.weatherCredit) return;
+    const shown = Boolean(weather && Number.isFinite(weather.temperatureC));
+    this.weatherCredit.hidden = !shown;
   }
 
   renderCockpitSignals() {
