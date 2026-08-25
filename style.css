@@ -28,6 +28,10 @@
   --display-panel-expanded-width: 272px;
   --cockpit-radio-collapsed-width: 148px;
   --cockpit-radio-expanded-width: 232px;
+  /* Bottom-left keep-out for Cesium/Google credits + the MIT disclaimer.
+     The LOCATION dock starts after this strip so Data attribution stays clickable. */
+  --credit-lane-width: 24rem;
+  --credit-lane-gap: 0.75rem;
 }
 
 * {
@@ -287,7 +291,7 @@ body.cockpit-mode #cockpit-cloud-effects.active {
      /Cesium attribution ToS). */
   bottom: 36px;
   left: 36px;
-  z-index: 90;
+  z-index: 160;
   max-width: 90vw;
   /* Keep the Google logo + "Data attribution" link on ONE line — they were wrapping to a second
      row (looked like it was falling over). nowrap + a roomy max-width holds them inline. */
@@ -8741,6 +8745,8 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   --dock-unified-width: calc(var(--dock-side-compact) * 2 + var(--dock-voice-width));
   --dock-location-open: max(34rem, calc(var(--dock-unified-width) + 0.75rem));
   --dock-presets-open: max(34rem, calc(var(--dock-unified-width) + 0.75rem));
+  /* Stay centered when there is room; otherwise start after the credit lane. */
+  left: max(50%, calc(var(--credit-lane-width) + var(--credit-lane-gap) + var(--dock-unified-width) / 2));
 }
 
 #command-dock .panel-title,
@@ -9132,14 +9138,15 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   letter-spacing: 0.035rem;
 }
 
-/* The compact dock leaves both lower corners free for required attribution and telemetry. */
+/* Required credits occupy a reserved bottom-left lane above the LOCATION dock. */
 body:not(.ui-clean-view):not(.recording-mode) #cesium-credits,
 body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minimal'].active) #cesium-credits {
   right: auto;
   bottom: 0.75rem;
-  left: 1.5rem;
+  left: var(--credit-lane-gap);
+  z-index: 160;
   width: auto !important;
-  max-width: calc(50vw - 15rem);
+  max-width: calc(var(--credit-lane-width) - var(--credit-lane-gap));
   text-align: left;
 }
 
@@ -9167,8 +9174,8 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
   body:not(.ui-clean-view):not(.recording-mode) #cesium-credits,
   body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minimal'].active) #cesium-credits {
     bottom: calc(2vh + 5rem);
-    left: 0.75rem;
-    max-width: calc(100vw - 1.5rem);
+    left: var(--credit-lane-gap);
+    max-width: calc(var(--credit-lane-width) - var(--credit-lane-gap));
   }
 
   #command-dock .gev-voice-error-tray {
@@ -10396,10 +10403,10 @@ body.scene-playback-mode #responsible-use-notice {
 
 #meridian-terms {
   position: fixed;
-  bottom: 64px;
-  left: 36px;
-  z-index: 90;
-  max-width: min(42rem, calc(100vw - 72px));
+  bottom: calc(0.75rem + 2.25rem);
+  left: var(--credit-lane-gap);
+  z-index: 160;
+  max-width: var(--credit-lane-width);
   margin: 0;
   font-family: var(--font-mono);
   font-size: 9px;
@@ -10408,6 +10415,23 @@ body.scene-playback-mode #responsible-use-notice {
   color: rgba(232, 234, 237, 0.45);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  #meridian-terms {
+    bottom: calc(2vh + 7.25rem);
+    max-width: var(--credit-lane-width);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --credit-lane-width: 11rem;
+  }
+
+  #command-dock {
+    left: 50%;
+  }
 }
 
 #billing-modal {
