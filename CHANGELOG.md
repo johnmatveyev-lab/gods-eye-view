@@ -25,7 +25,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
-- Satellites row can pick a CelesTrak TLE group (stations, weather, visual, GPS, GLONASS, Galileo, GEO). Changing the group refetches `/api/celestrak/<group>` and replaces the layer. The choice persists as `meridian.satGroup` (`stations` default). Invalid groups are not listed. Space Missions still uses `/api/celestrak/active` independently; the Launches panel stays on `/api/launches`. No new `/api`.
+- Added a DISPLAY-rail Keep above ground control. After the camera moves, if
+  `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
+  below terrain plus a small margin, the camera is lifted. The preference
+  persists as `meridian.keepAbove` and defaults on. Cockpit interior still
+  owns the camera. A terrain 503 skips the lift. No new API.
 - Added a Clean view control on the globe chrome that toggles the existing
   `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
   Google Maps and Data attribution stay on. No new hide system and no `/api`.
@@ -42,6 +46,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   pad when coordinates are present, otherwise the row is only selected.
   Empty or failed payloads use the existing unavailable/empty language and
   do not hang. No new vendor or `/api`.
+- Satellites row can pick a CelesTrak TLE group (stations, weather, visual, GPS, GLONASS, Galileo, GEO). Changing the group refetches `/api/celestrak/<group>` and replaces the layer. The choice persists as `meridian.satGroup` (`stations` default). Invalid groups are not listed. Space Missions still uses `/api/celestrak/active` independently; the Launches panel stays on `/api/launches`. No new `/api`.
 - Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
   Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
   The choice persists as `meridian.power`. Data polls, the idle render
