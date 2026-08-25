@@ -14,6 +14,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
   returns 503/400 with variable names only.
+- Added Vercel Node catch-all `api/[...path].js` that runs the same live
+  `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
+  adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
+  terrain, Google Places, and the rest). No Next rewrite and no new vendors.
 
 ### Fixed
 

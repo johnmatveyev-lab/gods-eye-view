@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "vite",
   "functions": {
+    "api/[...path].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/**"
+    },
     "api/billing/[...path].js": {
       "maxDuration": 15
     },
