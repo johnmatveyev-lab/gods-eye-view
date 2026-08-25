@@ -20,6 +20,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a DISPLAY Zoom to pointer control. On, the wheel zooms about the
+  globe pick under the cursor so a city stays under the pointer. Off keeps
+  today's center zoom. No pick falls back to center. Invert scroll still
+  only flips direction. The choice persists as `meridian.zoomToPointer`
+  and defaults off.
 - Added a Contacts control that shows or hides the existing 250 km nearby
   aircraft roster. Selecting a row still uses the current track action. Copy
   ident stays on the tracked card. Cockpit enter still requires a selected

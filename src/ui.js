@@ -258,6 +258,14 @@ import {
   peekModelsPreference,
   writeModelsPreference,
 } from './modelsPreference.js';
+import {
+  bindZoomToPointerWheel,
+  readZoomToPointerPreference,
+  setWheelZoomEventEnabled,
+  syncZoomToPointerButton,
+  writeZoomToPointerPreference,
+  zoomToPointerEnabled,
+} from './zoomToPointer.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
@@ -295,6 +303,11 @@ const DETECTION_ALLOCATION_STORAGE_KEY = 'gev:detection-allocation:v1';
 
 /** Best-effort localStorage for `meridian.models`. Access itself can throw. */
 function modelsPreferenceStore() {
+  try { return globalThis.localStorage ?? null; } catch { return null; }
+}
+
+/** Best-effort localStorage for `meridian.zoomToPointer`. Access itself can throw. */
+function zoomToPointerStore() {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 /** Z ladder: panels promote within [100, 139]; voice pill 150, toast 200, clean-view-exit 300. */
@@ -2394,6 +2407,7 @@ export class StyleManager {
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
+    this._zoomToPointerBtn = document.getElementById('zoom-to-pointer-toggle');
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -2783,6 +2797,7 @@ export class StyleManager {
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initZoomToPointer();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -3616,6 +3631,9 @@ export class StyleManager {
     this._reduceMotionBtn?.addEventListener('click', () => {
       setReduceMotionOverride(!isReduceMotionEnabled());
       this._syncReduceMotionButton();
+    });
+    this._zoomToPointerBtn?.addEventListener('click', () => {
+      this._toggleZoomToPointer();
     });
     if (this._cleanViewExitBtn) {
       this._cleanViewExitBtn.addEventListener('click', () => this.toggleCleanView(false));
@@ -9985,6 +10003,37 @@ export class StyleManager {
   }
 
   /**
+   * DISPLAY-rail Zoom to pointer. Off (default) keeps Cesium center zoom.
+   * Persist as `meridian.zoomToPointer` = on|off.
+   * @returns {void}
+   */
+  _initZoomToPointer() {
+    const storage = zoomToPointerStore();
+    const enabled = zoomToPointerEnabled(readZoomToPointerPreference(storage));
+    syncZoomToPointerButton(this._zoomToPointerBtn, enabled);
+    this._unbindZoomToPointer = bindZoomToPointerWheel(this.viewer, {
+      storage,
+      wheelType: Cesium.CameraEventType?.WHEEL,
+      onZoom: () => governorRequestRender(),
+    });
+  }
+
+  _toggleZoomToPointer() {
+    const storage = zoomToPointerStore();
+    const next = writeZoomToPointerPreference(
+      storage,
+      zoomToPointerEnabled(readZoomToPointerPreference(storage)) ? 'off' : 'on',
+    );
+    const enabled = zoomToPointerEnabled(next);
+    syncZoomToPointerButton(this._zoomToPointerBtn, enabled);
+    setWheelZoomEventEnabled(
+      this.viewer?.scene?.screenSpaceCameraController,
+      !enabled,
+      Cesium.CameraEventType?.WHEEL,
+    );
+  }
+
+  /**
    * Toggles idle orbit around the current POI. Decorative spin is refused
    * while reduced motion is on; fly-to Home is unaffected.
    * @returns {void}
@@ -10604,6 +10653,8 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    this._unbindZoomToPointer?.();
+    this._unbindZoomToPointer = null;
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
     this._layerStateCoordinator = null;
