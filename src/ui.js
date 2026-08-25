@@ -234,6 +234,7 @@ import {
   earthquakePagerAlertFlags,
   normalizeEarthquakeTimeWindowHours,
   normalizeEarthquakeTsunamiOnly,
+  normalizeEarthquakeReviewedOnly,
   toggleEarthquakeDepthBand,
   toggleEarthquakePagerAlert,
 } from './data/earthquakes.js';
@@ -2963,6 +2964,7 @@ export class StyleManager {
     this._earthquakeDepthChips = document.getElementById('earthquake-depth-chips');
     this._earthquakeTimeChips = document.getElementById('earthquake-time-chips');
     this._earthquakeTsunamiChips = document.getElementById('earthquake-tsunami-chips');
+    this._earthquakeReviewedChips = document.getElementById('earthquake-reviewed-chips');
     this._earthquakePagerChips = document.getElementById('earthquake-pager-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
@@ -5422,6 +5424,7 @@ export class StyleManager {
           this._syncEarthquakeDepthChips();
           this._syncEarthquakeTimeChips();
           this._syncEarthquakeTsunamiChip();
+          this._syncEarthquakeReviewedChip();
           this._syncEarthquakePagerChips();
         }
         if (change?.layerId === 'satellites') {
@@ -11741,6 +11744,34 @@ export class StyleManager {
     this._syncEarthquakeTsunamiChip();
   }
 
+  _syncEarthquakeReviewedChip() {
+    const enabled = this._dataManager?.isEnabled?.('earthquakes') === true;
+    if (this._earthquakeReviewedChips) {
+      this._earthquakeReviewedChips.hidden = !enabled;
+    }
+    const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+    const only = normalizeEarthquakeReviewedOnly(layer?.getParams?.()?.reviewedOnly) === true;
+    const chips = this._earthquakeReviewedChips?.querySelectorAll?.('[data-earthquake-reviewed]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initEarthquakeReviewedChip() {
+    if (!this._earthquakeReviewedChips) return;
+    this._earthquakeReviewedChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-reviewed]');
+      if (!chip || !this._earthquakeReviewedChips.contains(chip)) return;
+      const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+      const current = normalizeEarthquakeReviewedOnly(layer?.getParams?.()?.reviewedOnly) === true;
+      this._dataManager?.setLayerParams?.('earthquakes', { reviewedOnly: !current }, { origin: 'user' });
+      this._syncEarthquakeReviewedChip();
+    });
+    this._syncEarthquakeReviewedChip();
+  }
+
   _syncEarthquakePagerChips() {
     const enabled = this._dataManager?.isEnabled?.('earthquakes') === true;
     if (this._earthquakePagerChips) {
@@ -11775,6 +11806,7 @@ export class StyleManager {
     this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
     this._initEarthquakeTsunamiChip();
+    this._initEarthquakeReviewedChip();
     this._initEarthquakePagerChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,
