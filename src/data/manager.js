@@ -2211,6 +2211,7 @@ export class DataLayerManager {
 
   _renderToggles() {
     if (!this._toggleContainer) return;
+    this._parkRowReadout();
     this._toggleContainer.innerHTML = '';
 
     for (const layer of this.getAll()) {
@@ -2338,7 +2339,7 @@ export class DataLayerManager {
    * misbehaving layer cannot blank the whole panel. Resolved from the registry
    * rather than the `getAll()` projection, which deliberately omits `module`.
    * @param {string} layerId Registered layer id.
-   * @returns {{ chips?: Array<object>, legend?: Array<object>, selects?: Array<object>, sliders?: Array<object>, picker?: object }|null} Descriptor.
+   * @returns {{ chips?: Array<object>, legend?: Array<object>, selects?: Array<object>, sliders?: Array<object>, picker?: object, readout?: {id?: string, title?: string} }|null} Descriptor.
    */
   _rowControlsFor(layerId) {
     const module = this.layers.get(layerId)?.module;
@@ -2378,9 +2379,10 @@ export class DataLayerManager {
     const headingText = typeof declared?.heading === 'string' ? declared.heading.trim() : '';
     const picker = declared?.picker || null;
     const field = layer.enabled ? (declared?.field || null) : null;
+    const readout = layer.enabled ? (declared?.readout || null) : null;
     container.hidden = chips.length === 0 && legend.length === 0 && selects.length === 0
       && sliders.length === 0
-      && !headingText && !picker && !field;
+      && !headingText && !picker && !field && !readout;
     this._syncRowPicker(container, picker);
     this._syncRowField(container, field);
 
@@ -2490,6 +2492,57 @@ export class DataLayerManager {
       entry.append(swatch, text);
       container.appendChild(entry);
     }
+
+    this._syncRowReadout(container, readout);
+  }
+
+  /**
+   * Move the Next ISS host out of the toggle list before a full rebuild so
+   * `innerHTML = ''` cannot destroy the index.html singleton.
+   */
+  _parkRowReadout() {
+    const doc = globalThis.document;
+    const host = doc?.getElementById?.('iss-pass-readout');
+    const park = doc?.getElementById?.('iss-pass-readout-park');
+    if (host && park) park.appendChild(host);
+  }
+
+  /**
+   * Place (or park) a declared row readout next to the class legend. The
+   * host is the index.html singleton when present; otherwise a matching
+   * <output> is created. Painting stays with the readout module.
+   * @param {HTMLElement} container The row's `.data-toggle-controls` node.
+   * @param {{id?: string, title?: string}|null} spec
+   */
+  _syncRowReadout(container, spec) {
+    const hostId = typeof spec?.id === 'string' ? spec.id.trim() : '';
+    const doc = globalThis.document;
+    let host = hostId && typeof doc?.getElementById === 'function'
+      ? doc.getElementById(hostId)
+      : null;
+    if (!host) {
+      host = [...(container.children || [])].find((node) => node.id === hostId || (
+        String(node.className || '').split(/\s+/).includes('iss-pass-readout')
+      )) || null;
+    }
+    if (!spec || !hostId) {
+      if (host) {
+        host.hidden = true;
+        const park = doc?.getElementById?.('iss-pass-readout-park');
+        park?.appendChild?.(host);
+      }
+      return;
+    }
+    if (!host) {
+      host = document.createElement('output');
+      host.id = hostId;
+      host.className = 'iss-pass-readout';
+      host.setAttribute?.('aria-live', 'polite');
+      if (!host.textContent) host.textContent = 'UNAVAILABLE';
+      host.hidden = true;
+    }
+    if (spec.title) host.title = spec.title;
+    if (host.parent !== container) container.appendChild(host);
   }
 
   /**

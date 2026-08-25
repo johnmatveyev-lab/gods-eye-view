@@ -2984,6 +2984,62 @@ test('a layer that declares row controls renders its chips and color legend', as
   }
 });
 
+test('the ISS readout sits on the satellites row and hides when the layer is off', async () => {
+  const originalDocument = globalThis.document;
+  const park = makeControlElement();
+  park.id = 'iss-pass-readout-park';
+  const host = makeControlElement('output');
+  host.id = 'iss-pass-readout';
+  host.className = 'iss-pass-readout';
+  host.hidden = true;
+  host.textContent = 'UNAVAILABLE';
+  park.appendChild(host);
+  const registry = new Map([
+    ['iss-pass-readout-park', park],
+    ['iss-pass-readout', host],
+  ]);
+  globalThis.document = {
+    createElement: makeControlElement,
+    getElementById(id) {
+      return registry.get(id) || null;
+    },
+  };
+  const mgr = new DataLayerManager({});
+  const layer = makeRowControlLayer();
+  const inner = layer.module.getRowControls;
+  layer.module.getRowControls = () => ({
+    ...inner(),
+    readout: { id: 'iss-pass-readout', title: 'Next ISS pass at the camera location. Not an alert service.' },
+  });
+  mgr.register(layer.module);
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    const row = container.querySelector('[data-layer-id="satellites"]');
+    const controls = row.querySelector('.data-toggle-controls');
+    assert.equal(controls.hidden, true);
+    assert.equal(host.parent, park, 'parked while the layer is off');
+    assert.equal(host.hidden, true);
+
+    assert.equal(await mgr.setEnabled('satellites', true), true);
+    mgr._refreshTogglePanel();
+    assert.equal(controls.hidden, false);
+    assert.equal(host.parent, controls, 'adopted next to the class chips');
+    assert.equal(host.title, 'Next ISS pass at the camera location. Not an alert service.');
+
+    assert.equal(await mgr.setEnabled('satellites', false), true);
+    mgr._refreshTogglePanel();
+    assert.equal(controls.hidden, true);
+    assert.equal(host.hidden, true);
+    assert.equal(host.parent, park, 'returned to the park when the layer turns off');
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
+
 test('clicking a row chip applies the params it declared and re-renders', async () => {
   const originalDocument = globalThis.document;
   globalThis.document = { createElement: makeControlElement };

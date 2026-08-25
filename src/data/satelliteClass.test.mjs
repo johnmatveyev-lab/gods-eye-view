@@ -544,6 +544,7 @@ test('a dependency owner hiding the points surrenders the whole row', async () =
     const owned = satellitesLayer.getRowControls();
     assert.deepEqual(owned.chips, [], 'no chip to click while the owner holds the params');
     assert.deepEqual(owned.legend, [], 'no legend describing an empty sky');
+    assert.equal(owned.readout, undefined, 'ISS readout leaves with the surrendered row');
 
     satellitesLayer.setParams({ showPoints: true });
     assert.equal(satellitesLayer.getRowControls().chips.length, 8, 'released on restore');

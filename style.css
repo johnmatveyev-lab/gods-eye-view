@@ -7781,6 +7781,24 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   flex: none;
 }
 
+/* Plan 139 — Next ISS pass on the satellites row, next to class chips. */
+#iss-pass-readout-park[hidden] {
+  display: none;
+}
+
+.iss-pass-readout {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.iss-pass-readout[hidden] {
+  display: none;
+}
+
 /* Allowlisted-system picker (bikeshare). A compact select of known feeds —
    not Radio search and not a layer-filter chip. */
 .data-toggle-picker {
