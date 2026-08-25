@@ -29,6 +29,12 @@ import {
   encodeInstallationClassFilter,
   normalizeInstallationClassFilter,
 } from './militaryInstallationClassFilter.js';
+import {
+  DEFAULT_VESSEL_TYPE_FILTER,
+  decodeVesselTypeFilter,
+  encodeVesselTypeFilter,
+  normalizeVesselTypeFilter,
+} from './vesselTypeFilter.js';
 
 const VALID_DISPOSITIONS = new Set([
   'enabled-only',
@@ -405,6 +411,21 @@ const OPTION_GROUPS = Object.freeze({
       decode: decodeInstallationClassFilter,
     }),
   ]),
+  'ais-live-vessels': Object.freeze([
+    // PLAN 153: type chips default ALL ON. Omitted `k` means every family
+    // stays visible — there was no prior type filter, so absent === default.
+    Object.freeze({
+      key: 'vesselTypeFilter',
+      token: 'k',
+      defaultValue: DEFAULT_VESSEL_TYPE_FILTER,
+      normalize: (value) => {
+        if (value === undefined || value === null) return null;
+        return normalizeVesselTypeFilter(value);
+      },
+      encode: encodeVesselTypeFilter,
+      decode: decodeVesselTypeFilter,
+    }),
+  ]),
 });
 
 const TRACKING_OPTION_KEY_BY_LAYER = Object.freeze({
@@ -439,7 +460,7 @@ export const SHARE_TRACKING_RESTORE_POLICIES = Object.freeze({
  * owns stable URL ordering.
  */
 export const LAYER_STATE_REGISTRY = Object.freeze([
-  Object.freeze({ id: 'ais-live-vessels', token: 'a', disposition: 'enabled-only' }),
+  Object.freeze({ id: 'ais-live-vessels', token: 'a', disposition: 'enabled+options', optionOwner: 'ais-live-vessels' }),
   Object.freeze({ id: 'bikeshare', token: 'b', disposition: 'enabled-only' }),
   Object.freeze({ id: 'cctv', token: 'c', disposition: 'enabled+options', optionOwner: 'cctv' }),
   Object.freeze({ id: 'earthquakes', token: 'e', disposition: 'enabled-only' }),

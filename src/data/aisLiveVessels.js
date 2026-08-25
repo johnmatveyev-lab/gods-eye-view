@@ -52,6 +52,13 @@ import {
 import { requestWorldFocus } from '../worldFocus.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { AISSTREAM_CREDIT, registerDynamicCredit } from './dataCredits.js';
+import {
+  DEFAULT_VESSEL_TYPE_FILTER,
+  filterVesselsByType,
+  normalizeVesselTypeFilter,
+  vesselMatchesTypeFilter,
+  vesselTypeChipModels,
+} from './vesselTypeFilter.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -506,7 +513,7 @@ const aisLiveVesselsLayer = {
    * @returns {Array<{ mmsi: string, name: string, position: Cesium.Cartesian3, distanceM: number }>}
    */
   getNearby(centerCartesian, rangeM, maxCount = 25) {
-    const records = state.vesselRecords;
+    const records = visibleVesselRecords();
     if (!centerCartesian || !Array.isArray(records) || !records.length) return [];
     const range = Number.isFinite(rangeM) && rangeM > 0 ? rangeM : Infinity;
     const cap = Number.isFinite(maxCount) && maxCount > 0 ? Math.floor(maxCount) : 25;
@@ -546,9 +553,37 @@ const aisLiveVesselsLayer = {
     return state.vesselMap.has(String(mmsi).trim());
   },
 
+  /**
+   * Type chips re-filter in-memory vessels. Never hits `/api/ais-live`.
+   * @param {{ vesselTypeFilter?: unknown }} [params]
+   * @returns {boolean}
+   */
+  setParams(params = {}) {
+    if (!params || typeof params !== 'object') return false;
+    if (!Object.hasOwn(params, 'vesselTypeFilter')) return true;
+    const next = normalizeVesselTypeFilter(params.vesselTypeFilter);
+    if (next == null) return false;
+    if (next !== state.typeFilter) {
+      state.typeFilter = next;
+      if (state.enabled && state.viewer) updateVisibility(true);
+    }
+    return true;
+  },
+
+  /** @returns {{ vesselTypeFilter: string }} */
+  getParams() {
+    return { vesselTypeFilter: state.typeFilter };
+  },
+
+  getRowControls() {
+    return {
+      chips: vesselTypeChipModels(state.typeFilter),
+    };
+  },
+
   getAllPositions(maxCount = 800) {
     const result = [];
-    const records = state.vesselRecords;
+    const records = visibleVesselRecords();
     if (!Array.isArray(records)) return result;
     const cap = Number.isFinite(maxCount) && maxCount > 0 ? Math.floor(maxCount) : 800;
 
@@ -577,7 +612,7 @@ const aisLiveVesselsLayer = {
    */
   getAnalystRecords(maxCount = 2000) {
     if (!state.enabled) return [];
-    const records = state.vesselRecords;
+    const records = visibleVesselRecords();
     if (!Array.isArray(records) || !records.length) return [];
     const limit = Number.isFinite(maxCount) ? Math.max(1, Math.floor(maxCount)) : 2000;
     const result = [];
@@ -642,7 +677,7 @@ const aisLiveVesselsLayer = {
    */
   getDetectableObjects(options = {}) {
     if (!state.enabled || !state.billboardCollection || !state.billboardCollection.show) return [];
-    const records = state.vesselRecords;
+    const records = visibleVesselRecords();
     if (!Array.isArray(records) || !records.length) return [];
 
     const maxCount = Number.isFinite(options.maxCount)
@@ -769,6 +804,8 @@ const state = {
   trailMmsi: null,
   /** @type {number} Monotonic token — invalidates in-flight backfill responses */
   trailBackfillToken: 0,
+  /** Client-only type chips. Re-applied on the already-fetched vessel list. */
+  typeFilter: DEFAULT_VESSEL_TYPE_FILTER,
 };
 
 /** Replace live AIS rows through the production reconciliation path (DEV only). */
@@ -1126,8 +1163,22 @@ function reconcileVessels(viewer, rows) {
  * @param {Object} record - Normalized vessel record.
  * @param {Cesium.EllipsoidalOccluder|null} occluder - Horizon occluder for initial visibility.
  */
+function visibleVesselRecords() {
+  return filterVesselsByType(
+    state.vesselRecords,
+    state.typeFilter,
+    state.selectedRecord?.mmsi || null,
+  );
+}
+
+function vesselTypeVisible(record) {
+  return vesselMatchesTypeFilter(record, state.typeFilter, {
+    selectedId: state.selectedRecord?.mmsi || null,
+  });
+}
+
 function addRecordPrimitives(record, occluder) {
-  const visible = state.enabled && isVisible(record.surfacePosition, occluder);
+  const visible = state.enabled && vesselTypeVisible(record) && isVisible(record.surfacePosition, occluder);
   record.billboard = state.billboardCollection.add({
     position: record.position,
     show: visible,
@@ -1325,7 +1376,7 @@ function updateVisibility(force = false) {
     const occluder = makeOccluder();
     const labelCandidates = [];
     for (const record of state.vesselRecords) {
-      const visible = isVisible(record.surfacePosition, occluder);
+      const visible = vesselTypeVisible(record) && isVisible(record.surfacePosition, occluder);
       if (record.billboard) {
         record.billboard.show = visible;
         if (visible && doRotations && scene) {
@@ -2064,6 +2115,7 @@ function resetState() {
   state.trailPositions = [];
   state.trailMmsi = null;
   state.trailBackfillToken = 0;
+  state.typeFilter = DEFAULT_VESSEL_TYPE_FILTER;
 }
 
 /**

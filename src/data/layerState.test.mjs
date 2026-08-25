@@ -76,6 +76,9 @@ function paramsForLayer(id) {
   if (id === 'military-installations') {
     return { installationClassFilter: 'all' };
   }
+  if (id === 'ais-live-vessels') {
+    return { vesselTypeFilter: 'all' };
+  }
   if (id === 'radio') {
     return {
       filter: 'all',
@@ -424,6 +427,25 @@ test('FIRMS age window is a cheap local-firms enum that defaults to 24h', () => 
   assert.match(encodeLayerStateParams(new URLSearchParams('v=2'), twelve).get('lo'), /w\.a\.1/);
   assert.equal(decodeLayerStateParams(encodeLayerStateParams(new URLSearchParams('v=2'), twelve))
     .options['local-firms'].ageWindow, '12');
+});
+
+test('AIS vessel type chips persist on ais-live-vessels and default all on', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['ais-live-vessels'].vesselTypeFilter, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=a'));
+  assert.equal(omitted.options['ais-live-vessels'].vesselTypeFilter, 'all',
+    'existing a links keep every type visible');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['ais-live-vessels'],
+    options: { 'ais-live-vessels': { vesselTypeFilter: 'CPFSO' } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /a\.k\.cpfso/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['ais-live-vessels'].vesselTypeFilter, 'CPFSO');
+  assert.equal(layerOptionsForRestore(decoded, 'ais-live-vessels').vesselTypeFilter, 'CPFSO');
 });
 
 test('installation class chips persist on military-installations and default all on', () => {
