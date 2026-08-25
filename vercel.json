@@ -39,6 +39,9 @@
     },
     "api/route.js": {
       "maxDuration": 20
+    },
+    "api/weather-effects.js": {
+      "maxDuration": 15
     }
   }
 }

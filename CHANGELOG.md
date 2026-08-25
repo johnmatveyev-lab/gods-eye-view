@@ -40,6 +40,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   existing public CCTV catalog/proxy (`sources`, `health`, `stream`,
   `frame`/`media`). Helpers live in `src/data/cctvProxy.js`; Vite still
   forwards the same plugin. Does not wrap AIS or Google text-search.
+- Hosted `GET /api/weather-effects` now lives in `src/data/weatherEffects.js`
+  with a Vercel Node entry at `api/weather-effects.js`. Vite and the live
+  proxy plugin forward to the same handler. Cache, rate limit, and the
+  Open-Meteo-only credit are unchanged. This change does not wrap
+  `/api/terrain/heights`.
 
 ### Fixed
 

@@ -26,13 +26,16 @@ test('production proxies never fetch OpenSky or Google News RSS', () => {
   const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
   const cctv = readFileSync(path.join(ROOT, 'src/data/cctvProxy.js'), 'utf8');
   const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
-  for (const source of [flights, proxies, cctv, vite]) {
+  const weather = readFileSync(path.join(ROOT, 'src/data/weatherEffects.js'), 'utf8');
+  for (const source of [flights, proxies, cctv, vite, weather]) {
     assert.doesNotMatch(source, /https:\/\/opensky-network\.org/);
     assert.doesNotMatch(source, /https:\/\/auth\.opensky-network\.org/);
     assert.doesNotMatch(source, /news\.google\.com/);
   }
   assert.match(flights, /api\.adsb\.lol/);
   assert.match(proxies, /api\.gdeltproject\.org/);
+  assert.match(weather, /api\.open-meteo\.com/);
+  assert.doesNotMatch(weather, /openweathermap|weatherapi|visualcrossing|accuweather/i);
 });
 
 test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
