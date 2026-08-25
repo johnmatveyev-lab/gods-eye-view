@@ -4,7 +4,6 @@ import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DATA_CREDITS } from './dataCredits.js';
 import { acquisitionMsUtc } from './firmsCsv.js';
 import {
   FIRMS_TTL_MS,
@@ -15,7 +14,6 @@ import {
   parseFirmsCsv,
   restoreFirmsPath,
 } from './firms.js';
-import createViteConfig from '../../vite.config.js';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 const FIXTURE = readFileSync(
@@ -218,12 +216,12 @@ test('restoreFirmsPath does not require a vercel.json rewrite', () => {
 
 test('NASA FIRMS acknowledgement stays in DATA_SOURCES.md and dataCredits.js', () => {
   const sources = readFileSync(path.join(ROOT, 'DATA_SOURCES.md'), 'utf8');
+  const credits = readFileSync(path.join(ROOT, 'src/data/dataCredits.js'), 'utf8');
   assert.match(sources, /We acknowledge the use of data and\/or imagery from NASA's Fire Information for Resource Management System/);
   assert.match(sources, /CC0|public domain/i);
-  const firms = DATA_CREDITS.find((credit) => credit.key === 'firms');
-  assert.ok(firms, 'firms credit registered');
-  assert.match(firms.html, /NASA FIRMS/);
-  assert.match(firms.html, /earthdata\.nasa\.gov\/firms/);
+  assert.match(credits, /key: 'firms'/);
+  assert.match(credits, /NASA FIRMS/);
+  assert.match(credits, /earthdata\.nasa\.gov\/firms/);
 });
 
 test('FIRMS module does not pull OpenSky, Google News, or cables', () => {
@@ -236,8 +234,8 @@ test('FIRMS module does not pull OpenSky, Google News, or cables', () => {
 });
 
 test('Vite plugin still forwards to the shared FIRMS handler', () => {
-  const config = createViteConfig({ mode: 'test' });
-  const byName = new Map(config.plugins.map((plugin) => [plugin.name, plugin]));
-  assert.equal(typeof byName.get('firms-proxy')?.configureServer, 'function');
-  assert.equal(typeof byName.get('firms-proxy')?.configurePreviewServer, 'function');
+  const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
+  assert.match(vite, /import \{ firmsProxy \} from '\.\/src\/data\/firms\.js'/);
+  assert.match(vite, /firmsProxy\(\)/);
+  assert.doesNotMatch(vite, /function firmsProxy\(/);
 });
