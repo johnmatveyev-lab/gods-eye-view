@@ -25,6 +25,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   pad when coordinates are present, otherwise the row is only selected.
   Empty or failed payloads use the existing unavailable/empty language and
   do not hang. No new vendor or `/api`.
+- Added a camera-center lat,lon copy control next to Copy view link. It shows
+  the pose already computed from `positionCartographic` (same source as the
+  share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept
+  as the secondary GIS order. Height is not shown, so the units toggle is
+  unused. No /api and no place names.
 - Hosted WX OFF | ON chrome sits next to the HUD and cockpit clocks and
   toggles the existing cockpit weather-effects render flag
   (`godsEyeView.cockpitWeatherEffects.enabled`). Off removes globe FX;
