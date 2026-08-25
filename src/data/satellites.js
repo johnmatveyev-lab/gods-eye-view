@@ -340,6 +340,11 @@ function _untrackedPointShouldShow(noradId) {
   return _classAllowsSatellite(noradId);
 }
 
+/** Orbit ring show-flag: ORBITS on AND the class chips allow this satellite. */
+function _orbitPathShouldShow(noradId) {
+  return _params.showOrbits && _classAllowsSatellite(noradId);
+}
+
 function _classFilterChips() {
   const filter = _params.satelliteClassFilter;
   const flags = satelliteClassFilterFlags(filter);
@@ -361,11 +366,15 @@ function _classFilterChips() {
   });
 }
 
-/** Re-apply class chips to in-memory points. Never fetches CelesTrak. */
+/** Re-apply class chips to in-memory points and orbit rings. Never fetches CelesTrak. */
 function _applyClassVisibility() {
   for (const [noradId, point] of _points) {
     if (!point) continue;
     point.show = _untrackedPointShouldShow(noradId);
+  }
+  for (const [noradId, path] of _orbitPaths) {
+    if (!path?.primitive) continue;
+    path.primitive.show = _orbitPathShouldShow(noradId);
   }
   _classTallyCache = { revision: -1, filter: null, counts: null };
   _syncIssOverlay();
@@ -1763,7 +1772,9 @@ const satellitesLayer = {
     holdContinuousRender('satellites'); // per-frame animator (perf wave 2)
     if (_pointCollection) _pointCollection.show = satelliteVisualsVisible(_enabled, _params.showPoints);
     // Orbit ring primitives + persistent ISS host label — show them
-    for (const path of _orbitPaths.values()) path.primitive.show = satelliteVisualsVisible(_enabled, _params.showOrbits);
+    for (const [noradId, path] of _orbitPaths) {
+      path.primitive.show = satelliteVisualsVisible(_enabled, _orbitPathShouldShow(noradId));
+    }
     _syncIssOverlay();
     // Re-attach input handlers and preRender propagation
     _installClickHandler(viewer);
@@ -1930,7 +1941,7 @@ const satellitesLayer = {
       if (_catalog.has(ISS_NORAD)) {
         _showOrbitPath(ISS_NORAD, POINT_STYLES.iss.color);
         const issPath = _orbitPaths.get(ISS_NORAD);
-        if (issPath) issPath.primitive.show = _params.showOrbits;
+        if (issPath) issPath.primitive.show = _orbitPathShouldShow(ISS_NORAD);
 
         _syncIssOverlay();
       }
@@ -2278,7 +2289,9 @@ const satellitesLayer = {
     }
     if (params.showOrbits !== undefined) {
       _params.showOrbits = params.showOrbits !== false;
-      for (const path of _orbitPaths.values()) path.primitive.show = satelliteVisualsVisible(_enabled, _params.showOrbits);
+      for (const [noradId, path] of _orbitPaths) {
+        path.primitive.show = satelliteVisualsVisible(_enabled, _orbitPathShouldShow(noradId));
+      }
       _syncIssOverlay();
     }
     if (catalogChanged && catalog === 'dense') {

@@ -3,6 +3,10 @@ import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  DEFAULT_SATELLITE_CLASS_FILTER,
+  toggleSatelliteClassFilter,
+} from './satelliteClassFilter.js';
 import satellitesLayer, {
   _clearDenseCatalogStateForTest,
   _satelliteVisualStateForTest,
@@ -105,6 +109,73 @@ test('ORBITS off hides rings and leaves ISS, core, and dense points', () => {
     assert.equal(after.showPoints, true);
     assert.equal(after.catalog, 'dense');
     assert.deepEqual(after.pointIds.sort((a, b) => a - b), [ISS_NORAD, CORE_NORAD, DENSE_NORAD]);
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('STATION off hides the untracked ISS ring; STATION on restores it', () => {
+  const stationOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'station');
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD],
+      orbits: [ISS_NORAD],
+      groups: { [ISS_NORAD]: 'stations' },
+    });
+    assert.equal(_satelliteVisualStateForTest().orbitShows[ISS_NORAD], true);
+
+    satellitesLayer.setParams({ satelliteClassFilter: stationOff });
+    assert.equal(_satelliteVisualStateForTest().showOrbits, true);
+    assert.equal(_satelliteVisualStateForTest().orbitShows[ISS_NORAD], false);
+
+    satellitesLayer.setParams({ satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER });
+    assert.equal(_satelliteVisualStateForTest().orbitShows[ISS_NORAD], true);
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('tracked ISS keeps its ring when STATION is off', () => {
+  const stationOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'station');
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD],
+      orbits: [ISS_NORAD],
+      groups: { [ISS_NORAD]: 'stations' },
+      trackedNorad: ISS_NORAD,
+    });
+    satellitesLayer.setParams({ satelliteClassFilter: stationOff });
+    assert.equal(_satelliteVisualStateForTest().orbitShows[ISS_NORAD], true);
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('NAV off leaves the ISS ring; ORBITS off hides it with STATION on', () => {
+  const navOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'nav');
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD, CORE_NORAD],
+      orbits: [ISS_NORAD],
+      groups: { [ISS_NORAD]: 'stations', [CORE_NORAD]: 'gps-ops' },
+    });
+    satellitesLayer.setParams({ satelliteClassFilter: navOff });
+    assert.equal(_satelliteVisualStateForTest().orbitShows[ISS_NORAD], true);
+
+    satellitesLayer.setParams({
+      satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER,
+      showOrbits: false,
+    });
+    assert.equal(_satelliteVisualStateForTest().orbitShows[ISS_NORAD], false);
   } finally {
     _clearDenseCatalogStateForTest();
   }
