@@ -3,12 +3,16 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { finished } from 'node:stream/promises';
 import handleNetlifyLiveApi, {
   applyHostedApiRewrites,
   config as netlifyFunctionConfig,
+  createNodeResponse,
   resolveVercelApiFile,
   restoreNetlifyApiPath,
+  toWebResponse,
 } from './netlifyLiveApi.js';
+import { createRadioProxyMiddleware } from '../data/radioDirectory.js';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
@@ -259,4 +263,118 @@ test('GET /api/ais-live/track is an empty samples stub', async () => {
   assert.deepEqual(json.samples, []);
   assert.doesNotMatch(text, /<!doctype html/i);
   assert.doesNotMatch(JSON.stringify(json), /opensky-network|news\.google|telegeography|quantum-earth/i);
+});
+
+async function nodeHandlerToWebResponse(write) {
+  const { res, chunks } = createNodeResponse();
+  await write(res);
+  if (!res.writableFinished) await finished(res);
+  return toWebResponse(res, chunks);
+}
+
+test('adapter writeHead(204)+end() is a bodyless 204; 200 JSON still has a body', async () => {
+  assert.throws(
+    () => new Response(Buffer.concat([]), { status: 204 }),
+    /Invalid response status code 204/,
+  );
+
+  const empty = await nodeHandlerToWebResponse((res) => {
+    res.writeHead(204, { 'Cache-Control': 'no-store' });
+    res.end();
+  });
+  assert.equal(empty.status, 204);
+  assert.equal(empty.body, null);
+  assert.equal(empty.headers.get('cache-control'), 'no-store');
+
+  for (const status of [205, 304]) {
+    const response = await nodeHandlerToWebResponse((res) => {
+      res.writeHead(status);
+      res.end();
+    });
+    assert.equal(response.status, status);
+    assert.equal(response.body, null);
+  }
+
+  const jsonOk = await nodeHandlerToWebResponse((res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ ok: true }));
+  });
+  assert.equal(jsonOk.status, 200);
+  assert.ok(jsonOk.body);
+  assert.deepEqual(await jsonOk.json(), { ok: true });
+
+  const liveJson = await handleNetlifyLiveApi(new Request('http://localhost/api/tomtom/status'));
+  assert.equal(liveJson.status, 200);
+  assert.ok(liveJson.body);
+  assert.equal(typeof (await liveJson.json()).hasKey, 'boolean');
+});
+
+test('adapter radio click: known uuid is 204 with no body; unknown uuid is 404', async () => {
+  const uuid = '12345678-1234-4234-8234-123456789abc';
+  const unknownUuid = '00000000-0000-0000-0000-000000000000';
+  const station = {
+    stationuuid: uuid,
+    name: 'Test Radio',
+    url_resolved: 'https://stream.example.org/live.mp3',
+    homepage: 'https://station.example.org/',
+    tags: 'news',
+    language: 'English',
+    country: 'United States',
+    countrycode: 'US',
+    state: 'Texas',
+    codec: 'MP3',
+    bitrate: 128,
+    hls: 0,
+    lastcheckok: 1,
+    geo_lat: 30.2672,
+    geo_long: -97.7431,
+    clickcount: 42,
+  };
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    if (href.includes('/json/servers')) {
+      return new Response(JSON.stringify([{ name: 'de1.api.radio-browser.info' }]), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (href.includes('/json/stations/search')) {
+      return new Response(JSON.stringify([station]), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (href.includes(`/json/url/${uuid}`)) {
+      return new Response(JSON.stringify({ ok: 'true' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({}), { status: 404 });
+  };
+  const middleware = createRadioProxyMiddleware({
+    lookupImpl: async () => [{ address: '93.184.216.34', family: 4 }],
+    fetchImpl,
+  });
+
+  const stations = await nodeHandlerToWebResponse((res) => (
+    middleware({ method: 'GET', url: '/stations' }, res)
+  ));
+  assert.equal(stations.status, 200);
+  assert.ok(stations.body);
+  const catalog = await stations.json();
+  assert.equal(catalog.stations[0].id, uuid);
+
+  const known = await nodeHandlerToWebResponse((res) => (
+    middleware({ method: 'POST', url: `/click/${uuid}` }, res)
+  ));
+  assert.equal(known.status, 204);
+  assert.equal(known.body, null);
+  assert.equal(known.headers.get('cache-control'), 'no-store');
+
+  const unknown = await handleNetlifyLiveApi(new Request(
+    `http://localhost/api/radio/click/${unknownUuid}`,
+    { method: 'POST' },
+  ));
+  assert.equal(unknown.status, 404);
+  assert.ok(unknown.body);
+  assert.deepEqual(await unknown.json(), { error: 'Unknown radio station' });
+  assert.equal(unknown.headers.get('cache-control'), 'no-store');
 });

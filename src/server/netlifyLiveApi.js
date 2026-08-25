@@ -155,10 +155,30 @@ export async function invokeVercelApiHandler(request) {
   }
   if (!res.writableFinished) await finished(res);
 
-  return new Response(Buffer.concat(chunks), {
-    status: res.statusCode || 200,
-    headers: toWebHeaders(res.headers),
-  });
+  return toWebResponse(res, chunks);
+}
+
+/**
+ * Fetch forbids a body on 204 / 205 / 304. An empty Buffer is still a body,
+ * so those statuses must pass `null` or the Response constructor throws and
+ * the adapter catch turns a legal 204 into a 500.
+ */
+export function toWebResponse(res, chunks) {
+  const status = res.statusCode || 200;
+  switch (status) {
+    case 204:
+    case 205:
+    case 304:
+      return new Response(null, {
+        status,
+        headers: toWebHeaders(res.headers),
+      });
+    default:
+      return new Response(Buffer.concat(chunks), {
+        status,
+        headers: toWebHeaders(res.headers),
+      });
+  }
 }
 
 /** Default Netlify Functions v2 entry used by netlify/functions/api.js */
@@ -255,7 +275,7 @@ function createNodeRequest(request, { url, query, body }) {
   return req;
 }
 
-function createNodeResponse() {
+export function createNodeResponse() {
   const chunks = [];
   const headers = Object.create(null);
   const res = new Writable({
