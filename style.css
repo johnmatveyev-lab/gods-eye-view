@@ -9917,9 +9917,10 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
   pointer-events: none;
   transform: translateY(0.55rem) scale(0.985);
   transform-origin: bottom left;
+  /* Visibility is applied synchronously in syncLocationDockPopover — do not
+     transition it or pills stay hidden / 0×0 while the chrome is painted. */
   transition:
     opacity 180ms ease,
-    visibility 180ms ease,
     transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 

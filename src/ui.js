@@ -280,6 +280,7 @@ import {
   shareableDetectionState,
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
+import { syncLocationDockPopover } from './dockPopover.js';
 import {
   handleCleanViewEscape,
   isCleanView,
@@ -8882,6 +8883,12 @@ export class StyleManager {
       }
     }
     panelEl.classList.toggle('collapsed', nextCollapsed);
+    if (panelId === 'location-bar') {
+      syncLocationDockPopover(panelEl, {
+        open: !nextCollapsed,
+        focusSearch: !nextCollapsed,
+      });
+    }
     if (nextCollapsed && this.cockpitView?.active && panelId === 'data-panel'
         && this._cockpitContextCollapsedForDataPanel) {
       this._cockpitContextCollapsedForDataPanel = false;
