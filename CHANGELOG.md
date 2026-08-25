@@ -61,6 +61,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
   returns 503/400 with variable names only.
+- Added hosted TomTom traffic tiles: `src/data/tomtom.js` owns the
+  budget-governed proxy, the Vite plugin forwards, and
+  `api/tomtom/[...path].js` serves `/api/tomtom/status` and flow tiles on
+  Vercel (256-tile memory cache, optional `/tmp`, in-isolate daily
+  budget, default 40k). A rewrite sends `*.pbf` tile URLs to the
+  function so they are not a static 404. Keyless installs return 503
+  `{error:'no_key'}` without contacting TomTom. Responses never echo
+  the key or upstream URL. This extract does not wrap `/api/ais-live`;
+  OpenSky stays off.
 - Added Vercel Node catch-all `api/[...path].js` that runs the same live
   `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
   adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,

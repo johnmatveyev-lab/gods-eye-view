@@ -79,7 +79,7 @@ Setup:
 
 If Stripe keys are missing, the Upgrade button explains that Checkout is not configured instead of failing silently. Unit tests mock Stripe and Clerk — they do not need live keys.
 
-On Vercel the globe is a Vite static build. Hosted billing therefore lives in Node functions (`api/billing/[...path].js` and `api/stripe/webhook.js`) that forward to `handleBillingHttp`. The cockpit regional brief is the same pattern: `api/regional-brief.js` forwards to `handleRegionalBrief` (GDELT + Open-Meteo + Nominatim; no Google News RSS). Leave Clerk/Stripe unset on a preview and billing routes still respond with `503`/`401` JSON — they must not be a Vercel platform 404. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
+On Vercel the globe is a Vite static build. Hosted billing therefore lives in Node functions (`api/billing/[...path].js` and `api/stripe/webhook.js`) that forward to `handleBillingHttp`. The cockpit regional brief is the same pattern: `api/regional-brief.js` forwards to `handleRegionalBrief` (GDELT + Open-Meteo + Nominatim; no Google News RSS). Optional TomTom live traffic uses `api/tomtom/[...path].js` → `src/data/tomtom.js`: `/api/tomtom/status` is always JSON, and a missing `TOMTOM_API_KEY` is `503 {error:'no_key'}` without contacting TomTom. Leave Clerk/Stripe unset on a preview and billing routes still respond with `503`/`401` JSON — they must not be a Vercel platform 404. This extract does not wrap `/api/ais-live`. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
 
 Optional: `MERIDIAN_BILLING_STORE_PATH=.meridian-billing/accounts.json` persists plan + daily usage across process restarts (in-memory otherwise).
 

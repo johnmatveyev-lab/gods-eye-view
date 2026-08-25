@@ -151,11 +151,11 @@ test('Vercel wrapper forwards to handleNearbyPlacesHttp and is the only new Goog
   assert.ok(vercelJson.functions['api/google/nearby-places.js']);
   assert.equal(vercelJson.functions['api/firms.js'], undefined);
   assert.equal(vercelJson.functions['api/ais-live.js'], undefined);
-  assert.equal(vercelJson.functions['api/tomtom/[...path].js'], undefined);
+  assert.ok(vercelJson.functions['api/tomtom/[...path].js']);
   assert.equal(vercelJson.functions['api/adsbdb.js'], undefined);
   assert.equal(existsSync(path.join(ROOT, 'api/firms.js')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
-  assert.equal(existsSync(path.join(ROOT, 'api/tomtom')), false);
+  assert.equal(existsSync(path.join(ROOT, 'api/tomtom/[...path].js')), true);
   assert.equal(existsSync(path.join(ROOT, 'api/adsbdb.js')), false);
 });
 
