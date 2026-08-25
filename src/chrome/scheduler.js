@@ -210,19 +210,20 @@ export function createLivePollScheduler({
     },
 
     /**
-     * Test/QA seam: apply a synthetic chrome snapshot.
+     * Test/QA seam: apply a synthetic chrome snapshot without writing
+     * read-only browser fields such as navigator.onLine.
      * @param {{hidden?: boolean, offline?: boolean}} next
      */
     apply(next = {}) {
-      if (typeof next.hidden === 'boolean' && doc) {
-        doc.visibilityState = next.hidden ? 'hidden' : 'visible';
-        doc.hidden = next.hidden;
-      }
-      if (typeof next.offline === 'boolean' && win) {
-        if (!win.navigator) win.navigator = {};
-        win.navigator.onLine = !next.offline;
-      }
-      applyEnvironment();
+      const nextHidden = typeof next.hidden === 'boolean' ? next.hidden : hidden;
+      const nextOffline = typeof next.offline === 'boolean' ? next.offline : offline;
+      const wasSuspended = isLivePollSuspended({ hidden, offline });
+      const nextSuspended = isLivePollSuspended({ hidden: nextHidden, offline: nextOffline });
+      hidden = nextHidden;
+      offline = nextOffline;
+      if (!wasSuspended && nextSuspended) pauseHandles();
+      else if (wasSuspended && !nextSuspended) resumeHandles();
+      emit();
     },
   };
 }
