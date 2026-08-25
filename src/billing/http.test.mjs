@@ -47,6 +47,8 @@ function hostedRuntime(overrides = {}) {
     now: () => Date.parse('2026-08-25T12:00:00.000Z'),
     store,
     verifyToken: async () => ({ sub: 'user_abc', email: 'ops@example.com' }),
+    getUserRecord: async () => null,
+    updateUserMetadata: async () => {},
     createStripe: () => ({
       checkout: {
         sessions: {
@@ -395,7 +397,117 @@ test('checkout.session.completed syncs Pro onto mocked Clerk metadata', async ()
   assert.equal(json.applied, true);
   assert.equal(clerkWrites[0].userId, 'user_abc');
   assert.equal(clerkWrites[0].metadata.publicMetadata.meridianPlan, PLANS.PRO);
+  assert.equal(clerkWrites[0].metadata.publicMetadata.stripeCustomerId, 'cus_clerk');
+  assert.equal(clerkWrites[0].metadata.publicMetadata.stripeSubscriptionId, 'sub_clerk');
   assert.equal(clerkWrites[0].metadata.privateMetadata.stripeCustomerId, 'cus_clerk');
+  assert.equal(clerkWrites[0].metadata.privateMetadata.stripeSubscriptionId, 'sub_clerk');
+});
+
+test('checkout.session.completed writes Pro and Stripe ids to Clerk', async () => {
+  const clerkWrites = [];
+  const runtime = hostedRuntime({
+    updateUserMetadata: async (userId, metadata) => {
+      clerkWrites.push({ userId, metadata });
+    },
+  });
+  const { status, json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          mode: 'subscription',
+          customer: 'cus_123',
+          subscription: 'sub_123',
+          metadata: { userId: 'user_abc' },
+        },
+      },
+    },
+  });
+  assert.equal(status, 200);
+  assert.equal(json.applied, true);
+  assert.equal(json.plan, PLANS.PRO);
+  assert.equal(runtime.accounts.get('user_abc').plan, PLANS.PRO);
+  assert.equal(clerkWrites.length, 1);
+  assert.equal(clerkWrites[0].userId, 'user_abc');
+  assert.equal(clerkWrites[0].metadata.publicMetadata.meridianPlan, PLANS.PRO);
+  assert.equal(clerkWrites[0].metadata.publicMetadata.stripeCustomerId, 'cus_123');
+  assert.equal(clerkWrites[0].metadata.publicMetadata.stripeSubscriptionId, 'sub_123');
+});
+
+test('empty-store durability: /me stays Pro from Clerk publicMetadata across isolates', async () => {
+  const getUserRecord = async () => ({
+    publicMetadata: { meridianPlan: PLANS.PRO },
+  });
+
+  async function meOnEmptyStore() {
+    const runtime = hostedRuntime({
+      store: createAccountStore({ now: () => Date.parse('2026-08-25T12:00:00.000Z') }),
+      getUserRecord,
+    });
+    return dispatch(runtime, {
+      url: '/api/billing/me',
+      headers: { authorization: 'Bearer sess_test' },
+    });
+  }
+
+  const first = await meOnEmptyStore();
+  assert.equal(first.status, 200);
+  assert.equal(first.json.plan, PLANS.PRO);
+  assert.equal(first.json.voice, true);
+
+  const second = await meOnEmptyStore();
+  assert.equal(second.status, 200);
+  assert.equal(second.json.plan, PLANS.PRO);
+  assert.equal(second.json.voice, true);
+});
+
+test('webhook is non-2xx when the Clerk metadata write throws', async () => {
+  const runtime = hostedRuntime({
+    updateUserMetadata: async () => {
+      throw new Error('Clerk metadata write failed');
+    },
+  });
+  const { status } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/stripe/webhook',
+    headers: { 'stripe-signature': 'sig_test' },
+    body: {
+      type: 'checkout.session.completed',
+      data: {
+        object: {
+          mode: 'subscription',
+          customer: 'cus_123',
+          subscription: 'sub_123',
+          metadata: { userId: 'user_abc' },
+        },
+      },
+    },
+  });
+  assert.ok(status >= 400);
+  assert.notEqual(status, 200);
+});
+
+test('empty store hydrates Stripe customer id so portal is not 409', async () => {
+  const runtime = hostedRuntime({
+    store: createAccountStore({ now: () => Date.parse('2026-08-25T12:00:00.000Z') }),
+    getUserRecord: async () => ({
+      publicMetadata: {
+        meridianPlan: PLANS.PRO,
+        stripeCustomerId: 'cus_123',
+        stripeSubscriptionId: 'sub_123',
+      },
+    }),
+  });
+  const { status, json } = await dispatch(runtime, {
+    method: 'POST',
+    url: '/api/billing/portal',
+    headers: { authorization: 'Bearer sess_test' },
+  });
+  assert.equal(status, 200);
+  assert.equal(json.url, 'https://billing.stripe.com/session/test');
 });
 
 test('empty serverless store hydrates Pro from mocked Clerk so voice unlocks', async () => {

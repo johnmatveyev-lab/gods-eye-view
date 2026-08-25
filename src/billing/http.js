@@ -1,3 +1,4 @@
+import { createClerkClient } from '@clerk/backend';
 import { authenticateRequest, readBearerToken } from './auth.js';
 import { clerkMetadataFromAccount, hydrateAccountFromClerk } from './clerkSync.js';
 import { BILLING_CODES, publicAccountView, resolveEntitlements, voiceDenial } from './entitlements.js';
@@ -295,7 +296,13 @@ async function handleWebhook(req, res, runtime) {
   const { lookupByCustomerId, patch, ...fields } = mapped;
   const next = patch || fields;
   const account = runtime.accounts.applyPatch(userId, next);
-  void syncClerkPlan(userId, account, runtime);
+  try {
+    await syncClerkPlan(userId, account, runtime);
+  } catch (error) {
+    return writeJson(res, 502, {
+      error: publicBillingError(error, 'Failed to persist plan to Clerk.'),
+    });
+  }
   return writeJson(res, 200, { received: true, applied: true, userId, plan: next.plan });
 }
 
@@ -406,30 +413,23 @@ async function constructWebhookEvent(runtime, raw, signature) {
 }
 
 async function syncClerkPlan(userId, account, runtime) {
-  if (!userId || !account || !runtime.config.clerkSecretKey) return;
+  if (!userId || !account) return;
+  if (!runtime.config.clerkSecretKey) {
+    throw new Error('CLERK_SECRET_KEY is not set.');
+  }
   const metadata = clerkMetadataFromAccount(account);
-  if (runtime.updateUserMetadata) {
-    try {
-      await runtime.updateUserMetadata(userId, metadata);
-    } catch {
-      /* store remains authoritative when it persists */
-    }
+  if (typeof runtime.updateUserMetadata === 'function') {
+    await runtime.updateUserMetadata(userId, metadata);
     return;
   }
-  try {
-    const { createClerkClient } = await import('@clerk/backend');
-    const clerk = createClerkClient({ secretKey: runtime.config.clerkSecretKey });
-    await clerk.users.updateUserMetadata(userId, metadata);
-  } catch {
-    /* store remains authoritative when it persists */
-  }
+  const clerk = createClerkClient({ secretKey: runtime.config.clerkSecretKey });
+  await clerk.users.updateUserMetadata(userId, metadata);
 }
 
 async function resolveUserEmail(user, runtime) {
   if (user?.email) return user.email;
   if (!runtime.getUserEmail) {
     try {
-      const { createClerkClient } = await import('@clerk/backend');
       const clerk = createClerkClient({ secretKey: runtime.config.clerkSecretKey });
       const record = await clerk.users.getUser(user.id);
       return record.emailAddresses?.find((row) => row.id === record.primaryEmailAddressId)?.emailAddress

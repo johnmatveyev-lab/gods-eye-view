@@ -18,7 +18,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).
-  Plan and Stripe customer ids hydrate from Clerk metadata after webhook.
+  `GET /api/billing/me` and checkout `ALREADY_PRO` read
+  `publicMetadata.meridianPlan` from Clerk (`users.getUser`) so Pro survives
+  an empty isolate. Webhook `checkout.session.completed` awaits that Clerk
+  write (including `stripeCustomerId` / `stripeSubscriptionId`) and returns
+  non-2xx if it fails so Stripe retries. Portal no longer 409s after a cold
+  start when those ids are on Clerk metadata.
 
 ## [Unreleased] — 2026-08-24
 
