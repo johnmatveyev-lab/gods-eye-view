@@ -233,6 +233,11 @@
       <div>
         <strong>QUAKES</strong>
         <span>USGS · 24H · M2.5+</span>
+        <div class="earthquake-depth-chips" id="earthquake-depth-chips" role="group" aria-label="Earthquake depth">
+          <button type="button" class="earthquake-depth-chip active" data-earthquake-depth="shallow" aria-pressed="true" title="Show shallow earthquakes (shallower than 70 km)">Shallow</button>
+          <button type="button" class="earthquake-depth-chip active" data-earthquake-depth="intermediate" aria-pressed="true" title="Show intermediate earthquakes (70–300 km)">Intermediate</button>
+          <button type="button" class="earthquake-depth-chip active" data-earthquake-depth="deep" aria-pressed="true" title="Show deep earthquakes (300 km and deeper)">Deep</button>
+        </div>
       </div>
       <output id="earthquake-list-count" data-earthquake-list-count>—</output>
     </div>

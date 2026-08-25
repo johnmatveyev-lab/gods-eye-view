@@ -6,17 +6,23 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as Cesium from 'cesium';
 import {
+  DEFAULT_EARTHQUAKE_DEPTH_BANDS,
   DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
+  EARTHQUAKE_DEPTH_BANDS,
   EARTHQUAKE_MAGNITUDE_FLOORS,
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
   USGS_ALL_DAY_URL,
   createEarthquakeOverlayEntry,
   createEarthquakesLayer,
+  earthquakeDepthBand,
+  filterEarthquakeFeatures,
+  filterEarthquakeFeaturesByDepthBands,
   filterEarthquakeFeaturesByMagnitudeFloor,
   isSignificantEarthquake,
   mapAnalystRecord,
   selectEarthquakeOverlayCohort,
+  toggleEarthquakeDepthBand,
 } from './earthquakes.js';
 import { DataLayerManager } from './manager.js';
 import {
@@ -612,14 +618,242 @@ test('earthquake floor chips stay on the existing USGS all_day feed with no new 
   const { overlayHost } = makeHost();
   const layer = createEarthquakesLayer({ overlayHost });
   try {
-    const chips = layer.getRowControls().chips;
+    const chips = layer.getRowControls().chips.filter((chip) => chip.id.startsWith('floor-'));
     assert.deepEqual(chips.map((chip) => chip.label), ['2.5+', '4.0+', '5.0+', '6.0+']);
     assert.deepEqual(chips.map((chip) => chip.params.magnitudeFloor), [2.5, 4.0, 5.0, 6.0]);
     assert.equal(chips.find((chip) => chip.active)?.label, '2.5+');
     assert.equal(layer.setParams({ magnitudeFloor: 4.0 }), true);
-    assert.equal(layer.getRowControls().chips.find((chip) => chip.active)?.label, '4.0+');
+    assert.equal(
+      layer.getRowControls().chips.filter((chip) => chip.id.startsWith('floor-')).find((chip) => chip.active)?.label,
+      '4.0+',
+    );
     assert.equal(layer.setParams({ magnitudeFloor: 7.0 }), false);
     assert.equal(layer.getParams().magnitudeFloor, 4.0);
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 125: operator depth chips (client-side, same USGS all_day) ───────────
+
+function depthFeature(id, mag, depthKm) {
+  return quakeFeature(id, mag, [-122.4, 37.79, depthKm]);
+}
+
+const MIXED_DEPTH_DAY = Object.freeze({
+  features: Object.freeze([
+    depthFeature('shallow-micro', 2.4, 12),
+    depthFeature('shallow-lo', 3.1, 8.2),
+    depthFeature('shallow-hi', 5.4, 69.9),
+    depthFeature('intermediate-lo', 4.2, 70),
+    depthFeature('intermediate-mid', 5.1, 180),
+    depthFeature('intermediate-hi', 3.6, 299.9),
+    depthFeature('deep-lo', 4.8, 300),
+    depthFeature('deep-mid', 5.6, 410),
+    depthFeature('deep-hi', 6.2, 580),
+  ]),
+});
+
+test('depthColor buckets: shallow <70, intermediate 70–300, deep ≥300', () => {
+  assert.deepEqual([...EARTHQUAKE_DEPTH_BANDS], ['shallow', 'intermediate', 'deep']);
+  assert.equal(DEFAULT_EARTHQUAKE_DEPTH_BANDS, 'SID');
+  assert.equal(earthquakeDepthBand(0), 'shallow');
+  assert.equal(earthquakeDepthBand(69.9), 'shallow');
+  assert.equal(earthquakeDepthBand(70), 'intermediate');
+  assert.equal(earthquakeDepthBand(299.9), 'intermediate');
+  assert.equal(earthquakeDepthBand(300), 'deep');
+  assert.equal(earthquakeDepthBand(580), 'deep');
+  assert.equal(earthquakeDepthBand(null), 'shallow', 'missing depth matches draw path (0 km)');
+  assert.equal(toggleEarthquakeDepthBand('SID', 'shallow'), 'ID');
+  assert.equal(toggleEarthquakeDepthBand('ID', 'shallow'), 'SID');
+  assert.equal(toggleEarthquakeDepthBand('D', 'deep'), '0');
+});
+
+test('Deep-only hides discs shallower than 300 km', async () => {
+  const deepOnly = filterEarthquakeFeaturesByDepthBands(MIXED_DEPTH_DAY.features, 'D')
+    .map((feature) => feature.id);
+  assert.deepEqual(deepOnly, ['deep-lo', 'deep-mid', 'deep-hi']);
+  assert.ok(deepOnly.every((id) => {
+    const feature = MIXED_DEPTH_DAY.features.find((row) => row.id === id);
+    return feature.geometry.coordinates[2] >= 300;
+  }));
+
+  const viewer = makeViewer();
+  const { overlayHost, hostCalls } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DEPTH_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.getParams().depthBands, 'SID');
+    assert.equal(layer.setParams({ depthBands: 'D' }), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['deep-hi', 'deep-lo', 'deep-mid']);
+    assert.ok(!entityIds(viewer._dataSources[0]).some((id) => id.startsWith('shallow') || id.startsWith('intermediate')));
+    assert.ok(overlayTitles(hostCalls).every((title) => ['M4.8', 'M5.6', 'M6.2'].includes(title)));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Shallow-only hides events at or deeper than 70 km', async () => {
+  const shallowOnly = filterEarthquakeFeaturesByDepthBands(MIXED_DEPTH_DAY.features, 'S')
+    .map((feature) => feature.id);
+  assert.deepEqual(shallowOnly, ['shallow-micro', 'shallow-lo', 'shallow-hi']);
+  assert.ok(shallowOnly.every((id) => {
+    const feature = MIXED_DEPTH_DAY.features.find((row) => row.id === id);
+    return feature.geometry.coordinates[2] < 70;
+  }));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DEPTH_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ depthBands: 'S' }), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['shallow-hi', 'shallow-lo']);
+    assert.ok(!entityIds(viewer._dataSources[0]).some((id) => id.includes('intermediate') || id.startsWith('deep')));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('all depth chips on matches the current magnitude-floor-only view', async () => {
+  const current = filterEarthquakeFeaturesByMagnitudeFloor(MIXED_DEPTH_DAY.features, 2.5)
+    .map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_DEPTH_DAY.features, {
+      magnitudeFloor: 2.5,
+      depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DEPTH_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('depth chip change redraws from cached geojson without a new USGS fetch', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DEPTH_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({ depthBands: 'I' }), true);
+    assert.equal(feed.fetches, 1, 'depth chips must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['intermediate-hi', 'intermediate-lo', 'intermediate-mid']);
+    assert.equal(layer.setParams({ depthBands: 'SD' }), true);
+    assert.equal(feed.fetches, 1);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['deep-hi', 'deep-lo', 'deep-mid', 'shallow-hi', 'shallow-lo']);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('depth chips AND with the magnitude floor', async () => {
+  const anded = filterEarthquakeFeatures(MIXED_DEPTH_DAY.features, {
+    magnitudeFloor: 5.0,
+    depthBands: 'D',
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['deep-mid', 'deep-hi']);
+
+  const viewer = makeViewer();
+  const { overlayHost, hostCalls } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DEPTH_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ magnitudeFloor: 5.0, depthBands: 'D' }), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['deep-hi', 'deep-mid']);
+    assert.ok(overlayTitles(hostCalls).every((title) => Number(title.slice(1)) >= 5.0));
+    assert.ok(layer.getAnalystRecords().every((record) => (
+      record.magnitude >= 5.0 && record.depthKm >= 300
+    )));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Plan 71 list sources only include selected depth bands', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DEPTH_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    const atDefault = layer.getListRecords();
+    assert.ok(atDefault.some((row) => row.depthKm < 70), 'default all-on list still includes shallow events');
+    assert.ok(atDefault.some((row) => row.depthKm >= 300), 'default all-on list still includes deep events');
+
+    layer.setParams({ depthBands: 'D' });
+    const rows = layer.getListRecords();
+    assert.deepEqual(rows.map((row) => row.id).sort(), ['deep-hi', 'deep-lo', 'deep-mid']);
+    assert.ok(rows.every((row) => row.depthKm >= 300), 'Plan 71 list must not include hidden depth bands');
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('earthquake depth chips default all on and sit next to the magnitude floor', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /data-earthquake-depth="shallow"/);
+  assert.match(html, /data-earthquake-depth="intermediate"/);
+  assert.match(html, /data-earthquake-depth="deep"/);
+  assert.match(html, /USGS · 24H · M2\.5\+/);
+  assert.match(ui, /earthquake-depth-chips|data-earthquake-depth/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const floor = chips.filter((chip) => chip.id.startsWith('floor-'));
+    const depth = chips.filter((chip) => chip.id.startsWith('depth-'));
+    assert.deepEqual(floor.map((chip) => chip.label), ['2.5+', '4.0+', '5.0+', '6.0+']);
+    assert.deepEqual(depth.map((chip) => chip.label), ['Shallow', 'Intermediate', 'Deep']);
+    assert.ok(depth.every((chip) => chip.active === true));
+    assert.ok(depth.every((chip) => chip.group === 'Depth'));
+    assert.equal(layer.getParams().depthBands, 'SID');
+    assert.equal(layer.setParams({ depthBands: 'D' }), true);
+    assert.deepEqual(
+      layer.getRowControls().chips.filter((chip) => chip.id.startsWith('depth-')).map((chip) => chip.active),
+      [false, false, true],
+    );
+    assert.equal(layer.setParams({ depthBands: 'bogus' }), false);
+    assert.equal(layer.getParams().depthBands, 'D');
   } finally {
     layer.destroy(viewer);
   }
