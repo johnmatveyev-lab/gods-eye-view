@@ -42,6 +42,13 @@ import {
   setJamViz,
 } from './trafficJamViz.js';
 import {
+  getTrafficJamsOnly,
+  normalizeTrafficJamsOnly,
+  roadPassesJamFilter,
+  setTrafficJamsOnly,
+  trafficJamsOnlyControls,
+} from './trafficJamFilter.js';
+import {
   getTrafficDensity,
   getTrafficSpeed,
   setTrafficDensity,
@@ -276,6 +283,14 @@ let _uncoveredMode = getUncoveredRoads();
  * @type {'none'|'density'|'heatline'|'both'}
  */
 let _jamViz = getJamViz();
+/**
+ * Jams-only filter: when on in live mode, spawn dots only on roads whose
+ * `flowBucket(road.flow.level)` is `jam`. Free / slow / missing level hide.
+ * Sim / keyless never filter. Persisted in localStorage; no cheap
+ * layer-option slot. Applies from in-memory roads — no extra TomTom fetch.
+ * @type {boolean}
+ */
+let _jamsOnly = getTrafficJamsOnly();
 /**
  * Congestion heat-lines are GroundPolylinePrimitive batches draped onto the
  * rendered 3D tiles (ClassificationType.CESIUM_3D_TILE) — polylines at the
@@ -708,6 +723,12 @@ function computeDotCount(road, altitude) {
     hasFlow: Boolean(flow),
     uncoveredRoads: _uncoveredMode,
   })) return 0;
+  // Jams only: live roads whose bucket is not `jam` spawn nothing. Sim /
+  // keyless always pass. AND with the two checks above.
+  if (!roadPassesJamFilter(road, {
+    jamsOnly: _jamsOnly,
+    liveMode: _liveMode,
+  })) return 0;
 
   const lengthM = estimateRoadLengthDeg(road.coords);
 
@@ -768,13 +789,18 @@ function allocateRoadDotBudgets(roads, altitude, dotCap, viewport = null) {
  */
 function spawnDotsForRoad(road, altitude, budgetCount = null) {
   // Live flow styling (`road.flow` only exists in live mode; keyless path is
-  // byte-identical): closures spawn nothing, congestion colors/slows dots.
+  // byte-identical): closures spawn nothing, uncovered hide skips unmatched
+  // roads, Jams only keeps jammed flow, congestion colors/slows dots.
   const flow = _liveMode ? road.flow : null;
   if (flow?.closure) return;
   if (!uncoveredRoadSpawns({
     liveMode: _liveMode,
     hasFlow: Boolean(flow),
     uncoveredRoads: _uncoveredMode,
+  })) return;
+  if (!roadPassesJamFilter(road, {
+    jamsOnly: _jamsOnly,
+    liveMode: _liveMode,
   })) return;
 
   const count = Number.isFinite(budgetCount)
@@ -2552,6 +2578,20 @@ const trafficLayer = {
         _rowControlsListener?.();
       }
     }
+    // Jams only: live spawn filter on already-stamped `road.flow.level`.
+    // Re-applies from in-memory roads — no extra TomTom fetch. Sim /
+    // keyless paint is unchanged (the matcher no-ops when `_liveMode`
+    // is false). Invalid values are refused so a bad chip cannot clobber.
+    if (Object.hasOwn(params, 'jamsOnly')) {
+      const next = normalizeTrafficJamsOnly(params.jamsOnly);
+      if (next !== null && next !== _jamsOnly) {
+        _jamsOnly = setTrafficJamsOnly(next);
+        _rowControlsListener?.();
+        if (_liveMode && _roads?.length) {
+          renderRoadsForAltitude(_roads, _lastRenderAltitude || 0, 'Jams only');
+        }
+      }
+    }
     // Preset-aware dot styling kill switch (A/B): 'off' forces the
     // shipped palette under every post-FX preset. Applies immediately via
     // in-place restyle — no refetch — so A/B legs share identical dots.
@@ -2580,16 +2620,18 @@ const trafficLayer = {
       speedScale: _speedScale,
       uncoveredRoads: _uncoveredMode,
       jamViz: _jamViz,
+      jamsOnly: _jamsOnly,
       presetDots: _presetDots,
       trafficSource: getTrafficSource(),
     };
   },
 
   /**
-   * Street Traffic row chrome. Live | Sim, Uncovered Sim | Hide, and Jam
-   * Density | Heatline | Both | Off are independent chip groups. Density
-   * and Speed sliders write only densityScale / speedScale. Jam is
-   * live-only. Each group writes only its own setParams key.
+   * Street Traffic row chrome. Live | Sim, Uncovered Sim | Hide, Jam
+   * Density | Heatline | Both | Off, and Jams only are independent chip
+   * groups. Density and Speed sliders write only densityScale / speedScale.
+   * Jam viz and Jams only are live-only. Each group writes only its own
+   * setParams key.
    * @returns {{heading: string, chips: Array<object>, sliders: Array<object>}}
    */
   getRowControls() {
@@ -2603,9 +2645,13 @@ const trafficLayer = {
       jamViz: _jamViz,
       liveMode: _liveMode,
     });
+    const jamsOnly = trafficJamsOnlyControls({
+      jamsOnly: _jamsOnly,
+      liveMode: _liveMode,
+    });
     return {
       heading: source.heading,
-      chips: [...source.chips, ...uncovered.chips, ...jam.chips],
+      chips: [...source.chips, ...uncovered.chips, ...jam.chips, ...jamsOnly.chips],
       sliders: trafficMotionSliders({
         densityScale: _densityScale,
         speedScale: _speedScale,
@@ -2730,6 +2776,7 @@ const trafficLayer = {
       // Jam-viz prototype diagnostics (additive — harness contract untouched).
       heatLines: _heatLineCount,
       jamViz: _jamViz,
+      jamsOnly: _jamsOnly,
       // Preset-styling diagnostics (additive): active style + profile.
       stylePreset: _stylePreset,
       styleProfile: _presetDots === 'on' ? trafficStyleProfile(_stylePreset) : 'normal',
