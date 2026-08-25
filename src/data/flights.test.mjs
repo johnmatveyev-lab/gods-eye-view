@@ -11,6 +11,7 @@ import flightsLayer, {
   _militaryLayerSuppressesForTest,
   _pendingFlightTrackingRestoreForTest,
   _setFlightTrackingRefreshOutcomeForTest,
+  _setFlightTrailDrawingStateForTest,
   _setTrackedFlightRefreshStateForTest,
   _floorGroundedDisplayPositionForTest,
   _clearDisplayFloorStateForTest,
@@ -1462,4 +1463,244 @@ test('display floor: two contacts on the same cell get their own outputs', () =>
   );
   assert.notEqual(a, b, 'a shared scratch would hand both contacts the same object');
   assert.ok(Math.abs(_floorCarto(a).height - _floorCarto(b).height) < 0.05);
+});
+
+// ---------------------------------------------------------------------------
+// Civil trail backfill must use the hosted adsblol/trace route.
+// /api/opensky-track stays 410 in this commercial build; military already
+// reads timestamp+trace from /api/adsblol/trace?hex=. Live civil still had
+// the leftover OpenSky /tracks fetch, so Trails stayed a ~15s local stub.
+// ---------------------------------------------------------------------------
+
+const CIVIL_TRACE_HEX = 'acf344';
+const CIVIL_STUB_LON = -97.6699;
+const CIVIL_STUB_LAT = 30.1945;
+const CIVIL_OLDER_LON = -97.80;
+const CIVIL_OLDER_LAT = 30.10;
+
+function makeCivilTrailSpy() {
+  return {
+    calls: [],
+    setVisible() {},
+    clear() {},
+    destroy() {},
+    setPositions(positions) {
+      this.calls.push(Array.isArray(positions) ? [...positions] : []);
+    },
+  };
+}
+
+function cartographicDegrees(position) {
+  const carto = Cesium.Cartographic.fromCartesian(position);
+  return {
+    lat: Cesium.Math.toDegrees(carto.latitude),
+    lon: Cesium.Math.toDegrees(carto.longitude),
+  };
+}
+
+function hasVertexNear(positions, lat, lon, slopDeg = 0.02) {
+  return positions.some((position) => {
+    const at = cartographicDegrees(position);
+    return Math.abs(at.lat - lat) < slopDeg && Math.abs(at.lon - lon) < slopDeg;
+  });
+}
+
+async function waitFor(predicate, { timeoutMs = 4000, intervalMs = 20 } = {}) {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  throw new Error('timed out waiting for civil trail backfill');
+}
+
+function installCivilTrailFetch({ adsblol } = {}) {
+  const seen = [];
+  const previous = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const href = String(url);
+    seen.push(href);
+    if (href.includes('/api/opensky-track')) {
+      return {
+        ok: false,
+        status: 410,
+        json: async () => ({ error: 'OpenSky track backfill is disabled in this commercial build' }),
+      };
+    }
+    if (href.includes('/api/adsblol/trace')) {
+      if (adsblol === 'throw') throw new Error('adsblol down');
+      if (adsblol === 'fail') {
+        return {
+          ok: false,
+          status: 502,
+          json: async () => ({ error: 'adsb.lol trace fetch failed' }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => adsblol,
+      };
+    }
+    return { ok: false, status: 404, json: async () => ({}) };
+  };
+  return {
+    seen,
+    restore() { globalThis.fetch = previous; },
+  };
+}
+
+async function withCivilTrailBackfill(adsblol, run) {
+  const stubPosition = Cesium.Cartesian3.fromDegrees(CIVIL_STUB_LON, CIVIL_STUB_LAT, 10_668);
+  const now = Cesium.JulianDate.now();
+  const stubTime = Cesium.JulianDate.addSeconds(now, -45, new Cesium.JulianDate());
+  const oldestFixEpochSec = Cesium.JulianDate.toDate(stubTime).getTime() / 1000;
+  const entities = new Cesium.EntityCollection();
+  const trackedEntityChanged = new Cesium.Event();
+  let trackedEntity;
+  const viewer = {
+    entities,
+    trackedEntityChanged,
+    clock: { currentTime: now },
+    camera: {
+      cancelFlight() {},
+      position: new Cesium.Cartesian3(0, -10_000, 7_000),
+      positionWC: new Cesium.Cartesian3(0, -10_000, 7_000),
+      direction: Cesium.Cartesian3.UNIT_Y,
+      transform: Cesium.Matrix4.IDENTITY,
+      viewMatrix: Cesium.Matrix4.IDENTITY,
+      frustum: { projectionMatrix: Cesium.Matrix4.IDENTITY },
+      lookAtTransform() {},
+    },
+    scene: {
+      canvas: { clientWidth: 1600, clientHeight: 900 },
+      frameState: { frameNumber: 41, mode: Cesium.SceneMode.SCENE3D },
+      preUpdate: new Cesium.Event(),
+      screenSpaceCameraController: null,
+    },
+    isDestroyed: () => false,
+  };
+  Object.defineProperty(viewer, 'trackedEntity', {
+    get: () => trackedEntity,
+    set(value) {
+      trackedEntity = value;
+      trackedEntityChanged.raiseEvent(value);
+    },
+  });
+  viewer.scene.camera = viewer.camera;
+  const trail = makeCivilTrailSpy();
+  const host = {
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  };
+  const realWindow = globalThis.window;
+  const fetchMock = installCivilTrailFetch({
+    adsblol: typeof adsblol === 'function' ? adsblol(oldestFixEpochSec) : adsblol,
+  });
+  globalThis.window = new EventTarget();
+  _setTrackedOverlayHostForTest(host);
+  try {
+    initTrackedReadout(viewer);
+    _setTrackedFlightRefreshStateForTest({
+      icao24: CIVIL_TRACE_HEX,
+      entity: null,
+      billboard: {
+        position: stubPosition,
+        rotation: 0.3,
+        show: true,
+        width: 20,
+        height: 20,
+        color: Cesium.Color.WHITE,
+        scale: 1,
+      },
+      billboardCollection: { show: true, remove() {} },
+      viewer,
+      tracked: false,
+      history: [{
+        time: stubTime,
+        epochMs: Cesium.JulianDate.toDate(stubTime).getTime(),
+        position: stubPosition,
+        velocity: 250,
+        track: 95,
+      }],
+      meta: {
+        callsign: 'ASH4049',
+        altitude: 10_668,
+        renderAltitudeM: 10_700,
+        velocity: 250,
+        true_track: 95,
+        verticalRate: 0,
+        klass: 'airliner',
+        onGround: false,
+        wasAirborne: true,
+        turnRateDps: 0,
+        rawLat: CIVIL_STUB_LAT,
+        rawLon: CIVIL_STUB_LON,
+      },
+    });
+    _setFlightTrailDrawingStateForTest({ trail });
+    assert.equal(flightsLayer.trackById(CIVIL_TRACE_HEX, { origin: 'user' }), true);
+    await run({ trail, seen: fetchMock.seen, oldestFixEpochSec });
+  } finally {
+    flightsLayer.stopTracking();
+    destroyTrackedReadout();
+    _setTrackedOverlayHostForTest();
+    _setFlightTrailDrawingStateForTest({ trail: null, trailHeadEntity: null, positions: [] });
+    fetchMock.restore();
+    globalThis.window = realWindow;
+  }
+}
+
+function olderAdsblolTrace(oldestFixEpochSec) {
+  return {
+    icao: CIVIL_TRACE_HEX,
+    t: 'E75L',
+    r: 'N93305',
+    timestamp: oldestFixEpochSec - 180,
+    trace: [[0, CIVIL_OLDER_LAT, CIVIL_OLDER_LON, 35_000]],
+  };
+}
+
+test('civil trail backfill uses /api/adsblol/trace?hex=acf344; 410 opensky-track stays unused', async () => {
+  await withCivilTrailBackfill(olderAdsblolTrace, async ({ seen }) => {
+    await waitFor(() => seen.some((url) => url.includes('/api/adsblol/trace') || url.includes('/api/opensky-track')));
+    assert.deepEqual(
+      seen.filter((url) => url.includes('/api/adsblol/trace') || url.includes('/api/opensky-track')),
+      [`/api/adsblol/trace?hex=${CIVIL_TRACE_HEX}`],
+    );
+    assert.equal(seen.some((url) => url.includes('/api/opensky-track')), false);
+  });
+});
+
+test('civil trail backfill: adsblol 200 paints points older than the DR head', async () => {
+  await withCivilTrailBackfill(olderAdsblolTrace, async ({ trail }) => {
+    await waitFor(() => trail.calls.some((positions) => (
+      hasVertexNear(positions, CIVIL_OLDER_LAT, CIVIL_OLDER_LON)
+    )));
+    const painted = trail.calls.at(-1);
+    assert.ok(hasVertexNear(painted, CIVIL_OLDER_LAT, CIVIL_OLDER_LON),
+      'adsblol vertices older than the local stub must join the cyan trail');
+    assert.equal(
+      hasVertexNear(painted, CIVIL_STUB_LAT, CIVIL_STUB_LON),
+      false,
+      'the DR head stays the newest point and is not the backfill body',
+    );
+  });
+});
+
+test('civil trail backfill: adsblol failure keeps the local stub', async () => {
+  await withCivilTrailBackfill('fail', async ({ trail, seen }) => {
+    await waitFor(() => seen.some((url) => url.includes('/api/adsblol/trace')));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    assert.deepEqual(
+      seen.filter((url) => url.includes('/api/adsblol/trace') || url.includes('/api/opensky-track')),
+      [`/api/adsblol/trace?hex=${CIVIL_TRACE_HEX}`],
+    );
+    const painted = trail.calls.at(-1);
+    assert.ok(painted?.length, 'the local ~15s stub must remain');
+    assert.ok(hasVertexNear(painted, CIVIL_STUB_LAT, CIVIL_STUB_LON),
+      'failed adsblol backfill must keep the seeded stub vertex');
+    assert.equal(hasVertexNear(painted, CIVIL_OLDER_LAT, CIVIL_OLDER_LON), false);
+  });
 });
