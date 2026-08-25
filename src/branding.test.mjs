@@ -23,7 +23,7 @@ function userAgentLiterals(source) {
 }
 
 function productUserAgent(value) {
-  return value.replace(/\s*\(\+https:\/\/github\.com\/[^)]+\)/g, '');
+  return value.replace(/\+?https:\/\/github\.com\/\S+/g, '');
 }
 
 test('LICENSE keeps the required MIT copyright line', () => {
