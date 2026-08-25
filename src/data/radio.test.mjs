@@ -361,6 +361,72 @@ test('filters do not rewrite inputs and overlapping operational tags remain disc
   assert.deepEqual(stations, before);
 });
 
+const livePublicSafetyCatalogRows = [
+  {
+    id: '9614ed70-0601-11e8-ae97-52543be04c81',
+    name: 'SomaFM SF 10-33 (128k MP3)',
+    tags: ['ambient', 'experimental', 'fire scanner', 'live', 'mix'],
+  },
+  {
+    id: '9d6d9530-ce29-45f5-af50-8f052716544e',
+    name: 'SomaFM SF Police Scanner',
+    tags: ['police scanner'],
+  },
+  {
+    id: '53733e08-7728-40ee-b968-59e71f0281b6',
+    name: 'KISSTORY: Non-Stop Old Skool & Anthems',
+    tags: ['anthems', 'dance anthems', 'dance classics', 'old skool'],
+  },
+  {
+    id: 'a3d45eec-8fb2-4e8a-8925-057d04576925',
+    name: 'Ibiza X Radio',
+    tags: ['dance', 'dance anthems', 'deep house', 'edm', 'house', 'trance'],
+  },
+  {
+    id: '9c8f6141-f8e8-4779-bfed-5a79e14ed4dd',
+    name: 'KISS DANCE: The Biggest Dance Anthems 24/7',
+    tags: ['anthems', 'dance', 'dance anthems', 'dance music', 'edm'],
+  },
+  {
+    id: '19b250fe-9027-4caf-b6ea-33022f0b6392',
+    name: 'KISSTORY R&B: The Hottest R&B tracks from KISSTORY',
+    tags: ['anthems', 'music', 'r&b music', 'rnb classics'],
+  },
+];
+
+test('Public Safety matches whole tag tokens, not anthems substrings', () => {
+  assert.equal(stationMatchesRadioCategory({ tags: ['anthems'] }, 'public-safety'), false);
+  assert.equal(stationMatchesRadioCategory({ tags: ['dance anthems'] }, 'public-safety'), false);
+  assert.equal(stationMatchesRadioCategory({ tags: ['ems'] }, 'public-safety'), true);
+  assert.equal(stationMatchesRadioCategory({ tags: ['fire scanner'] }, 'public-safety'), true);
+  assert.equal(stationMatchesRadioCategory({ tags: ['police scanner'] }, 'public-safety'), true);
+  assert.equal(radioStationCategoryId({ tags: ['anthems', 'dance'] }), 'music');
+  assert.equal(radioStationCategoryId({ tags: ['fire scanner'] }), 'public-safety');
+
+  assert.deepEqual(
+    filterRadioStations(livePublicSafetyCatalogRows, 'public-safety').map((station) => station.id),
+    [
+      '9614ed70-0601-11e8-ae97-52543be04c81',
+      '9d6d9530-ce29-45f5-af50-8f052716544e',
+    ],
+  );
+
+  const categories = buildRadioCategories(livePublicSafetyCatalogRows);
+  assert.equal(categories.find((category) => category.id === 'public-safety').count, 2);
+
+  const musicIds = new Set(
+    filterRadioStations(livePublicSafetyCatalogRows, 'music').map((station) => station.id),
+  );
+  for (const id of [
+    '53733e08-7728-40ee-b968-59e71f0281b6',
+    'a3d45eec-8fb2-4e8a-8925-057d04576925',
+    '9c8f6141-f8e8-4779-bfed-5a79e14ed4dd',
+    '19b250fe-9027-4caf-b6ea-33022f0b6392',
+  ]) {
+    assert.equal(musicIds.has(id), true, id);
+  }
+});
+
 test('tag normalization is bounded and stable', () => {
   assert.equal(normalizeRadioTag('  Hip-Hop__Music  '), 'hip hop music');
   assert.equal(normalizeRadioTag('x'.repeat(100)).length, 80);
