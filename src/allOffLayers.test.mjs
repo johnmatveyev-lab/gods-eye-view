@@ -142,7 +142,7 @@ describe('All off chrome', () => {
 
   it('hides with the other globe chrome and does not invent /api', () => {
     const css = root('style.css');
-    assert.match(css, /#clear-selected-layers \{/);
+    assert.match(css, /#clear-selected-layers(?:,\s*#restore-live-layers)? \{/);
     assert.match(css, /body\.cockpit-mode :is\([^)]*#clear-selected-layers/);
     assert.match(css, /body\.scene-playback-mode :is\([^)]*#clear-selected-layers/);
     const module = src('allOffLayers.js');
