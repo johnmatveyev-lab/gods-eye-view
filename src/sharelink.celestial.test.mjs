@@ -504,9 +504,14 @@ test('explicit Context transitions claim the visual restore lane before transiti
     'the Context authority helper must claim the visual lane',
   );
 
+  const contactsRoster = sourceBlock('  _toggleContactsRoster() {', '  _initGlobalContextPanel() {');
+  assertContextClaimsBefore(contactsRoster, 'this._selectContextMode(', 'Contacts roster toggle');
+
   const contextPanel = sourceBlock('  _initGlobalContextPanel() {', '  async _runUserFacingContextAction(');
+  assert.match(contextPanel, /this\._contactsRosterToggle\?\.addEventListener\('click'/);
+  assert.match(contextPanel, /this\._globalContextFlightsBtn\?\.addEventListener\('click'/);
+  assert.match(contextPanel, /this\._toggleContactsRoster\(\)/);
   for (const [start, end, label] of [
-    ["this._globalContextFlightsBtn?.addEventListener('click'", "this._globalContextMissionsBtn?.addEventListener('click'", 'Contacts tab'],
     ["this._globalContextMissionsBtn?.addEventListener('click'", 'CONTEXT_PANEL_END', 'Space Missions tab'],
   ]) {
     const startIndex = contextPanel.indexOf(start);
@@ -548,9 +553,11 @@ test('explicit Context transitions claim the visual restore lane before transiti
 // detection: `_detectionUserOverridden` is what suppresses the military-style
 // auto-enable for the rest of the session. Contacts entry is not that.
 test('Context lane claims never set the session detection-override flag', () => {
+  const contactsRoster = sourceBlock('  _toggleContactsRoster() {', '  _initGlobalContextPanel() {');
   const contextPanel = sourceBlock('  _initGlobalContextPanel() {', '  async _runUserFacingContextAction(');
   const facade = sourceBlock('  async setContextMode(mode, {', '  getCockpitState() {');
   for (const [block, label] of [
+    [contactsRoster, 'Contacts roster toggle'],
     [contextPanel, 'Context panel'],
     [facade, 'setContextMode facade'],
   ]) {

@@ -1182,6 +1182,92 @@ test('generic voice visibility maps Space Missions to the explicit mission layer
   assert.equal(contextSettled, true);
 });
 
+test('voice enable OpenSky is refused and never hits opensky-network.org', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const fetches = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    fetches.push(String(url));
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  const setEnabledCalls = [];
+  const viewer = {
+    clock: { onTick: { addEventListener: () => () => {} } },
+    scene: { canvas: { addEventListener() {}, removeEventListener() {} } },
+    camera: { moveEnd: { addEventListener() {} } },
+  };
+  const runner = createGevActionRunner({
+    viewer,
+    styleManager: {},
+    dataManager: {
+      layers: new Map([['flights', { module: {} }]]),
+      isEnabled: () => false,
+      getLayerLifecycleState: () => ({ enabled: false, lifecycleState: 'disabled', uncertain: false }),
+      getAll: () => [{ id: 'flights', name: 'Live Flights' }],
+      setEnabled: async (...args) => {
+        setEnabledCalls.push(args);
+        return true;
+      },
+    },
+  });
+  try {
+    for (const layerId of ['OpenSky', 'opensky', 'open sky', 'OpenSky Network']) {
+      const result = await runner('set_layer_visibility', { layerId, enabled: true });
+      assert.equal(result.ok, false, layerId);
+      assert.equal(result.error, 'OpenSky is disabled', layerId);
+      assert.equal(result.layerId, 'opensky', layerId);
+    }
+    assert.equal(setEnabledCalls.length, 0);
+    assert.equal(fetches.length, 0);
+    assert.ok(fetches.every((url) => !url.includes('opensky-network.org')));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
+test('voice Google News / news RSS is refused and never hits news.google.com', async () => {
+  globalThis.window = globalThis.window || { clearTimeout, setTimeout, requestIdleCallback: null };
+  const fetches = [];
+  const previousFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    fetches.push(String(url));
+    throw new Error(`unexpected fetch: ${url}`);
+  };
+  const setEnabledCalls = [];
+  const viewer = {
+    clock: { onTick: { addEventListener: () => () => {} } },
+    scene: { canvas: { addEventListener() {}, removeEventListener() {} } },
+    camera: { moveEnd: { addEventListener() {} } },
+  };
+  const runner = createGevActionRunner({
+    viewer,
+    styleManager: {},
+    dataManager: {
+      layers: new Map([['flights', { module: {} }]]),
+      isEnabled: () => false,
+      getLayerLifecycleState: () => ({ enabled: false, lifecycleState: 'disabled', uncertain: false }),
+      getAll: () => [{ id: 'flights', name: 'Live Flights' }],
+      setEnabled: async (...args) => {
+        setEnabledCalls.push(args);
+        return true;
+      },
+    },
+  });
+  try {
+    for (const layerId of ['Google News', 'google news', 'news RSS', 'news rss']) {
+      const result = await runner('set_layer_visibility', { layerId, enabled: true });
+      assert.equal(result.ok, false, layerId);
+      assert.equal(result.error, 'Google News RSS is disabled', layerId);
+      assert.equal(result.layerId, 'google-news-rss', layerId);
+    }
+    assert.equal(setEnabledCalls.length, 0);
+    assert.equal(fetches.length, 0);
+    assert.ok(fetches.every((url) => !url.includes('news.google.com')));
+  } finally {
+    globalThis.fetch = previousFetch;
+  }
+});
+
 test('voice CCTV focus reports tracking ownership separately from no active camera', () => {
   assert.deepEqual(
     cctvVoiceFocusOutcome(CCTV_FOCUS_RESULT.TRACKING_HOLDS_VIEW),

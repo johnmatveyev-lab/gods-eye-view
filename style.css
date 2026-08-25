@@ -2020,6 +2020,29 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 18px;
 }
 
+#contacts-roster-toggle {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+#contacts-roster-toggle .contacts-roster-toggle-label {
+  line-height: 1;
+}
+
+#contacts-roster-toggle.active,
+#contacts-roster-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+}
+
 #global-loading-status {
   position: fixed;
   top: 74px;
@@ -2290,6 +2313,35 @@ body.ui-clean-view #scene-runtime.active {
   html:not([data-reduce-motion="false"]) .gev-flap-sizing {
     transition-duration: 1ms;
   }
+}
+
+/* ── Offline chip (live polls paused) ────────── */
+#meridian-offline-chip {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 210;
+  padding: 8px 16px;
+  border: 1px solid rgba(255, 196, 92, 0.45);
+  border-radius: 8px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #ffc45c;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+#meridian-offline-chip[hidden] {
+  display: none !important;
+}
+
+body.recording-mode #meridian-offline-chip {
+  display: none !important;
 }
 
 /* ── Toast Notification ──────────────────────── */

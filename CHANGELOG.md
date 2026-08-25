@@ -25,6 +25,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `meridian.liveSun`. The existing UTC | Local HUD toggle only changes the
   clock display. WX FX and visual looks stay independent. No new imagery
   stack and no `/api`.
+- Added a Contacts control that shows or hides the existing 250 km nearby
+  aircraft roster. Selecting a row still uses the current track action. Copy
+  ident stays on the tracked card. Cockpit enter still requires a selected
+  aircraft. Empty sky reports empty or unavailable rather than hanging. No new
+  range math, `/api`, or person-search.
 - Added a Look control that cycles the existing sensor styles — CRT, NVG,
   FLIR, Noir, Snow, then default — through the same setter the share URL and
   voice already use. No new looks.
@@ -146,6 +151,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “OpenSky” is refused with “OpenSky is disabled”. Civilian flights stay
   labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
   compatibility path and never contacts opensky-network.org.
+- Voice “Google News” / “news RSS” is refused with “Google News RSS is
+  disabled”. Cockpit headlines stay GDELT with citation and never fetch
+  news.google.com. No Google News source picker.
 
 ### Fixed
 
