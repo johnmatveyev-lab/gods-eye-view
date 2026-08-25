@@ -16,6 +16,8 @@ export const BIKESHARE_SYSTEM_STORAGE_KEY = 'meridian.bikeshare.system';
 export const BIKESHARE_HIDE_EMPTY_STORAGE_KEY = 'meridian.bikeshare.hideEmpty';
 /** localStorage key for the Hide full station filter. Default omitted = OFF. */
 export const BIKESHARE_HIDE_FULL_STORAGE_KEY = 'meridian.bikeshare.hideFull';
+/** localStorage key for the Hide closed station filter. Default omitted = OFF. */
+export const BIKESHARE_HIDE_CLOSED_STORAGE_KEY = 'meridian.bikeshare.hideClosed';
 
 /** Default system: the app's first-run city. */
 export const DEFAULT_BIKESHARE_SYSTEM_ID = 'austin-capmetro';
@@ -141,6 +143,14 @@ export function normalizeBikeshareHideFull(value) {
 }
 
 /**
+ * @param {unknown} value
+ * @returns {boolean|null}
+ */
+export function normalizeBikeshareHideClosed(value) {
+  return normalizeBikeshareHideEmpty(value);
+}
+
+/**
  * @param {{getItem?: Function}|null} storage
  * @returns {boolean|null}
  */
@@ -161,6 +171,19 @@ export function readPersistedBikeshareHideFull(storage) {
   if (!storage || typeof storage.getItem !== 'function') return null;
   try {
     return normalizeBikeshareHideFull(storage.getItem(BIKESHARE_HIDE_FULL_STORAGE_KEY));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {{getItem?: Function}|null} storage
+ * @returns {boolean|null}
+ */
+export function readPersistedBikeshareHideClosed(storage) {
+  if (!storage || typeof storage.getItem !== 'function') return null;
+  try {
+    return normalizeBikeshareHideClosed(storage.getItem(BIKESHARE_HIDE_CLOSED_STORAGE_KEY));
   } catch {
     return null;
   }
@@ -192,6 +215,22 @@ export function writePersistedBikeshareHideFull(value, storage) {
   if (normalized == null || !storage || typeof storage.setItem !== 'function') return null;
   try {
     storage.setItem(BIKESHARE_HIDE_FULL_STORAGE_KEY, normalized ? '1' : '0');
+    return normalized;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * @param {unknown} value
+ * @param {{setItem?: Function}|null} storage
+ * @returns {boolean|null}
+ */
+export function writePersistedBikeshareHideClosed(value, storage) {
+  const normalized = normalizeBikeshareHideClosed(value);
+  if (normalized == null || !storage || typeof storage.setItem !== 'function') return null;
+  try {
+    storage.setItem(BIKESHARE_HIDE_CLOSED_STORAGE_KEY, normalized ? '1' : '0');
     return normalized;
   } catch {
     return null;
