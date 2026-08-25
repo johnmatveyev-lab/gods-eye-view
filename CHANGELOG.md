@@ -49,6 +49,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Bikeshare has All | 3+ | 5+ chips next to Hide empty / Hide full /
+  Hide closed. Default All matches the current dots. 3+ and 5+ keep
+  stations whose last-good `bikesAvailable` is at least that floor.
+  Unknown counts stay visible. A selected station stays until deselected.
+  Hide empty, hide full, and hide closed still AND independently. Filters
+  already-fetched GBFS status only — no extra `/api/gbfs` fetch. Preference
+  persists as `meridian.bikeshare.minAvailable`. The Plan 68 system picker
+  is unchanged.
 - Satellites DATA LAYERS row now shows a **Next ISS** readout: rise time
   (UTC | Local follows the existing clock toggle), peak elevation, and rise
   azimuth from the already-loaded ISS satrec at the camera lat/lon. Recalc is

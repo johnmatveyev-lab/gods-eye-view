@@ -20,6 +20,12 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import {
+  BIKESHARE_MIN_AVAILABLE_FLOORS,
+  DEFAULT_BIKESHARE_MIN_AVAILABLE,
+  normalizeBikeshareMinAvailable,
+  stationMatchesBikeshareMinAvailable,
+} from './bikeshareMinAvailable.js';
+import {
   DEFAULT_BIKESHARE_SYSTEM_ID,
   bikeshareSystemPickerLabel,
   buildGbfsProxyUrl,
@@ -31,10 +37,12 @@ import {
   readPersistedBikeshareHideClosed,
   readPersistedBikeshareHideEmpty,
   readPersistedBikeshareHideFull,
+  readPersistedBikeshareMinAvailable,
   readPersistedBikeshareSystem,
   writePersistedBikeshareHideClosed,
   writePersistedBikeshareHideEmpty,
   writePersistedBikeshareHideFull,
+  writePersistedBikeshareMinAvailable,
   writePersistedBikeshareSystem,
 } from './bikeshareSystems.js';
 
@@ -561,11 +569,13 @@ let _hideEmpty = false;
 let _hideFull = false;
 /** Hide stations that are not installed, renting, or returning. Default OFF. */
 let _hideClosed = false;
+/** Min-available bike floor chip. Default All — no numeric floor. */
+let _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
 /** Optional storage override for picker persistence tests. */
 let _storageOverride = null;
 /** Manager callback when picker state changes. */
 let _rowControlsListener = null;
-/** Count of `/api/gbfs` fetches — hide-empty / hide-full / hide-closed must not increment this. */
+/** Count of `/api/gbfs` fetches — visibility chips must not increment this. */
 let _gbfsFetchCount = 0;
 
 /**
@@ -609,18 +619,26 @@ function isClosedBikeshareStation(record) {
 
 /**
  * Whether a station should stay on the globe under Hide empty / Hide full /
- * Hide closed. Unknown / non-finite counts stay visible for empty/full.
- * Unknown operational flags stay visible for Hide closed. A selected
- * station stays visible even after it goes empty, full, or closed, until
- * deselected. The three filters AND independently.
+ * Hide closed / min-available. Unknown / non-finite counts stay visible
+ * for empty, full, and the bike floor. Unknown operational flags stay
+ * visible for Hide closed. A selected station stays visible even after
+ * it goes empty, full, closed, or below the floor, until deselected.
+ * The filters AND independently.
  * @param {Object|null|undefined} record
- * @param {{ hideEmpty?: boolean, hideFull?: boolean, hideClosed?: boolean, selectedKey?: string|null }} [options]
+ * @param {{
+ *   hideEmpty?: boolean,
+ *   hideFull?: boolean,
+ *   hideClosed?: boolean,
+ *   minAvailable?: string|number|null,
+ *   selectedKey?: string|null,
+ * }} [options]
  * @returns {boolean}
  */
 export function shouldShowBikeshareStation(record, {
   hideEmpty = false,
   hideFull = false,
   hideClosed = false,
+  minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE,
   selectedKey = null,
 } = {}) {
   if (record?.key && record.key === selectedKey) return true;
@@ -631,6 +649,9 @@ export function shouldShowBikeshareStation(record, {
     return false;
   }
   if (hideClosed && isClosedBikeshareStation(record)) {
+    return false;
+  }
+  if (!stationMatchesBikeshareMinAvailable(record, minAvailable)) {
     return false;
   }
   return true;
@@ -652,6 +673,7 @@ function applyStationVisibility(record) {
     hideEmpty: _hideEmpty,
     hideFull: _hideFull,
     hideClosed: _hideClosed,
+    minAvailable: _minAvailable,
     selectedKey: _selectedKey,
   });
   if (isSelected) {
@@ -694,6 +716,16 @@ function setHideClosed(nextValue) {
   if (next === _hideClosed) return false;
   _hideClosed = next;
   writePersistedBikeshareHideClosed(next, safeBikeshareStorage());
+  applyAllStationVisibility();
+  notifyRowControlsChanged();
+  return true;
+}
+
+function setMinAvailable(nextValue) {
+  const next = normalizeBikeshareMinAvailable(nextValue);
+  if (next == null || next === _minAvailable) return false;
+  _minAvailable = next;
+  writePersistedBikeshareMinAvailable(next, safeBikeshareStorage());
   applyAllStationVisibility();
   notifyRowControlsChanged();
   return true;
@@ -1785,6 +1817,8 @@ const bikeshareLayer = {
     _hideEmpty = readPersistedBikeshareHideEmpty(safeBikeshareStorage()) === true;
     _hideFull = readPersistedBikeshareHideFull(safeBikeshareStorage()) === true;
     _hideClosed = readPersistedBikeshareHideClosed(safeBikeshareStorage()) === true;
+    _minAvailable = readPersistedBikeshareMinAvailable(safeBikeshareStorage())
+      || DEFAULT_BIKESHARE_MIN_AVAILABLE;
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -1917,9 +1951,10 @@ const bikeshareLayer = {
   },
 
   /**
-   * Picker of allowlisted systems plus Hide empty / Hide full / Hide closed chips.
-   * The picker stays Plan 68: it still switches allowlisted systems.
-   * The chips are draw filters on already-fetched status, not a new feed.
+   * Picker of allowlisted systems plus Hide empty / Hide full / Hide closed
+   * and All | 3+ | 5+ chips. The picker stays Plan 68: it still switches
+   * allowlisted systems. The chips are draw filters on already-fetched
+   * status, not a new feed.
    * @returns {{ picker: object, chips: Array<object> }}
    */
   getRowControls() {
@@ -1959,18 +1994,29 @@ const bikeshareLayer = {
           ? 'Hiding stations that are not installed, renting, or returning — click to show them'
           : 'Hide stations that are not installed, renting, or returning',
         params: { hideClosed: !_hideClosed },
-      }],
+      }, ...BIKESHARE_MIN_AVAILABLE_FLOORS.map((floor) => ({
+        id: `min-available-${floor.id}`,
+        label: floor.label,
+        title: floor.title,
+        active: _minAvailable === floor.id,
+        params: { minAvailable: floor.id },
+      }))],
     };
   },
 
   getParams() {
-    return { hideEmpty: _hideEmpty, hideFull: _hideFull, hideClosed: _hideClosed };
+    return {
+      hideEmpty: _hideEmpty,
+      hideFull: _hideFull,
+      hideClosed: _hideClosed,
+      minAvailable: _minAvailable,
+    };
   },
 
   /**
-   * Apply Hide empty / Hide full / Hide closed without refetching GBFS.
-   * System switching stays on setSelectedSystem (Plan 68) and is not
-   * accepted here.
+   * Apply Hide empty / Hide full / Hide closed / min-available without
+   * refetching GBFS. System switching stays on setSelectedSystem (Plan 68)
+   * and is not accepted here.
    * @param {Object} [params]
    * @returns {boolean}
    */
@@ -1987,6 +2033,10 @@ const bikeshareLayer = {
     if (Object.hasOwn(params, 'hideClosed')) {
       const next = normalizeBikeshareHideClosed(params.hideClosed);
       if (next !== null) setHideClosed(next);
+    }
+    if (Object.hasOwn(params, 'minAvailable')) {
+      const next = normalizeBikeshareMinAvailable(params.minAvailable);
+      if (next !== null) setMinAvailable(next);
     }
     return true;
   },
@@ -2092,6 +2142,7 @@ export function _resetBikeshareSystemPickerForTest() {
   _hideEmpty = false;
   _hideFull = false;
   _hideClosed = false;
+  _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
   _unavailable = false;
   _error = null;
   _enabled = false;
