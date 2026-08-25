@@ -7,6 +7,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Voice token mint and HUD summary fail closed unless Clerk is configured and
+  the signed-in user is Pro. An unset Clerk env no longer mints an unauthenticated
+  Realtime secret or HUD call.
 - Hosted MIC stays locked for Free, anonymous, and exhausted sessions and
   reuses the existing upgrade / sign-in / budget modal. A 404/503 token
   response shows “Voice is not available on this host yet” or

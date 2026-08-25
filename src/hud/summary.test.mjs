@@ -144,8 +144,12 @@ test('POST {} unauth/Free is the same forbid JSON as voice', async () => {
 
 test('HUD summary uses the server key and does not leak it', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
-  const { status, json, body } = await dispatchHud({}, {
-    runtime: createBillingRuntime({ env: {} }),
+  const { status, json, body } = await dispatchHud({
+    headers: { authorization: 'Bearer sess_test' },
+  }, {
+    runtime: hostedRuntime({
+      getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.PRO } }),
+    }),
     fetchImpl,
   });
   assert.equal(status, 200);
@@ -180,15 +184,29 @@ test('invented-coord-only context does not add a place name in the prompt path',
 
   const { fetchImpl, calls } = mockOpenAiFetch();
   await dispatchHud({
+    headers: { authorization: 'Bearer sess_test' },
     body: { lat: 30.2672, lon: -97.7431, placeName: 'Austin' },
   }, {
-    runtime: createBillingRuntime({ env: {} }),
+    runtime: hostedRuntime({
+      getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.PRO } }),
+    }),
     fetchImpl,
   });
   assert.equal(calls.length, 1);
   const posted = JSON.parse(calls[0].init.body);
   assert.doesNotMatch(posted.input, /Austin|30\.2672|-97\.7431|placeName/);
   assert.match(posted.instructions, /Do not infer from coordinates or invent a place/);
+});
+
+test('Clerk unset fails closed for HUD summary', async () => {
+  const { fetchImpl, calls } = mockOpenAiFetch();
+  const { status, json } = await dispatchHud({ body: {} }, {
+    runtime: createBillingRuntime({ env: {} }),
+    fetchImpl,
+  });
+  assert.equal(status, 401);
+  assert.equal(json.code, BILLING_CODES.AUTH_REQUIRED);
+  assert.equal(calls.length, 0);
 });
 
 test('Vercel without Clerk fails closed for HUD summary', async () => {
