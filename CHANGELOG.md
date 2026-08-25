@@ -20,6 +20,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a top-center north-up compass. Click or `N` sets heading 0 and keeps
+  the current target, range, and tilt. The needle tracks camera heading.
+  Home still returns the full default pose. Share links keep using the
+  existing `heading` field.
 - Hosted `/api/military-installations` on Vercel through the existing live
   catch-all (`api/[...path].js`), forwarding the GET handler extracted to
   `src/data/militaryInstallationsHttp.js`. Keeps the non-dateline ≤10° bbox

@@ -702,8 +702,12 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   and viewport changes, while explicit collapse remains the only persisted
 >   user intent.
 >   Display orders 3D immediately above Celestial and Clean UI immediately
->   below it. The top-center action group places Clear Layers to the left of
->   Share and Reset Globe to the right. Clear Layers turns off the currently
+>   below it. The top-center action group places Contacts, then Clear Layers to the left of
+>   Share, a north-up compass, Home, Stop tracking, Copy, Fullscreen, and Reset Globe to the right. The compass
+>   needle tracks camera heading; a click or `N` sets heading 0 while keeping
+>   the current target, range, and tilt. Home still returns the full first-load
+>   Austin pose. Reset Globe still returns the full
+>   18,000 km globe pose. Clear Layers turns off the currently
 >   selected manager-owned data layers, including an active Context choice,
 >   while retaining visual, HUD, map, and panel settings. A disabled layer may
 >   still release camera work that it owns through its normal teardown.
@@ -749,7 +753,8 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   the Cockpit HUD at 145), scrolling internally when the layer list is longer than
 >   the corridor. Cesium's credit line is never passable and still bounds the
 >   corridor. Layer toggles stay live from there, and collapsing returns the
->   plain launcher. The map-only Clear, Share, and Reset Globe actions are hidden
+>   plain launcher. The map-only Clear, Share, north-up compass, Home, Stop tracking, Copy, Fullscreen, and Reset Globe
+>   actions are hidden
 >   for the duration of Cockpit, both as a group and as individual controls.
 >   It uses the `radar` symbol and provides roving keyboard tab navigation. Its action row
 >   places the single Cockpit entry before Search Nearby Sites. Cockpit removes
@@ -860,7 +865,8 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   tray inside the screen.
 >   Adaptive remeasurement preserves the user's
 >   scroll position across Tactical, Minimal, and HUD Off layouts.
->   During an active Scene run, Clear Selected Layers and Reset Globe remain
+>   During an active Scene run, Clear Selected Layers, the north-up compass,
+>   Home, Stop tracking, and Reset Globe remain
 >   hidden until playback stops or completes because the Scene transport owns
 >   layer and camera sequencing for that interval.
 >   The Cockpit Contact summary exposes Previous and Next contact navigation

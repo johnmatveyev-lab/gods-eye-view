@@ -16,6 +16,7 @@ import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
+import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -2534,6 +2535,7 @@ export class StyleManager {
     this._cctvMeta = document.getElementById('cctv-meta');
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
+    this._northUpCompassBtn = document.getElementById('north-up-compass');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
     this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
@@ -2829,6 +2831,7 @@ export class StyleManager {
     this._initHomeViewButton();
     this._initStopTrackingButton();
     this._initResetGlobeButton();
+    this._initNorthUpCompass();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initTrailsToggle();
@@ -3548,7 +3551,7 @@ export class StyleManager {
     // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
-      // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f') otherwise fire while a
+      // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
       // <select> dropdown (e.g. HUD layout) is focused and its native
       // type-ahead is in use, or while typing in a text field (M9).
       const isFormControl = e.target?.matches?.('select, input, textarea')
@@ -3601,6 +3604,9 @@ export class StyleManager {
       }
       if (e.key.toLowerCase() === 'c') {
         this._toggleCctvEnabled();
+      }
+      if (e.key.toLowerCase() === 'n') {
+        this.setNorthUp();
       }
     };
     document.addEventListener('keydown', this._globalKeydownHandler);
@@ -10278,6 +10284,30 @@ export class StyleManager {
     }
   }
 
+  /** Wire the north-up compass and keep its needle aligned with camera heading. */
+  _initNorthUpCompass() {
+    if (!this._northUpCompassBtn) return;
+    this._northUpHandler = () => { this.setNorthUp(); };
+    this._northUpCompassBtn.addEventListener('click', this._northUpHandler);
+    this._removeCompassHeading = this.viewer.camera.changed.addEventListener(() => {
+      this._syncCompassNeedle();
+    });
+    this._removeCompassMoveEnd = this.viewer.camera.moveEnd?.addEventListener?.(() => {
+      this._syncCompassNeedle();
+    }) || null;
+    this._syncCompassNeedle();
+  }
+
+  /** Rotate the compass needle so N tracks the current heading. */
+  _syncCompassNeedle() {
+    if (!this._northUpCompassBtn) return;
+    const heading = this.viewer?.camera?.heading;
+    this._northUpCompassBtn.style.setProperty(
+      '--north-up-heading',
+      `${compassNeedleDeg(heading)}deg`,
+    );
+  }
+
   /** Wire the top-center action that clears only manager-owned data layers. */
   _initClearSelectedLayersButton() {
     if (!this._clearSelectedLayersBtn) return;
@@ -10420,6 +10450,26 @@ export class StyleManager {
     });
     if (!target) finish(true);
     return resetPromise;
+  }
+
+  /**
+   * Set heading 0 (north-up) without the Home / Reset Globe pose.
+   * Keeps the current ground target, range, and tilt when a pick exists;
+   * otherwise keeps camera lat/lon/height/pitch.
+   */
+  setNorthUp() {
+    if (this.cockpitView?.active) return false;
+    this._stampNavigation();
+    interruptCameraMotion('north-up');
+    this._stopOrbit();
+    this.viewer.camera.cancelFlight();
+    const target = this.viewer.trackedEntity
+      ? null
+      : resolveNorthUpTarget(this.viewer);
+    const applied = applyNorthUp(this.viewer.camera, target);
+    this.viewer.scene?.requestRender?.();
+    this._syncCompassNeedle();
+    return applied;
   }
 
   // ── Share Button ─────────────────────────────
@@ -10986,6 +11036,14 @@ export class StyleManager {
       this._stopTrackingBtn.removeEventListener('click', this._stopTrackingHandler);
       this._stopTrackingHandler = null;
     }
+    if (this._northUpHandler) {
+      this._northUpCompassBtn?.removeEventListener('click', this._northUpHandler);
+      this._northUpHandler = null;
+    }
+    this._removeCompassHeading?.();
+    this._removeCompassHeading = null;
+    this._removeCompassMoveEnd?.();
+    this._removeCompassMoveEnd = null;
     if (this._clearSelectedLayersBtn && this._clearSelectedLayersHandler) {
       this._clearSelectedLayersBtn.removeEventListener('click', this._clearSelectedLayersHandler);
       this._clearSelectedLayersHandler = null;
