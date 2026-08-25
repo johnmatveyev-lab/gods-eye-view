@@ -22,15 +22,23 @@ import {
   BIKESHARE_HIDE_CLOSED_STORAGE_KEY,
   BIKESHARE_HIDE_EMPTY_STORAGE_KEY,
   BIKESHARE_HIDE_FULL_STORAGE_KEY,
+  BIKESHARE_MIN_AVAILABLE_STORAGE_KEY,
   BIKESHARE_SYSTEM_STORAGE_KEY,
   buildGbfsProxyUrl,
   readPersistedBikeshareHideClosed,
   readPersistedBikeshareHideEmpty,
   readPersistedBikeshareHideFull,
+  readPersistedBikeshareMinAvailable,
   writePersistedBikeshareHideClosed,
   writePersistedBikeshareHideEmpty,
   writePersistedBikeshareHideFull,
+  writePersistedBikeshareMinAvailable,
 } from './bikeshareSystems.js';
+import {
+  DEFAULT_BIKESHARE_MIN_AVAILABLE,
+  normalizeBikeshareMinAvailable,
+  stationMatchesBikeshareMinAvailable,
+} from './bikeshareMinAvailable.js';
 
 function makeRecord() {
   return {
@@ -792,6 +800,286 @@ test('hide closed persists with the bikeshare layer and adds no new endpoint', (
     assert.equal(bikeshareLayer.getParams().hideClosed, true);
     assert.equal(bikeshareLayer.getParams().hideEmpty, false);
     assert.equal(bikeshareLayer.getParams().hideFull, false);
+    assert.match(buildGbfsProxyUrl('https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json'), /^\/api\/gbfs\//);
+  } finally {
+    _resetBikeshareSystemPickerForTest();
+  }
+});
+
+test('All is the default min-available floor and matches the current dots', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const empty = makeStationRecord({
+    key: `${cityId}:empty`,
+    cityId,
+    stationId: 'empty',
+    bikesAvailable: 0,
+  });
+  const two = makeStationRecord({
+    key: `${cityId}:two`,
+    cityId,
+    stationId: 'two',
+    bikesAvailable: 2,
+  });
+  const three = makeStationRecord({
+    key: `${cityId}:three`,
+    cityId,
+    stationId: 'three',
+    bikesAvailable: 3,
+  });
+  const unknown = makeStationRecord({
+    key: `${cityId}:unknown`,
+    cityId,
+    stationId: 'unknown',
+    bikesAvailable: null,
+  });
+  _seedBikeshareStationsForTest([empty, two, three, unknown], { cityId });
+
+  assert.equal(DEFAULT_BIKESHARE_MIN_AVAILABLE, 'all');
+  assert.equal(bikeshareLayer.getParams().minAvailable, 'all');
+  assert.equal(_getBikeshareStationShowForTest(empty.key), true);
+  assert.equal(_getBikeshareStationShowForTest(two.key), true);
+  assert.equal(_getBikeshareStationShowForTest(three.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true);
+
+  const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+  bikeshareLayer.setParams({ hideEmpty: true });
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+  assert.equal(_getBikeshareStationShowForTest(empty.key), false,
+    'Hide empty stays independent while All is selected');
+  assert.equal(_getBikeshareStationShowForTest(two.key), true);
+  assert.equal(_getBikeshareStationShowForTest(three.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true);
+
+  bikeshareLayer.setParams({ hideEmpty: false });
+  assert.equal(_getBikeshareStationShowForTest(empty.key), true);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('3+ hides 0–2 bike stations and keeps 3+ plus unknown counts', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const zero = makeStationRecord({
+    key: `${cityId}:zero`,
+    cityId,
+    stationId: 'zero',
+    bikesAvailable: 0,
+  });
+  const two = makeStationRecord({
+    key: `${cityId}:two`,
+    cityId,
+    stationId: 'two',
+    bikesAvailable: 2,
+  });
+  const three = makeStationRecord({
+    key: `${cityId}:three`,
+    cityId,
+    stationId: 'three',
+    bikesAvailable: 3,
+  });
+  const five = makeStationRecord({
+    key: `${cityId}:five`,
+    cityId,
+    stationId: 'five',
+    bikesAvailable: 5,
+  });
+  const unknown = makeStationRecord({
+    key: `${cityId}:unknown`,
+    cityId,
+    stationId: 'unknown',
+    bikesAvailable: Number.NaN,
+  });
+  _seedBikeshareStationsForTest([zero, two, three, five, unknown], { cityId });
+
+  const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+  assert.equal(bikeshareLayer.setParams({ minAvailable: '3' }), true);
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore,
+    'chip change must filter cached status, not refetch GBFS');
+  assert.equal(bikeshareLayer.getParams().minAvailable, '3');
+  assert.equal(_getBikeshareStationShowForTest(zero.key), false);
+  assert.equal(_getBikeshareStationShowForTest(two.key), false);
+  assert.equal(_getBikeshareStationShowForTest(three.key), true);
+  assert.equal(_getBikeshareStationShowForTest(five.key), true);
+  assert.equal(_getBikeshareStationShowForTest(unknown.key), true,
+    'missing / non-finite bikesAvailable stay visible');
+
+  assert.equal(bikeshareLayer.setParams({ minAvailable: 'all' }), true);
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+  assert.equal(_getBikeshareStationShowForTest(zero.key), true);
+  assert.equal(_getBikeshareStationShowForTest(two.key), true);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('min-available predicate keeps selected below-floor stations and unknown counts', () => {
+  const oneBike = { key: 'austin-capmetro:one', bikesAvailable: 1 };
+  assert.equal(stationMatchesBikeshareMinAvailable(oneBike, 'all'), true);
+  assert.equal(stationMatchesBikeshareMinAvailable(oneBike, '3'), false);
+  assert.equal(shouldShowBikeshareStation(oneBike, { minAvailable: '3' }), false);
+  assert.equal(shouldShowBikeshareStation(oneBike, {
+    minAvailable: '3',
+    selectedKey: 'austin-capmetro:one',
+  }), true);
+  assert.equal(shouldShowBikeshareStation({ bikesAvailable: Number.NaN }, { minAvailable: '5' }), true);
+  assert.equal(shouldShowBikeshareStation({ bikesAvailable: null }, { minAvailable: '5' }), true);
+  assert.equal(normalizeBikeshareMinAvailable('nope'), null);
+  assert.equal(normalizeBikeshareMinAvailable(3), '3');
+});
+
+test('selected 1-bike station stays visible when 3+ is on', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const key = `${cityId}:3790`;
+  const record = makeStationRecord({
+    key,
+    cityId,
+    stationId: '3790',
+    bikesAvailable: 1,
+  });
+  const other = makeStationRecord({
+    key: `${cityId}:other`,
+    cityId,
+    stationId: 'other',
+    bikesAvailable: 1,
+  });
+  const viewer = { entities: new Cesium.EntityCollection() };
+  const overlayHost = {
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  };
+  _setBikeshareSelectionStateForTest({ viewer, key, record, overlayHost });
+  _seedBikeshareStationsForTest([record, other], { cityId });
+  try {
+    _selectBikeshareStationForTest(key);
+    assert.equal(record.point.show, false);
+    assert.equal(viewer.entities.values.length, 1);
+
+    const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+    bikeshareLayer.setParams({ minAvailable: '3' });
+    assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+    assert.equal(viewer.entities.values.length, 1, 'selected highlight stays below the floor');
+    assert.equal(viewer.entities.values[0].show, true, 'selected 1-bike station stays drawn');
+    assert.equal(record.point.show, false);
+    assert.equal(_getBikeshareStationShowForTest(other.key), false);
+
+    _clearBikeshareSelectionForTest();
+    assert.equal(record.point.show, false, 'deselected 1-bike station is hidden while 3+ is on');
+  } finally {
+    _clearBikeshareSelectionForTest();
+    _resetBikeshareSystemPickerForTest();
+  }
+});
+
+test('hide full + hide closed + 5+ still AND', () => {
+  _resetBikeshareSystemPickerForTest();
+  const cityId = 'austin-capmetro';
+  const full = makeStationRecord({
+    key: `${cityId}:full`,
+    cityId,
+    stationId: 'full',
+    bikesAvailable: 8,
+    docksAvailable: 0,
+  });
+  const closed = makeStationRecord({
+    key: `${cityId}:closed`,
+    cityId,
+    stationId: 'closed',
+    bikesAvailable: 6,
+    docksAvailable: 3,
+    isRenting: false,
+  });
+  const low = makeStationRecord({
+    key: `${cityId}:low`,
+    cityId,
+    stationId: 'low',
+    bikesAvailable: 4,
+    docksAvailable: 4,
+  });
+  const usable = makeStationRecord({
+    key: `${cityId}:usable`,
+    cityId,
+    stationId: 'usable',
+    bikesAvailable: 7,
+    docksAvailable: 3,
+  });
+  _seedBikeshareStationsForTest([full, closed, low, usable], { cityId });
+
+  const fetchesBefore = _getBikeshareGbfsFetchCountForTest();
+  bikeshareLayer.setParams({ hideFull: true, hideClosed: true, minAvailable: '5' });
+  assert.equal(_getBikeshareGbfsFetchCountForTest(), fetchesBefore);
+  assert.equal(_getBikeshareStationShowForTest(full.key), false);
+  assert.equal(_getBikeshareStationShowForTest(closed.key), false);
+  assert.equal(_getBikeshareStationShowForTest(low.key), false);
+  assert.equal(_getBikeshareStationShowForTest(usable.key), true);
+
+  assert.equal(shouldShowBikeshareStation({
+    bikesAvailable: 7,
+    docksAvailable: 0,
+    isRenting: true,
+  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), false);
+  assert.equal(shouldShowBikeshareStation({
+    bikesAvailable: 7,
+    docksAvailable: 2,
+    isRenting: false,
+  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), false);
+  assert.equal(shouldShowBikeshareStation({
+    bikesAvailable: 4,
+    docksAvailable: 2,
+    isRenting: true,
+  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), false);
+  assert.equal(shouldShowBikeshareStation({
+    bikesAvailable: 7,
+    docksAvailable: 2,
+    isRenting: true,
+  }, { hideFull: true, hideClosed: true, minAvailable: '5' }), true);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('row chips are Hide empty / Hide full / Hide closed then All | 3+ | 5+', () => {
+  _resetBikeshareSystemPickerForTest();
+  const controls = bikeshareLayer.getRowControls();
+  assert.deepEqual(controls.chips.map((chip) => chip.id), [
+    'hide-empty',
+    'hide-full',
+    'hide-closed',
+    'min-available-all',
+    'min-available-3',
+    'min-available-5',
+  ]);
+  assert.deepEqual(controls.chips.map((chip) => chip.label), [
+    'Hide empty',
+    'Hide full',
+    'Hide closed',
+    'All',
+    '3+',
+    '5+',
+  ]);
+  assert.equal(controls.chips.find((chip) => chip.id === 'min-available-all').active, true);
+  assert.equal(controls.chips.find((chip) => chip.id === 'min-available-3').params.minAvailable, '3');
+  bikeshareLayer.setParams({ minAvailable: '5' });
+  const after = bikeshareLayer.getRowControls();
+  assert.equal(after.chips.find((chip) => chip.id === 'min-available-5').active, true);
+  assert.equal(after.chips.filter((chip) => String(chip.id).startsWith('min-available-') && chip.active).length, 1);
+  _resetBikeshareSystemPickerForTest();
+});
+
+test('min-available persists with the bikeshare layer and adds no new endpoint', () => {
+  const storage = new Map();
+  const store = {
+    getItem: (key) => storage.get(key) ?? null,
+    setItem: (key, value) => { storage.set(key, value); },
+  };
+  _setBikeshareSystemStorageForTest(store);
+  try {
+    assert.equal(writePersistedBikeshareMinAvailable('3', store), '3');
+    assert.equal(storage.get(BIKESHARE_MIN_AVAILABLE_STORAGE_KEY), '3');
+    assert.equal(readPersistedBikeshareMinAvailable(store), '3');
+    bikeshareLayer.setParams({ minAvailable: '5' });
+    assert.equal(storage.get(BIKESHARE_MIN_AVAILABLE_STORAGE_KEY), '5');
+    assert.equal(bikeshareLayer.getParams().minAvailable, '5');
+    assert.equal(bikeshareLayer.getParams().hideEmpty, false);
+    assert.equal(bikeshareLayer.getParams().hideFull, false);
+    assert.equal(bikeshareLayer.getParams().hideClosed, false);
     assert.match(buildGbfsProxyUrl('https://gbfs.lyft.com/gbfs/2.3/bkn/en/station_status.json'), /^\/api\/gbfs\//);
   } finally {
     _resetBikeshareSystemPickerForTest();
