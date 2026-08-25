@@ -37,9 +37,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   visibility still hides out-of-band contacts even when the squawk is
   emergency. Client-side current payload only — not an alert service and
   not a verified emergency. No `/api`.
+- Hosted Data Layers now list in-view OSM dams from the existing bundled
+  payload (cap 50). Clicking a row flies to those coords using the layer's
+  current stem-click camera. Empty or off yields an empty list. The
+  datacenter roster stays independent. No new Overpass fetch. © OpenStreetMap
+  credit is unchanged.
 - Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
   a row to fly to that event (cap 50). Empty or failed feed shows
   UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
+- Flights layer has a client-side altitude band (All / Surface / &lt;10k /
+  10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
+  the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
+  `meridian.altBand`. Empty bands show an empty layer. No `/api`.
 - Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
   camera-center aim point copy-coords and measure already use. Default off.
   Persists as `meridian.crosshair`. Clean view may keep it; credits stay

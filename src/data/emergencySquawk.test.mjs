@@ -34,6 +34,7 @@ import militaryFlightsLayer, {
   _setTrackedMilitaryRefreshStateForTest,
 } from './militaryFlights.js';
 import { normalizeAdsbLolAircraftState } from './adsbLolFallback.js';
+import { aircraftMatchesAltitudeBand } from './flightAltitudeBand.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const src = (name) => readFileSync(path.join(ROOT, 'src', name), 'utf8');
@@ -120,10 +121,14 @@ test('toggle off → no special paint', () => {
 test('alt band still hides out-of-band even if emergency', () => {
   // Documented product rule: altitude-band visibility still wins. An
   // emergency squawk does not punch through an out-of-band hide.
+  const highEmergency = { altitudeM: 37000 * 0.3048, onGround: false };
+  assert.equal(aircraftMatchesAltitudeBand(highEmergency, 'surface'), false);
+  assert.equal(aircraftMatchesAltitudeBand(highEmergency, 'gt30k'), true);
+
   const outOfBand = emergencyHighlightPaint({
     squawk: '7700',
     highlightEnabled: true,
-    inAltitudeBand: false,
+    inAltitudeBand: aircraftMatchesAltitudeBand(highEmergency, 'surface'),
   });
   assert.equal(outOfBand.visible, false);
   assert.equal(outOfBand.highlighted, false);
@@ -133,10 +138,18 @@ test('alt band still hides out-of-band even if emergency', () => {
     highlightEnabled: true,
     inAltitudeBand: false,
   }), false);
+  assert.equal(emergencyHighlightPaint({
+    squawk: '7700',
+    highlightEnabled: true,
+    inAltitudeBand: aircraftMatchesAltitudeBand(highEmergency, 'gt30k'),
+  }).highlighted, true);
 
   const moduleSource = data('emergencySquawk.js');
+  const flights = data('flights.js');
   assert.match(moduleSource, /Altitude-band visibility still wins/);
   assert.match(moduleSource, /out-of-band contact stays hidden/);
+  assert.match(flights, /inAltitudeBand: _inAltitudeBand\(icao24\)/);
+  assert.match(flights, /Emergency squawk\s+does not punch through this hide/);
 });
 
 test('highlight uses the existing annotation alert red, not a new hue', () => {

@@ -259,6 +259,12 @@ import {
   viewFromCamera,
 } from './data/datacenterList.js';
 import {
+  DAMS_LAYER_ID,
+  bindDamsInViewList,
+  damFlyDestination,
+  viewFromCamera as damsViewFromCamera,
+} from './data/damsList.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -286,6 +292,13 @@ import {
   setScaleBarEnabled,
   uninstallScaleBar,
 } from './scaleBar.js';
+import {
+  altitudeBandStopLabels,
+  getAltitudeBand,
+  hydrateAltitudeBand,
+  setAltitudeBand,
+  subscribeAltitudeBand,
+} from './data/flightAltitudeBand.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -2515,6 +2528,7 @@ export class StyleManager {
       document.getElementById('power-low'),
     ].filter(Boolean);
     this._syncPowerModeUi(installPowerMode(this.viewer));
+    this._initAltitudeBand();
     this._detectionSliderRow = document.getElementById('detection-slider-row');
     this._detectionDensitySlider = document.getElementById('detection-density-slider');
     this._detectionDensityValue = document.getElementById('detection-density-value');
@@ -3001,6 +3015,7 @@ export class StyleManager {
     this._initHomeViewButton();
     this._initLaunchesPanel();
     this._initStopTrackingButton();
+    this._initDamsInViewList();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
@@ -4204,6 +4219,37 @@ export class StyleManager {
     refreshScaleBar();
   }
 
+  _initAltitudeBand() {
+    this._altBandBtns = [
+      document.getElementById('alt-band-all'),
+      document.getElementById('alt-band-surface'),
+      document.getElementById('alt-band-lt10k'),
+      document.getElementById('alt-band-mid'),
+      document.getElementById('alt-band-gt30k'),
+    ].filter(Boolean);
+    hydrateAltitudeBand();
+    for (const button of this._altBandBtns) {
+      button.addEventListener('click', () => {
+        setAltitudeBand(button.dataset.altBand);
+        this._syncAltitudeBandUi();
+      });
+    }
+    this._altBandUnsubscribe = subscribeAltitudeBand(() => this._syncAltitudeBandUi());
+    this._syncAltitudeBandUi();
+  }
+
+  _syncAltitudeBandUi() {
+    const band = getAltitudeBand();
+    const labels = altitudeBandStopLabels(getDistanceUnit());
+    for (const button of this._altBandBtns || []) {
+      const id = button.dataset.altBand;
+      const active = band.id === id;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+      if (Object.hasOwn(labels, id)) button.textContent = labels[id];
+    }
+  }
+
   _syncUnitsUi() {
     const unit = getDistanceUnit();
     for (const button of this._unitsBtns || []) {
@@ -4211,6 +4257,7 @@ export class StyleManager {
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', String(active));
     }
+    this._syncAltitudeBandUi();
     const windowPhrase = `${formatDistanceMeters(AWARENESS_RADIUS_M, unit, { style: 'range' })} window`;
     const previous = document.getElementById('cockpit-context-previous');
     const next = document.getElementById('cockpit-context-next');
@@ -5041,6 +5088,8 @@ export class StyleManager {
       dataManager: this._dataManager,
       setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
     });
+    this._datacenterInViewList?.refresh();
+    this._damsInViewList?.refresh();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5052,6 +5101,9 @@ export class StyleManager {
           this._handleContextLayerChange(change);
           if (change?.layerId === DATACENTER_LAYER_ID) {
             this._datacenterInViewList?.refresh();
+          }
+          if (change?.layerId === DAMS_LAYER_ID) {
+            this._damsInViewList?.refresh();
           }
         }
         if (this._installationsListOpen && change?.layerId === 'military-installations') {
@@ -10759,6 +10811,48 @@ export class StyleManager {
   }
 
   /**
+   * In-view OSM dams list. Reads the existing layer payload and flies
+   * with the same stem-click destination. Datacenters stay on their own list.
+   */
+  _initDamsInViewList() {
+    const root = document.getElementById('dams-in-view');
+    const items = document.getElementById('dams-in-view-items');
+    const count = document.getElementById('dams-in-view-count');
+    this._damsInViewList = bindDamsInViewList({
+      root,
+      items,
+      count,
+      getEnabled: () => Boolean(this._dataManager?.isEnabled(DAMS_LAYER_ID)),
+      getRecords: () => {
+        const module = this._dataManager?.layers?.get(DAMS_LAYER_ID)?.module;
+        if (typeof module?.getListPayload !== 'function') return [];
+        return module.getListPayload() || [];
+      },
+      getView: () => damsViewFromCamera(this.viewer?.camera, Cesium.Math),
+      flyTo: (site) => {
+        const module = this._dataManager?.layers?.get(DAMS_LAYER_ID)?.module;
+        if (typeof module?.flyToRecord === 'function') {
+          return module.flyToRecord(this.viewer, site.id);
+        }
+        const destination = damFlyDestination(site);
+        if (!destination || !this.viewer?.camera) return false;
+        this.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(
+            destination.longitude,
+            destination.latitude,
+            destination.height,
+          ),
+          duration: destination.duration,
+        });
+        return true;
+      },
+    });
+    this._damsListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
+      this._damsInViewList?.refresh();
+    });
+  }
+
+  /**
    * Fly to the default first-load camera. Does not delete lastView;
    * moveEnd overwrites the slot after the flight.
    */
@@ -11597,6 +11691,10 @@ export class StyleManager {
       this._initialShareGestureHandler = null;
     }
     this._launchesPanelLoadToken += 1;
+    this._damsListMoveEndRemove?.();
+    this._damsListMoveEndRemove = null;
+    this._damsInViewList?.destroy();
+    this._damsInViewList = null;
     this._datacenterListMoveEndRemove?.();
     this._datacenterListMoveEndRemove = null;
     this._datacenterInViewList?.destroy();
