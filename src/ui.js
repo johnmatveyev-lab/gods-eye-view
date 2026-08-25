@@ -21,6 +21,13 @@ import {
   enterCockpitWithTracking,
 } from './cockpitTracking.js';
 import { IntelHUD } from './hud.js';
+import {
+  CLOCK_CHANGE_EVENT,
+  bindClockToggle,
+  formatChromeClock,
+  getClockMode,
+  syncClockToggleButtons,
+} from './clockPreference.js';
 import { ShareLinkManager } from './sharelink.js';
 import {
   isExplicitLayerStateOrigin,
@@ -699,6 +706,7 @@ class CockpitViewController {
     this.headingValue = document.getElementById('cockpit-heading-value');
     this.compassTape = document.getElementById('cockpit-compass-tape');
     this.clock = document.getElementById('cockpit-clock');
+    this.clockToggle = this.clock?.closest('.cockpit-clock-row') || this.clock?.parentElement;
     this.position = document.getElementById('cockpit-position');
     this.aircraftMeta = document.getElementById('cockpit-aircraft-meta');
     this.route = document.getElementById('cockpit-route');
@@ -804,6 +812,15 @@ class CockpitViewController {
         else this.syncEntry();
       }),
     );
+    this._unbindClockToggle = bindClockToggle(this.clockToggle, {
+      onChange: () => this._paintChromeClock(),
+    });
+    this._listenerRemovers.push(() => this._unbindClockToggle?.());
+    this._listen(window, CLOCK_CHANGE_EVENT, () => {
+      this._paintChromeClock();
+      syncClockToggleButtons(this.clockToggle, getClockMode());
+    });
+    this._paintChromeClock();
     this._listen(this.entry, 'click', () => this.enter());
     this._listen(this.tr3bToggle, 'click', () => this.toggleTrackedTr3b());
     this._listen(this.mapViewButton, 'click', () => this.exit());
@@ -857,6 +874,10 @@ class CockpitViewController {
     if (!target?.addEventListener) return;
     target.addEventListener(type, handler, options);
     this._listenerRemovers.push(() => target.removeEventListener(type, handler, options));
+  }
+
+  _paintChromeClock() {
+    if (this.clock) this.clock.textContent = formatChromeClock(new Date(), getClockMode());
   }
 
   syncWeatherToggle(enabled) {
@@ -1458,7 +1479,7 @@ class CockpitViewController {
           .join('');
       }
     }
-    if (this.clock) this.clock.textContent = new Date().toISOString().slice(11, 19) + 'Z';
+    if (this.clock) this.clock.textContent = formatChromeClock(new Date(), getClockMode());
     if (this.position) {
       const lat = Number.isFinite(info.latitude)
         ? `${Math.abs(info.latitude).toFixed(3)}°${info.latitude >= 0 ? 'N' : 'S'}` : '--';

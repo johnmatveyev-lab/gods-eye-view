@@ -11,6 +11,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- HUD and cockpit clocks can switch UTC | Local next to the existing time.
+  Local uses the browser timezone. The choice persists as `meridian.clock`
+  (`utc` default). Share URLs, units, compass, and Home are unchanged.
 - Hosted `/api/google/nearby-places` on Vercel via `api/google/nearby-places.js`,
   forwarding the same GET handler extracted to `src/google/nearbyPlaces.js`.
   Reuses `GOOGLE_MAPS_API_KEY` and optional `GEV_RATELIMIT_GOOGLE_PER_MIN`.

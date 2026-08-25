@@ -91,6 +91,9 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.match(osrm.html, /OSRM/);
   assert.match(osrm.html, /OpenStreetMap contributors/);
   assert.match(osrm.html, /ODbL/);
+  assert.ok(keys.includes('radio-browser'));
+  const radio = DATA_CREDITS.find((credit) => credit.key === 'radio-browser');
+  assert.match(radio.html, /Radio Browser/);
 });
 
 test('AIS stays BYOK on a long-lived Node host; hosted Vercel does not wrap AISStream', () => {
