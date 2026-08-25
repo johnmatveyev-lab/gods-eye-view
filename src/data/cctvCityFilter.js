@@ -7,6 +7,8 @@
  */
 
 export const CCTV_CITY_FILTER_STORAGE_KEY = 'meridian.cctvCity';
+export const CCTV_HIDE_NO_FEED_STORAGE_KEY = 'meridian.cctvHideNoFeed';
+export const CCTV_HIDE_NO_FEED_DEFAULT = false;
 
 /**
  * @param {unknown} value
@@ -31,13 +33,40 @@ export function sourceMatchesCityFilter(source, filter) {
 }
 
 /**
+ * Hide-no-feed is off by default so the current catalog still draws.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function normalizeCctvHideNoFeed(value) {
+  return value === true || value === 'true' || value === '1';
+}
+
+/**
+ * Skip cameras with feedConfigured === false. A selected camera stays.
+ * Missing feedConfigured keeps the current catalog (treat as configured).
+ * @param {{id?: string, feedConfigured?: boolean}|null|undefined} source
+ * @param {unknown} hideNoFeed
+ * @param {{selectedId?: string|null}} [options]
+ * @returns {boolean}
+ */
+export function sourceMatchesHideNoFeed(source, hideNoFeed, { selectedId = null } = {}) {
+  if (hideNoFeed !== true) return true;
+  if (selectedId && source?.id === selectedId) return true;
+  return source?.feedConfigured !== false;
+}
+
+/**
  * @param {Array<object>|null|undefined} sources
  * @param {unknown} filter
+ * @param {{hideNoFeed?: boolean, selectedId?: string|null}} [options]
  * @returns {Array<object>}
  */
-export function filterCctvSources(sources, filter) {
+export function filterCctvSources(sources, filter, options = {}) {
+  const hideNoFeed = options.hideNoFeed === true;
+  const selectedId = options.selectedId ?? null;
   return (Array.isArray(sources) ? sources : []).filter((source) => (
     sourceMatchesCityFilter(source, filter)
+    && sourceMatchesHideNoFeed(source, hideNoFeed, { selectedId })
   ));
 }
 
@@ -107,6 +136,35 @@ export function writeCctvCityFilter(storage, filter) {
     storage?.setItem?.(CCTV_CITY_FILTER_STORAGE_KEY, normalized);
   } catch {
     // Fail open: the session can still show the chosen city.
+  }
+  return normalized;
+}
+
+/**
+ * @param {{getItem?: Function}|null|undefined} storage
+ * @returns {boolean}
+ */
+export function readCctvHideNoFeed(storage) {
+  try {
+    const raw = storage?.getItem?.(CCTV_HIDE_NO_FEED_STORAGE_KEY);
+    if (raw == null || raw === '') return CCTV_HIDE_NO_FEED_DEFAULT;
+    return normalizeCctvHideNoFeed(raw);
+  } catch {
+    return CCTV_HIDE_NO_FEED_DEFAULT;
+  }
+}
+
+/**
+ * @param {{setItem?: Function}|null|undefined} storage
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+export function writeCctvHideNoFeed(storage, value) {
+  const normalized = normalizeCctvHideNoFeed(value);
+  try {
+    storage?.setItem?.(CCTV_HIDE_NO_FEED_STORAGE_KEY, normalized ? '1' : '0');
+  } catch {
+    // Fail open: the session can still honor the in-memory toggle.
   }
   return normalized;
 }
