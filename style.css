@@ -6815,6 +6815,22 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   flex: 1 1 12rem;
   min-width: 0;
 }
+.radio-codec-seg {
+  display: flex;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+.radio-codec-seg .pp-mode-btn {
+  min-width: 3.2rem;
+  letter-spacing: 0.2px;
+}
+.radio-codec-seg .pp-mode-btn:not(.active) { opacity: 0.55; }
+.radio-codec-seg .pp-mode-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
 .radio-favorites-chip {
   flex: 0 0 auto;
   align-self: stretch;

@@ -54,6 +54,14 @@ import {
   writeRadioFavoriteIds,
 } from './radioFavorites.js';
 import {
+  DEFAULT_RADIO_CODEC_FILTER,
+  filterRadioStationsByCodec,
+  normalizeRadioCodecFilter,
+  readRadioCodecFilter,
+  stationMatchesRadioCodecFilter,
+  writeRadioCodecFilter,
+} from './radioCodecFilter.js';
+import {
   DEFAULT_RADIO_VOLUME_PCT,
   radioMuteToggle,
   radioVolumePctToUnit,
@@ -212,6 +220,7 @@ let _renderById = new Map();
 let _filter = DEFAULT_RADIO_FILTER;
 let _stationSearch = '';
 let _bitrateFloor = DEFAULT_RADIO_BITRATE_FLOOR;
+let _codecFilter = { ...DEFAULT_RADIO_CODEC_FILTER };
 let _favoriteIds = [];
 let _favoritesOnly = false;
 let _selectedId = null;
@@ -726,6 +735,10 @@ function applyPersistedRadioFavorites() {
   _favoriteIds = readRadioFavoriteIds();
 }
 
+function applyPersistedRadioCodecs() {
+  _codecFilter = readRadioCodecFilter();
+}
+
 function commitUserVolume(volume) {
   const next = clampRadioVolume(volume);
   if (next > 0) _unmutedVolume = next;
@@ -1211,11 +1224,16 @@ function playingStationKeepId() {
 }
 
 function directoryStations({ keepPlaying = true } = {}) {
+  const keepStationId = keepPlaying ? playingStationKeepId() : null;
   return filterRadioStationsByFavorites(
-    filterRadioStationsByBitrateFloor(
-      filterRadioStations(_stations, _filter),
-      _bitrateFloor,
-      { keepStationId: keepPlaying ? playingStationKeepId() : null },
+    filterRadioStationsByCodec(
+      filterRadioStationsByBitrateFloor(
+        filterRadioStations(_stations, _filter),
+        _bitrateFloor,
+        { keepStationId },
+      ),
+      _codecFilter,
+      { keepStationId },
     ),
     _favoriteIds,
     { favoritesOnly: _favoritesOnly },
@@ -1231,11 +1249,11 @@ function walkableStations() {
 }
 
 function stationMatchesCurrentDirectory(station, { keepPlaying = true } = {}) {
+  const keepStationId = keepPlaying ? playingStationKeepId() : null;
   return stationMatchesRadioCategory(station, _filter)
     && stationMatchesRadioSearch(station, _stationSearch)
-    && stationMatchesRadioBitrateFloor(station, _bitrateFloor, {
-      keepStationId: keepPlaying ? playingStationKeepId() : null,
-    })
+    && stationMatchesRadioBitrateFloor(station, _bitrateFloor, { keepStationId })
+    && stationMatchesRadioCodecFilter(station, _codecFilter, { keepStationId })
     && stationMatchesRadioFavorites(station, _favoriteIds, { favoritesOnly: _favoritesOnly });
 }
 
@@ -1312,6 +1330,7 @@ export function getRadioUIState() {
     filter: _filter,
     stationSearch: _stationSearch,
     minBitrate: _bitrateFloor,
+    codecs: Object.freeze({ ..._codecFilter }),
     favoritesOnly: _favoritesOnly,
     favoriteIds: Object.freeze([..._favoriteIds]),
     selectedFavorite: Boolean(selected && isRadioFavorite(selected.id, _favoriteIds)),
@@ -2552,6 +2571,18 @@ export function setRadioBitrateFloor(floorId) {
   return true;
 }
 
+/** Hide MP3 or AAC family stations without fetching or stopping audio. */
+export function setRadioCodecs(filter) {
+  if (!radioPresentationAllowed()) return false;
+  const next = normalizeRadioCodecFilter({ ..._codecFilter, ...filter });
+  const changed = next.mp3 !== _codecFilter.mp3 || next.aac !== _codecFilter.aac;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _codecFilter = writeRadioCodecFilter(next);
+  if (changed) applyRadioDirectoryFilterChange();
+  emitState();
+  return true;
+}
+
 /** Show only pinned stations without fetching or stopping audio. */
 export function setRadioFavoritesOnly(enabled) {
   if (!radioPresentationAllowed()) return false;
@@ -2801,6 +2832,7 @@ export const radioLayer = {
     resetRadioClusterOverlayIdentities();
     applyPersistedRadioVolume();
     applyPersistedRadioFavorites();
+    applyPersistedRadioCodecs();
     installAudio();
     if (!_dataSource) {
       _dataSource = new Cesium.CustomDataSource('Radio stations');
@@ -3010,6 +3042,7 @@ export const radioLayer = {
     _filter = DEFAULT_RADIO_FILTER;
     _stationSearch = '';
     _bitrateFloor = DEFAULT_RADIO_BITRATE_FLOOR;
+    _codecFilter = { ...DEFAULT_RADIO_CODEC_FILTER };
     _favoriteIds = [];
     _favoritesOnly = false;
     _renderById.clear();
@@ -3077,6 +3110,7 @@ export const radioLayer = {
   setFilter: setRadioFilter,
   setStationSearch: setRadioStationSearch,
   setBitrateFloor: setRadioBitrateFloor,
+  setCodecs: setRadioCodecs,
   setFavoritesOnly: setRadioFavoritesOnly,
   toggleFavorite: toggleRadioFavorite,
   selectStation: selectRadioStation,
