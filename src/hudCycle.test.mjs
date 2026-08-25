@@ -20,6 +20,7 @@ const css = fs.readFileSync(new URL('../style.css', import.meta.url), 'utf8');
 const hud = fs.readFileSync(new URL('./hud.js', import.meta.url), 'utf8');
 const voice = fs.readFileSync(new URL('./voice/gevActions.js', import.meta.url), 'utf8');
 const liveApi = fs.readFileSync(new URL('./server/liveApiProxies.js', import.meta.url), 'utf8');
+const hudSummary = fs.readFileSync(new URL('./hud/summary.js', import.meta.url), 'utf8');
 
 function memoryStorage(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -194,7 +195,7 @@ test('voice set_hud still writes StyleManager HUD state, not a second store', ()
 
 test('HUD summary API and the five-word model stay unchanged', () => {
   assert.match(hud, /const HUD_SUMMARY_URL = '\/api\/openai\/hud-summary';/);
-  assert.match(liveApi, /const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';/);
+  assert.match(hudSummary, /const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';/);
   assert.match(liveApi, /middlewares\.use\('\/api\/openai\/hud-summary'/);
 });
 
