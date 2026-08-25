@@ -3701,3 +3701,108 @@ test('a PREFIX field writes callsignPrefixes through existing flight layer optio
     else globalThis.document = originalDocument;
   }
 });
+
+test('Density and Speed sliders write existing traffic setParams only', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const paramsCalls = [];
+  let densityScale = 1;
+  let speedScale = 1;
+  mgr.register({
+    id: 'traffic',
+    name: 'Street Traffic',
+    icon: '',
+    source: 'OpenStreetMap',
+    updateInterval: 0,
+    async init() {},
+    enable() {},
+    disable() {},
+    async update() {},
+    getStats() { return { count: 4, lastUpdate: Date.now() }; },
+    setParams(params) {
+      if (typeof params.densityScale === 'number') densityScale = params.densityScale;
+      if (typeof params.speedScale === 'number') speedScale = params.speedScale;
+      paramsCalls.push({ ...params });
+      return true;
+    },
+    getParams() { return { densityScale, speedScale }; },
+    getRowControls() {
+      return {
+        heading: 'Traffic',
+        chips: [
+          { id: 'traffic-source-live', label: 'Live', active: true, params: { trafficSource: 'live' } },
+        ],
+        sliders: [
+          {
+            id: 'traffic-density',
+            label: 'Density',
+            param: 'densityScale',
+            min: 0.2,
+            max: 2.5,
+            step: 0.1,
+            value: densityScale,
+            params: { densityScale },
+          },
+          {
+            id: 'traffic-speed',
+            label: 'Speed',
+            param: 'speedScale',
+            min: 0.3,
+            max: 3,
+            step: 0.1,
+            value: speedScale,
+            params: { speedScale },
+          },
+        ],
+      };
+    },
+  });
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    const controls = container
+      .querySelector('[data-layer-id="traffic"]')
+      .querySelector('.data-toggle-controls');
+    assert.equal(
+      collectByClass(controls, 'data-toggle-slider-input').length,
+      0,
+      'sliders stay off the row while the layer is off',
+    );
+
+    assert.equal(await mgr.setEnabled('traffic', true), true);
+    mgr._refreshTogglePanel();
+    assert.equal(controls.hidden, false);
+    const sliders = collectByClass(controls, 'data-toggle-slider-input');
+    assert.equal(sliders.length, 2);
+    assert.deepEqual(sliders.map((slider) => slider.dataset.sliderId), [
+      'traffic-density',
+      'traffic-speed',
+    ]);
+    assert.equal(sliders[0].type, 'range');
+    assert.equal(sliders[0].min, '0.2');
+    assert.equal(sliders[0].max, '2.5');
+    assert.equal(sliders[0].value, '1');
+    assert.equal(sliders[1].min, '0.3');
+    assert.equal(sliders[1].max, '3');
+    assert.deepEqual(
+      collectByClass(controls, 'data-toggle-slider-label').map((node) => node.textContent),
+      ['Density', 'Speed'],
+    );
+
+    sliders[0].value = '0.2';
+    controls.listeners.input({ target: sliders[0] });
+    assert.deepEqual(paramsCalls.at(-1), { densityScale: 0.2 });
+    sliders[1].value = '3';
+    controls.listeners.input({ target: sliders[1] });
+    assert.deepEqual(paramsCalls.at(-1), { speedScale: 3 });
+    assert.equal(paramsCalls.every((call) => !Object.hasOwn(call, 'trafficSource')), true);
+    assert.equal(paramsCalls.every((call) => !Object.hasOwn(call, 'jamViz')), true);
+    assert.equal(paramsCalls.every((call) => !Object.hasOwn(call, 'uncoveredRoads')), true);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
