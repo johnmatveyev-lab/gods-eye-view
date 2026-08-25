@@ -17,6 +17,7 @@ import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, 
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
+import { handleKeyboardPanKeyDown } from './keyboardPan.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -88,6 +89,11 @@ import {
   hydrateTrailsEnabled,
   setTrailsEnabled,
 } from './data/trailPreference.js';
+import {
+  hydrateKeepAboveEnabled,
+  installKeepAboveGround,
+  setKeepAboveEnabled,
+} from './cameraAboveGround.js';
 import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
@@ -222,6 +228,12 @@ import {
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
 import {
+  handleCleanViewEscape,
+  isCleanView,
+  setCleanViewEnabled,
+  syncCleanViewButton,
+} from './cleanViewChrome.js';
+import {
   DATACENTER_LAYER_ID,
   bindDatacenterInViewList,
   datacenterFlyDestination,
@@ -305,6 +317,16 @@ import {
   writeLiveSunPreference,
 } from './liveSunLighting.js';
 import {
+  LOCK_TILT_DEFAULT,
+  LOCK_TILT_STORAGE_KEY,
+  applyLockTiltToController,
+  bindLockTiltUserRotate,
+  captureControllerEvents,
+  holdLockedPitch,
+  readLockTiltPreference,
+  writeLockTiltPreference,
+} from './lockTilt.js';
+import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -342,6 +364,14 @@ import {
   peekModelsPreference,
   writeModelsPreference,
 } from './modelsPreference.js';
+import {
+  bindZoomToPointerWheel,
+  readZoomToPointerPreference,
+  setWheelZoomEventEnabled,
+  syncZoomToPointerButton,
+  writeZoomToPointerPreference,
+  zoomToPointerEnabled,
+} from './zoomToPointer.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
@@ -379,6 +409,11 @@ const DETECTION_ALLOCATION_STORAGE_KEY = 'gev:detection-allocation:v1';
 
 /** Best-effort localStorage for `meridian.models`. Access itself can throw. */
 function modelsPreferenceStore() {
+  try { return globalThis.localStorage ?? null; } catch { return null; }
+}
+
+/** Best-effort localStorage for `meridian.zoomToPointer`. Access itself can throw. */
+function zoomToPointerStore() {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 }
 /** Z ladder: panels promote within [100, 139]; voice pill 150, toast 200, clean-view-exit 300. */
@@ -2488,9 +2523,11 @@ export class StyleManager {
     this._mapStackChips = document.getElementById('map-stack-chips');
     this._mapStackStatus = document.getElementById('map-stack-status');
     this._cleanViewBtn = document.getElementById('clean-view-toggle');
+    this._cleanViewChromeBtn = document.getElementById('clean-view-chrome');
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
+    this._zoomToPointerBtn = document.getElementById('zoom-to-pointer-toggle');
     this._invertScrollBtn = document.getElementById('invert-scroll-toggle');
     this._removeInvertScrollZoom = installWheelZoomSign(
       this.viewer?.scene?.screenSpaceCameraController,
@@ -2498,6 +2535,10 @@ export class StyleManager {
       Cesium.CameraEventType.WHEEL,
     );
     this._unbindInvertScroll = bindInvertScrollToggle(this._invertScrollBtn);
+    this._lockTiltBtn = document.getElementById('lock-tilt-toggle');
+    this._lockTiltEnabled = LOCK_TILT_DEFAULT;
+    this._lockTiltControllerSnapshot = null;
+    this._unbindLockTiltUserRotate = null;
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -2874,6 +2915,11 @@ export class StyleManager {
     // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
     // existing tracked-target trail renderer without stopping track.
     this._trailsEnabled = true;
+    this._keepAboveBtn = document.getElementById('keep-above-toggle');
+    // DISPLAY-rail Keep above ground. Default ON (`meridian.keepAbove`);
+    // lifts the map camera after a move when an existing terrain helper
+    // says the eye is below the mesh. Cockpit interior skips this clamp.
+    this._keepAboveEnabled = true;
 
     // The shared world-overlay host must own its one postRender lane before
     // detection and tracked-readout initialize. It stays transparent until a
@@ -2923,9 +2969,12 @@ export class StyleManager {
     this._initNorthUpCompass();
     this._initHUDToggle();
     this._initModels3dToggle();
+    this._initZoomToPointer();
     this._initTrailsToggle();
+    this._initKeepAboveToggle();
     this._initLiveSunToggle();
     this._initScaleBar();
+    this._initLockTiltToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -3622,9 +3671,9 @@ export class StyleManager {
 
   /**
    * Wires up all primary UI event listeners: style buttons, keyboard shortcuts
-   * (1-8 style keys, H/O/V/F/D/C hotkeys, Escape), AI prompt input with
-   * debounce, bloom/sharpen/HUD toggles, detection density slider, and
-   * clean-view toggle.
+   * (1-8 style keys, WASD/arrow pan, H/O/V/F/D/C hotkeys, Escape), AI prompt
+   * input with debounce, bloom/sharpen/HUD toggles, detection density slider,
+   * and clean-view toggle.
    * @returns {void}
    */
   _initUI() {
@@ -3648,6 +3697,10 @@ export class StyleManager {
         || e.target === this._locationSearch;
       if (isFormControl && e.key !== 'Escape') return;
 
+      // WASD / arrows pan the globe. Must run before letter hotkeys so D
+      // does not also cycle detection. Ignores typing targets internally.
+      if (handleKeyboardPanKeyDown(e, this.viewer)) return;
+
       const keyMap = {
         '1': 'normal', '2': 'retro', '3': 'surveillance',
         '4': 'thermal', '5': 'anime', '6': 'noir',
@@ -3655,7 +3708,11 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
-        handleFullscreenEscape(e);
+        if (handleCleanViewEscape(e)) {
+          this.toggleCleanView(false);
+        } else {
+          handleFullscreenEscape(e);
+        }
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
           this._locationSearch.value = '';
@@ -3759,12 +3816,15 @@ export class StyleManager {
     if (this._cleanViewBtn) {
       this._cleanViewBtn.addEventListener('click', () => this.toggleCleanView());
     }
+    this._cleanViewChromeBtn?.addEventListener('click', () => this.toggleCleanView());
 
     this._reduceMotionBtn?.addEventListener('click', () => {
       setReduceMotionOverride(!isReduceMotionEnabled());
       this._syncReduceMotionButton();
     });
-
+    this._zoomToPointerBtn?.addEventListener('click', () => {
+      this._toggleZoomToPointer();
+    });
     this._gridBtn?.addEventListener('click', () => {
       const next = this._gridOverlay?.isEnabled() !== true;
       this._gridOverlay?.setEnabled(next);
@@ -3867,6 +3927,58 @@ export class StyleManager {
     }
     governorRequestRender('live-sun');
     return { ok: true, liveSun: next };
+  }
+
+  _initLockTiltToggle() {
+    this._lockTiltBtn?.addEventListener('click', () => {
+      this.setLockTiltEnabled(!this._lockTiltEnabled);
+    });
+    let stored = LOCK_TILT_DEFAULT;
+    try {
+      stored = readLockTiltPreference(window.localStorage);
+    } catch {
+      stored = LOCK_TILT_DEFAULT;
+    }
+    this.setLockTiltEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Lock user rotate to heading-only. Pitch stays until unlock.
+   * Home and cockpit still set their own pitch. Wheel zoom is unchanged.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, lockTilt: boolean}}
+   */
+  setLockTiltEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._lockTiltEnabled = next;
+    const controller = this.viewer?.scene?.screenSpaceCameraController;
+    if (controller && !this._lockTiltControllerSnapshot) {
+      this._lockTiltControllerSnapshot = captureControllerEvents(controller);
+    }
+    applyLockTiltToController(controller, next, {
+      snapshot: this._lockTiltControllerSnapshot,
+    });
+    if (next && this.viewer?.camera) {
+      holdLockedPitch(this.viewer.camera, this.viewer.camera.pitch);
+    }
+    if (!this._unbindLockTiltUserRotate && this.viewer) {
+      this._unbindLockTiltUserRotate = bindLockTiltUserRotate(this.viewer, {
+        getLocked: () => this._lockTiltEnabled,
+      });
+    }
+    this._lockTiltBtn?.classList.toggle('active', next);
+    this._lockTiltBtn?.setAttribute('aria-pressed', String(next));
+    if (this._lockTiltBtn) {
+      this._lockTiltBtn.title = next
+        ? 'Lock tilt on — rotate changes heading only'
+        : 'Lock tilt off — free tumble';
+    }
+    if (persist) {
+      try { writeLockTiltPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    this.viewer?.scene?.requestRender?.();
+    return { ok: true, lockTilt: next };
   }
 
   /**
@@ -6171,9 +6283,9 @@ export class StyleManager {
     this._radioPrevBtn?.addEventListener('click', () => cycleRadio(-1));
     this._radioNextBtn?.addEventListener('click', () => cycleRadio(1));
     this._radioPlayBtn?.addEventListener('click', () => void radioLayer.togglePlayback({ origin: 'user' }));
-    this._radioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
-    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
-    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.stopPlayback({ origin: 'user' }));
+    this._radioStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
+    this._contextRadioMiniStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
+    this._cockpitRadioStopBtn?.addEventListener('click', () => radioLayer.toggleMute({ origin: 'user' }));
     this._radioVolume?.addEventListener('input', () => {
       const value = Number(this._radioVolume.value);
       if (this._radioVolumeValue) this._radioVolumeValue.textContent = `${value}%`;
@@ -6598,9 +6710,19 @@ export class StyleManager {
       this._cockpitRadioPlayBtn.title = action;
     }
     const liveRadioAudio = ['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
-    if (this._radioStopBtn) this._radioStopBtn.disabled = !['loading', 'playing', 'buffering', 'paused', 'error'].includes(state.audioState);
-    if (this._contextRadioMiniStopBtn) this._contextRadioMiniStopBtn.disabled = !liveRadioAudio;
-    if (this._cockpitRadioStopBtn) this._cockpitRadioStopBtn.disabled = !liveRadioAudio;
+    const muteAvailable = interactive || liveRadioAudio;
+    if (this._radioStopBtn) {
+      this._radioStopBtn.disabled = !muteAvailable;
+      this._radioStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
+    if (this._contextRadioMiniStopBtn) {
+      this._contextRadioMiniStopBtn.disabled = !muteAvailable;
+      this._contextRadioMiniStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
+    if (this._cockpitRadioStopBtn) {
+      this._cockpitRadioStopBtn.disabled = !muteAvailable;
+      this._cockpitRadioStopBtn.setAttribute('aria-pressed', String(state.muted === true));
+    }
     if (this._radioVolume) this._radioVolume.disabled = !interactive;
     if (this._radioVolume && document.activeElement !== this._radioVolume) {
       this._radioVolume.value = String(Math.round(state.volume * 100));
@@ -8447,8 +8569,9 @@ export class StyleManager {
   toggleCleanView(forceEnabled) {
     const shouldEnable = typeof forceEnabled === 'boolean'
       ? forceEnabled
-      : !document.body.classList.contains('ui-clean-view');
-    document.body.classList.toggle('ui-clean-view', shouldEnable);
+      : !isCleanView();
+    setCleanViewEnabled(shouldEnable);
+    syncCleanViewButton(this._cleanViewChromeBtn, shouldEnable);
     if (this._cleanViewBtn) {
       this._cleanViewBtn.classList.toggle('active', shouldEnable);
     }
@@ -10344,6 +10467,37 @@ export class StyleManager {
   }
 
   /**
+   * DISPLAY-rail Zoom to pointer. Off (default) keeps Cesium center zoom.
+   * Persist as `meridian.zoomToPointer` = on|off.
+   * @returns {void}
+   */
+  _initZoomToPointer() {
+    const storage = zoomToPointerStore();
+    const enabled = zoomToPointerEnabled(readZoomToPointerPreference(storage));
+    syncZoomToPointerButton(this._zoomToPointerBtn, enabled);
+    this._unbindZoomToPointer = bindZoomToPointerWheel(this.viewer, {
+      storage,
+      wheelType: Cesium.CameraEventType?.WHEEL,
+      onZoom: () => governorRequestRender(),
+    });
+  }
+
+  _toggleZoomToPointer() {
+    const storage = zoomToPointerStore();
+    const next = writeZoomToPointerPreference(
+      storage,
+      zoomToPointerEnabled(readZoomToPointerPreference(storage)) ? 'off' : 'on',
+    );
+    const enabled = zoomToPointerEnabled(next);
+    syncZoomToPointerButton(this._zoomToPointerBtn, enabled);
+    setWheelZoomEventEnabled(
+      this.viewer?.scene?.screenSpaceCameraController,
+      !enabled,
+      Cesium.CameraEventType?.WHEEL,
+    );
+  }
+
+  /**
    * Mirror the persisted lat/lon graticule on the DISPLAY Grid toggle.
    * @returns {void}
    */
@@ -10920,6 +11074,38 @@ export class StyleManager {
     this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
   }
 
+  /**
+   * Wires the DISPLAY-rail Keep above ground toggle and installs the camera
+   * clamp. Off persists `meridian.keepAbove` and leaves zoom/tilt unclamped.
+   * Cockpit interior still owns the camera while active.
+   */
+  _initKeepAboveToggle() {
+    this._keepAboveEnabled = hydrateKeepAboveEnabled();
+    this._keepAboveDispose?.();
+    this._keepAboveDispose = installKeepAboveGround(this.viewer, {
+      isEnabled: () => this._keepAboveEnabled !== false,
+      isCockpitActive: () => this.cockpitView?.active === true,
+      requestRender: governorRequestRender,
+      setCameraCartesian: (carto) => {
+        this.viewer.camera.position = Cesium.Cartesian3.fromRadians(
+          carto.longitude,
+          carto.latitude,
+          carto.height,
+        );
+      },
+    });
+    this._keepAboveBtn?.addEventListener('click', () => {
+      this._keepAboveEnabled = setKeepAboveEnabled(!this._keepAboveEnabled);
+      this._syncKeepAboveButtonState();
+    });
+    this._syncKeepAboveButtonState();
+  }
+
+  _syncKeepAboveButtonState() {
+    this._keepAboveBtn?.classList.toggle('active', this._keepAboveEnabled);
+    this._keepAboveBtn?.setAttribute('aria-pressed', String(this._keepAboveEnabled));
+  }
+
   _initHUDToggle() {
     this._hudBtn.addEventListener('click', () => {
       this.shareLinkManager?.claimRestoreLane?.('visual');
@@ -11196,6 +11382,10 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    this._keepAboveDispose?.();
+    this._keepAboveDispose = null;
+    this._unbindZoomToPointer?.();
+    this._unbindZoomToPointer = null;
     uninstallScaleBar();
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
@@ -11319,6 +11509,8 @@ export class StyleManager {
     this._unbindInvertScroll = null;
     this._removeInvertScrollZoom?.();
     this._removeInvertScrollZoom = null;
+    this._unbindLockTiltUserRotate?.();
+    this._unbindLockTiltUserRotate = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;

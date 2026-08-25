@@ -25,6 +25,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a DISPLAY-rail Lock tilt control. When on, user rotate changes
+  heading only and pitch stays (keep horizon). Unlock restores free tumble.
+  The choice persists as `meridian.lockTilt` and defaults off. Home and
+  cockpit still set their own pitch. Wheel zoom / invert scroll stay
+  wheel-only. No `/api`.
+- Added a DISPLAY-rail Keep above ground control. After the camera moves, if
+  `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
+  below terrain plus a small margin, the camera is lifted. The preference
+  persists as `meridian.keepAbove` and defaults on. Cockpit interior still
+  owns the camera. A terrain 503 skips the lift. No new API.
+- Added a Clean view control on the globe chrome that toggles the existing
+  `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
+  Google Maps and Data attribution stay on. No new hide system and no `/api`.
 - Contact Labels on/off (declutter) hides ambient callsign billboards on
   busy FIRs. Dots, models, and trails stay. Selected/tracked ident cards stay.
   Density still only changes detections. Persists `meridian.contactLabels`
@@ -43,6 +56,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   The choice persists as `meridian.power`. Data polls, the idle render
   governor, and required credits are unchanged. Clean view still keeps
   Google Maps and Data attribution on screen.
+- Added a DISPLAY Zoom to pointer control. On, the wheel zooms about the
+  globe pick under the cursor so a city stays under the pointer. Off keeps
+  today's center zoom. No pick falls back to center. Invert scroll still
+  only flips direction. The choice persists as `meridian.zoomToPointer`
+  and defaults off.
 - Added a camera-center lat,lon copy control next to Copy view link. It shows
   the pose already computed from `positionCartographic` (same source as the
   share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept
@@ -149,6 +167,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
   "Offline — showing last data". AIS is not wrapped. No service worker.
+- Radio volume is a 0–100 slider on the existing Radio Browser audio element.
+  The level persists as `meridian.radioVolume`. Mute sets 0 and unmute
+  restores the prior level. Disabling the Radio layer still stops audio.
+  Station search and play are unchanged. No new `/api` and no voice ducking.
 
 ### Changed
 

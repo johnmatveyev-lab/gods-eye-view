@@ -22,7 +22,38 @@ import { isReduceMotionEnabled } from './reduceMotion.js';
 /** °/s by speed word — orbit; pan uses fractions of view height/s. */
 const ORBIT_DEG_S = { slow: 2, normal: 6, fast: 15 };
 const TILT_DEG_S = { slow: 4, normal: 10, fast: 20 };
-const PAN_VIEW_FRACTION_S = { slow: 0.08, normal: 0.2, fast: 0.45 };
+export const PAN_VIEW_FRACTION_S = { slow: 0.08, normal: 0.2, fast: 0.45 };
+
+/** Optional post-translate lift (keep-above). Keyboard pan and voice pan share it. */
+let _keepAbove = null;
+
+/**
+ * Translate the camera over the globe using Cesium's directional move helpers.
+ * After the move, any registered keep-above handler may lift the eye.
+ *
+ * @param {object} camera Cesium camera (or test double with move*).
+ * @param {'left'|'right'|'up'|'down'} direction
+ * @param {number} distanceM
+ * @returns {boolean}
+ */
+export function translateCamera(camera, direction, distanceM) {
+  const step = Number(distanceM);
+  if (!camera || !Number.isFinite(step) || step === 0) return false;
+  if (direction === 'left') camera.moveLeft(step);
+  else if (direction === 'right') camera.moveRight(step);
+  else if (direction === 'up') camera.moveUp(step);
+  else if (direction === 'down') camera.moveDown(step);
+  else return false;
+  _keepAbove?.(camera);
+  return true;
+}
+
+/** Register the keep-above lift that runs after every translateCamera move. */
+export function setCameraKeepAbove(handler) {
+  _keepAbove = typeof handler === 'function' ? handler : null;
+  return _keepAbove;
+}
+
 /** MEAN ground speed by speed word. The trapezoid profile below eases in and
  *  out around this mean, so a route still takes totalM / ROUTE_M_S seconds. */
 const ROUTE_M_S = { slow: 20, normal: 40, fast: 90 };
@@ -929,10 +960,7 @@ function onTick() {
         ? (heightM * ONCE.panViewFraction * (scale - (m.lastScale || 0)))
         : heightM * PAN_VIEW_FRACTION_S[m.speed] * dt);
       m.lastScale = scale;
-      if (m.direction === 'left') cam.moveLeft(step);
-      else if (m.direction === 'right') cam.moveRight(step);
-      else if (m.direction === 'up') cam.moveUp(step);
-      else cam.moveDown(step);
+      translateCamera(cam, m.direction, step);
     } else if (m.kind === 'tilt' || m.kind === 'rotate') {
       const degS = TILT_DEG_S[m.speed];
       const stepRad = (m.mode === 'once'

@@ -711,11 +711,15 @@ This is the current runtime/source-of-truth snapshot for the project.
 >   and viewport changes, while explicit collapse remains the only persisted
 >   user intent.
 >   Display orders 3D immediately above Celestial and Clean UI immediately
->   below it. The top-center action group places Contacts, then Clear Layers to the left of
->   Share, a north-up compass, Home, Stop tracking, Copy, Fullscreen, and Reset Globe to the right. The compass
+>   below it. A persistable Lock tilt toggle (`meridian.lockTilt`, default off)
+>   keeps user rotate heading-only so the horizon does not bank; Home and
+>   cockpit still set their own pitch. Invert scroll remains wheel-only.
+>   The top-center action group places Contacts, then Clear Layers to the left of
+>   Share, a north-up compass, Home, Stop tracking, Copy, Fullscreen, Clean view, and Reset Globe to the right. The compass
 >   needle tracks camera heading; a click or `N` sets heading 0 while keeping
 >   the current target, range, and tilt. Home still returns the full first-load
->   Austin pose. Reset Globe still returns the full
+>   Austin pose. Clean view reuses `ui-clean-view` (Esc or a second click
+>   restores; `#cesium-credits` stays). Reset Globe still returns the full
 >   18,000 km globe pose. Clear Layers turns off the currently
 >   selected manager-owned data layers, including an active Context choice,
 >   while retaining visual, HUD, map, and panel settings. A disabled layer may
