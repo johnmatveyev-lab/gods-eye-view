@@ -39,6 +39,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the existing track highlight. Clicking a row tracks that contact if
   present, otherwise toasts `not in view` without inventing a position. The
   list persists as `meridian.watchlist`. No `/api`, person-search, or OpenSky.
+- Street Traffic has an Uncovered: Sim | Hide control. Sim keeps today's
+  white ambient dots on roads TomTom has no flow for. Hide spawns nothing
+  on those roads; colored live flow stays. Applies on the next camera-driven
+  load. Distinct from Traffic: Live | Sim, which still changes the whole
+  feed. The choice persists as `meridian.uncoveredRoads` (default Sim).
+  Share URLs stay enabled-only. No extra `/api`.
+- FIRMS row chips filter already-fetched detections by FRP floor
+  (`All` | `10+` | `50+` | `100+ MW`, default All). Cells, sprites, overlay
+  cards, and the Plan 70 FIRES list hide below the floor without a new NASA
+  fetch. Failed/stale last-good still filters. The choice persists on
+  `local-firms` (`w.f.*`). Same VIIRS proxy, quota, and TTL.
+- Satellites row has an **ORBITS** on/off chip over the existing
+  `setParams({ showOrbits })` path (default ON). Off hides orbit rings;
+  ISS / core / dense points stay. The choice persists in layer-state /
+  share links (`s.o.0` when off). It does not change catalog core|dense,
+  the CelesTrak group picker, or add an `/api` route.
 - Emergency highlight paints contacts whose current public ADS-B squawk is
   7500, 7600, or 7700 using the existing annotation alert-red token. DISPLAY
   **Emergency** defaults on and persists as `meridian.emergencyHighlight`.
@@ -156,6 +172,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   camera. `meridian.lastView` is not cleared. The next enable is manual.
   First-visit layer defaults still apply only on a fresh profile. Banned
   layers stay off. No `/api`.
+- **Restore** sits next to All off and reapplies the enabled-layer snapshot
+  taken immediately before All off. Hidden until All off has been used this
+  session. Does not move the camera. Banned cables / OpenSky / GNews never
+  restore on. No `/api`.
 - Added a city/provider filter on the CCTV panel list. It uses `city`,
   `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
   isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.

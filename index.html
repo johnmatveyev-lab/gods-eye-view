@@ -113,6 +113,17 @@
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
       <span class="all-off-layers-label">ALL OFF</span>
     </button>
+    <button
+      id="restore-live-layers"
+      type="button"
+      hidden
+      data-restore-live-layers
+      aria-label="Restore layers from before All off"
+      title="Restore the layers that were on before All off. Does not move the globe."
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">layers</span>
+      <span class="restore-live-layers-label">RESTORE</span>
+    </button>
     <button id="clear-annotations" type="button" aria-label="Clear annotations" title="Erase whiteboard marks" disabled>
       <span class="material-symbols-outlined" aria-hidden="true">ink_eraser</span>
     </button>
@@ -644,6 +655,14 @@
           <button class="pp-mode-btn" id="models3d-mode-all" data-mode="all" role="radio" aria-checked="false">All</button>
         </div>
       </div>
+      <div class="pp-slider-row visible" id="speed-band-row">
+        <span class="pp-slider-mini-label">Speed</span>
+        <input type="number" class="pp-speed-band-input" id="speed-band-min" min="0" max="9999" step="10" inputmode="numeric" placeholder="min" aria-label="Minimum ground speed">
+        <span class="speed-band-sep" aria-hidden="true">–</span>
+        <input type="number" class="pp-speed-band-input" id="speed-band-max" min="0" max="9999" step="10" inputmode="numeric" placeholder="max" aria-label="Maximum ground speed">
+        <span class="pp-slider-value" id="speed-band-unit">km/h</span>
+        <button type="button" class="pp-mode-btn" id="speed-band-clear" title="Clear ground-speed band">Clear</button>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true" title="Tracked-target trail — hide the fading path without stopping track">
@@ -1094,6 +1113,13 @@
                   <span>SELECT A MISSION TO INSPECT</span>
                 </div>
                 <output data-mission-roster-count>—</output>
+              </div>
+              <div class="space-mission-status-chips" role="group" aria-label="Launch status filters">
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="go" aria-pressed="true">Go</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="tbd" aria-pressed="true">TBD</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="hold" aria-pressed="true">Hold</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="in-flight" aria-pressed="true">In Flight</button>
+                <button type="button" class="space-mission-status-chip active" data-mission-status-chip="other" aria-pressed="true">Other</button>
               </div>
               <div class="space-mission-roster-list" data-mission-roster-list>
                 <div class="space-mission-roster-empty">LOADING 30-DAY MISSION INDEX</div>

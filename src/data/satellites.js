@@ -1341,9 +1341,13 @@ export function _runSatellitePreRenderForTest() {
  * Seed the minimum render state a dense-catalog load needs, so a test can
  * exercise the real async load/settle/fail path (and the row-control states it
  * drives) without constructing a WebGL viewer.
- * @param {{ catalog?: 'core'|'dense', showPoints?: boolean }} [options]
+ * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean }} [options]
  */
-export function _setDenseCatalogStateForTest({ catalog = 'core', showPoints = true } = {}) {
+export function _setDenseCatalogStateForTest({
+  catalog = 'core',
+  showPoints = true,
+  showOrbits = false,
+} = {}) {
   _viewer = { scene: { primitives: { add: (p) => p, remove() {} } } };
   // Neutralize the shared world-overlay host: these tests exercise catalog and
   // row-control logic, not the ISS callout.
@@ -1366,7 +1370,7 @@ export function _setDenseCatalogStateForTest({ catalog = 'core', showPoints = tr
   _catalogRevision++;
   _trackedNorad = null;
   _cancelPendingTrackingRestore();
-  _params = { catalog, showPoints, showOrbits: false };
+  _params = { catalog, showPoints, showOrbits };
   _enabled = true;
 }
 
@@ -1391,6 +1395,53 @@ export function _clearDenseCatalogStateForTest() {
 /** Catalog group tag recorded for a satellite, for ingestion-path assertions. */
 export function _catalogGroupForTest(noradId) {
   return _catalog.get(Number(noradId))?.group;
+}
+
+/**
+ * Seed points + orbit-ring primitives without a WebGL viewer, so presentation
+ * tests can exercise `setParams({ showOrbits })` independently of catalog load.
+ * @param {{
+ *   catalog?: 'core'|'dense',
+ *   showPoints?: boolean,
+ *   showOrbits?: boolean,
+ *   points?: number[],
+ *   orbits?: number[],
+ * }} [options]
+ */
+export function _setSatellitePresentationForTest({
+  catalog = 'core',
+  showPoints = true,
+  showOrbits = true,
+  points = [],
+  orbits = [],
+} = {}) {
+  _setDenseCatalogStateForTest({ catalog, showPoints, showOrbits });
+  for (const noradId of points) {
+    const id = Number(noradId);
+    const group = id === 44444 ? 'dense' : 'stations';
+    _catalog.set(id, { name: `SAT-${id}`, satrec: {}, group });
+    _points.set(id, _pointCollection.add({ id, show: true }));
+    if (group === 'dense') _denseIds.push(id);
+  }
+  for (const noradId of orbits) {
+    _orbitPaths.set(Number(noradId), { primitive: { show: showOrbits }, gmstAtBake: 0 });
+  }
+  if (_pointCollection) _pointCollection.show = satelliteVisualsVisible(_enabled, _params.showPoints);
+  _catalogRevision++;
+}
+
+/** Live presentation snapshot for orbit/point toggle tests. */
+export function _satelliteVisualStateForTest() {
+  return {
+    catalog: _params.catalog,
+    showPoints: _params.showPoints,
+    showOrbits: _params.showOrbits,
+    pointCollectionShow: _pointCollection ? Boolean(_pointCollection.show) : null,
+    pointIds: [..._points.keys()],
+    orbitShows: Object.fromEntries(
+      [..._orbitPaths].map(([id, path]) => [id, Boolean(path.primitive?.show)]),
+    ),
+  };
 }
 
 /** Seed ISS/tracking state while retaining the production track and host paths. */
@@ -2148,13 +2199,13 @@ const satellitesLayer = {
 
   /**
    * Layer-row sub-controls (DataLayerManager row-controls contract): the DENSE
-   * catalog chip plus a class legend so the point colors are learnable without
-   * a new panel.
+   * catalog chip, an ORBITS chip over the existing `showOrbits` param, plus a
+   * class legend so the point colors are learnable without a new panel.
    *
-   * The chip is stateless — it declares the params to apply and the manager
+   * The chips are stateless — they declare the params to apply and the manager
    * owns the write, so the Space Missions snapshot/restore path (which drives
-   * the same `catalog` param) stays the single source of truth and the chip
-   * always renders whatever the layer actually has.
+   * the same `catalog` / `showOrbits` params) stays the single source of truth
+   * and the chips always render whatever the layer actually has.
    *
    * The chip reports the dense LOAD state, not the catalog param: the param
    * flips synchronously while the Starlink shell takes seconds to arrive and
@@ -2186,6 +2237,17 @@ const satellitesLayer = {
         state: loading ? 'loading' : (failed ? 'error' : (active ? 'active' : 'idle')),
         title,
         params: { catalog: active ? 'core' : 'dense' },
+      }, {
+        id: 'orbits',
+        label: 'ORBITS',
+        active: _params.showOrbits,
+        busy: false,
+        disabled: false,
+        state: _params.showOrbits ? 'active' : 'idle',
+        title: _params.showOrbits
+          ? 'Hide orbital path rings — satellite points stay visible'
+          : 'Show orbital path rings',
+        params: { showOrbits: !_params.showOrbits },
       }],
       selects: [{
         id: 'sat-group',

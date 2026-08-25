@@ -181,6 +181,24 @@ function integerOption(key, token, defaultValue) {
   });
 }
 
+/** Optional non-negative integer. Null (absent) is the default OFF value. */
+function nullableIntegerOption(key, token, defaultValue = null, { max = 9999 } = {}) {
+  const bound = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = typeof value === 'number' ? value : Number(String(value).trim());
+    if (!Number.isInteger(numeric) || numeric < 0 || numeric > max) return null;
+    return numeric;
+  };
+  return Object.freeze({
+    key,
+    token,
+    defaultValue,
+    normalize: bound,
+    encode: (value) => String(Math.trunc(value)),
+    decode: bound,
+  });
+}
+
 const OPTION_GROUPS = Object.freeze({
   flights: Object.freeze([
     // Product invariant 2026-08-22: the fleet's 3D models are DEFAULT-ON in
@@ -209,9 +227,15 @@ const OPTION_GROUPS = Object.freeze({
     }),
     trackingIdOption('selectedFlightsTrackingId', 't', null),
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
+    nullableIntegerOption('speedMinKt', 's', null),
+    nullableIntegerOption('speedMaxKt', 'p', null),
   ]),
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),
+    // Default ON matches the long-standing hardcoded ring visibility. This is a
+    // new token, so omitted `o` means the same thing existing v2 links already
+    // showed: rings on.
+    booleanOption('showOrbits', 'o', true),
     integerOption('selectedSatTrackingId', 't', null),
   ]),
   cctv: Object.freeze([
@@ -239,6 +263,14 @@ const OPTION_GROUPS = Object.freeze({
       normalize: normalizeVolume,
       encode: (value) => String(Math.round(value * 100)),
       decode: (value) => (/^\d{1,3}$/.test(value) ? normalizeVolume(Number(value) / 100) : null),
+    }),
+  ]),
+  'local-firms': Object.freeze([
+    enumOption('frpFloor', 'f', 'all', ['all', '10', '50', '100'], {
+      all: 'a',
+      10: '1',
+      50: '5',
+      100: 'c',
     }),
   ]),
 });
@@ -282,7 +314,7 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   Object.freeze({ id: 'flights', token: 'f', disposition: 'enabled+options', optionOwner: 'flights' }),
   Object.freeze({ id: 'local-dams', token: 'q', disposition: 'enabled-only' }),
   Object.freeze({ id: 'local-datacenters', token: 'd', disposition: 'enabled-only' }),
-  Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled-only' }),
+  Object.freeze({ id: 'local-firms', token: 'w', disposition: 'enabled+options', optionOwner: 'local-firms' }),
   Object.freeze({ id: 'military', token: 'm', disposition: 'enabled+mirrored-options', optionOwner: 'flights' }),
   Object.freeze({ id: 'military-awareness', token: 'g', disposition: 'enabled-only' }),
   Object.freeze({ id: 'military-installations', token: 'i', disposition: 'enabled-only' }),

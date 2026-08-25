@@ -3232,3 +3232,75 @@ test('a system picker stays visible while the layer is off and does not write la
     else globalThis.document = originalDocument;
   }
 });
+
+test('a chip group heading wraps a second Sim|Hide pair under the first heading', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const paramsCalls = [];
+  mgr.register({
+    id: 'traffic',
+    name: 'Street Traffic',
+    icon: '',
+    source: 'OpenStreetMap',
+    updateInterval: 0,
+    async init() {},
+    enable() {},
+    disable() {},
+    async update() {},
+    getStats() { return { count: 4, lastUpdate: Date.now() }; },
+    setParams(params) { paramsCalls.push({ ...params }); },
+    getParams() { return {}; },
+    getRowControls() {
+      return {
+        heading: 'Traffic',
+        chips: [
+          { id: 'traffic-source-live', label: 'Live', active: true, params: { trafficSource: 'live' } },
+          { id: 'traffic-source-sim', label: 'Sim', active: false, params: { trafficSource: 'sim' } },
+          {
+            id: 'uncovered-sim',
+            label: 'Sim',
+            active: true,
+            group: 'Uncovered',
+            params: { uncoveredRoads: 'sim' },
+          },
+          {
+            id: 'uncovered-hide',
+            label: 'Hide',
+            active: false,
+            group: 'Uncovered',
+            params: { uncoveredRoads: 'hide' },
+          },
+        ],
+      };
+    },
+  });
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    assert.equal(await mgr.setEnabled('traffic', true), true);
+    mgr._refreshTogglePanel();
+    const controls = container
+      .querySelector('[data-layer-id="traffic"]')
+      .querySelector('.data-toggle-controls');
+    const headings = collectByClass(controls, 'data-toggle-heading');
+    assert.deepEqual(headings.map((node) => node.textContent), ['Traffic', 'Uncovered']);
+    assert.equal(collectByClass(controls, 'data-toggle-row-break').length, 1);
+    const chips = collectByClass(controls, 'data-toggle-chip');
+    assert.deepEqual(chips.map((chip) => chip.dataset.chipId), [
+      'traffic-source-live',
+      'traffic-source-sim',
+      'uncovered-sim',
+      'uncovered-hide',
+    ]);
+
+    const hide = chips.find((chip) => chip.dataset.chipId === 'uncovered-hide');
+    controls.listeners.click({ target: hide });
+    assert.deepEqual(paramsCalls, [{ uncoveredRoads: 'hide' }]);
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});
