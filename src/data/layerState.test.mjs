@@ -264,6 +264,7 @@ test('unknown and forbidden option fields are ignored while missing options use 
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
+    callsignPrefixes: '',
   });
   assert.deepEqual(decoded.options.radio, { filter: 'news', volume: 0.35, minBitrate: 'all' });
 
@@ -640,6 +641,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
+    callsignPrefixes: '',
   }]);
   assert.deepEqual(calls.military, [{
     models3d: false,
@@ -649,6 +651,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
+    callsignPrefixes: '',
   }]);
   assert.equal(coordinator.getDurableState().options.flights.models3d, false);
   coordinator.destroy();
@@ -1084,6 +1087,7 @@ test('later explicit params during init replace options without cancelling visib
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
+    callsignPrefixes: '',
   });
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   assert.equal(storage.writes.length, 1);
@@ -1132,6 +1136,7 @@ test('explicit navigation preserves unrelated visibility and option restoration'
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
+    callsignPrefixes: '',
   }]);
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   coordinator.destroy();
@@ -1196,6 +1201,7 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
+    callsignPrefixes: '',
   });
   assert.deepEqual(manager.getLayerParams('radio'), {
     filter: 'genre:r&b',
@@ -1262,6 +1268,7 @@ test('shared flight selection is deferred until destination refresh and then fol
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
+    callsignPrefixes: '',
   }]);
 
   const result = await coordinator.restoreShareTrackingSelection();

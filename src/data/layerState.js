@@ -10,6 +10,7 @@ import {
   encodeHeadingSectors,
   normalizeHeadingSectors,
 } from './inFlightFilters.js';
+import { formatCallsignPrefixField, parseCallsignPrefixes } from './flightLayerFilters.js';
 
 const VALID_DISPOSITIONS = new Set([
   'enabled-only',
@@ -270,6 +271,14 @@ const OPTION_GROUPS = Object.freeze({
       normalize: normalizeAircraftClassFilter,
       encode: encodeAircraftClassFilter,
       decode: decodeAircraftClassFilter,
+    }),
+    Object.freeze({
+      key: 'callsignPrefixes',
+      token: 'c',
+      defaultValue: '',
+      normalize: (value) => formatCallsignPrefixField(value),
+      encode: (value) => parseCallsignPrefixes(value).join('-'),
+      decode: (value) => formatCallsignPrefixField(String(value || '').split('-')),
     }),
   ]),
   satellites: Object.freeze([
