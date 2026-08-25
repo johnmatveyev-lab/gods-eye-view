@@ -1,5 +1,6 @@
 import * as Cesium from 'cesium';
 import { holdContinuousRender, releaseContinuousRender } from './renderGovernor.js';
+import { isReduceMotionEnabled, subscribeReduceMotion } from './reduceMotion.js';
 
 /**
  * OrbitController — smooth orbit around a target point.
@@ -16,6 +17,9 @@ export class OrbitController {
     this.speed = Cesium.Math.toRadians(6); // ~6°/sec → full rotation in ~60s
     this.angle = 0;
     this._removeListener = null;
+    this._unsubReduceMotion = subscribeReduceMotion(() => {
+      if (isReduceMotionEnabled() && this.active) this.stop();
+    });
   }
 
   /**
@@ -28,6 +32,7 @@ export class OrbitController {
    */
   start(targetCartesian, options = {}) {
     if (!targetCartesian) return;
+    if (isReduceMotionEnabled()) return;
 
     this.target = targetCartesian;
     this.radius = options.radius || this.radius;

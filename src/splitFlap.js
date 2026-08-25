@@ -1,3 +1,5 @@
+import { isReduceMotionEnabled } from './reduceMotion.js';
+
 /**
  * Split-flap (departure-board) text animation for the status chips.
  *
@@ -246,9 +248,7 @@ export function visibleGlyphs(plan, elapsedMs, options = {}) {
 
 /** Whether the viewer asked for reduced motion. */
 function prefersReducedMotion() {
-  return typeof window !== 'undefined'
-    && typeof window.matchMedia === 'function'
-    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  return isReduceMotionEnabled();
 }
 
 /**
