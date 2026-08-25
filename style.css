@@ -6716,6 +6716,27 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   background: rgba(5, 24, 31, .88);
   font: 9px/1.2 var(--font-mono);
 }
+.radio-bitrate-row {
+  display: grid;
+  gap: 4px;
+}
+.radio-bitrate-seg {
+  display: flex;
+  flex-wrap: wrap;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+.radio-bitrate-seg .pp-mode-btn {
+  flex: 1 1 22%;
+  min-width: 0;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.radio-bitrate-seg .pp-mode-btn:disabled {
+  opacity: .42;
+  cursor: not-allowed;
+}
 .radio-station-search-wrap {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;

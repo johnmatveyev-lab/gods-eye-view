@@ -33,6 +33,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Radio has a client-side min-bitrate floor (All / 64+ / 128+ / 192+ kbps)
+  on the already-fetched Radio Browser directory. Default All keeps the
+  current list. Null bitrate stays visible. A station already playing stays
+  audible until Stop or Next. Genre and search still AND with the floor.
+  Preference persists on the existing radio layer options. No `/api`.
 - Added a Watch list of up to 10 public aircraft idents (callsign or hex
   already on the selected contact). Add from the selected card; remove from
   the list. When a watched ident is in the current flights payload it uses
