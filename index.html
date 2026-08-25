@@ -495,7 +495,17 @@
             <small id="cockpit-local-coordinates">--</small>
           </div>
           <div class="cockpit-local-grid">
-            <div><span>TEMP</span><strong id="cockpit-local-temperature">—</strong><small>OPEN-METEO</small></div>
+            <div>
+              <span>TEMP</span>
+              <div class="cockpit-local-temp-readout">
+                <strong id="cockpit-local-temperature">—</strong>
+                <span class="weather-unit-toggle" role="group" aria-label="Temperature units">
+                  <button type="button" data-weather-units="C" aria-pressed="true">°C</button>
+                  <button type="button" data-weather-units="F" aria-pressed="false">°F</button>
+                </span>
+              </div>
+              <small>OPEN-METEO</small>
+            </div>
             <div><span>WIND</span><strong id="cockpit-local-wind">—</strong><small id="cockpit-local-wind-direction">—</small></div>
             <div><span>SKY</span><strong id="cockpit-local-condition">UNKNOWN</strong><small id="cockpit-local-cloud">—</small></div>
             <div><span>PRECIP</span><strong id="cockpit-local-precipitation">—</strong><small>MM</small></div>

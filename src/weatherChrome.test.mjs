@@ -264,6 +264,12 @@ test('Local Info briefing still fetches weather and shows Open-Meteo credit when
     /href="https:\/\/open-meteo\.com\/"[\s\S]*?Weather data by Open-Meteo\.com/,
   );
   assert.match(sources, /WX OFF[\s\S]*Open-Meteo credit/);
+
+  const paint = ui.match(/paintLocalTemperature\(weather\) \{([\s\S]*?)\n  \}/);
+  assert.ok(paint, 'temperature paint helper is missing');
+  assert.match(paint[1], /formatTemperatureC\(weather\?\.temperatureC\)/);
+  assert.doesNotMatch(paint[1], /getWxEnabled|weatherToggle|cockpitWeather|WX_/);
+  assert.match(html, /id="cockpit-local-temperature"[\s\S]*?data-weather-units="C"[\s\S]*?°C[\s\S]*?data-weather-units="F"[\s\S]*?°F/);
 });
 
 test('share URLs, annotations, and trails stay off this chrome', () => {
