@@ -42,6 +42,47 @@ const FIRMS_API_URL = '/api/firms';
 /** Client poll interval; the proxy's 30 min TTL is what guards upstream quota. */
 const REFRESH_INTERVAL_MS = 600_000;
 
+/** Operator FRP floor chips. `all` is the current unfiltered view. */
+export const FIRMS_FRP_FLOOR_CHIPS = Object.freeze([
+  Object.freeze({ id: 'all', label: 'All', title: 'Show every FIRMS detection' }),
+  Object.freeze({ id: '10', label: '10+', title: 'Hide detections below 10 MW' }),
+  Object.freeze({ id: '50', label: '50+', title: 'Hide detections below 50 MW' }),
+  Object.freeze({ id: '100', label: '100+ MW', title: 'Hide detections below 100 MW' }),
+]);
+const FIRMS_FRP_FLOOR_MW = Object.freeze({ all: 0, 10: 10, 50: 50, 100: 100 });
+
+/**
+ * Coerce a chip / layer-state value to a floor id. Unknown values stay All
+ * so a stale share token cannot invent a new NASA query.
+ * @param {*} value
+ * @returns {'all'|'10'|'50'|'100'}
+ */
+export function normalizeFrpFloor(value) {
+  if (value === 10 || value === '10') return '10';
+  if (value === 50 || value === '50') return '50';
+  if (value === 100 || value === '100') return '100';
+  if (value === 'all' || value === 0 || value === '0') return 'all';
+  return 'all';
+}
+
+/** Numeric MW threshold for a floor id. All is 0. */
+export function frpFloorThresholdMw(floor) {
+  return FIRMS_FRP_FLOOR_MW[normalizeFrpFloor(floor)] ?? 0;
+}
+
+/**
+ * Keep detections at or above the FRP floor. All returns a shallow copy.
+ * @param {Array<Object>|null|undefined} fires
+ * @param {'all'|'10'|'50'|'100'|number} floor
+ * @returns {Array<Object>}
+ */
+export function filterFiresByFrpFloor(fires, floor) {
+  if (!Array.isArray(fires)) return [];
+  const minMw = frpFloorThresholdMw(floor);
+  if (minMw <= 0) return fires.slice();
+  return fires.filter((fire) => Number(fire?.frp) >= minMw);
+}
+
 /**
  * LOD bands keyed by camera height. `cells` bands render aggregated
  * ground-clamped heat rectangles; `detections` bands (< ~750km plus the
@@ -149,6 +190,9 @@ export function createFirmsHeatmapLayer({
   let _error = null;
   let _fires = [];
   let _firesByFrp = [];
+  /** Last-good fetch stays in `_fires`; `_firesByFrp` is the FRP-floor view. */
+  let _frpFloor = 'all';
+  let _rowControlsListener = null;
   let _count = 0;
   let _cellCount = 0;
   let _lastUpdate = null;
@@ -273,6 +317,8 @@ export function createFirmsHeatmapLayer({
       clearSelectedEntityContextForLayer(id);
       _fires = [];
       _firesByFrp = [];
+      _frpFloor = 'all';
+      _rowControlsListener = null;
       _cellCacheByGrid.clear();
       _count = 0;
       _cellCount = 0;
@@ -351,7 +397,7 @@ export function createFirmsHeatmapLayer({
      * @returns {Array<object>}
      */
     getNearbyFires({ origin, limit = FIRMS_LIST_LIMIT } = {}) {
-      return listNearestFires(_fires, origin || cameraOriginFromViewer(_viewer), limit);
+      return listNearestFires(_firesByFrp, origin || cameraOriginFromViewer(_viewer), limit);
     },
 
     /**
@@ -364,7 +410,7 @@ export function createFirmsHeatmapLayer({
         keyRequired: _keyRequired,
         loading: _loading,
         enabled: _enabled,
-        fires: _fires,
+        fires: _firesByFrp,
         camera: camera || cameraOriginFromViewer(_viewer),
         now,
       });
@@ -432,15 +478,47 @@ export function createFirmsHeatmapLayer({
       return result;
     },
 
+    /**
+     * FRP floor for the data-panel chips. Re-filters in-memory `_fires` —
+     * never hits /api/firms.
+     * @param {{ frpFloor?: string|number }} [params]
+     * @returns {boolean}
+     */
+    setParams(params = {}) {
+      if (!Object.hasOwn(params, 'frpFloor')) return true;
+      return applyFrpFloor(params.frpFloor);
+    },
+
+    /** @returns {{ frpFloor: 'all'|'10'|'50'|'100' }} */
+    getParams() {
+      return { frpFloor: _frpFloor };
+    },
+
+    getRowControls() {
+      return {
+        chips: FIRMS_FRP_FLOOR_CHIPS.map((chip) => ({
+          id: `frp-${chip.id}`,
+          label: chip.label,
+          title: chip.title,
+          active: _frpFloor === chip.id,
+          params: { frpFloor: chip.id },
+        })),
+      };
+    },
+
+    setRowControlsListener(listener) {
+      _rowControlsListener = typeof listener === 'function' ? listener : null;
+    },
+
     /** Test seam that binds the production click path and indexes. */
     _bindInteractionForTest(viewer, fires = []) {
       _viewer = viewer;
       _enabled = true;
       _fires = fires;
-      _firesByFrp = [...fires];
+      applyVisibleIndex();
       _pickIndexById.clear();
       _labelLodDistance = 1e7;
-      _labelCandidates = fires.map((fire) => {
+      _labelCandidates = _firesByFrp.map((fire) => {
         _pickIndexById.set(`firms-${fire.index}`, fire);
         return { fire, position: firePosition(fire) };
       });
@@ -487,8 +565,7 @@ export function createFirmsHeatmapLayer({
       _selectedFire = null;
       _fires = adaptFirmsRecords(payload?.fires);
       _cellCacheByGrid.clear(); // aggregation is per-dataset — new fires, new cells
-      _firesByFrp = [..._fires].sort((a, b) => b.frp - a.frp);
-      _count = _fires.length;
+      applyVisibleIndex();
       // Data age, not response age: a stale proxy payload truthfully reads old.
       _lastUpdate = Number.isFinite(payload?.fetchedAt) ? payload.fetchedAt : Date.now();
       // Settle the previous selection BEFORE the LOD rebuild. renderCurrentLod
@@ -497,8 +574,11 @@ export function createFirmsHeatmapLayer({
       // Clearing after that deletion fails the ownership guard inside
       // clearSelectedEntityContextForLayer and emits nothing at all, so an
       // eviction-aware readout never hears that its subject is gone.
-      const reselected = findMatchingFire(previousSelection);
-      if (!reselected && previousSelection) {
+      const match = findMatchingFire(previousSelection);
+      const reselected = match && (match.frp || 0) >= frpFloorThresholdMw(_frpFloor)
+        ? match
+        : null;
+      if (!match && previousSelection) {
         // The selected detection is not in the new payload: it left the feed
         // rather than being deselected. Eviction-aware readouts hold their
         // last-known values for this instead of tearing down.
@@ -527,6 +607,43 @@ export function createFirmsHeatmapLayer({
     return _fires.find((fire) => fireDetectionKey(fire) === key) || null;
   }
 
+  /** Rebuild the FRP-sorted visible index from last-good `_fires`. */
+  function applyVisibleIndex() {
+    const visible = filterFiresByFrpFloor(_fires, _frpFloor);
+    _firesByFrp = visible.sort((a, b) => b.frp - a.frp);
+    _count = visible.length;
+  }
+
+  /**
+   * Change the FRP floor and re-render from memory. Never fetches.
+   * @param {*} nextFloor
+   * @returns {boolean}
+   */
+  function applyFrpFloor(nextFloor) {
+    const floor = normalizeFrpFloor(nextFloor);
+    const changed = floor !== _frpFloor;
+    _frpFloor = floor;
+    applyVisibleIndex();
+    _cellCacheByGrid.clear();
+    if (_selectedFire && (_selectedFire.frp || 0) < frpFloorThresholdMw(_frpFloor)) {
+      clearFireSelection();
+    }
+    if (_enabled && _dataSource && _viewer) renderCurrentLod(true);
+    if (changed) _rowControlsListener?.();
+    return true;
+  }
+
+  /** Clear cells, sprites, and overlay when the floor hides every detection. */
+  function clearRenderedHeatmap() {
+    if (_dataSource) _dataSource.entities.removeAll();
+    if (_billboards) _billboards.removeAll();
+    _pickIndexById.clear();
+    _cullPositions.length = 0;
+    _cellCount = 0;
+    _labelCandidates = [];
+    overlayHost.setEntries(FIRMS_OVERLAY_SOURCE_ID, []);
+  }
+
   /**
    * Rebuild the render for the current LOD band and viewport. Skips work
    * when neither the (hysteresis-damped) LOD band nor the padded view
@@ -537,7 +654,11 @@ export function createFirmsHeatmapLayer({
    *   its freshly-added sprites, an early-out does not.
    */
   function renderCurrentLod(force = false) {
-    if (!_dataSource || !_fires.length || !_viewer) return false;
+    if (!_dataSource || !_viewer) return false;
+    if (!_firesByFrp.length) {
+      clearRenderedHeatmap();
+      return true;
+    }
     const lodIndex = selectLodIndex(cameraHeight());
     const lod = LOD_LEVELS[lodIndex];
     const viewRect = computeViewRect();
@@ -570,7 +691,7 @@ export function createFirmsHeatmapLayer({
     let sorted = _cellCacheByGrid.get(gridDegrees);
     if (!sorted) {
       const cells = new Map();
-      for (const fire of _fires) {
+      for (const fire of _firesByFrp) {
         const latCell = Math.floor(fire.lat / gridDegrees) * gridDegrees;
         const lonCell = Math.floor(fire.lon / gridDegrees) * gridDegrees;
         const key = `${latCell.toFixed(3)}:${lonCell.toFixed(3)}`;
