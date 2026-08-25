@@ -17,6 +17,7 @@ import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, 
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
 import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNorthUp.js';
+import { handleKeyboardPanKeyDown } from './keyboardPan.js';
 import {
   aircraftTrackingTarget,
   enterCockpitWithTracking,
@@ -3565,9 +3566,9 @@ export class StyleManager {
 
   /**
    * Wires up all primary UI event listeners: style buttons, keyboard shortcuts
-   * (1-8 style keys, H/O/V/F/D/C hotkeys, Escape), AI prompt input with
-   * debounce, bloom/sharpen/HUD toggles, detection density slider, and
-   * clean-view toggle.
+   * (1-8 style keys, WASD/arrow pan, H/O/V/F/D/C hotkeys, Escape), AI prompt
+   * input with debounce, bloom/sharpen/HUD toggles, detection density slider,
+   * and clean-view toggle.
    * @returns {void}
    */
   _initUI() {
@@ -3590,6 +3591,10 @@ export class StyleManager {
       const isFormControl = e.target?.matches?.('select, input, textarea')
         || e.target === this._locationSearch;
       if (isFormControl && e.key !== 'Escape') return;
+
+      // WASD / arrows pan the globe. Must run before letter hotkeys so D
+      // does not also cycle detection. Ignores typing targets internally.
+      if (handleKeyboardPanKeyDown(e, this.viewer)) return;
 
       const keyMap = {
         '1': 'normal', '2': 'retro', '3': 'surveillance',
