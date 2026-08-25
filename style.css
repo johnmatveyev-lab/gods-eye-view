@@ -2805,6 +2805,70 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 16px;
 }
 
+/* Go-to: operator paste of MGRS or decimal lat,lon next to the readout. */
+#go-to {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 36px;
+  padding: 0 4px 0 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#top-center-actions #go-to-input {
+  width: 148px;
+  height: 28px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  outline: none;
+}
+#top-center-actions #go-to-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.65;
+}
+#top-center-actions #go-to-submit {
+  width: auto;
+  min-width: 36px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  transform: none;
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+}
+#top-center-actions #go-to-submit:hover,
+#top-center-actions #go-to-submit:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  transform: none;
+  color: var(--text-primary, #e8f0f4);
+}
+#go-to-status {
+  position: absolute;
+  left: 10px;
+  top: calc(100% + 4px);
+  max-width: 180px;
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  pointer-events: none;
+}
+#go-to-status:empty {
+  display: none;
+}
+
 #earthquake-list-panel {
   position: fixed;
   top: 76px;

@@ -41,6 +41,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Go-to field next to the camera-center readout. Operators paste
+  an MGRS grid (`mgrs.toPoint`) or decimal `lat, lon` and the existing
+  Home/share `camera.flyTo` helper centers on that point, keeping the
+  current height, heading, and pitch unless the paste includes a height.
+  Invalid or empty input does not move the camera and shows a short
+  `Invalid coordinates` status. Pointer MGRS and Home are unchanged.
+  Client-only; no `/api`.
 - Bikeshare has a Hide full chip next to Hide empty. When on, stations
   whose last-good `docksAvailable` is exactly 0 are not drawn. Unknown
   dock counts stay visible. A selected station stays until deselected.

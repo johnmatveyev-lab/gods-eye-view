@@ -2,6 +2,14 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — go to MGRS or lat/lon (plan 124)** (`src/coords/parseGoTo.js`,
+> `#go-to`). A Go-to field next to the camera-center readout accepts an
+> operator-entered MGRS grid (`mgrs.toPoint`) or decimal `lat, lon`. Submit
+> flies with the same `camera.flyTo` helper Home and share restore already
+> use, keeping the current height/heading/pitch unless the paste includes a
+> height. Invalid input is a no-op plus `Invalid coordinates`. Pointer MGRS
+> still updates after the flight. Home is unchanged. Client-only; no `/api`.
+
 > **2026-08-25 — pointer MGRS readout (plan 119)** (`src/copyCameraCoords.js`,
 > `#camera-coords-mgrs`). The camera-center chrome next to Copy coords shows
 > an MGRS line computed with the existing `mgrs` package from the same
@@ -2266,6 +2274,7 @@ silently demoting every later lookup for the session.
 - **Share view QR:** top-center chrome next to Copy view link opens a popover whose QR encodes the same `currentShareUrl()` camera+layers URL that Copy view link copies. Encoding is in-page (`uqr`); no shortener, upload, or `/api`. A second click or Escape closes the popover. Copy view link still copies the URL text only. Credits stay on the globe.
 - **Copy snapshot:** top-center chrome next to Copy view link captures the current Cesium viewer canvas (`toBlob` / `toDataURL`) and composites the on-screen `#cesium-credits` strip so Google Photorealistic 3D Tiles, Cesium, and data-source attribution remain readable in the PNG. A successful clipboard image write toasts `Snapshot copied`; a denied clipboard writes a same-tab `meridian-view.png` download instead. Clean view still pins credits (Plan 27) into that image. Operator-local only — no upload, no `/api`, and Copy view link still copies the URL only.
 - **Camera-center coordinate copy:** top-center chrome next to Copy view link shows the already-computed camera-center lat/lon from `camera.positionCartographic` (same numbers the share URL encodes) plus an MGRS line from the existing `mgrs` package (`#camera-coords-mgrs`). The copy control writes numeric `lat,lon` and that MGRS line; `lon,lat` is the secondary GIS order. Polar / undefined conversions stay blank. Height is not shown, so the distance units toggle is unused. Home then copy is the default first-load pose. Coordinates only — no geocoding, place names, or /api.
+- **Go to MGRS or lat/lon:** `#go-to` sits next to that readout. Paste a grid (`mgrs.toPoint`) or decimal `lat, lon` and Go (or Enter) flies the existing Home/share `camera.flyTo` helper to that point, keeping the live height/heading/pitch unless a third height number is included. Junk or empty input does not move the camera and shows `Invalid coordinates`. No new camera mode and no `/api`.
 - **Diagnostics**: every client/server event is posted to `/api/realtime/debug-log` and appended to `.gev-logs/realtime-conversations.jsonl` (gitignored) with secret/image redaction; last 30 errors persist in `localStorage` (`gev-realtime-errors`); `window.__gevVoiceCommands.getDiagnostics()` in the console.
 - **Counting semantics ("near")** — a CONTRACT; new count-bearing tool work inherits it. Three honest numbers exist for one question: the Contacts cohort (250 km around the subject, what the panel shows), `analyst_query`'s count of *currently-loaded* records for the requested scope, and the layer-wide loaded total in `coverage.layersQueried[].records`. They diverge legitimately — the flights layer loads by viewport, so after a camera dive the loaded set can hold a fraction of the cohort (field case: panel 42, analyst 8). The contract:
   1. **Contacts ACTIVE** → "near / nearby / how many aircraft" means the **Contacts window** — the panel's numbers, spoken verbatim. Mechanism: `contactsWindow` (`{centeredOn, radiusKm, flights, military, vessels}`), carried by both `analyst_query` and `get_current_view_state`, derived by `contactsWindowFromSnapshot()` from the same snapshot the panel renders so the two cannot drift. A cohort whose feed cannot answer reports `'unknown'`, never a confident zero.
