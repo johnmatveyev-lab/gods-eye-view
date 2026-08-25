@@ -9,6 +9,7 @@ import {
   DEFAULT_EARTHQUAKE_DEPTH_BANDS,
   DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
   DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+  DEFAULT_EARTHQUAKE_REVIEWED_ONLY,
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
   EARTHQUAKE_DEPTH_BANDS,
   EARTHQUAKE_MAGNITUDE_FLOORS,
@@ -24,11 +25,13 @@ import {
   filterEarthquakeFeaturesByDepthBands,
   filterEarthquakeFeaturesByMagnitudeFloor,
   filterEarthquakeFeaturesByPagerAlert,
+  filterEarthquakeFeaturesByReviewedStatus,
   filterEarthquakeFeaturesByTimeWindow,
   filterEarthquakeFeaturesByTsunamiFlag,
   isSignificantEarthquake,
   mapAnalystRecord,
   normalizeEarthquakePagerAlerts,
+  normalizeEarthquakeReviewedOnly,
   normalizeEarthquakeTimeWindowHours,
   normalizeEarthquakeTsunamiOnly,
   selectEarthquakeOverlayCohort,
@@ -1634,6 +1637,306 @@ test('PAGER chips sit next to mag/depth/time/tsunami, persist, and hide with the
     assert.equal(layer.getParams().magnitudeFloor, 2.5);
     assert.equal(layer.getParams().timeWindowHours, 24);
     assert.equal(layer.getParams().tsunamiOnly, false);
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 156: reviewed-only toggle (client-side, same USGS all_day) ───────────
+
+function reviewedFeature(id, mag, status, {
+  depthKm = 8.2,
+  tsunami,
+  alert,
+  time = 1_753_600_000_000,
+} = {}) {
+  const properties = { mag, place: String(id), time, status };
+  if (tsunami !== undefined) properties.tsunami = tsunami;
+  if (alert !== undefined) properties.alert = alert;
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties,
+  };
+}
+
+const MIXED_REVIEWED_DAY = Object.freeze({
+  features: Object.freeze([
+    reviewedFeature('reviewed-lo', 3.1, 'reviewed'),
+    reviewedFeature('reviewed-sig', 5.4, 'REVIEWED', { depthKm: 80 }),
+    reviewedFeature('reviewed-deep', 4.8, 'Reviewed', { depthKm: 410 }),
+    reviewedFeature('automatic-lo', 4.2, 'automatic'),
+    reviewedFeature('deleted-lo', 3.6, 'deleted'),
+    reviewedFeature('missing-status', 4.1),
+    reviewedFeature('other-status', 3.3, 'unknown'),
+    reviewedFeature('reviewed-micro', 2.4, 'reviewed'),
+    reviewedFeature('reviewed-tsunami', 4.4, 'reviewed', {
+      tsunami: 1,
+      alert: 'green',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+    reviewedFeature('automatic-tsunami', 4.0, 'automatic', { tsunami: 1 }),
+    reviewedFeature('reviewed-old', 4.6, 'reviewed', { time: 1_800_000_000_000 - 20 * HOUR_MS }),
+    reviewedFeature('reviewed-fresh', 4.7, 'reviewed', {
+      alert: 'green',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+  ]),
+});
+
+test('Reviewed only defaults off and matches the current mag/depth/time/tsunami/PAGER view', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_REVIEWED_ONLY, false);
+  assert.equal(normalizeEarthquakeReviewedOnly(undefined), false);
+  assert.equal(normalizeEarthquakeReviewedOnly(false), false);
+  assert.equal(normalizeEarthquakeReviewedOnly(true), true);
+  assert.equal(normalizeEarthquakeReviewedOnly('1'), true);
+  assert.equal(normalizeEarthquakeReviewedOnly('bogus'), null);
+
+  const current = filterEarthquakeFeatures(MIXED_REVIEWED_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    timeWindowHours: 24,
+    tsunamiOnly: false,
+    pagerAlerts: DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+  }).map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByReviewedStatus(MIXED_REVIEWED_DAY.features, false)
+      .map((feature) => feature.id),
+    MIXED_REVIEWED_DAY.features.map((feature) => feature.id),
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_REVIEWED_DAY.features, {
+      magnitudeFloor: 2.5,
+      reviewedOnly: false,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_REVIEWED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().reviewedOnly, false);
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Reviewed only keeps reviewed status and hides automatic/deleted/missing/other', async () => {
+  const reviewed = filterEarthquakeFeaturesByReviewedStatus(MIXED_REVIEWED_DAY.features, true)
+    .map((feature) => feature.id);
+  assert.deepEqual(reviewed, [
+    'reviewed-lo',
+    'reviewed-sig',
+    'reviewed-deep',
+    'reviewed-micro',
+    'reviewed-tsunami',
+    'reviewed-old',
+    'reviewed-fresh',
+  ]);
+  assert.ok(!reviewed.includes('automatic-lo'));
+  assert.ok(!reviewed.includes('deleted-lo'));
+  assert.ok(!reviewed.includes('missing-status'));
+  assert.ok(!reviewed.includes('other-status'));
+  assert.ok(!reviewed.includes('automatic-tsunami'));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_REVIEWED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ reviewedOnly: true }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.deepEqual(ids, [
+      'reviewed-deep',
+      'reviewed-fresh',
+      'reviewed-lo',
+      'reviewed-old',
+      'reviewed-sig',
+      'reviewed-tsunami',
+    ]);
+    assert.ok(!ids.includes('automatic-lo'));
+    assert.ok(!ids.includes('deleted-lo'));
+    assert.ok(!ids.includes('missing-status'));
+    assert.ok(!layer.getListRecords().some((row) => row.id.startsWith('automatic-')));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('selected event stays visible when Reviewed only hides its status', async () => {
+  assert.deepEqual(
+    filterEarthquakeFeaturesByReviewedStatus(MIXED_REVIEWED_DAY.features, true, {
+      selectedId: 'automatic-lo',
+    }).map((feature) => feature.id),
+    [
+      'reviewed-lo',
+      'reviewed-sig',
+      'reviewed-deep',
+      'automatic-lo',
+      'reviewed-micro',
+      'reviewed-tsunami',
+      'reviewed-old',
+      'reviewed-fresh',
+    ],
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_REVIEWED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ selectedId: 'automatic-lo', reviewedOnly: true }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('automatic-lo'));
+    assert.ok(ids.includes('reviewed-lo'));
+    assert.ok(!ids.includes('deleted-lo'));
+    assert.ok(layer.getListRecords().some((row) => row.id === 'automatic-lo'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Reviewed only ANDs with mag/depth/time/tsunami/PAGER and redraws from cached geojson', async () => {
+  const now = 1_800_000_000_000;
+  const anded = filterEarthquakeFeatures(MIXED_REVIEWED_DAY.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 1,
+    tsunamiOnly: true,
+    reviewedOnly: true,
+    pagerAlerts: 'G',
+    now,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['reviewed-tsunami']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(MIXED_REVIEWED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({
+      magnitudeFloor: 4.0,
+      depthBands: 'S',
+      timeWindowHours: 1,
+      tsunamiOnly: true,
+      reviewedOnly: true,
+      pagerAlerts: 'G',
+    }), true);
+    assert.equal(feed.fetches, 1, 'reviewed chip must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['reviewed-tsunami']);
+    assert.equal(layer.getParams().reviewedOnly, true);
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+    assert.equal(layer.getParams().timeWindowHours, 1);
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('USGS refresh keeps Reviewed only applied to the new payload', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const first = stubUsgs(MIXED_REVIEWED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ reviewedOnly: true }), true);
+    assert.ok(entityIds(viewer._dataSources[0]).every((id) => id.startsWith('reviewed-')));
+    first.restore();
+    const second = stubUsgs({
+      features: [
+        reviewedFeature('fresh-reviewed', 3.3, 'reviewed'),
+        reviewedFeature('fresh-automatic', 4.4, 'automatic'),
+        reviewedFeature('reviewed-lo', 3.1, 'reviewed'),
+      ],
+    });
+    try {
+      assert.equal(await layer.update(viewer), true);
+      assert.equal(layer.getParams().reviewedOnly, true);
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['fresh-reviewed', 'reviewed-lo']);
+      assert.ok(!entityIds(viewer._dataSources[0]).includes('fresh-automatic'));
+    } finally {
+      second.restore();
+    }
+  } finally {
+    first.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Reviewed only chip sits next to mag/depth/time/tsunami/PAGER, persists, and hides with the layer', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('./earthquakeReviewedFilter.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-reviewed-chips"/);
+  assert.match(html, /data-earthquake-reviewed="only"/);
+  assert.match(html, /Reviewed only/);
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(ui, /earthquake-reviewed-chips|data-earthquake-reviewed/);
+  assert.match(ui, /_earthquakeReviewedChips\.hidden = !enabled/);
+  assert.match(css, /earthquake-reviewed-chip/);
+  assert.match(helper, /properties\.status/);
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+  assert.doesNotMatch(helper, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const reviewed = chips.filter((chip) => chip.id.startsWith('reviewed-'));
+    assert.deepEqual(reviewed.map((chip) => chip.label), ['Reviewed only']);
+    assert.equal(reviewed[0].active, false);
+    assert.equal(reviewed[0].params.reviewedOnly, true);
+    assert.equal(layer.setParams({ reviewedOnly: true }), true);
+    assert.equal(
+      layer.getRowControls().chips.find((chip) => chip.id === 'reviewed-only')?.active,
+      true,
+    );
+    assert.equal(layer.getRowControls().chips.find((chip) => chip.id === 'reviewed-only')?.params.reviewedOnly, false);
+    assert.equal(layer.setParams({ reviewedOnly: 'nope' }), false);
+    assert.equal(layer.getParams().reviewedOnly, true);
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(layer.getParams().pagerAlerts, 'GYORN');
   } finally {
     layer.destroy(viewer);
   }

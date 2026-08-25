@@ -295,6 +295,8 @@ test('legal: USGS credit, Meridian title, MIT notice, no banned sources', () => 
   assert.match(html, /data-earthquake-time="1"/);
   assert.match(html, /id="earthquake-tsunami-chips"/);
   assert.match(html, /data-earthquake-tsunami="only"/);
+  assert.match(html, /id="earthquake-reviewed-chips"/);
+  assert.match(html, /data-earthquake-reviewed="only"/);
   assert.match(html, /id="earthquake-pager-chips"/);
   assert.match(html, /data-earthquake-pager="green"/);
   assert.doesNotMatch(html, /quantum-earth/i);
