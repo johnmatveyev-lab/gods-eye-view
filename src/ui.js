@@ -101,6 +101,11 @@ import {
 import trafficLayer from './data/traffic.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
+import {
+  readTrackingState,
+  stopTrackingInPlace,
+  syncStopTrackingButton,
+} from './chrome/stopTracking.js';
 import { isTr3b, toggleTr3b } from './data/tr3bRegistry.js';
 import satellitesLayer from './data/satellites.js';
 import cctvLayer from './data/cctv.js';
@@ -2531,6 +2536,7 @@ export class StyleManager {
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
     this._homeViewBtn = document.getElementById('home-view');
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
+    this._stopTrackingBtn = document.getElementById('stop-tracking');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -2814,6 +2820,7 @@ export class StyleManager {
     this._initFullscreenButton();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
+    this._initStopTrackingButton();
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -2938,6 +2945,7 @@ export class StyleManager {
     );
     this._navigationOwnerChangedRemover = viewer.trackedEntityChanged.addEventListener((entity) => {
       if (entity && !this._disposed) this._stampNavigation({ cancelPendingSelection: false });
+      this._syncStopTrackingButton();
     });
     // Vessel/installation focus flies without ever assigning a tracked entity,
     // so it cannot reach the listener above. It announces instead.
@@ -4818,8 +4826,14 @@ export class StyleManager {
       });
     }
     if (!this._awarenessSelectedHandler) {
-      this._awarenessSelectedHandler = (event) => this._persistAwarenessSelection(event, false);
-      this._awarenessClearedHandler = (event) => this._persistAwarenessSelection(event, true);
+      this._awarenessSelectedHandler = (event) => {
+        this._persistAwarenessSelection(event, false);
+        this._syncStopTrackingButton();
+      };
+      this._awarenessClearedHandler = (event) => {
+        this._persistAwarenessSelection(event, true);
+        this._syncStopTrackingButton();
+      };
       window.addEventListener('gev:awareness-subject-selected', this._awarenessSelectedHandler);
       window.addEventListener('gev:awareness-subject-cleared', this._awarenessClearedHandler);
     }
@@ -10221,6 +10235,31 @@ export class StyleManager {
     flyToHomeView(this.viewer);
   }
 
+  /** Show Stop tracking only while a contact owns the follow camera. */
+  _syncStopTrackingButton() {
+    syncStopTrackingButton(this._stopTrackingBtn, readTrackingState({
+      viewer: this.viewer,
+      cockpitTrackedEntity: this.cockpitView?.trackedEntity,
+      getFlightInfo: () => flightsLayer.getTrackedInfo?.(),
+      getMilitaryInfo: () => militaryFlightsLayer.getTrackedInfo?.(),
+      getSatelliteInfo: () => satellitesLayer.getTrackedInfo?.(),
+    }));
+  }
+
+  /** Wire camera chrome that releases tracking without flying Home. */
+  _initStopTrackingButton() {
+    if (!this._stopTrackingBtn) return;
+    this._stopTrackingHandler = () => {
+      stopTrackingInPlace({
+        releaseFollow: () => this._releaseFollowCamera({ trackingOrigin: 'user' }),
+        camera: this.viewer?.camera,
+      });
+      this._syncStopTrackingButton();
+    };
+    this._stopTrackingBtn.addEventListener('click', this._stopTrackingHandler);
+    this._syncStopTrackingButton();
+  }
+
   /** Wire the persistent reset control to the same route used by voice. */
   _initResetGlobeButton() {
     this._globeResetHandler = () => { this.resetToGlobeView(); };
@@ -10886,6 +10925,10 @@ export class StyleManager {
       this._resetGlobeBtn?.removeEventListener('click', this._globeResetHandler);
       this._cockpitResetGlobeBtn?.removeEventListener('click', this._globeResetHandler);
       this._globeResetHandler = null;
+    }
+    if (this._stopTrackingBtn && this._stopTrackingHandler) {
+      this._stopTrackingBtn.removeEventListener('click', this._stopTrackingHandler);
+      this._stopTrackingHandler = null;
     }
     if (this._clearSelectedLayersBtn && this._clearSelectedLayersHandler) {
       this._clearSelectedLayersBtn.removeEventListener('click', this._clearSelectedLayersHandler);

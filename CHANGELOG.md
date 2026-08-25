@@ -20,6 +20,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Camera chrome shows **Stop tracking** while a contact is followed. The
+  control calls the existing untrack/clear-target action and leaves the camera
+  where it is. Hidden when nothing is tracked. Home still does the full
+  default pose reset. Roster click still tracks. No `/api`.
 - Added a city/provider filter on the CCTV panel list. It uses `city`,
   `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
   isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.
