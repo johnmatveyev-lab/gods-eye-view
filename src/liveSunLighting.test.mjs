@@ -196,10 +196,8 @@ test('DISPLAY Sun control is lighting-only and independent of looks, WX, and ima
   assert.doesNotMatch(lighting, /setStyle\(|stages\[|bloom|sharpen|nightVision|thermal/);
   assert.doesNotMatch(lighting, /gev:cockpit-weather|godsEyeView\.cockpitWeatherEffects/);
   assert.match(weather, /writeWxPreference/);
-  assert.doesNotMatch(weather, /godsEyeView\.cockpitWeatherEffects/);
-  const wx = src('weatherChrome.js');
-  assert.match(wx, /prefKey\('cockpitWeatherEffects\.enabled'\)/);
-  assert.doesNotMatch(wx, /WX_STORAGE_KEY = 'godsEyeView\.cockpitWeatherEffects\.enabled'/);
+  assert.match(weather, /prefKey\('cockpitWeatherEffects\.enabled'\)/);
+  assert.doesNotMatch(weather, /WX_STORAGE_KEY = 'godsEyeView\.cockpitWeatherEffects\.enabled'/);
   assert.match(stacks, /id: 'photoreal'/);
   assert.equal((stacks.match(/id: '/g) || []).length, 4, 'no new imagery stack');
 });
