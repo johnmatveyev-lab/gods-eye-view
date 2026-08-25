@@ -20,6 +20,14 @@ import {
   setOverlaySourceVisible,
 } from '../overlays/worldOverlay.js';
 import {
+  BIKESHARE_EBIKES_ONLY_CHIP_LABEL,
+  BIKESHARE_EBIKES_ONLY_CHIP_TITLE,
+  DEFAULT_BIKESHARE_EBIKES_ONLY,
+  ebikesAvailableFromGbfsStation,
+  normalizeBikeshareEbikesOnly,
+  stationMatchesBikeshareEbikesOnly,
+} from './bikeshareEbikeFilter.js';
+import {
   BIKESHARE_MIN_AVAILABLE_FLOORS,
   DEFAULT_BIKESHARE_MIN_AVAILABLE,
   normalizeBikeshareMinAvailable,
@@ -40,12 +48,14 @@ import {
   normalizeBikeshareHideEmpty,
   normalizeBikeshareHideFull,
   normalizeBikeshareSystemId,
+  readPersistedBikeshareEbikesOnly,
   readPersistedBikeshareHideClosed,
   readPersistedBikeshareHideEmpty,
   readPersistedBikeshareHideFull,
   readPersistedBikeshareMinAvailable,
   readPersistedBikeshareMinDocks,
   readPersistedBikeshareSystem,
+  writePersistedBikeshareEbikesOnly,
   writePersistedBikeshareHideClosed,
   writePersistedBikeshareHideEmpty,
   writePersistedBikeshareHideFull,
@@ -581,6 +591,8 @@ let _hideClosed = false;
 let _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
 /** Min-open-docks floor chip. Default All — no numeric floor. */
 let _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
+/** Hide stations whose last-good ebikesAvailable is exactly 0. Default OFF. */
+let _ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY;
 /** Optional storage override for picker persistence tests. */
 let _storageOverride = null;
 /** Manager callback when picker state changes. */
@@ -629,11 +641,11 @@ function isClosedBikeshareStation(record) {
 
 /**
  * Whether a station should stay on the globe under Hide empty / Hide full /
- * Hide closed / min-available / min-docks. Unknown / non-finite counts stay
- * visible for empty, full, the bike floor, and the dock floor. Unknown
- * operational flags stay visible for Hide closed. A selected station stays
- * visible even after it goes empty, full, closed, or below a floor, until
- * deselected. The filters AND independently.
+ * Hide closed / min-available / min-docks / E-bikes only. Unknown / non-finite
+ * counts stay visible for empty, full, the bike floor, the dock floor, and
+ * e-bikes. Unknown operational flags stay visible for Hide closed. A selected
+ * station stays visible even after it goes empty, full, closed, below a
+ * floor, or to zero e-bikes, until deselected. The filters AND independently.
  * @param {Object|null|undefined} record
  * @param {{
  *   hideEmpty?: boolean,
@@ -641,6 +653,7 @@ function isClosedBikeshareStation(record) {
  *   hideClosed?: boolean,
  *   minAvailable?: string|number|null,
  *   minDocks?: string|number|null,
+ *   ebikesOnly?: boolean,
  *   selectedKey?: string|null,
  * }} [options]
  * @returns {boolean}
@@ -651,6 +664,7 @@ export function shouldShowBikeshareStation(record, {
   hideClosed = false,
   minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE,
   minDocks = DEFAULT_BIKESHARE_MIN_DOCKS,
+  ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY,
   selectedKey = null,
 } = {}) {
   if (record?.key && record.key === selectedKey) return true;
@@ -667,6 +681,9 @@ export function shouldShowBikeshareStation(record, {
     return false;
   }
   if (!stationMatchesBikeshareMinDocks(record, minDocks)) {
+    return false;
+  }
+  if (!stationMatchesBikeshareEbikesOnly(record, ebikesOnly)) {
     return false;
   }
   return true;
@@ -690,6 +707,7 @@ function applyStationVisibility(record) {
     hideClosed: _hideClosed,
     minAvailable: _minAvailable,
     minDocks: _minDocks,
+    ebikesOnly: _ebikesOnly,
     selectedKey: _selectedKey,
   });
   if (isSelected) {
@@ -752,6 +770,16 @@ function setMinDocks(nextValue) {
   if (next == null || next === _minDocks) return false;
   _minDocks = next;
   writePersistedBikeshareMinDocks(next, safeBikeshareStorage());
+  applyAllStationVisibility();
+  notifyRowControlsChanged();
+  return true;
+}
+
+function setEbikesOnly(nextValue) {
+  const next = nextValue === true;
+  if (next === _ebikesOnly) return false;
+  _ebikesOnly = next;
+  writePersistedBikeshareEbikesOnly(next, safeBikeshareStorage());
   applyAllStationVisibility();
   notifyRowControlsChanged();
   return true;
@@ -1074,7 +1102,7 @@ function parseStationInformation(payload) {
  * Parse a GBFS station_status payload into a Map of real-time availability.
  * @param {Object} payload - Parsed station_status.json response.
  * @returns {Map<string, Object>} Map of stationId to status objects containing
- *   bikesAvailable, docksAvailable, and operational flags.
+ *   bikesAvailable, docksAvailable, ebikesAvailable, and operational flags.
  */
 function parseStationStatus(payload) {
   const stations = extractStationsArray(payload);
@@ -1090,6 +1118,7 @@ function parseStationStatus(payload) {
       stationId,
       bikesAvailable: bikes,
       docksAvailable: docks,
+      ebikesAvailable: ebikesAvailableFromGbfsStation(raw),
       isInstalled: normalizeGbfsBool(raw?.is_installed, true),
       isRenting: normalizeGbfsBool(raw?.is_renting, true),
       isReturning: normalizeGbfsBool(raw?.is_returning, true),
@@ -1533,6 +1562,7 @@ function ensureCityPoints(cityId, stationMap) {
       capacity: toNonNegativeInteger(station.capacity),
       bikesAvailable: null,
       docksAvailable: null,
+      ebikesAvailable: null,
       isInstalled: station.isInstalled,
       isRenting: station.isRenting,
       isReturning: station.isReturning,
@@ -1591,6 +1621,7 @@ function applyStatusToPoints(cityId, statusMap) {
 
     record.bikesAvailable = toNonNegativeInteger(status?.bikesAvailable);
     record.docksAvailable = toNonNegativeInteger(status?.docksAvailable);
+    record.ebikesAvailable = toNonNegativeInteger(status?.ebikesAvailable);
     record.isInstalled = normalizeGbfsBool(status?.isInstalled, true);
     record.isRenting = normalizeGbfsBool(status?.isRenting, true);
     record.isReturning = normalizeGbfsBool(status?.isReturning, true);
@@ -1847,6 +1878,7 @@ const bikeshareLayer = {
       || DEFAULT_BIKESHARE_MIN_AVAILABLE;
     _minDocks = readPersistedBikeshareMinDocks(safeBikeshareStorage())
       || DEFAULT_BIKESHARE_MIN_DOCKS;
+    _ebikesOnly = readPersistedBikeshareEbikesOnly(safeBikeshareStorage()) === true;
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -1979,9 +2011,9 @@ const bikeshareLayer = {
   },
 
   /**
-   * Picker of allowlisted systems plus Hide empty / Hide full / Hide closed
-   * and All | 3+ | 5+ bike / dock chips. The picker stays Plan 68: it still
-   * switches allowlisted systems. The chips are draw filters on
+   * Picker of allowlisted systems plus Hide empty / Hide full / Hide closed /
+   * E-bikes only and All | 3+ | 5+ bike / dock chips. The picker stays Plan
+   * 68: it still switches allowlisted systems. The chips are draw filters on
    * already-fetched status, not a new feed. Manager hides this row while
    * the bike layer is off.
    * @returns {{ picker: object, chips: Array<object> }}
@@ -2023,6 +2055,14 @@ const bikeshareLayer = {
           ? 'Hiding stations that are not installed, renting, or returning — click to show them'
           : 'Hide stations that are not installed, renting, or returning',
         params: { hideClosed: !_hideClosed },
+      }, {
+        id: 'ebikes-only',
+        label: BIKESHARE_EBIKES_ONLY_CHIP_LABEL,
+        active: _ebikesOnly,
+        title: _ebikesOnly
+          ? 'Showing e-bike docks only — click to show pedal-only stations too'
+          : BIKESHARE_EBIKES_ONLY_CHIP_TITLE,
+        params: { ebikesOnly: !_ebikesOnly },
       }, ...BIKESHARE_MIN_AVAILABLE_FLOORS.map((floor) => ({
         id: `min-available-${floor.id}`,
         label: floor.label,
@@ -2048,13 +2088,14 @@ const bikeshareLayer = {
       hideClosed: _hideClosed,
       minAvailable: _minAvailable,
       minDocks: _minDocks,
+      ebikesOnly: _ebikesOnly,
     };
   },
 
   /**
-   * Apply Hide empty / Hide full / Hide closed / min-available / min-docks
-   * without refetching GBFS. System switching stays on setSelectedSystem
-   * (Plan 68) and is not accepted here.
+   * Apply Hide empty / Hide full / Hide closed / min-available / min-docks /
+   * E-bikes only without refetching GBFS. System switching stays on
+   * setSelectedSystem (Plan 68) and is not accepted here.
    * @param {Object} [params]
    * @returns {boolean}
    */
@@ -2079,6 +2120,10 @@ const bikeshareLayer = {
     if (Object.hasOwn(params, 'minDocks')) {
       const next = normalizeBikeshareMinDocks(params.minDocks);
       if (next !== null) setMinDocks(next);
+    }
+    if (Object.hasOwn(params, 'ebikesOnly')) {
+      const next = normalizeBikeshareEbikesOnly(params.ebikesOnly);
+      if (next !== null) setEbikesOnly(next);
     }
     return true;
   },
@@ -2186,6 +2231,7 @@ export function _resetBikeshareSystemPickerForTest() {
   _hideClosed = false;
   _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
   _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
+  _ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY;
   _unavailable = false;
   _error = null;
   _enabled = false;
