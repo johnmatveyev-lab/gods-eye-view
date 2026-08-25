@@ -27,6 +27,14 @@ import { contactPassesInFlightFilters, normalizeSpeedBand } from './flightSpeedB
 import * as inFlightFilters from './inFlightFilters.js';
 import { passesAirborneOnlyFilter } from './flightOperatorFilters.js';
 import {
+  getIdentifiedOnlyEnabled,
+  hydrateIdentifiedOnlyEnabled,
+  passesIdentifiedOnlyFilter,
+  resetIdentifiedOnlyForTest,
+  setIdentifiedOnlyEnabled,
+  subscribeIdentifiedOnlyEnabled,
+} from './flightIdentifiedFilter.js';
+import {
   screenProjectedRotation,
   stabilizeScreenRotation,
   horizonOccluder,
@@ -283,6 +291,15 @@ function _airborneOnlyMatcher(contact) {
   return passesAirborneOnlyFilter({
     onGround: contact?.onGround === true,
     airborneOnly: _airborneOnly,
+  });
+}
+
+/** PLAN 188 — same contact shape as civil; no military-only chip. */
+function _identifiedOnlyMatcher(contact) {
+  return passesIdentifiedOnlyFilter({
+    callsign: contact?.callsign,
+    registration: contact?.registration,
+    identifiedOnly: getIdentifiedOnlyEnabled(),
   });
 }
 
@@ -1059,6 +1076,7 @@ export function _setTrackedMilitaryRefreshStateForTest({
   _backoff = false;
   _retryAt = 0;
   _airborneOnly = false;
+  resetIdentifiedOnlyForTest();
   _speedMinKt = null;
   _speedMaxKt = null;
   _showClimb = true;
@@ -1102,6 +1120,8 @@ function _applyInFlightFilterVisibility() {
 onHeadingSectorsChange(_applyInFlightFilterVisibility);
 hydrateAltitudeBand();
 subscribeAltitudeBand(_applyInFlightFilterVisibility);
+hydrateIdentifiedOnlyEnabled();
+subscribeIdentifiedOnlyEnabled(_applyInFlightFilterVisibility);
 
 /** Apply the live operator visibility gate (airborne-only + sibling AND). */
 export function _applyOperatorContactVisibilityForTest() {
@@ -2937,7 +2957,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _identifiedOnlyMatcher],
   });
 }
 
@@ -2947,7 +2967,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _identifiedOnlyMatcher],
   });
 }
 
@@ -3693,7 +3713,7 @@ const militaryFlightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in aircraft
    * stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedMilitaryTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, identifiedOnly?: boolean, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedMilitaryTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -3754,6 +3774,10 @@ const militaryFlightsLayer = {
       _airborneOnly = params.airborneOnly;
       _applyOperatorContactVisibility();
     }
+    if (typeof params.identifiedOnly === 'boolean' && params.identifiedOnly !== getIdentifiedOnlyEnabled()) {
+      setIdentifiedOnlyEnabled(params.identifiedOnly);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedMilitaryTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedMilitaryTrackingId);
       if (requested === _trackedIcao) {
@@ -3783,6 +3807,7 @@ const militaryFlightsLayer = {
       models3d: _models3dEnabled,
       models3dMode: _models3dMode,
       airborneOnly: _airborneOnly,
+      identifiedOnly: getIdentifiedOnlyEnabled(),
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),

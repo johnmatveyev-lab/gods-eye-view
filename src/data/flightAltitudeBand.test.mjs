@@ -188,7 +188,7 @@ test('DISPLAY chrome and flights layer stay client-side on the current payload',
   assert.match(flightsSource, /hydrateAltitudeBand|getAltitudeBand|subscribeAltitudeBand/);
   assert.match(militarySource, /aircraftMatchesAltitudeBand/);
   assert.match(militarySource, /subscribeAltitudeBand/);
-  const militaryAndMatchers = militarySource.match(/andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher\]/g);
+  const militaryAndMatchers = militarySource.match(/andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _identifiedOnlyMatcher\]/g);
   assert.equal(militaryAndMatchers?.length, 2, 'both military andMatchers arrays include _altitudeAndMatcher');
   assert.doesNotMatch(uiSource.slice(uiSource.indexOf('_initAltitudeBand'), uiSource.indexOf('_initAltitudeBand') + 800), /fetch\(|\/api\//);
   assert.doesNotMatch(flightsSource, /opensky-network\.org|google\.com\/news|telegeography/i);

@@ -41,6 +41,7 @@ const DEFAULT_FLIGHT_FILTER_OPTIONS = {
   hideStale: false,
   airborneOnly: false,
   emergenciesOnly: false,
+  identifiedOnly: false,
   speedMinKt: null,
   speedMaxKt: null,
   aircraftClassFilter: 'all',
@@ -909,6 +910,7 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
   assert.equal(defaults.models3dMode, 'proximity', 'and proximity, never all');
   assert.equal(defaults.airborneOnly, false, 'Airborne only stays off so current draw remains');
   assert.equal(defaults.emergenciesOnly, false, 'Emergencies only stays off so current draw remains');
+  assert.equal(defaults.identifiedOnly, false, 'Identified only stays off so current draw remains');
   assert.equal(defaults.showClimb, true, 'rate filter defaults all-on');
   assert.equal(defaults.showLevel, true);
   assert.equal(defaults.showDescent, true);

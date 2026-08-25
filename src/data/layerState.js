@@ -300,6 +300,10 @@ const OPTION_GROUPS = Object.freeze({
     // PLAN 166: hide non-emergency civil contacts. Default OFF so current draw
     // stays. Token `q` is unused; `e` is models3d, `a` is airborne-only.
     booleanOption('emergenciesOnly', 'q', false),
+    // PLAN 188: hide hex-only contacts. Default OFF so current draw stays.
+    // Token `i` is unused; `q` is emergencies-only. Also persisted as
+    // meridian.flightsIdentifiedOnly.
+    booleanOption('identifiedOnly', 'i', false),
     trackingIdOption('selectedFlightsTrackingId', 't', null),
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
     nullableIntegerOption('speedMinKt', 's', null),
