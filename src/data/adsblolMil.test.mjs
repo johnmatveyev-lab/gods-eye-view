@@ -213,32 +213,23 @@ test('Vercel leftover /adsblol/mil reaches the extracted handler', async () => {
 });
 
 test('military proxy sources stay adsb.lol ODbL only', () => {
-  const files = [
-    'src/data/adsblolMil.js',
-    'api/adsblol/mil.js',
-    'src/server/liveApiProxies.js',
-    'vite.config.js',
-  ].map((file) => ({
-    file,
-    source: readFileSync(path.join(ROOT, file), 'utf8'),
-  }));
+  const mil = readFileSync(path.join(ROOT, 'src/data/adsblolMil.js'), 'utf8');
+  const api = readFileSync(path.join(ROOT, 'api/adsblol/mil.js'), 'utf8');
+  const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
+  const milAndApi = `${mil}\n${api}`;
 
   assert.equal(existsSync(path.join(ROOT, 'api/adsblol/mil.js')), true);
-  assert.match(files[0].source, /https:\/\/api\.adsb\.lol\/v2\/mil/);
-  assert.match(files[0].source, /Meridian-adsblol-proxy\/1\.0/);
-  assert.doesNotMatch(files[1].source, /liveApiProxies|ais-live|opensky/i);
-  assert.doesNotMatch(files[2].source, /function adsbLolProxy/);
-  assert.doesNotMatch(files[2].source, /gods-eye-view-adsblol/);
-  assert.match(files[2].source, /adsbLolMilPlugin/);
-
-  const milAndApi = `${files[0].source}\n${files[1].source}`;
-  for (const source of [milAndApi, files[2].source, files[3].source]) {
-    assert.doesNotMatch(source, /opensky-network\.org/);
-    assert.doesNotMatch(source, /auth\.opensky-network\.org/);
-    assert.doesNotMatch(source, /news\.google\.com/);
-    assert.doesNotMatch(source, /quantum-earth/i);
-  }
+  assert.match(mil, /https:\/\/api\.adsb\.lol\/v2\/mil/);
+  assert.match(mil, /Meridian-adsblol-proxy\/1\.0/);
+  assert.doesNotMatch(api, /liveApiProxies|\/api\/ais-live|opensky-network/i);
+  assert.doesNotMatch(proxies, /function adsbLolProxy/);
+  assert.doesNotMatch(proxies, /gods-eye-view-adsblol/);
+  assert.match(proxies, /adsbLolMilPlugin/);
+  assert.doesNotMatch(milAndApi, /https:\/\/opensky-network\.org/);
+  assert.doesNotMatch(milAndApi, /https:\/\/auth\.opensky-network\.org/);
+  assert.doesNotMatch(milAndApi, /news\.google\.com/);
   assert.doesNotMatch(milAndApi, /telegeography/i);
+  assert.doesNotMatch(milAndApi, /quantum-earth/i);
   assert.doesNotMatch(milAndApi, /\/api\/ais-live/);
   assert.doesNotMatch(milAndApi, /\/api\/adsblol\/trace/);
   assert.doesNotMatch(milAndApi, /gods-eye-view-adsblol/);

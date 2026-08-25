@@ -6,5 +6,5 @@ export const config = {
   },
 };
 
-/** Dedicated Vercel route — not the live catch-all, not AIS, not OpenSky. */
+/** Dedicated Vercel route for the adsb.lol military feed only. */
 export default createAdsbLolMilApiHandler();
