@@ -16,6 +16,8 @@ import {
   passesInFlightFilters,
   resetHideStaleEnabledForTest,
   setHideStaleEnabled,
+  setHeadingSectors,
+  _resetHeadingSectorsForTest,
 } from './inFlightFilters.js';
 import { resetAltitudeBandForTest, setAltitudeBand } from './flightAltitudeBand.js';
 import flightsLayer, {
@@ -71,6 +73,7 @@ function seedCommercial({ trackedIcao = null, contacts }) {
       klass: 'airliner',
       onGround: false,
       velocity: first.velocity ?? 128.6,
+      true_track: first.true_track ?? 90,
     },
   });
   for (const contact of contacts.slice(1)) {
@@ -82,6 +85,7 @@ function seedCommercial({ trackedIcao = null, contacts }) {
         klass: 'airliner',
         onGround: false,
         velocity: contact.velocity ?? 128.6,
+        true_track: contact.true_track ?? 90,
       },
       billboard: contact.billboard,
     });
@@ -139,7 +143,12 @@ function detectedIds(layer) {
 afterEach(() => {
   resetHideStaleEnabledForTest();
   resetAltitudeBandForTest();
-  flightsLayer.setParams({ speedMinKt: null, speedMaxKt: null });
+  _resetHeadingSectorsForTest();
+  flightsLayer.setParams({
+    speedMinKt: null,
+    speedMaxKt: null,
+    headingSectors: 'NESW',
+  });
   militaryFlightsLayer.setParams({ speedMinKt: null, speedMaxKt: null });
 });
 
@@ -326,6 +335,26 @@ test('Hide stale ANDs with the landed ground-speed band (PLAN 96)', () => {
   flightsLayer.setParams({ speedMinKt: 400, speedMaxKt: null });
   assert.equal(cruiseLive.show, false, 'speed band still hides slower live contacts');
   assert.equal(cruiseStale.show, false, 'stale ghost stays hidden under AND');
+});
+
+test('Hide stale ANDs with landed heading sectors (PLAN 101)', () => {
+  resetHideStaleEnabledForTest();
+  const eastLive = billboard();
+  const eastStale = billboard();
+  seedCommercial({
+    contacts: [
+      { icao24: 'east01', billboard: eastLive, callsign: 'EAST01', true_track: 90 },
+      { icao24: 'east02', billboard: eastStale, callsign: 'EAST02', true_track: 90 },
+    ],
+  });
+  _setFlightFeedHealthForTest({ missingPolls: new Map([['east02', 1]]) });
+  flightsLayer.setParams({ hideStale: true });
+  assert.equal(eastLive.show, true, 'eastbound live contact remains');
+  assert.equal(eastStale.show, false, 'eastbound stale ghost is still hidden');
+  setHeadingSectors('W');
+  flightsLayer.setParams({ headingSectors: 'W' });
+  assert.equal(eastLive.show, false, 'heading sector still hides eastbound live contacts');
+  assert.equal(eastStale.show, false, 'stale ghost stays hidden under AND');
 });
 
 test('Hide stale persists on existing flight layer options and paints as a chip', () => {
