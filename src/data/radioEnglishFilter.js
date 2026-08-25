@@ -39,7 +39,10 @@ export function isEnglishRadioStation(station) {
   const languages = Array.isArray(station?.languages) ? station.languages : [];
   return languages.some((language) => {
     const normalized = normalizeRadioLanguage(language);
-    return normalized === 'en' || normalized === 'eng' || normalized.startsWith('english');
+    return normalized === 'en'
+      || normalized === 'eng'
+      || normalized.startsWith('english')
+      || normalized.endsWith(' english');
   });
 }
 
