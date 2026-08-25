@@ -1121,6 +1121,11 @@ body.recording-mode #cesium-credits {
   display: flex;
 }
 
+.pp-toggle-group > .pp-slider-row.visible:first-child:last-child {
+  border-top: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+
 .pp-toggle-group .pp-toggle-btn {
   transition: all var(--transition-fast), border-radius var(--transition-fast);
 }
@@ -2075,6 +2080,53 @@ body.ui-clean-view #scene-runtime.active {
   letter-spacing: 0.02em;
   line-height: 18px;
   text-align: center;
+}
+
+/* Camera-center lat,lon readout. Coordinates only — no height, so no units toggle. */
+#camera-coords {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#top-center-actions #camera-coords-value,
+#top-center-actions #camera-coords-copy {
+  width: auto;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transform: none;
+}
+#top-center-actions #camera-coords-value {
+  padding: 0 4px;
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+#top-center-actions #camera-coords-copy {
+  width: 28px;
+  flex: 0 0 28px;
+  color: var(--text-secondary);
+}
+#top-center-actions #camera-coords-value:hover,
+#top-center-actions #camera-coords-value:focus-visible,
+#top-center-actions #camera-coords-copy:hover,
+#top-center-actions #camera-coords-copy:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  transform: none;
+  color: var(--text-primary, #e8f0f4);
+}
+#top-center-actions #camera-coords-copy .material-symbols-outlined {
+  font-size: 16px;
 }
 
 #global-loading-status {
@@ -4449,7 +4501,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
-.clock-mode-toggle {
+.clock-mode-toggle,
+.wx-mode-toggle {
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
@@ -4460,7 +4513,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   pointer-events: auto;
 }
 
-.clock-mode-toggle button {
+.clock-mode-toggle button,
+.wx-mode-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -4474,12 +4528,14 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.55;
 }
 
-.clock-mode-toggle button[aria-pressed="true"] {
+.clock-mode-toggle button[aria-pressed="true"],
+.wx-mode-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
 
-.cockpit-clock-row .clock-mode-toggle {
+.cockpit-clock-row .clock-mode-toggle,
+.cockpit-clock-row .wx-mode-toggle {
   margin-left: 0;
 }
 

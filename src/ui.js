@@ -41,6 +41,14 @@ import {
   readStoredHudVariant,
   writeStoredHudVariant,
 } from './hudCycle.js';
+import {
+  WX_STATE_EVENT,
+  WX_TOGGLE_EVENT,
+  bindWxToggle,
+  getWxEnabled,
+  syncWxToggleButtons,
+  weatherChromePresentation,
+} from './weatherChrome.js';
 import { ShareLinkManager } from './sharelink.js';
 import {
   cycleSensorLook,
@@ -60,6 +68,11 @@ import {
   subscribeReduceMotion,
 } from './reduceMotion.js';
 import {
+  bindInvertScrollToggle,
+  getInvertScroll,
+  installWheelZoomSign,
+} from './invertScroll.js';
+import {
   CelestialRing,
   getKeyholeFadeTuning,
   isCelestialRingStyleSupported,
@@ -71,6 +84,7 @@ import {
   hydrateTrailsEnabled,
   setTrailsEnabled,
 } from './data/trailPreference.js';
+import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -212,6 +226,11 @@ import {
   setDistanceUnit,
   subscribeDistanceUnit,
 } from './units.js';
+import {
+  getPowerMode as readViewerPowerMode,
+  installPowerMode,
+  setPowerMode as writeViewerPowerMode,
+} from './powerMode.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -926,6 +945,15 @@ class CockpitViewController {
       syncClockToggleButtons(this.clockToggle, getClockMode());
     });
     this._paintChromeClock();
+    this._unbindWxToggle = bindWxToggle(this.hud, { stateEl: this.weatherState });
+    this._listenerRemovers.push(() => this._unbindWxToggle?.());
+    this._listen(window, WX_TOGGLE_EVENT, (event) => {
+      this.syncWeatherToggle(event?.detail?.enabled === true);
+    });
+    this._listen(window, WX_STATE_EVENT, (event) => {
+      this.syncWeatherToggle(event?.detail?.enabled === true);
+    });
+    this.syncWeatherToggle(getWxEnabled());
     this._listen(this.entry, 'click', () => {
       this.onEnterRequest();
     });
@@ -937,16 +965,6 @@ class CockpitViewController {
     this._listen(this.contextPrevious, 'click', () => this.navigateContext(-1, { origin: 'user' }));
     this._listen(this.contextNext, 'click', () => this.navigateContext(1, { origin: 'user' }));
     this._listen(this.contextToggle, 'click', () => this.setContextCollapsed(!this.contextCollapsed));
-    this._listen(this.weatherToggle, 'click', () => {
-      const enabled = this.weatherToggle.getAttribute('aria-pressed') !== 'true';
-      this.syncWeatherToggle(enabled);
-      window.dispatchEvent(new CustomEvent('gev:cockpit-weather-toggle', {
-        detail: { enabled },
-      }));
-    });
-    this._listen(window, 'gev:cockpit-weather-state', (event) => {
-      this.syncWeatherToggle(event?.detail?.enabled !== false);
-    });
     this._listen(this.signalToggle, 'click', () => this.setSignalCollapsed(
       !this.signalCollapsed,
       { user: true },
@@ -988,15 +1006,14 @@ class CockpitViewController {
   }
 
   syncWeatherToggle(enabled) {
-    if (!this.weatherToggle) return;
     const active = !!enabled;
-    this.weatherToggle.setAttribute('aria-pressed', String(active));
-    this.weatherToggle.setAttribute(
-      'aria-label',
-      `${active ? 'Disable' : 'Enable'} cockpit weather effects`,
-    );
-    this.weatherToggle.title = `${active ? 'Disable' : 'Enable'} cockpit weather effects`;
-    if (this.weatherState) this.weatherState.textContent = active ? 'ON' : 'OFF';
+    syncWxToggleButtons(this.hud, active, this.weatherState);
+    if (!this.weatherToggle) return;
+    const presentation = weatherChromePresentation(active);
+    this.weatherToggle.setAttribute('aria-pressed', presentation.pressed);
+    this.weatherToggle.setAttribute('aria-label', presentation.ariaLabel);
+    this.weatherToggle.title = presentation.title;
+    if (this.weatherState) this.weatherState.textContent = presentation.stateText;
   }
 
   readAircraftInfo() {
@@ -2408,6 +2425,11 @@ export class StyleManager {
       militaryAwarenessLayer.refreshDistanceLabels?.();
       this.cockpitView?.refreshDistanceUnits?.();
     });
+    this._powerBtns = [
+      document.getElementById('power-normal'),
+      document.getElementById('power-low'),
+    ].filter(Boolean);
+    this._syncPowerModeUi(installPowerMode(this.viewer));
     this._detectionSliderRow = document.getElementById('detection-slider-row');
     this._detectionDensitySlider = document.getElementById('detection-density-slider');
     this._detectionDensityValue = document.getElementById('detection-density-value');
@@ -2439,6 +2461,13 @@ export class StyleManager {
     this._reduceMotionBtn = document.getElementById('reduce-motion-toggle');
     this._reduceMotionUnsubscribe = subscribeReduceMotion(() => this._syncReduceMotionButton());
     this._syncReduceMotionButton();
+    this._invertScrollBtn = document.getElementById('invert-scroll-toggle');
+    this._removeInvertScrollZoom = installWheelZoomSign(
+      this.viewer?.scene?.screenSpaceCameraController,
+      () => getInvertScroll(),
+      Cesium.CameraEventType.WHEEL,
+    );
+    this._unbindInvertScroll = bindInvertScrollToggle(this._invertScrollBtn);
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
     this._scenePanel = document.getElementById('scene-panel');
@@ -2814,6 +2843,10 @@ export class StyleManager {
       showToast: (text) => this._showToast(text),
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
+    });
+    initCameraCoords({
+      viewer,
+      showToast: (text) => this._showToast(text),
     });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
@@ -3707,6 +3740,12 @@ export class StyleManager {
       });
     }
 
+    for (const button of this._powerBtns) {
+      button.addEventListener('click', () => {
+        this.setPowerMode(button.dataset.power);
+      });
+    }
+
     for (const slider of [this._detectionFadeSlider, this._detectionOpacitySlider]) {
       slider?.addEventListener('input', () => {
         this.shareLinkManager?.claimRestoreLane?.('visual');
@@ -3872,6 +3911,14 @@ export class StyleManager {
       outsideOpacity: outsideOpacityPct / 100,
     });
     this.viewer.scene.requestRender?.();
+  }
+
+  _syncPowerModeUi(mode = readViewerPowerMode(this.viewer)) {
+    for (const button of this._powerBtns || []) {
+      const active = button.dataset.power === mode;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+    }
   }
 
   _syncUnitsUi() {
@@ -8713,6 +8760,22 @@ export class StyleManager {
   }
 
   /**
+   * Caps Cesium `targetFrameRate` only. Low = 30; Normal restores 60.
+   * @param {'normal'|'low'|string} mode
+   * @returns {{ok: boolean, power: 'normal'|'low', targetFrameRate: number}}
+   */
+  setPowerMode(mode) {
+    const power = writeViewerPowerMode(this.viewer, mode);
+    this._syncPowerModeUi(power);
+    return { ok: true, power, targetFrameRate: this.viewer.targetFrameRate };
+  }
+
+  /** @returns {'normal'|'low'} */
+  getPowerMode() {
+    return readViewerPowerMode(this.viewer);
+  }
+
+  /**
    * Reads global context mode state for voice/state-sync consumers.
    * @returns {{mode: 'flights'|'space-missions'|null, active: boolean, changing: boolean, entering: 'flights'|'space-missions'|null, snapshotCaptured: boolean}}
    */
@@ -9134,6 +9197,7 @@ export class StyleManager {
       },
       orbiting: !!this.orbitController?.active,
       reduceMotion: isReduceMotionEnabled(),
+      power: readViewerPowerMode(this.viewer),
       recording: !!this._recordingMode,
       cleanView: document.body.classList.contains('ui-clean-view'),
     };
@@ -11072,6 +11136,10 @@ export class StyleManager {
     this._stopLoadingFeedbackTicker();
     this._reduceMotionUnsubscribe?.();
     this._reduceMotionUnsubscribe = null;
+    this._unbindInvertScroll?.();
+    this._unbindInvertScroll = null;
+    this._removeInvertScrollZoom?.();
+    this._removeInvertScrollZoom = null;
     if (this._globalKeydownHandler) {
       document.removeEventListener('keydown', this._globalKeydownHandler);
       this._globalKeydownHandler = null;
@@ -11150,6 +11218,7 @@ export class StyleManager {
       this._radioSelectedHandler = null;
     }
     destroySelectedContactIdent();
+    destroyCameraCoords();
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();

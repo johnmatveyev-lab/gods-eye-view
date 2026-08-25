@@ -20,6 +20,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
+  Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
+  The choice persists as `meridian.power`. Data polls, the idle render
+  governor, and required credits are unchanged. Clean view still keeps
+  Google Maps and Data attribution on screen.
+- Added a camera-center lat,lon copy control next to Copy view link. It shows
+  the pose already computed from `positionCartographic` (same source as the
+  share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept
+  as the secondary GIS order. Height is not shown, so the units toggle is
+  unused. No /api and no place names.
+- Hosted WX OFF | ON chrome sits next to the HUD and cockpit clocks and
+  toggles the existing cockpit weather-effects render flag
+  (`godsEyeView.cockpitWeatherEffects.enabled`). Off removes globe FX;
+  Local Info still fetches Open-Meteo and shows the credit when weather
+  values are on screen. Hidden-tab and offline pauses still apply. No new
+  weather vendor or `/api`.
 - Added a bike-share system picker for the existing allowlisted GBFS city list.
   Switching a system uses the current `/api/gbfs` URL builder only, persists
   the last system locally, and does not add hosts or open the proxy.

@@ -91,6 +91,12 @@
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
+    <div id="camera-coords">
+      <button type="button" id="camera-coords-value" class="camera-coords-value" aria-label="Copy camera coordinates" title="Copy lat,lon">—, —</button>
+      <button type="button" id="camera-coords-copy" class="camera-coords-copy" aria-label="Copy lat,lon" title="Copy lat,lon">
+        <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+      </button>
+    </div>
     <button id="fullscreen-view" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
       <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
     </button>
@@ -234,6 +240,10 @@
           <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
           <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
         </span>
+        <span class="wx-mode-toggle" role="group" aria-label="Weather effects">
+          <button type="button" data-wx-mode="off" aria-pressed="true">WX OFF</button>
+          <button type="button" data-wx-mode="on" aria-pressed="false">WX ON</button>
+        </span>
       </span>
       <span id="cockpit-position">--° · --°</span>
     </div>
@@ -277,6 +287,7 @@
           id="cockpit-weather-toggle"
           class="cockpit-context-weather"
           type="button"
+          data-wx-toggle
           aria-label="Enable cockpit weather effects"
           aria-pressed="false"
           title="Enable cockpit weather effects"
@@ -557,6 +568,24 @@
         <span class="pp-icon" aria-hidden="true">&#x23F8;</span>
         <span class="pp-label">Still</span>
       </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="invert-scroll-toggle" type="button" title="Invert scroll zoom" aria-pressed="false" aria-label="Invert scroll zoom">
+        <span class="pp-icon" aria-hidden="true">&#x2195;</span>
+        <span class="pp-label">Invert scroll</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <!-- Render pacing only. Low writes Cesium targetFrameRate = 30;
+           Normal restores the current 60 default. Persist meridian.power.
+           Still (reduce-motion) is decoration; this is the frame budget. -->
+      <div class="pp-slider-row visible" id="power-row">
+        <span class="pp-slider-mini-label">Power</span>
+        <div class="pp-mode-seg" role="radiogroup" aria-label="Power">
+          <button class="pp-mode-btn active" id="power-normal" data-power="normal" role="radio" aria-checked="true">Normal</button>
+          <button class="pp-mode-btn" id="power-low" data-power="low" role="radio" aria-checked="false">Low</button>
+        </div>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="bloom-toggle" title="Bloom / Glow">
