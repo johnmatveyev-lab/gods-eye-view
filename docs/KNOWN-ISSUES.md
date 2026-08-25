@@ -1,6 +1,6 @@
 # KNOWN ISSUES
 
-Updated: July 8, 2026
+Updated: August 25, 2026
 
 This file tracks active runtime issues only.
 
@@ -22,10 +22,10 @@ Context:
 Current mitigation in runtime:
 - Fair per-road dot budget allocation (reduces hard starvation under global `MAX_DOTS` cap).
 - Center-shift threshold (reduces stale overlap lock while panning).
+- Viewport-first paint: in-view road segments consume `MAX_DOTS` and spawn before off-center extras (`src/data/trafficViewport.js`).
+- After jump-to-city (or first arrival from high altitude), one neighbor ring of nearby tiles is prefetched into the existing client tile cache so a fast pan does not need a second zoom.
 
 Next iteration candidates:
-- Prioritize currently visible road segments inside the active viewport before off-center segments.
-- Add neighbor prefetch ring for nearby tiles after jump-to-city actions.
 - Add adaptive dot cap by frame time (coverage first, density second).
 - Promote sync chip from loading indicator to true multi-phase progress.
 

@@ -1,5 +1,14 @@
 import * as Cesium from 'cesium';
 import { deriveFetchCenter, clampBoundsAroundCenter } from './trafficBounds.js';
+import {
+  assignFairDotBudgets,
+  assignViewportFirstBudgets,
+  boundsCacheKey,
+  neighborRingBounds,
+  orderRoadsViewportFirst,
+  roadIntersectsViewport,
+  shouldPrefetchNeighborRing,
+} from './trafficViewport.js';
 import { fetchFlowForBounds, getFlowSessionStats, resetFlowTileCache } from './flowTiles.js';
 import { matchFlowToRoads } from './flowMatch.js';
 import { flowBucket, flowSpeedScale, flowDensityMult } from './trafficFlowStyle.js';
@@ -35,7 +44,8 @@ import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor
  *  - Fetch bounds center on the camera's look-at point (`trafficBounds.js`, C4).
  *  - Roads are fetched in two passes: major-only (fast) then full graph (detailed).
  *  - Fetched tiles are cached by clamped bounding-box key to avoid re-fetching.
- *  - Dot budget allocation distributes a hard cap fairly across visible roads.
+ *  - Render order and MAX_DOTS spend in-view roads first (`trafficViewport.js`).
+ *  - After a jump-to-city, one neighbor ring of tiles is prefetched into cache.
  *  - Each dot lerps along pre-computed Cartesian3 waypoints every preRender frame.
  *
  * @module data/traffic
@@ -396,6 +406,10 @@ let _trafficTimingSequence = 0;
 let _trafficTimingTracesCreated = 0;
 /** @type {number} Development-only count of loads dropped for missing/stale anchors. */
 let _trafficTimingDroppedTraces = 0;
+/** @type {AbortController|null} Background neighbor-ring prefetch (never the painted tile). */
+let _prefetchAbort = null;
+/** @type {number} Bumped to drop a superseded neighbor-ring prefetch. */
+let _prefetchGeneration = 0;
 
 /**
  * Return development timing counters for the capture harness and inertness test.
@@ -679,69 +693,22 @@ function computeDotCount(road, altitude) {
  *     fractional residuals (largest-remainder method).
  *
  * This prevents high-density motorways from starving smaller residential roads
- * when the global MAX_DOTS cap is reached.
+ * when the global MAX_DOTS cap is reached. When `viewport` is provided,
+ * in-view roads consume the cap first; leftover (if any) is shared fairly
+ * among off-center extras.
  *
  * @param {Array} roads    - Parsed road objects.
  * @param {number} altitude - Camera altitude in meters (affects spacing).
  * @param {number} dotCap   - Maximum total dots to allocate.
+ * @param {{south:number, west:number, north:number, east:number}|null} [viewport=null]
+ *   Active camera rectangle; null keeps a single fair pass over every road.
  * @returns {number[]} Per-road dot budgets, same length as `roads`.
  */
-function allocateRoadDotBudgets(roads, altitude, dotCap) {
+function allocateRoadDotBudgets(roads, altitude, dotCap, viewport = null) {
   const planned = roads.map((road) => computeDotCount(road, altitude));
-  const budgets = new Array(roads.length).fill(0);
-  let remaining = Math.max(0, dotCap);
-
-  // Pass 1 — fairness seed: give one dot to every road (highest-demand first)
-  const firstPassOrder = planned
-    .map((count, index) => ({ count, index }))
-    .sort((a, b) => b.count - a.count);
-
-  for (const entry of firstPassOrder) {
-    if (remaining <= 0) break;
-    if (entry.count <= 0) continue;
-    budgets[entry.index] = 1;
-    remaining -= 1;
-  }
-
-  if (remaining <= 0) return budgets;
-
-  // Pass 2 — proportional distribution of the remaining budget
-  let totalRemainder = 0;
-  for (let i = 0; i < planned.length; i++) {
-    totalRemainder += Math.max(0, planned[i] - budgets[i]);
-  }
-  if (totalRemainder <= 0) return budgets;
-
-  const residuals = [];
-  let assigned = 0;
-  for (let i = 0; i < planned.length; i++) {
-    const cap = Math.max(0, planned[i] - budgets[i]);
-    if (cap <= 0) continue;
-    const ideal = (cap / totalRemainder) * remaining;
-    const add = Math.min(cap, Math.floor(ideal));
-    budgets[i] += add;
-    assigned += add;
-    residuals.push({ index: i, residual: ideal - add });
-  }
-
-  // Pass 3 — largest-remainder: hand out leftover dots from floor rounding
-  let leftover = remaining - assigned;
-  if (leftover > 0 && residuals.length > 0) {
-    residuals.sort((a, b) => b.residual - a.residual);
-    let cursor = 0;
-    while (leftover > 0 && residuals.length > 0) {
-      const idx = residuals[cursor % residuals.length].index;
-      if (budgets[idx] < planned[idx]) {
-        budgets[idx] += 1;
-        leftover -= 1;
-      }
-      cursor += 1;
-      // Safety valve: avoid infinite loop if all roads are already at their ideal
-      if (cursor > residuals.length * 3 && leftover > 0) break;
-    }
-  }
-
-  return budgets;
+  if (!viewport) return assignFairDotBudgets(planned, dotCap);
+  const inViewFlags = roads.map((road) => roadIntersectsViewport(road.coords, viewport));
+  return assignViewportFirstBudgets(planned, inViewFlags, dotCap);
 }
 
 /**
@@ -1155,6 +1122,7 @@ function onCameraChanged() {
     clearDots();
     _lastBounds = null;
     _lastViewCenter = null;
+    cancelNeighborPrefetch();
     return;
   }
 
@@ -1195,6 +1163,91 @@ function cancelActiveFetch() {
   if (_activeFetchAbort) {
     _activeFetchAbort.abort();
     _activeFetchAbort = null;
+  }
+}
+
+/** Drop a background neighbor-ring prefetch without touching the painted tile. */
+function cancelNeighborPrefetch() {
+  if (_prefetchAbort) {
+    _prefetchAbort.abort();
+    _prefetchAbort = null;
+  }
+  _prefetchGeneration += 1;
+}
+
+/**
+ * Evict the oldest tile-cache entry that is not `keepKey` so a prefetch
+ * cannot throw out the tile currently on screen.
+ *
+ * @param {string} keepKey - Cache key that must stay.
+ */
+function evictOldestTileExcept(keepKey) {
+  for (const key of _tileCache.keys()) {
+    if (key === keepKey) continue;
+    _tileCache.delete(key);
+    return;
+  }
+}
+
+/**
+ * After a jump-to-city, warm the eight adjacent tiles into `_tileCache`
+ * (major pass only) so a fast pan paints without a second zoom. Uses the
+ * existing Overpass wrapper; never bumps `_loadGeneration` or `_fetching`.
+ *
+ * @param {{south:number, west:number, north:number, east:number}} centerBounds
+ */
+function scheduleNeighborPrefetch(centerBounds) {
+  cancelNeighborPrefetch();
+  if (!_enabled) return;
+  const generation = _prefetchGeneration;
+  const controller = new AbortController();
+  _prefetchAbort = controller;
+  prefetchNeighborRing(centerBounds, generation, controller.signal).catch((error) => {
+    if (error?.name === 'AbortError') return;
+    console.warn('[Data:Traffic] Neighbor prefetch error:', error);
+  });
+}
+
+/**
+ * Fetch one Moore ring of neighbor tiles into the session cache.
+ *
+ * @param {{south:number, west:number, north:number, east:number}} centerBounds
+ * @param {number} generation
+ * @param {AbortSignal} signal
+ * @returns {Promise<void>}
+ */
+async function prefetchNeighborRing(centerBounds, generation, signal) {
+  const neighbors = neighborRingBounds(centerBounds);
+  if (!neighbors.length) return;
+  const centerKey = boundsCacheKey(centerBounds);
+  console.log(`[Data:Traffic] Prefetch neighbor ring (${neighbors.length} tiles)`);
+
+  for (const bounds of neighbors) {
+    if (!_enabled || generation !== _prefetchGeneration || signal.aborted) return;
+    const cacheKey = boundsCacheKey(bounds);
+    if (cacheKey === centerKey) continue;
+    // Skip tiles the painted load already reserved or filled — a pan onto
+    // a neighbor must not race a second Overpass call for the same box.
+    if (_tileCache.has(cacheKey)) continue;
+
+    try {
+      const data = await fetchRoads(
+        bounds.south, bounds.west, bounds.north, bounds.east,
+        { majorOnly: true, timeoutSec: 12, signal },
+      );
+      if (!_enabled || generation !== _prefetchGeneration) return;
+      const parsed = parseRoads(data);
+      let cache = _tileCache.get(cacheKey);
+      if (!cache) {
+        if (_tileCache.size >= TILE_CACHE_MAX_ENTRIES) evictOldestTileExcept(centerKey);
+        cache = { major: null, full: null };
+        _tileCache.set(cacheKey, cache);
+      }
+      if (!cache.major) cache.major = parsed;
+    } catch (error) {
+      if (error?.name === 'AbortError') return;
+      console.warn(`[Data:Traffic] Neighbor prefetch failed [${cacheKey}]:`, error?.message || error);
+    }
   }
 }
 
@@ -1597,8 +1650,14 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
   _roads = roads;
   _lastRenderAltitude = altitude;
 
-  // At high altitude, drop minor roads to reduce visual noise
-  const filteredRoads = visibleRoadsForAltitude(roads, altitude);
+  // At high altitude, drop minor roads to reduce visual noise.
+  // Then put currently visible segments ahead of off-center extras so a
+  // dense downtown paints in-view majors before the tile's off-screen roads.
+  const viewport = getViewBounds();
+  const filteredRoads = orderRoadsViewportFirst(
+    visibleRoadsForAltitude(roads, altitude),
+    viewport,
+  );
 
   // Closed roads spawn zero dots (computeDotCount/spawnDotsForRoad) — count
   // them here so the closure signal is visible in stats even at zero dots.
@@ -1630,7 +1689,7 @@ function renderRoadsForAltitude(roads, altitude, label, trace = null) {
     roadCount: roads.length,
     visibleRoadCount: filteredRoads.length,
   }) : null;
-  const roadBudgets = allocateRoadDotBudgets(filteredRoads, altitude, MAX_DOTS);
+  const roadBudgets = allocateRoadDotBudgets(filteredRoads, altitude, MAX_DOTS, viewport);
   for (let i = 0; i < filteredRoads.length; i++) {
     const road = filteredRoads[i];
     const budget = roadBudgets[i] || 0;
@@ -1993,7 +2052,7 @@ async function loadRoadsForBoundsTimed(bounds, altitude, expectedAnchor) {
     cameraChangeTimestamp: expectedAnchor.timestamp,
     cameraChangeMark: trafficTimingCameraChangeMarkName(expectedAnchor.interactionId),
     generation,
-    cacheKey: `${clamped.south.toFixed(4)},${clamped.west.toFixed(4)},${clamped.north.toFixed(4)},${clamped.east.toFixed(4)}`,
+    cacheKey: boundsCacheKey(clamped),
     currentPass: null,
     renderSequence: 0,
     passes: new Map(),
@@ -2026,6 +2085,11 @@ const _loadRoadsForBounds = TRAFFIC_TIMING_ENABLED
  * Each fetch is guarded by a monotonic `_loadGeneration` counter so that
  * stale responses from superseded requests are silently discarded.
  *
+ * After a jump-to-city (or first arrival after a high-altitude fly), a
+ * successful paint also prefetches one neighbor ring of major-road tiles
+ * into the same cache. Prefetch never increments `_loadGeneration` or
+ * `_fetching` and does not change the Overpass/TomTom wrappers.
+ *
  * @param {{south:number, west:number, north:number, east:number}} bounds
  *   Viewport bounds (will be clamped internally).
  * @param {number} altitude - Camera altitude in meters.
@@ -2039,7 +2103,7 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
   const clamped = clampBounds(bounds);
 
   // Cache key: fixed-precision bounding-box string for deterministic lookups
-  const cacheKey = `${clamped.south.toFixed(4)},${clamped.west.toFixed(4)},${clamped.north.toFixed(4)},${clamped.east.toFixed(4)}`;
+  const cacheKey = boundsCacheKey(clamped);
 
   // Live mode: warm the flow-tile cache CONCURRENTLY with the Overpass road
   // fetch — sequential fetches doubled first-paint latency (field-test
@@ -2057,8 +2121,10 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
   // prospective values and roll back if nothing rendered.
   const prevBounds = _lastBounds;
   const prevViewCenter = _lastViewCenter;
+  const nextViewCenter = getBoundsCenter(clamped);
+  const jumped = shouldPrefetchNeighborRing(prevViewCenter, nextViewCenter);
   _lastBounds = clamped;
-  _lastViewCenter = getBoundsCenter(clamped);
+  _lastViewCenter = nextViewCenter;
   let renderedSomething = false;
 
   try {
@@ -2140,6 +2206,10 @@ async function loadRoadsForBounds(bounds, altitude, trace = null) {
       if (!renderedSomething) {
         _lastBounds = prevBounds;
         _lastViewCenter = prevViewCenter;
+      } else if (jumped) {
+        // Jump-to-city (or first arrival after a high-altitude fly): warm
+        // the eight adjacent tiles so a fast pan hits cache without zooming.
+        scheduleNeighborPrefetch(clamped);
       }
     }
     _activeFetchAbort = null;
@@ -2292,6 +2362,7 @@ const trafficLayer = {
     clearInterval(_enableKickTimer);
     _enableKickTimer = null;
     cancelActiveFetch();
+    cancelNeighborPrefetch();
     _loadGeneration++;
     clearDots();
     _lastViewCenter = null;
