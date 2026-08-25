@@ -11,6 +11,12 @@ import {
   normalizeHeadingSectors,
 } from './inFlightFilters.js';
 import { formatCallsignPrefixField, parseCallsignPrefixes } from './flightLayerFilters.js';
+import {
+  DEFAULT_SATELLITE_CLASS_FILTER,
+  decodeSatelliteClassFilter,
+  encodeSatelliteClassFilter,
+  normalizeSatelliteClassFilter,
+} from './satelliteClassFilter.js';
 
 const VALID_DISPOSITIONS = new Set([
   'enabled-only',
@@ -294,6 +300,16 @@ const OPTION_GROUPS = Object.freeze({
     // showed: rings on.
     booleanOption('showOrbits', 'o', true),
     integerOption('selectedSatTrackingId', 't', null),
+    // PLAN 132: class chips default ALL ON. Omitted `k` means every class
+    // stays visible — there was no prior class filter, so absent === default.
+    Object.freeze({
+      key: 'satelliteClassFilter',
+      token: 'k',
+      defaultValue: DEFAULT_SATELLITE_CLASS_FILTER,
+      normalize: normalizeSatelliteClassFilter,
+      encode: encodeSatelliteClassFilter,
+      decode: decodeSatelliteClassFilter,
+    }),
   ]),
   cctv: Object.freeze([
     enumOption('coverageMode', 'c', 'on', ['off', 'on', 'viewshed'], {
