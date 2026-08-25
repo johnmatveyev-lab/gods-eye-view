@@ -498,12 +498,17 @@ test('labels off hides callsign glyphs; selected-style cards and density stay in
   const selectedIdents = () => env.ctx.calls.filter(([name, text]) => (
     name === 'fillText' && text === 'SELECTED-IDENT'
   ));
+  const paintOnce = () => {
+    env.advance(250);
+    env.postRender.raise();
+    env.advance(125);
+    env.postRender.raise();
+  };
   try {
-    resetContactLabelsForTest();
-    assert.equal(getContactLabelsEnabled(), true);
+    setContactLabelsEnabled(true);
     initWorldOverlay(env.viewer);
     initDetection(env.viewer, [detectableLayer()], () => {});
-    setOverlayEntries('flights', [{
+    setOverlayEntries('tracked', [{
       id: 'selected-flight',
       position: new Cesium.Cartesian3(0, 0, 6_356_752),
       variant: 'selected',
@@ -515,8 +520,11 @@ test('labels off hides callsign glyphs; selected-style cards and density stay in
     }]);
     setMode('DENSE');
     setDetectionTuning({ densityPct: 100 });
-    settleFrame(env);
-    assert.ok(callsigns().length > 0, 'labels on must paint ambient callsigns');
+    paintOnce();
+    assert.ok(
+      callsigns().length > 0,
+      `labels on must paint ambient callsigns (got ${env.ctx.calls.filter(([name]) => name === 'fillText').map(([, text]) => text).join('|') || 'none'})`,
+    );
     assert.ok(selectedIdents().length > 0, 'selected card shows ident while labels are on');
     assert.ok(env.detectionCtx.calls.some(([name, path]) => name === 'stroke' && path instanceof MockPath2D));
     const denseObservations = getDetectionDiagnostics().observationCount;
@@ -525,7 +533,7 @@ test('labels off hides callsign glyphs; selected-style cards and density stay in
     setContactLabelsEnabled(false);
     env.ctx.calls.length = 0;
     env.detectionCtx.calls.length = 0;
-    settleFrame(env);
+    paintOnce();
     assert.equal(callsigns().length, 0, 'labels off must not pile up callsigns');
     assert.ok(selectedIdents().length > 0, 'selected contact card still shows ident');
     assert.ok(
@@ -538,7 +546,7 @@ test('labels off hides callsign glyphs; selected-style cards and density stay in
     setDetectionTuning({ densityPct: 25 });
     env.ctx.calls.length = 0;
     env.detectionCtx.calls.length = 0;
-    settleFrame(env);
+    paintOnce();
     assert.equal(getDetectionDiagnostics().densityPct, 25);
     assert.equal(getDetectionDiagnostics().profile, 'SPARSE');
     assert.equal(getDetectionDiagnostics().observationCount, denseObservations);
@@ -546,12 +554,18 @@ test('labels off hides callsign glyphs; selected-style cards and density stay in
     assert.ok(selectedIdents().length > 0);
     assert.ok(env.detectionCtx.calls.some(([name, path]) => name === 'stroke' && path instanceof MockPath2D));
 
+    setDetectionTuning({ densityPct: 100 });
+    env.ctx.calls.length = 0;
+    paintOnce();
+    assert.equal(getDetectionDiagnostics().densityPct, 100);
+    assert.equal(callsigns().length, 0, 'raising density must not restore hidden callsigns');
+
     setContactLabelsEnabled(true);
     env.ctx.calls.length = 0;
-    settleFrame(env);
+    paintOnce();
     assert.ok(callsigns().length > 0, 'labels on restores ambient callsigns');
     assert.ok(selectedIdents().length > 0);
-    assert.equal(getDetectionDiagnostics().densityPct, 25, 'turning labels on must not reset density');
+    assert.equal(getDetectionDiagnostics().densityPct, 100, 'turning labels on must not reset density');
   } finally {
     resetContactLabelsForTest();
     env.cleanup();

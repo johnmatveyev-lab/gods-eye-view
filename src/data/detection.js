@@ -318,6 +318,7 @@ export function initDetection(viewer, layers, onModeChange) {
     _hostLane?.requestPaint();
   };
   _contactLabelsListener = () => {
+    _labelSolveDirty = true;
     _hostLane?.requestPaint();
     _calloutLane?.requestPaint();
   };
@@ -1265,10 +1266,6 @@ function _drawOverlay(frame) {
       if (bracketAlpha > 0) protectedVisibleCount++;
       continue;
     }
-    // Labels off hides billboard text only. Brackets/dots already painted
-    // above; density still collected this contact. Selected/tracked use
-    // skipLabel so their ident card is untouched.
-    if (!getContactLabelsEnabled()) continue;
 
     const primary = String(obj.id || '');
     const micro = String(obj.metric || '');

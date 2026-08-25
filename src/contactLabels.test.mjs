@@ -145,8 +145,13 @@ test('contact label declutter is display-only and does not add an API', () => {
   assert.match(ui, /CONTACT_LABELS_KEY|setContactLabelsEnabled/);
   assert.match(
     detection,
-    /if \(obj\.skipLabel\) \{[\s\S]*?if \(!getContactLabelsEnabled\(\)\) continue;/,
-    'detection must keep the existing skipLabel flag and gate only the text path',
+    /if \(obj\.skipLabel\) \{/,
+    'detection must keep the existing skipLabel flag for tracked ident',
+  );
+  assert.match(
+    detection,
+    /if \(!getContactLabelsEnabled\(\)\) return;/,
+    'labels off must skip the callout glyph lane only',
   );
   assert.match(
     detection,
