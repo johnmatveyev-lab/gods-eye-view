@@ -33,6 +33,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Failed or stale Data Layers rows now expose a Retry chip that calls the
+  existing `refreshLayer()` path immediately. Healthy rows stay quiet; a
+  click while a refresh is in flight is ignored. Operators no longer have
+  to wait on the `retry Ns` countdown or toggle the layer. No `/api`.
 - Radio has a client-side min-bitrate floor (All / 64+ / 128+ / 192+ kbps)
   on the already-fetched Radio Browser directory. Default All keeps the
   current list. Null bitrate stays visible. A station already playing stays
