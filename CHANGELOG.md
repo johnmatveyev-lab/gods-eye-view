@@ -25,6 +25,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites DATA LAYERS row now has a **Core | Dense** catalog control. Core
+  is the current six-group catalog (~840). Dense calls the existing
+  `setParams({ catalog: 'dense' })` Starlink path (chunked, points-only). A
+  failed `/api/celestrak/starlink` load stays on Core and shows the existing
+  feed-unavailable status. The choice persists through the existing layerState
+  `catalog` option. Not the Plan 65 core-group picker. No new `/api`.
 - Added a Clean view control on the globe chrome that toggles the existing
   `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
   Google Maps and Data attribution stay on. No new hide system and no `/api`.

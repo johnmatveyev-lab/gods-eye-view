@@ -19,6 +19,7 @@ import {
   satelliteClassLegend,
   tallySatelliteClasses,
 } from './satelliteClass.js';
+import { satelliteCatalogControls } from './satelliteCatalogControls.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -71,14 +72,15 @@ const RING_ROTATION_MS = 1000;   // re-align baked orbit rings to current GMST e
  * Note: CelesTrak's GLONASS group is named 'glo-ops' (not
  * 'glonass-operational' — that name 404s upstream).
  */
-const CATALOG_GROUPS = [
+export const CORE_CATALOG_GROUPS = Object.freeze([
   { tag: 'stations', path: 'stations' },
   { tag: 'visual', path: 'visual' },
   { tag: 'gps-ops', path: 'gps-ops' },
   { tag: 'glonass', path: 'glo-ops' },
   { tag: 'galileo', path: 'galileo' },
   { tag: 'geo', path: 'geo' },
-];
+]);
+const CATALOG_GROUPS = CORE_CATALOG_GROUPS;
 
 // Dense-catalog mode (setParams({ catalog: 'dense' })): Starlink shell as
 // points-only extras — no labels, no detection-overlay participation, and a
@@ -241,8 +243,8 @@ let _denseLoadPromise = null;
  * Dense-load lifecycle: 'idle' → 'loading' → 'ready' | 'failed'.
  * The catalog param flips synchronously but the Starlink shell arrives over
  * seconds and can fail outright (CelesTrak 502s this feed regularly), so the
- * row chip reports THIS, not the param. An active chip must mean dense points
- * are actually on screen.
+ * Dense chip reports THIS, not the param. An active Dense chip must mean
+ * dense points are actually on screen.
  */
 let _denseStatus = 'idle';
 /** @type {string|null} Why the last dense load failed, for the chip tooltip. */
@@ -1329,9 +1331,14 @@ export function _runSatellitePreRenderForTest() {
  * Seed the minimum render state a dense-catalog load needs, so a test can
  * exercise the real async load/settle/fail path (and the row-control states it
  * drives) without constructing a WebGL viewer.
- * @param {{ catalog?: 'core'|'dense', showPoints?: boolean }} [options]
+ * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, trackedNorad?: number|null, coreSats?: Array<{noradId: number, name: string, group?: string, satrec?: object, point?: object}> }} [options]
  */
-export function _setDenseCatalogStateForTest({ catalog = 'core', showPoints = true } = {}) {
+export function _setDenseCatalogStateForTest({
+  catalog = 'core',
+  showPoints = true,
+  trackedNorad = null,
+  coreSats = [],
+} = {}) {
   _viewer = { scene: { primitives: { add: (p) => p, remove() {} } } };
   // Neutralize the shared world-overlay host: these tests exercise catalog and
   // row-control logic, not the ISS callout.
@@ -1351,8 +1358,17 @@ export function _setDenseCatalogStateForTest({ catalog = 'core', showPoints = tr
   _denseLoadToken++;
   _denseStatus = 'idle';
   _denseError = null;
+  for (const sat of coreSats) {
+    _catalog.set(sat.noradId, {
+      name: sat.name,
+      satrec: sat.satrec || { error: 0, satnum: String(sat.noradId) },
+      group: sat.group || 'stations',
+    });
+    _points.set(sat.noradId, sat.point || { id: sat.noradId });
+  }
+  _count = _points.size;
   _catalogRevision++;
-  _trackedNorad = null;
+  _trackedNorad = trackedNorad;
   _cancelPendingTrackingRestore();
   _params = { catalog, showPoints, showOrbits: false };
   _enabled = true;
@@ -1371,6 +1387,8 @@ export function _clearDenseCatalogStateForTest() {
   _denseLoadToken++;
   _denseStatus = 'idle';
   _denseError = null;
+  _count = 0;
+  _trackedNorad = null;
   _params = { catalog: 'core', showPoints: true, showOrbits: true };
   _cancelPendingTrackingRestore();
   _enabled = false;
@@ -2120,17 +2138,16 @@ const satellitesLayer = {
   },
 
   /**
-   * Layer-row sub-controls (DataLayerManager row-controls contract): the DENSE
-   * catalog chip plus a class legend so the point colors are learnable without
-   * a new panel.
+   * Layer-row sub-controls (DataLayerManager row-controls contract): Core |
+   * Dense catalog chips plus a class legend so the point colors are learnable
+   * without a new panel.
    *
-   * The chip is stateless — it declares the params to apply and the manager
+   * The chips are stateless — they declare the params to apply and the manager
    * owns the write, so the Space Missions snapshot/restore path (which drives
-   * the same `catalog` param) stays the single source of truth and the chip
-   * always renders whatever the layer actually has.
+   * the same `catalog` param) stays the single source of truth.
    *
-   * The chip reports the dense LOAD state, not the catalog param: the param
-   * flips synchronously while the Starlink shell takes seconds to arrive and
+   * Dense reports the LOAD state, not the catalog param: the param flips
+   * synchronously while the Starlink shell takes seconds to arrive and
    * frequently 502s, so ACTIVE means "dense points are on screen" and nothing
    * less. The legend tally is cached against the catalog revision.
    * @returns {{ chips: Array<object>, legend: Array<object> }} Row controls.
@@ -2142,24 +2159,12 @@ const satellitesLayer = {
     // restore. Surrender the row rather than lie about it.
     if (!_params.showPoints) return { chips: [], legend: [] };
 
-    const loading = _denseStatus === 'loading';
-    const failed = _denseStatus === 'failed';
-    const active = _params.catalog === 'dense' && _denseStatus === 'ready';
-    let title = 'Add the full Starlink broadband shell (thousands of extra points)';
-    if (loading) title = 'Loading the Starlink shell…';
-    else if (failed) title = `Starlink ${_denseError || 'load failed'} — click to retry`;
-    else if (active) title = 'Showing the full Starlink shell — click for the core catalog only';
     return {
-      chips: [{
-        id: 'catalog',
-        label: loading ? 'DENSE ···' : (failed ? 'DENSE ✕' : 'DENSE'),
-        active,
-        busy: loading,
-        disabled: loading,
-        state: loading ? 'loading' : (failed ? 'error' : (active ? 'active' : 'idle')),
-        title,
-        params: { catalog: active ? 'core' : 'dense' },
-      }],
+      ...satelliteCatalogControls({
+        catalog: _params.catalog,
+        denseStatus: _denseStatus,
+        denseError: _denseError,
+      }),
       legend: satelliteClassLegend(_classTally()),
     };
   },
@@ -2175,14 +2180,16 @@ const satellitesLayer = {
   },
 
   getStats() {
+    const denseFailure = _denseStatus === 'failed' ? (_denseError || 'feed unavailable') : null;
+    const error = _lastError || denseFailure;
     return {
       count: _count,
       lastUpdate: _lastUpdate,
       stale: false,
-      status: _lastError === 'CelesTrak unreachable'
+      status: (_lastError === 'CelesTrak unreachable' || Boolean(denseFailure))
         ? 'unavailable'
-        : (_lastError ? 'degraded' : 'nominal'),
-      error: _lastError,
+        : (error ? 'degraded' : 'nominal'),
+      error,
     };
   },
 };
