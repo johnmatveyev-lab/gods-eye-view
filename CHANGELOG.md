@@ -5,6 +5,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Fixed
+
+- Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
+  the Radio layer also silences it. Starting a station unmutes. Compact
+  Context and Cockpit transports now expose the same control. No voice ducking
+  and no `/api/radio` changes.
+
 ### Changed
 
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
@@ -12,6 +19,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Clear annotations control on the globe chrome. It calls the existing
+  whiteboard `clear()` action so hosted users can erase voice marks without a
+  spoken command. The control is disabled when the board is empty. Trails,
+  models, and tracking are unchanged.
 - Added a filter field at the top of the Data Layers list. It matches the
   visible layer name plus existing voice common-names (fires, ships, bikes,
   traffic, cameras, and the rest of that map). Empty query shows the full
@@ -46,6 +57,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Added a Display `km | nm | mi` control that reformats existing range, contact,
+  and HUD altitude labels. The choice persists as `meridian.units`; first visit
+  keeps today's kilometre labels.
 - Hidden tabs and offline windows pause flight/layer poll timers and the HUD
   summary. Returning visible and online runs one refresh, then resumes
   intervals. An active voice session keeps running. Offline shows
