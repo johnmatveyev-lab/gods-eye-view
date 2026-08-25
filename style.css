@@ -2201,6 +2201,22 @@ body.ui-clean-view #scene-runtime.active {
   line-height: 1;
 }
 
+#clear-selected-layers {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+#clear-selected-layers .all-off-layers-label {
+  line-height: 1;
+}
+
 #contacts-roster-toggle.active,
 #contacts-roster-toggle[aria-pressed="true"],
 #launches-panel-toggle.active,
@@ -3005,6 +3021,13 @@ body.recording-mode #meridian-offline-chip {
   letter-spacing: 2px;
   text-transform: uppercase;
   color: var(--accent);
+}
+
+.keyboard-shortcuts-note {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 #keyboard-shortcuts-list {

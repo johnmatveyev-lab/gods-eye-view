@@ -12,6 +12,11 @@ import {
   clampBloomIntensity,
   decodeBloomIntensity,
 } from './bloom.js';
+import {
+  ALL_OFF_ARIA_LABEL,
+  ALL_OFF_BUSY_ARIA_LABEL,
+  allOffLiveLayers,
+} from './allOffLayers.js';
 import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
@@ -20,6 +25,7 @@ import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNo
 import { handleKeyboardPanKeyDown } from './keyboardPan.js';
 import { handleLookKeyDown } from './cameraLookKeys.js';
 import {
+  bindKeyboardShortcutsToggle,
   handleShortcutsOverlayKeyDown,
   isKeyboardShortcutsOverlayOpen,
   renderKeyboardShortcutsOverlay,
@@ -3753,6 +3759,7 @@ export class StyleManager {
     // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Q/E heading,
     // R/PageUp/PageDown pitch (not F), ? overlay, Escape
     renderKeyboardShortcutsOverlay();
+    bindKeyboardShortcutsToggle();
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
@@ -3773,6 +3780,7 @@ export class StyleManager {
 
       const look = handleLookKeyDown(e, this.viewer, {
         cockpitActive: this.cockpitView?.active,
+        tiltLocked: this._lockTiltEnabled === true,
         storage: globalThis.localStorage,
       });
       if (look) {
@@ -10968,11 +10976,20 @@ export class StyleManager {
     });
   }
 
-  /** Wire the top-center action that clears only manager-owned data layers. */
+  /** Wire the top-center panic All off control. Does not move the camera. */
   _initClearSelectedLayersButton() {
     if (!this._clearSelectedLayersBtn) return;
-    this._clearSelectedLayersHandler = () => { void this.clearSelectedLayers(); };
+    this._clearSelectedLayersHandler = () => { void this.allOff(); };
     this._clearSelectedLayersBtn.addEventListener('click', this._clearSelectedLayersHandler);
+  }
+
+  /**
+   * Panic All off: disable every live data layer. Globe, credits, camera, and
+   * lastView stay. Next enable is manual.
+   * @returns {Promise<object>} Aggregate manager lifecycle truth for the batch.
+   */
+  allOff() {
+    return this.clearSelectedLayers();
   }
 
   /**
@@ -11002,25 +11019,25 @@ export class StyleManager {
     this._setContactsRosterControlsDisabled(true);
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     this._clearSelectedLayersBtn.disabled = true;
-    this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clearing selected data layers');
+    this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_BUSY_ARIA_LABEL);
 
-    const managerOperation = this._dataManager.clearSelectedLayers({
+    const managerOperation = allOffLiveLayers(this._dataManager, {
       origin: 'user',
       notificationToken,
     });
     this._clearSelectedLayersManagerPromise = managerOperation;
     const operation = managerOperation.then((result) => {
       if (result.targetIds.length === 0) {
-        this._showToast('No selected data layers');
+        this._showToast('All off — no live layers were on');
       } else if (result.notClearedIds.length > 0) {
-        this._showToast(`${result.notClearedIds.length} data layer${result.notClearedIds.length === 1 ? '' : 's'} could not be cleared`);
+        this._showToast(`${result.notClearedIds.length} live layer${result.notClearedIds.length === 1 ? '' : 's'} could not be turned off`);
       } else {
-        this._showToast(`Cleared ${result.clearedIds.length} data layer${result.clearedIds.length === 1 ? '' : 's'}`);
+        this._showToast('All off');
       }
       return result;
     }).catch((error) => {
-      console.warn('[Data] clear selected layers failed', error);
-      this._showToast('Selected data layers could not be cleared');
+      console.warn('[Data] All off failed', error);
+      this._showToast('All off could not finish');
       return {
         targetIds: [],
         items: [],
@@ -11037,7 +11054,7 @@ export class StyleManager {
         this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = false);
       }
       this._clearSelectedLayersBtn.disabled = false;
-      this._clearSelectedLayersBtn.setAttribute('aria-label', 'Clear selected data layers');
+      this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_ARIA_LABEL);
       this._preservePanelStateDuringLayerClear = false;
       this._clearSelectedLayersManagerPromise = null;
       this._clearSelectedLayersPromise = null;
