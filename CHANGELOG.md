@@ -45,6 +45,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS row chips filter already-fetched detections by confidence floor
+  (`All` | `0.5+` | `0.8+`, default All). Cells, sprites, overlay cards,
+  and the Plan 70 FIRES list hide below the floor without a new NASA
+  fetch. Missing or non-finite confidence stays visible. The floor ANDs
+  with the existing FRP chips. The choice persists on `local-firms`
+  (`w.c.*`). Same VIIRS proxy, quota, and TTL. Not an alert service.
 - Earthquake depth chips — Shallow | Intermediate | Deep — sit next to the
   existing magnitude floor. Default all on, same buckets as the disc colors
   (shallow <70 km, intermediate 70–300, deep ≥300). Chip changes re-filter

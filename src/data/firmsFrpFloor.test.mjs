@@ -299,11 +299,12 @@ test('failed and stale proxy still filter the last-good payload', async () => {
 test('row chips are All | 10+ | 50+ | 100+ MW and write frpFloor params', () => {
   const layer = createFirmsHeatmapLayer({ id: 'firms', name: 'FIRMS' });
   const controls = layer.getRowControls();
-  assert.deepEqual(controls.chips.map((chip) => chip.label), ['All', '10+', '50+', '100+ MW']);
-  assert.deepEqual(controls.chips.map((chip) => chip.params.frpFloor), ['all', '10', '50', '100']);
-  assert.equal(controls.chips[0].active, true);
+  const frp = controls.chips.filter((chip) => chip.params.frpFloor);
+  assert.deepEqual(frp.map((chip) => chip.label), ['All', '10+', '50+', '100+ MW']);
+  assert.deepEqual(frp.map((chip) => chip.params.frpFloor), ['all', '10', '50', '100']);
+  assert.equal(frp[0].active, true);
   layer.setParams({ frpFloor: '50' });
-  const after = layer.getRowControls();
-  assert.equal(after.chips.find((chip) => chip.params.frpFloor === '50').active, true);
-  assert.equal(after.chips.filter((chip) => chip.active).length, 1);
+  const after = layer.getRowControls().chips.filter((chip) => chip.params.frpFloor);
+  assert.equal(after.find((chip) => chip.params.frpFloor === '50').active, true);
+  assert.equal(after.filter((chip) => chip.active).length, 1);
 });

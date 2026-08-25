@@ -335,6 +335,11 @@ const OPTION_GROUPS = Object.freeze({
       50: '5',
       100: 'c',
     }),
+    enumOption('confidenceFloor', 'c', 'all', ['all', '0.5', '0.8'], {
+      all: 'a',
+      '0.5': '5',
+      '0.8': '8',
+    }),
   ]),
 });
 
