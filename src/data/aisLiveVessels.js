@@ -1721,7 +1721,9 @@ function startSelectedVesselTrail(record) {
 
 /** Hide or show the selected-vessel trail without discarding its history. */
 function applySelectedVesselTrailDrawing() {
-  state.trail?.setVisible(trailDrawingVisible({
+  const trail = state.trail;
+  if (typeof trail?.setVisible !== 'function') return;
+  trail.setVisible(trailDrawingVisible({
     trailsEnabled: getTrailsEnabled(),
     cockpitContactMode: false,
   }));
