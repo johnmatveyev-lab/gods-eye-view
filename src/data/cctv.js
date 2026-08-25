@@ -100,6 +100,11 @@ import {
 } from './focusDeemphasis.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { prefKey, readPrefKey, writePrefKey } from '../prefStorage.js';
+import {
+  readCctvHideUnhealthy,
+  sourceMatchesHealthFilter,
+  writeCctvHideUnhealthy,
+} from './cctvHealthFilter.js';
 
 // ---------------------------------------------------------------------------
 // API endpoints
@@ -298,6 +303,10 @@ let _lastUpdate = null;
 let _lastHealthSyncAt = 0;
 let _lastError = null;
 let _healthById = new Map();
+/** Hide cameras whose latest health status is a known-unhealthy token. Default off. */
+let _hideUnhealthy = false;
+/** Count of /api/cctv/health fetches — Hide unhealthy must not increment this. */
+let _healthFetchCount = 0;
 let _calibrationById = new Map();
 let _listeners = new Set();
 let _projectionRaf = 0;
@@ -2720,13 +2729,31 @@ function rebuildViewshedVolume(record, isActive) {
  * from a US viewpoint. Pure math over ≤ catalog-size points; runs on
  * camera.moveEnd + init only (event-driven — no steady-state work).
  */
+function cameraPassesHealthVisibility(cameraId) {
+  return sourceMatchesHealthFilter(
+    { id: cameraId, sourceStatus: _healthById.get(cameraId)?.status },
+    _hideUnhealthy,
+    _activeCameraId,
+    _healthById,
+  );
+}
+
+function applyCctvHealthVisibility({ refreshCards = false } = {}) {
+  if (!_enabled) return;
+  if (_viewer && !_viewer.isDestroyed() && _records.length) {
+    refreshHorizonCulling();
+    if (refreshCards) refreshAmbientCards();
+  }
+}
+
 function refreshHorizonCulling() {
   if (!_viewer || _viewer.isDestroyed() || !_records.length) return;
   const occluder = horizonOccluder(_viewer.camera);
   for (const record of _records) {
     const bb = record.billboard;
     if (!bb) continue;
-    const visible = occluder.isPointVisible(bb.position);
+    const visible = occluder.isPointVisible(bb.position)
+      && cameraPassesHealthVisibility(record.camera.id);
     if (bb.show !== visible) bb.show = visible;
   }
 }
@@ -2782,6 +2809,7 @@ function refreshAmbientCards() {
   for (const record of _records) {
     const id = record.camera.id;
     if (id === activeId || !record.position) continue;
+    if (!cameraPassesHealthVisibility(id)) continue;
     let inView = false;
     let sx = NaN;
     let sy = NaN;
@@ -3405,6 +3433,7 @@ function getPublicCameraState(record, activeId = null) {
     mountHeightM: camera.mountHeightM,
     active: isActive,
     feedType: camera.feedType,
+    feedConfigured: camera.feedConfigured,
     sourceKind: health?.sourceKind || camera.sourceKind || (camera.feedConfigured ? 'configured' : 'seed'),
     sourceStatus: health?.status || 'unknown',
     sourceMessage: health?.message || '',
@@ -3747,6 +3776,7 @@ export function setActiveCamera(cameraId) {
   // The newly active camera leaves the ambient ring (its monitor plane takes
   // over); the freed slot re-fills on this same pass.
   refreshAmbientCards();
+  refreshHorizonCulling();
   // ADJUST mode follows the active camera.
   _gizmo?.refresh();
   notifyListeners();
@@ -3770,6 +3800,7 @@ export function deactivateActiveCamera() {
   });
   refreshCoverageStyles();
   refreshAmbientCards();
+  refreshHorizonCulling();
   _gizmo?.refresh();
   notifyListeners();
   return true;
@@ -3978,9 +4009,11 @@ function clearRuntimeState() {
   _records = [];
   _recordById = new Map();
   _healthById = new Map();
+  _hideUnhealthy = false;
   _count = 0;
   _lastUpdate = null;
   _lastHealthSyncAt = 0;
+  _healthFetchCount = 0;
   _lastError = null;
   _lastFocusStyleAt = 0;
   _activeFocusStyleCount = 0;
@@ -4131,6 +4164,7 @@ async function syncHealthState(force = false) {
   const now = Date.now();
   if (!force && now - _lastHealthSyncAt < HEALTH_SYNC_INTERVAL_MS) return;
   _lastHealthSyncAt = now;
+  _healthFetchCount += 1;
 
   try {
     const resp = await fetch(HEALTH_ENDPOINT, { cache: 'no-store' });
@@ -4150,9 +4184,23 @@ async function syncHealthState(force = false) {
       });
     }
     _healthById = next;
+    applyCctvHealthVisibility({ refreshCards: _hideUnhealthy });
   } catch {
     // keep previous health map
   }
+}
+
+/**
+ * Test seam: seed the in-memory health map without hitting /api/cctv/health.
+ * @param {Iterable<[string, object]>|Map<string, object>|null|undefined} entries
+ */
+export function _setCctvHealthByIdForTest(entries) {
+  _healthById = new Map(entries || []);
+}
+
+/** @returns {number} */
+export function _getCctvHealthFetchCountForTest() {
+  return _healthFetchCount;
 }
 
 // ---------------------------------------------------------------------------
@@ -4183,6 +4231,7 @@ const cctvLayer = {
     _enabled = false;
     _activeCameraId = null;
     _autoHopSuspended = false;
+    _hideUnhealthy = readCctvHideUnhealthy(safeWindowLocalStorage());
     _lastHopAt = 0;
     _lastViewContext = '';
     _calibrationById = loadCalibrationStore();
@@ -4437,6 +4486,7 @@ const cctvLayer = {
     _cctvOverlayHost.setVisible(CCTV_OVERLAY_SOURCE_ID, true);
     startCardFrameLoop();
     refreshAmbientCards();
+    refreshHorizonCulling();
     notifyListeners();
     restoreSpriteOrder(_viewer);
   },
@@ -4559,6 +4609,7 @@ const cctvLayer = {
    * @param {boolean} [params.calibrationMode] - Toggle the ADJUST gizmo.
    * @param {boolean} [params.focusSelected] - Fly to the active camera.
    * @param {number} [params.focusDurationSec] - Fly-to duration.
+   * @param {boolean} [params.hideUnhealthy] - Hide cameras marked unhealthy in the health map.
    */
   setParams(params = {}) {
     if (typeof params.showCoverage === 'boolean') {
@@ -4648,6 +4699,14 @@ const cctvLayer = {
     if (params.focusSelected && _activeCameraId) {
       focusCamera(_activeCameraId, Number(params.focusDurationSec) || 1.8);
     }
+    if (typeof params.hideUnhealthy === 'boolean') {
+      const next = params.hideUnhealthy === true;
+      if (next !== _hideUnhealthy) {
+        _hideUnhealthy = next;
+        writeCctvHideUnhealthy(safeWindowLocalStorage(), next);
+        applyCctvHealthVisibility({ refreshCards: true });
+      }
+    }
     refreshCoverageStyles();
     notifyListeners();
   },
@@ -4666,6 +4725,7 @@ const cctvLayer = {
       calibrationMode: _calibrationMode,
       autoHop: _autoHop,
       autoHopSec: _autoHopSec,
+      hideUnhealthy: _hideUnhealthy,
       selectedCameraId: active?.camera.id || null,
       calibration: active?.camera ? {
         cameraId: active.camera.id,
