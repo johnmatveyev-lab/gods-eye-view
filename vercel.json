@@ -25,6 +25,9 @@
     "api/stripe/webhook.js": {
       "maxDuration": 15
     },
+    "api/launches.js": {
+      "maxDuration": 30
+    },
     "api/firms/index.js": {
       "maxDuration": 60
     },
