@@ -13,6 +13,7 @@ import {
   subscribeTrailsEnabled,
   trailDrawingVisible,
 } from './trailPreference.js';
+import { isWatchHighlighted, subscribeWatchlist } from './watchlist.js';
 import {
   EMERGENCY_HIGHLIGHT_CSS,
   getEmergencyHighlightEnabled,
@@ -416,6 +417,32 @@ function _militaryBillboardScale(icao24) {
   return BILLBOARD_SCALE * (CLASS_SCALE_2D[meta?.klass] || 1) * (meta?.onGround ? GROUND_SCALE : 1);
 }
 
+function _watchHighlightActive(icao24, info = _flightData.get(icao24)) {
+  return icao24 !== _trackedIcao && isWatchHighlighted({
+    icao24,
+    callsign: info?.callsign,
+  });
+}
+
+function _contactHighlightSize(icao24, info) {
+  return icao24 === _trackedIcao || _watchHighlightActive(icao24, info) ? 24 : 20;
+}
+
+function _contactHighlightColor(icao24, info) {
+  return _contactIconColor(icao24, {
+    tracked: icao24 === _trackedIcao || _watchHighlightActive(icao24, info),
+  });
+}
+
+function _refreshWatchHighlights() {
+  if (!_billboards) return;
+  for (const [icao24, bb] of _billboards) {
+    if (icao24 === _trackedIcao) continue;
+    _applyFleetBillboardPresentation(icao24, bb);
+  }
+}
+subscribeWatchlist(_refreshWatchHighlights);
+
 /** Public emergency squawks 7500/7600/7700 use the existing alert-red token
  *  when Emergency highlight is on. Altitude-band hide still wins. */
 function _contactUsesEmergencyHighlight(icao24) {
@@ -428,7 +455,7 @@ function _contactUsesEmergencyHighlight(icao24) {
 
 function _contactIconColor(icao24, { tracked = false } = {}) {
   if (_contactUsesEmergencyHighlight(icao24)) return EMERGENCY_HIGHLIGHT_COLOR;
-  if (tracked || icao24 === _trackedIcao) return TRACKED_ICON_COLOR;
+  if (tracked || icao24 === _trackedIcao || _watchHighlightActive(icao24)) return TRACKED_ICON_COLOR;
   return MIL_ICON_COLOR;
 }
 
@@ -452,11 +479,11 @@ function _applyFleetBillboardPresentation(icao24, bb) {
 
   const meta = _flightData.get(icao24);
   bb.image = aircraftIcon(_iconKind(icao24, meta?.klass), bb._gevIconLarge ? TRACKED_ICON_PX : undefined);
-  bb.width = icao24 === _trackedIcao ? 24 : 20;
-  bb.height = icao24 === _trackedIcao ? 24 : 20;
+  bb.width = _contactHighlightSize(icao24, meta);
+  bb.height = _contactHighlightSize(icao24, meta);
   bb.scale = _militaryBillboardScale(icao24) * limbScale;
   bb.scaleByDistance = _normalBillboardScaleByDistance();
-  bb.color = _contactIconColor(icao24).withAlpha(bb.color?.alpha ?? 1);
+  bb.color = _contactHighlightColor(icao24, meta).withAlpha(bb.color?.alpha ?? 1);
 }
 
 /** Refresh the AIR-only Cockpit near band independently from model admission. */
@@ -2034,7 +2061,7 @@ function _fleetTick() {
       billboard: bb,
       baseScale: _cockpitContactMode && !isCockpitNear ? 1 : _militaryBillboardScale(icao24),
       baseAlpha: _missingPolls.get(icao24) ? 0.45 : 1,
-      baseColor: _contactIconColor(icao24),
+      baseColor: _contactHighlightColor(icao24, _flightData.get(icao24)),
       focusFactor: focus.factor,
       cameraDistanceM,
       cameraHeightM: camera.positionCartographic?.height,
@@ -3224,15 +3251,15 @@ const militaryFlightsLayer = {
           const bb = _billboardCollection.add({
             position,
             image: aircraftIcon(_iconKind(icao24, meta.klass)),
-            width: isTracked ? 24 : 20,
-            height: isTracked ? 24 : 20,
+            width: _contactHighlightSize(icao24, meta),
+            height: _contactHighlightSize(icao24, meta),
             scale: BILLBOARD_SCALE * (CLASS_SCALE_2D[meta.klass] || 1) * (meta.onGround ? GROUND_SCALE : 1),
             // Screen-projected rotation lands on the next fleet tick.
             rotation: 0,
             alignedAxis: Cesium.Cartesian3.ZERO,
             color: isTracked
               ? _contactIconColor(icao24, { tracked: true })
-              : _contactIconColor(icao24),
+              : _contactHighlightColor(icao24, meta),
             sizeInMeters: false,
             scaleByDistance: _normalBillboardScaleByDistance(),
             // Grounded/near-surface planes sit at/below the photoreal tile

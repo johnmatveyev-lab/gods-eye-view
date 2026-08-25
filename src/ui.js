@@ -102,7 +102,16 @@ import {
   setKeyholeFadeTuning,
 } from './celestialRing.js';
 import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
-import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import {
+  destroySelectedContactIdent,
+  initSelectedContactIdent,
+  resolveCopyableSelection,
+} from './selectedContactIdent.js';
+import {
+  bindWatchlist,
+  hydrateWatchlist,
+  watchIdentFromContact,
+} from './data/watchlist.js';
 import {
   hydrateTrailsEnabled,
   setTrailsEnabled,
@@ -2678,6 +2687,10 @@ export class StyleManager {
     this._radioStationHomepage = document.getElementById('radio-station-homepage');
     this._globalContextFlightsBtn = document.getElementById('global-context-flights-btn');
     this._contactsRosterToggle = document.getElementById('contacts-roster-toggle');
+    this._watchlistToggle = document.getElementById('watchlist-toggle');
+    this._watchlistPanel = document.getElementById('watchlist-panel');
+    this._watchlistItems = document.getElementById('watchlist-items');
+    this._selectedContactWatch = document.getElementById('selected-contact-ident-watch');
     this._installationsListToggle = document.getElementById('installations-list-toggle');
     this._installationsListPanel = document.getElementById('installations-viewport-list');
     this._installationsListOpen = false;
@@ -3043,6 +3056,7 @@ export class StyleManager {
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
     });
+    this._initWatchlist();
     initMeasure(viewer, {
       onChange: (state) => this._syncMeasureUi(state),
     });
@@ -5178,6 +5192,9 @@ export class StyleManager {
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
+        if (change?.layerId === 'flights' || change?.layerId === 'military') {
+          this._watchlistBinder?.refresh();
+        }
       });
     }
     this._updateGlobalLoadingFeedback(performance.now());
@@ -11354,6 +11371,40 @@ export class StyleManager {
   }
 
   /**
+   * Watch list of pinned aircraft idents. Add from the selected card; rows
+   * track when the ident is in the current flights payload.
+   */
+  _initWatchlist() {
+    hydrateWatchlist();
+    this._watchlistBinder = bindWatchlist({
+      toggle: this._watchlistToggle,
+      panel: this._watchlistPanel,
+      items: this._watchlistItems,
+      addButton: this._selectedContactWatch,
+      getFlights: () => [
+        ...(flightsLayer.getAnalystRecords?.() || []),
+        ...(militaryFlightsLayer.getAnalystRecords?.() || []),
+      ],
+      getSelectedContact: () => {
+        const selection = resolveCopyableSelection();
+        if (!selection) return null;
+        return {
+          kind: selection.kind,
+          callsign: watchIdentFromContact({
+            kind: selection.kind,
+            callsign: selection.ident,
+          }),
+        };
+      },
+      trackById: (icao24) => (
+        flightsLayer.trackById(icao24, { origin: 'user' })
+        || militaryFlightsLayer.trackById(icao24, { origin: 'user' })
+      ),
+      showToast: (text) => this._showToast(text),
+    });
+  }
+
+  /**
    * In-view OSM datacenter list. Reads the existing layer payload and flies
    * with the same stem-click destination. Installations stay on their own list.
    */
@@ -12155,6 +12206,8 @@ export class StyleManager {
       document.removeEventListener('gev:radio-selected', this._radioSelectedHandler);
       this._radioSelectedHandler = null;
     }
+    this._watchlistBinder?.destroy();
+    this._watchlistBinder = null;
     destroySelectedContactIdent();
     destroyCameraCoords();
     destroyTrackedReadout();

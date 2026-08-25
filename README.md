@@ -50,6 +50,7 @@ The dev server binds to **localhost** — your keys stay on your machine.
 
 - **Cockpit view:** Ride inside a tracked flight.
 - **Contacts:** A 250 km roster of nearby live aircraft. The Contacts control shows and hides that existing list.
+- **Watch list:** Pin up to 10 aircraft callsigns or hexes from the selected card. Watched idents highlight when they reappear in the current flights payload.
 - **Sites:** A list of mapped installations in the current view. Click a row to fly there.
 - **Launches panel:** Upcoming Launch Library 2 missions. Click a row to fly to the pad when coordinates are present.
 - **Click-to-track:** Camera locks on, draws a fading trail, surfaces metadata. Display **Trails** hides that path without stopping track.
