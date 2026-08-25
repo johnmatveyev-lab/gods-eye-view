@@ -21,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 import * as Cesium from 'cesium';
 import { legacyPrefKey } from '../prefStorage.js';
 import cctvLayer, {
+  _getCctvHealthFetchCountForTest,
+  _setCctvHealthByIdForTest,
   CCTV_PROJECTION_OVERLAY_SOURCE_OPTIONS,
   _createCctvProjectionPlaneForTest,
   _extractPickedCameraIdForTest,
@@ -1305,4 +1307,30 @@ test('frameSignatureFromPixels: empty or junk input yields null (always redraw)'
   assert.equal(frameSignatureFromPixels(null), null);
   assert.equal(frameSignatureFromPixels(undefined), null);
   assert.equal(frameSignatureFromPixels({}), null);
+});
+
+test('Hide unhealthy toggle reuses the in-memory health map and does not refetch', () => {
+  const fetches = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (input) => {
+    fetches.push(String(input));
+    return { ok: true, json: async () => ({ cameras: [] }) };
+  };
+  try {
+    _setCctvHealthByIdForTest([
+      ['ok-1', { status: 'ok' }],
+      ['err-1', { status: 'error' }],
+    ]);
+    const before = _getCctvHealthFetchCountForTest();
+    cctvLayer.setParams({ hideUnhealthy: true });
+    assert.equal(cctvLayer.getParams().hideUnhealthy, true);
+    cctvLayer.setParams({ hideUnhealthy: false });
+    assert.equal(cctvLayer.getParams().hideUnhealthy, false);
+    assert.equal(_getCctvHealthFetchCountForTest(), before);
+    assert.equal(fetches.some((url) => url.includes('/api/cctv/health')), false);
+    assert.equal(fetches.some((url) => url.includes('/api/cctv/sources')), false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    cctvLayer.setParams({ hideUnhealthy: false });
+  }
 });
