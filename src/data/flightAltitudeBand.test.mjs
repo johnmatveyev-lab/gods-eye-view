@@ -193,7 +193,7 @@ test('DISPLAY chrome and flights layer stay client-side on the current payload',
   assert.doesNotMatch(uiSource.slice(uiSource.indexOf('_initAltitudeBand'), uiSource.indexOf('_initAltitudeBand') + 800), /fetch\(|\/api\//);
   assert.doesNotMatch(flightsSource, /opensky-network\.org|google\.com\/news|telegeography/i);
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
-}
+});
 
 test('military altitudeFt converts to meters for the shared Alt chips', () => {
   const low = { altitudeFt: 3500, onGround: false };
