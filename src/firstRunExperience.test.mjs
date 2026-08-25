@@ -527,6 +527,9 @@ test('no mission writes a preference the visitor did not choose by picking it', 
     '_initTrailsToggle',
     '_setContactLabelsEnabled',
     'setContactLabelsEnabled',
+    'setAltitudeBand',
+    'writeAltitudeBand',
+    'hydrateAltitudeBand',
     'setFeather',
   ]) {
     assert.doesNotMatch(code, new RegExp(forbidden), `a mission must never touch ${forbidden}`);

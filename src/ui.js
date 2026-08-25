@@ -287,6 +287,13 @@ import {
   setScaleBarEnabled,
   uninstallScaleBar,
 } from './scaleBar.js';
+import {
+  altitudeBandStopLabels,
+  getAltitudeBand,
+  hydrateAltitudeBand,
+  setAltitudeBand,
+  subscribeAltitudeBand,
+} from './data/flightAltitudeBand.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -2516,6 +2523,7 @@ export class StyleManager {
       document.getElementById('power-low'),
     ].filter(Boolean);
     this._syncPowerModeUi(installPowerMode(this.viewer));
+    this._initAltitudeBand();
     this._detectionSliderRow = document.getElementById('detection-slider-row');
     this._detectionDensitySlider = document.getElementById('detection-density-slider');
     this._detectionDensityValue = document.getElementById('detection-density-value');
@@ -4200,6 +4208,37 @@ export class StyleManager {
     refreshScaleBar();
   }
 
+  _initAltitudeBand() {
+    this._altBandBtns = [
+      document.getElementById('alt-band-all'),
+      document.getElementById('alt-band-surface'),
+      document.getElementById('alt-band-lt10k'),
+      document.getElementById('alt-band-mid'),
+      document.getElementById('alt-band-gt30k'),
+    ].filter(Boolean);
+    hydrateAltitudeBand();
+    for (const button of this._altBandBtns) {
+      button.addEventListener('click', () => {
+        setAltitudeBand(button.dataset.altBand);
+        this._syncAltitudeBandUi();
+      });
+    }
+    this._altBandUnsubscribe = subscribeAltitudeBand(() => this._syncAltitudeBandUi());
+    this._syncAltitudeBandUi();
+  }
+
+  _syncAltitudeBandUi() {
+    const band = getAltitudeBand();
+    const labels = altitudeBandStopLabels(getDistanceUnit());
+    for (const button of this._altBandBtns || []) {
+      const id = button.dataset.altBand;
+      const active = band.id === id;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+      if (Object.hasOwn(labels, id)) button.textContent = labels[id];
+    }
+  }
+
   _syncUnitsUi() {
     const unit = getDistanceUnit();
     for (const button of this._unitsBtns || []) {
@@ -4207,6 +4246,7 @@ export class StyleManager {
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', String(active));
     }
+    this._syncAltitudeBandUi();
     const windowPhrase = `${formatDistanceMeters(AWARENESS_RADIUS_M, unit, { style: 'range' })} window`;
     const previous = document.getElementById('cockpit-context-previous');
     const next = document.getElementById('cockpit-context-next');

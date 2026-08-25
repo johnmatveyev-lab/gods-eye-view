@@ -1575,6 +1575,17 @@ body.recording-mode #scale-bar {
 .pp-mode-btn + .pp-mode-btn { border-left: 1px solid rgba(255, 255, 255, 0.14); }
 .pp-mode-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
 .pp-mode-btn.active { background: var(--accent); color: #000; }
+#alt-band-row { align-items: flex-start; }
+.alt-band-seg {
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+.alt-band-seg .pp-mode-btn {
+  flex: 1 1 28%;
+  min-width: 0;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
 
 #clean-view-toggle {
   width: var(--pp-expanded-width);
