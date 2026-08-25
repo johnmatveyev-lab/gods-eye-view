@@ -59,6 +59,13 @@ import {
   vesselMatchesTypeFilter,
   vesselTypeChipModels,
 } from './vesselTypeFilter.js';
+import {
+  DEFAULT_AIS_HIDE_PARKED,
+  aisHideParkedChipModel,
+  filterVesselsByParked,
+  normalizeAisHideParked,
+  vesselMatchesParkedFilter,
+} from './aisParkedFilter.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -554,30 +561,52 @@ const aisLiveVesselsLayer = {
   },
 
   /**
-   * Type chips re-filter in-memory vessels. Never hits `/api/ais-live`.
-   * @param {{ vesselTypeFilter?: unknown }} [params]
+   * Type chips and Hide parked re-filter in-memory vessels.
+   * Never hits `/api/ais-live`.
+   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown }} [params]
    * @returns {boolean}
    */
   setParams(params = {}) {
     if (!params || typeof params !== 'object') return false;
-    if (!Object.hasOwn(params, 'vesselTypeFilter')) return true;
-    const next = normalizeVesselTypeFilter(params.vesselTypeFilter);
-    if (next == null) return false;
-    if (next !== state.typeFilter) {
-      state.typeFilter = next;
-      if (state.enabled && state.viewer) updateVisibility(true);
+    const hasType = Object.hasOwn(params, 'vesselTypeFilter');
+    const hasParked = Object.hasOwn(params, 'hideParked');
+    if (!hasType && !hasParked) return true;
+
+    let nextType = state.typeFilter;
+    if (hasType) {
+      const type = normalizeVesselTypeFilter(params.vesselTypeFilter);
+      if (type == null) return false;
+      nextType = type;
     }
+
+    let nextParked = state.hideParked;
+    if (hasParked) {
+      const parked = normalizeAisHideParked(params.hideParked);
+      if (parked == null) return false;
+      nextParked = parked;
+    }
+
+    if (nextType === state.typeFilter && nextParked === state.hideParked) return true;
+    state.typeFilter = nextType;
+    state.hideParked = nextParked;
+    if (state.enabled && state.viewer) updateVisibility(true);
     return true;
   },
 
-  /** @returns {{ vesselTypeFilter: string }} */
+  /** @returns {{ vesselTypeFilter: string, hideParked: boolean }} */
   getParams() {
-    return { vesselTypeFilter: state.typeFilter };
+    return {
+      vesselTypeFilter: state.typeFilter,
+      hideParked: state.hideParked,
+    };
   },
 
   getRowControls() {
     return {
-      chips: vesselTypeChipModels(state.typeFilter),
+      chips: [
+        ...vesselTypeChipModels(state.typeFilter),
+        aisHideParkedChipModel(state.hideParked),
+      ],
     };
   },
 
@@ -806,6 +835,8 @@ const state = {
   trailBackfillToken: 0,
   /** Client-only type chips. Re-applied on the already-fetched vessel list. */
   typeFilter: DEFAULT_VESSEL_TYPE_FILTER,
+  /** Client-only Hide parked. Re-applied on the already-fetched vessel list. */
+  hideParked: DEFAULT_AIS_HIDE_PARKED,
 };
 
 /** Replace live AIS rows through the production reconciliation path (DEV only). */
@@ -1163,18 +1194,23 @@ function reconcileVessels(viewer, rows) {
  * @param {Object} record - Normalized vessel record.
  * @param {Cesium.EllipsoidalOccluder|null} occluder - Horizon occluder for initial visibility.
  */
+function selectedVesselId() {
+  return state.selectedRecord?.mmsi || null;
+}
+
 function visibleVesselRecords() {
-  return filterVesselsByType(
-    state.vesselRecords,
-    state.typeFilter,
-    state.selectedRecord?.mmsi || null,
+  const selectedId = selectedVesselId();
+  return filterVesselsByParked(
+    filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
+    state.hideParked,
+    selectedId,
   );
 }
 
 function vesselTypeVisible(record) {
-  return vesselMatchesTypeFilter(record, state.typeFilter, {
-    selectedId: state.selectedRecord?.mmsi || null,
-  });
+  const selectedId = selectedVesselId();
+  return vesselMatchesTypeFilter(record, state.typeFilter, { selectedId })
+    && vesselMatchesParkedFilter(record, state.hideParked, { selectedId });
 }
 
 function addRecordPrimitives(record, occluder) {
@@ -2116,6 +2152,7 @@ function resetState() {
   state.trailMmsi = null;
   state.trailBackfillToken = 0;
   state.typeFilter = DEFAULT_VESSEL_TYPE_FILTER;
+  state.hideParked = DEFAULT_AIS_HIDE_PARKED;
 }
 
 /**

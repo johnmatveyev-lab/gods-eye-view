@@ -1037,6 +1037,9 @@
         <button type="button" class="ais-type-chip active" data-ais-type="service" aria-pressed="true" title="Show service and tug vessels">Service</button>
         <button type="button" class="ais-type-chip active" data-ais-type="other" aria-pressed="true" title="Show untyped or unmatched vessels">Other</button>
       </div>
+      <div class="ais-parked-chips" id="ais-parked-chips" role="group" aria-label="Hide parked vessels" hidden>
+        <button type="button" class="ais-parked-chip" data-ais-parked="hide" aria-pressed="false" title="Hide anchored and parked vessels slower than 0.5 knots">Hide parked</button>
+      </div>
       <div id="data-toggles" class="data-toggle-list"></div>
       <div id="iss-pass-readout-park" hidden>
         <output id="iss-pass-readout" class="iss-pass-readout" hidden aria-live="polite" title="Next ISS pass at the camera location. Not an alert service.">UNAVAILABLE</output>

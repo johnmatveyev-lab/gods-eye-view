@@ -150,10 +150,12 @@ test('AIS layer row and Ships/AIS panel expose Tanker | Cargo | Passenger | Fish
   assert.doesNotMatch(filterSrc, /earthquakes\.js|satellites\.js|OpenSky|Google News|TeleGeography/);
   assert.equal(aisLiveVesselsLayer.setParams({ vesselTypeFilter: 'all' }), true);
   const chips = aisLiveVesselsLayer.getRowControls().chips;
-  assert.deepEqual(chips.map((chip) => chip.label), [
+  const typeChips = chips.filter((chip) => String(chip.id || '').startsWith('type-'));
+  assert.deepEqual(typeChips.map((chip) => chip.label), [
     'Tanker', 'Cargo', 'Passenger', 'Fishing', 'Service', 'Other',
   ]);
-  assert.ok(chips.every((chip) => chip.active === true));
+  assert.ok(typeChips.every((chip) => chip.active === true));
+  assert.equal(chips.find((chip) => chip.id === 'hide-parked')?.label, 'Hide parked');
   assert.equal(vesselTypeChipModels('all')[0].params.vesselTypeFilter, 'CPFSO');
 });
 

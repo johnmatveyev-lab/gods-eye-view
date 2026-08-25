@@ -60,6 +60,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has a client-only **Hide parked** toggle next to the Plan 153 type chips.
+  Default off matches the current harbor view. On skips in-memory vessels
+  whose `speed` is a finite value under 0.5 kt; missing or non-finite speed
+  stays visible. A selected vessel stays. Chip changes re-filter already
+  fetched AIS rows and AND with Tanker | Cargo | Passenger | Fishing |
+  Service | Other — no extra AISStream fetch and no `/api`. Preference
+  persists as `ais-live-vessels.hideParked` (`a.p.1`). Hidden when the AIS
+  layer is off. Feed refresh keeps the toggle. Existing AIS layer only.
 - Earthquake **Green | Yellow | Orange | Red | None** PAGER chips sit next to
   the tsunami toggle. Default all on matches the current USGS all_day discs.
   Chips filter cached `properties.alert`; missing/null is None and stays

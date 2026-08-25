@@ -78,7 +78,7 @@ function paramsForLayer(id) {
     return { installationClassFilter: 'all' };
   }
   if (id === 'ais-live-vessels') {
-    return { vesselTypeFilter: 'all' };
+    return { vesselTypeFilter: 'all', hideParked: false };
   }
   if (id === 'radio') {
     return {
@@ -476,6 +476,25 @@ test('AIS vessel type chips persist on ais-live-vessels and default all on', () 
   const decoded = decodeLayerStateParams(params);
   assert.equal(decoded.options['ais-live-vessels'].vesselTypeFilter, 'CPFSO');
   assert.equal(layerOptionsForRestore(decoded, 'ais-live-vessels').vesselTypeFilter, 'CPFSO');
+});
+
+test('AIS Hide parked persists on ais-live-vessels and defaults off', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['ais-live-vessels'].hideParked, false);
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=a'));
+  assert.equal(omitted.options['ais-live-vessels'].hideParked, false,
+    'existing a links keep parked vessels visible');
+
+  const state = normalizeLayerState({
+    enabledLayerIds: ['ais-live-vessels'],
+    options: { 'ais-live-vessels': { hideParked: true } },
+  });
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), state);
+  assert.match(params.get('lo'), /a\.p\.1/);
+  const decoded = decodeLayerStateParams(params);
+  assert.equal(decoded.options['ais-live-vessels'].hideParked, true);
+  assert.equal(layerOptionsForRestore(decoded, 'ais-live-vessels').hideParked, true);
 });
 
 test('installation class chips persist on military-installations and default all on', () => {
