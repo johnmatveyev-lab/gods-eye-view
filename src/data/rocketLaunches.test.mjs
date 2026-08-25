@@ -65,6 +65,13 @@ import {
   resetLaunchStatusFilterForTest,
   setLaunchStatusFilter,
 } from './launchStatusFilter.js';
+import {
+  DEFAULT_LAUNCH_PROVIDER_FILTER,
+  LAUNCH_PROVIDER_OTHER_CHIP_ID,
+  normalizeLaunchProviderFilter,
+  resetLaunchProviderFilterForTest,
+  setLaunchProviderFilter,
+} from './launchProviderFilter.js';
 
 const NOW = new Date('2026-07-27T00:00:00Z');
 
@@ -488,6 +495,48 @@ test('Go-only roster entries hide TBD/Hold and keep source indices', () => {
   ], { statusFilter: 'g' });
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['go']);
   assert.deepEqual(entries.map((entry) => entry.index), [1]);
+});
+
+test('provider-off roster entries hide that operator and keep others', () => {
+  const roster = [
+    { id: 'sx', provider: 'SpaceX', status: 'Go', launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'ula', provider: 'ULA', status: 'Go', launchTime: '2026-07-10T00:00:00Z' },
+    { id: 'blank', provider: null, status: 'Go', launchTime: '2026-07-15T00:00:00Z' },
+  ];
+  const chipIds = ['SpaceX', 'ULA', LAUNCH_PROVIDER_OTHER_CHIP_ID];
+  const withoutSpaceX = normalizeLaunchProviderFilter({
+    SpaceX: false,
+    ULA: true,
+    [LAUNCH_PROVIDER_OTHER_CHIP_ID]: true,
+  }, chipIds);
+  const entries = missionRosterEntries(roster, { providerFilter: withoutSpaceX });
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['ula', 'blank']);
+  assert.deepEqual(entries.map((entry) => entry.index), [1, 2]);
+  const allOn = missionRosterEntries(roster);
+  assert.deepEqual(allOn.map((entry) => entry.launch.id).sort(), ['blank', 'sx', 'ula']);
+});
+
+test('status Go AND one provider keeps only matching missions', () => {
+  const roster = [
+    { id: 'sx-go', provider: 'SpaceX', status: 'Go', launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'sx-tbd', provider: 'SpaceX', status: 'TBD', launchTime: '2026-07-18T00:00:00Z' },
+    { id: 'ula-go', provider: 'ULA', status: 'Go', launchTime: '2026-07-10T00:00:00Z' },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+  }, ['SpaceX', 'ULA']);
+  const entries = missionRosterEntries(roster, {
+    statusFilter: 'g',
+    providerFilter: spaceXOnly,
+  });
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['sx-go']);
+  const selected = missionRosterEntries(roster, {
+    statusFilter: 'g',
+    providerFilter: spaceXOnly,
+    selectedLaunchId: 'ula-go',
+  });
+  assert.deepEqual(selected.map((entry) => entry.launch.id).sort(), ['sx-go', 'ula-go']);
 });
 
 test('prioritizes data-rich missions before newer sparse records', () => {
@@ -1269,7 +1318,7 @@ test('disable reports a semantic failure while restoring the satellites dependen
   );
 });
 
-function statusFilterLaunch(id, status, latOffset = 0) {
+function statusFilterLaunch(id, status, latOffset = 0, provider = null) {
   return {
     id,
     name: `${id} | Status Filter`,
@@ -1281,6 +1330,7 @@ function statusFilterLaunch(id, status, latOffset = 0) {
       name: 'Space Launch Complex 39A',
     },
     mission: { name: id, orbit: { name: 'Low Earth Orbit' } },
+    ...(provider ? { launch_service_provider: { name: provider } } : {}),
   };
 }
 
@@ -1417,6 +1467,20 @@ function createStatusFilterDocument() {
 
     addEventListener() {}
     insertAdjacentHTML() {}
+    getContext() {
+      if (this.tagName !== 'CANVAS') return null;
+      return {
+        strokeStyle: '',
+        lineWidth: 0,
+        lineCap: '',
+        shadowColor: '',
+        shadowBlur: 0,
+        beginPath() {},
+        moveTo() {},
+        lineTo() {},
+        stroke() {},
+      };
+    }
   }
 
   const host = new FakeNode('div');
@@ -1436,8 +1500,12 @@ function createStatusFilterDocument() {
     chip.textContent = id;
     chips.appendChild(chip);
   }
+  const providerChips = new FakeNode('div');
+  providerChips.className = 'space-mission-provider-chips';
+  providerChips.setAttribute('data-mission-provider-chips', '');
   roster.appendChild(count);
   roster.appendChild(chips);
+  roster.appendChild(providerChips);
   roster.appendChild(list);
   host.appendChild(roster);
   const nodes = new Map([
@@ -1450,6 +1518,7 @@ function createStatusFilterDocument() {
     roster,
     list,
     count,
+    providerChips,
     document: {
       body: new FakeNode('body'),
       createElement: (tagName) => new FakeNode(tagName),
@@ -1596,4 +1665,124 @@ test('status chips re-apply the cached roster without refetching /api/launches',
   assert.match(list.innerHTML, /GO-1/);
   assert.match(list.innerHTML, /FLY-1/);
   assert.doesNotMatch(list.innerHTML, /TBD-1|HOLD-1/);
+});
+
+test('provider chips re-apply the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  resetLaunchProviderFilterForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, providerChips, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  const overlayEntries = [];
+  const payload = {
+    results: [
+      statusFilterLaunch('sx-go', 'Go', 0, 'SpaceX'),
+      statusFilterLaunch('ula-go', 'Go', 0.1, 'ULA'),
+      statusFilterLaunch('sx-tbd', 'TBD', 0.2, 'SpaceX'),
+      statusFilterLaunch('blank-go', 'Go', 0.3),
+    ],
+  };
+  const chipIds = ['SpaceX', 'ULA', LAUNCH_PROVIDER_OTHER_CHIP_ID];
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries(_id, entries) { overlayEntries.splice(0, overlayEntries.length, ...(entries || [])); },
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    resetLaunchProviderFilterForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  setLaunchStatusFilter(DEFAULT_LAUNCH_STATUS_FILTER);
+  setLaunchProviderFilter(DEFAULT_LAUNCH_PROVIDER_FILTER, { chipIds });
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:sx-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:ula-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:blank-go').show, true);
+  assert.match(list.innerHTML, /SX-GO/);
+  assert.match(list.innerHTML, /ULA-GO/);
+  assert.match(list.innerHTML, /BLANK-GO/);
+  assert.match(providerChips.innerHTML, /SpaceX/);
+  assert.match(providerChips.innerHTML, /ULA/);
+  assert.match(providerChips.innerHTML, /Other/);
+
+  const withoutSpaceX = normalizeLaunchProviderFilter({
+    SpaceX: false,
+    ULA: true,
+    [LAUNCH_PROVIDER_OTHER_CHIP_ID]: true,
+  }, chipIds);
+  setLaunchProviderFilter(withoutSpaceX, { chipIds });
+  assert.equal(launchFetches, 1, 'chip change must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:sx-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:sx-tbd').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:ula-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:blank-go').show, true);
+  assert.doesNotMatch(list.innerHTML, /SX-GO|SX-TBD/);
+  assert.match(list.innerHTML, /ULA-GO/);
+  assert.match(list.innerHTML, /BLANK-GO/);
+  assert.equal(
+    overlayEntries.some((entry) => entry.id === 'launch:sx-go'),
+    false,
+  );
+  assert.equal(
+    overlayEntries.some((entry) => entry.id === 'launch:ula-go'),
+    true,
+  );
+
+  setLaunchProviderFilter(DEFAULT_LAUNCH_PROVIDER_FILTER, { chipIds });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:sx-go').show, true);
+  assert.match(list.innerHTML, /SX-GO/);
+
+  _setSelectedRocketMissionForTest('sx-go');
+  setLaunchProviderFilter(withoutSpaceX, { chipIds });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:sx-go').show, true, 'selected SpaceX stays visible');
+  assert.match(list.innerHTML, /SX-GO/);
+  assert.doesNotMatch(list.innerHTML, /SX-TBD/);
+
+  _setSelectedRocketMissionForTest(null);
+  setLaunchStatusFilter({ go: true });
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+    [LAUNCH_PROVIDER_OTHER_CHIP_ID]: false,
+  }, chipIds);
+  setLaunchProviderFilter(spaceXOnly, { chipIds });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:sx-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:sx-tbd').show, false, 'Go + SpaceX still ANDs');
+  assert.equal(dataSource.entities.getById('rocket-launch:ula-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:blank-go').show, false);
+  assert.match(list.innerHTML, /SX-GO/);
+  assert.doesNotMatch(list.innerHTML, /SX-TBD|ULA-GO|BLANK-GO/);
 });
