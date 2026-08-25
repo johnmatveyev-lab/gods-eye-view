@@ -29,6 +29,12 @@ import {
   trafficSourceControls,
   trafficUsesLiveTiles,
 } from './trafficSource.js';
+import {
+  getUncoveredRoads,
+  setUncoveredRoads,
+  uncoveredRoadSpawns,
+  uncoveredRoadsControls,
+} from './uncoveredRoads.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -46,9 +52,9 @@ import {
  *    tiles (`flowTiles.js`) are matched onto the same Overpass roads
  *    (`flowMatch.js`); matched roads color/slow/densify their dots by real
  *    congestion (`trafficFlowStyle.js`), closed roads spawn no dots, and
- *    unmatched roads keep the simulated white. Hosted users can force Sim
- *    when Live is over budget. TomTom attribution registers only after Live
- *    actually paints a tile.
+ *    unmatched roads keep the simulated white unless Uncovered is Hide.
+ *    Hosted users can force Sim when Live is over budget. TomTom
+ *    attribution registers only after Live actually paints a tile.
  *
  * Architecture overview:
  *  - Camera-change listener triggers debounced road fetching per viewport tile.
@@ -246,7 +252,7 @@ let _bucketCounts = { free: 0, slow: 0, jam: 0, sim: 0 };
 /** @type {number} Roads in the current render skipped entirely as closed. */
 let _closedRoads = 0;
 /** @type {'sim'|'hide'} Live-mode treatment of roads without flow data. */
-let _uncoveredMode = 'sim';
+let _uncoveredMode = getUncoveredRoads();
 /**
  * Jam-viz prototype mode: 'density' = deep-jam density boost + platoon queues
  * + stop-and-go creep; 'heatline' = congestion corridor polylines; 'both';
@@ -684,7 +690,11 @@ function computeDotCount(road, altitude) {
   const flow = _liveMode ? road.flow : null;
   if (flow?.closure) return 0;
   // Strict data-integrity view: uncovered roads spawn nothing when hidden.
-  if (_liveMode && !flow && _uncoveredMode === 'hide') return 0;
+  if (!uncoveredRoadSpawns({
+    liveMode: _liveMode,
+    hasFlow: Boolean(flow),
+    uncoveredRoads: _uncoveredMode,
+  })) return 0;
 
   const lengthM = estimateRoadLengthDeg(road.coords);
 
@@ -748,7 +758,11 @@ function spawnDotsForRoad(road, altitude, budgetCount = null) {
   // byte-identical): closures spawn nothing, congestion colors/slows dots.
   const flow = _liveMode ? road.flow : null;
   if (flow?.closure) return;
-  if (_liveMode && !flow && _uncoveredMode === 'hide') return;
+  if (!uncoveredRoadSpawns({
+    liveMode: _liveMode,
+    hasFlow: Boolean(flow),
+    uncoveredRoads: _uncoveredMode,
+  })) return;
 
   const count = Number.isFinite(budgetCount)
     ? Math.max(0, Math.floor(budgetCount))
@@ -2513,7 +2527,8 @@ const trafficLayer = {
     // data-integrity view). Owner-explorable; re-render applies on the next
     // camera-driven load.
     if (params.uncoveredRoads === 'sim' || params.uncoveredRoads === 'hide') {
-      _uncoveredMode = params.uncoveredRoads;
+      _uncoveredMode = setUncoveredRoads(params.uncoveredRoads);
+      _rowControlsListener?.();
     }
     // Jam-viz prototype toggle (A/B): 'none' = shipped main behavior;
     // live mode only, applies on the next camera-driven load like the
@@ -2555,15 +2570,21 @@ const trafficLayer = {
   },
 
   /**
-   * Street Traffic Live | Sim chips. Live is disabled without a host key.
+   * Street Traffic Live | Sim chips plus Uncovered: Sim | Hide.
+   * Live is disabled without a host key. Uncovered only writes uncoveredRoads.
    * @returns {{heading: string, chips: Array<object>}}
    */
   getRowControls() {
-    return trafficSourceControls({
+    const source = trafficSourceControls({
       hasKey: _hasKey,
       source: _sourcePreference,
       flowError: _flowError,
     });
+    const uncovered = uncoveredRoadsControls({ uncoveredRoads: _uncoveredMode });
+    return {
+      heading: source.heading,
+      chips: [...source.chips, ...uncovered.chips],
+    };
   },
 
   /**

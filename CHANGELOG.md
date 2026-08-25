@@ -33,6 +33,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Street Traffic has an Uncovered: Sim | Hide control. Sim keeps today's
+  white ambient dots on roads TomTom has no flow for. Hide spawns nothing
+  on those roads; colored live flow stays. Applies on the next camera-driven
+  load. Distinct from Traffic: Live | Sim, which still changes the whole
+  feed. The choice persists as `meridian.uncoveredRoads` (default Sim).
+  Share URLs stay enabled-only. No extra `/api`.
 - FIRMS row chips filter already-fetched detections by FRP floor
   (`All` | `10+` | `50+` | `100+ MW`, default All). Cells, sprites, overlay
   cards, and the Plan 70 FIRES list hide below the floor without a new NASA
