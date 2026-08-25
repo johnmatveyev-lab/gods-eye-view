@@ -11,6 +11,7 @@ import {
   createDefaultLayerState,
   decodeLayerStateParams,
   encodeLayerStateParams,
+  isLayerSelectable,
   normalizeLayerState,
   parseStoredLayerState,
   serializeStoredLayerState,
@@ -152,6 +153,18 @@ function encode(state) {
   encodeLayerStateParams(params, state);
   return params.toString();
 }
+
+test('cables stay registered but unselectable in the client layer registry', () => {
+  const cables = LAYER_STATE_REGISTRY.find((entry) => entry.id === 'telegeography-submarine-cables');
+  assert.equal(cables?.token, 'u');
+  assert.equal(cables?.selectable, false);
+  assert.equal(isLayerSelectable('telegeography-submarine-cables'), false);
+  assert.equal(isLayerSelectable('local-datacenters'), true);
+  const normalized = normalizeLayerState({
+    enabledLayerIds: ['local-datacenters', 'telegeography-submarine-cables'],
+  });
+  assert.deepEqual(normalized.enabledLayerIds, ['local-datacenters']);
+});
 
 test('production registry is exact, canonical, and rejects incomplete contracts', async () => {
   assert.equal(validateLayerStateRegistry(), true);

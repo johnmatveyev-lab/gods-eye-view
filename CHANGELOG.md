@@ -26,6 +26,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).
   `/api/opensky-track` stays 410. No `OPENSKY_*` env.
 
+### Changed
+
+- TeleGeography submarine cables stay registered as a commercial no-op and are
+  now unselectable: the Data Layers panel hides the enable control, manager
+  enable is a no-op, and voice `set_layer` refuses undersea/submarine cables
+  with “layer is a commercial no-op”. No cable geometry is fetched.
+
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).
