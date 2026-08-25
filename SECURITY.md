@@ -20,7 +20,7 @@ The golden rule: **secret-bearing API keys stay on the server side.** The dev/pr
 | `OPENAI_API_KEY` | Server only | Browser fetches a short-lived **ephemeral** Realtime session token from `/api/realtime/token`; the real key never ships. Hosted Pro is required when Clerk is configured. |
 | `AISSTREAM_API_KEY` | Server only | Server holds the AISStream websocket; browser polls the same-origin `/api/ais-live` cache |
 | `CLERK_SECRET_KEY` | Server only | Verifies session JWTs for `/api/billing/*` and hosted voice |
-| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Server only | Creates Checkout sessions and verifies `/api/stripe/webhook` |
+| `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Server only | Creates Checkout sessions and verifies `/api/stripe/webhook` (Vite middleware locally; Vercel `/api` functions in production) |
 | `CLERK_PUBLISHABLE_KEY` | Client (injected) | Clerk sign-in UI only — not a secret, but restrict the Clerk instance to this origin |
 
 ### Two deliberately client-side keys — restrict them

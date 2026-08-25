@@ -8,6 +8,7 @@ output/
 .gev-logs/
 .gev-cache/
 .meridian-billing/
+.vercel/
 .DS_Store
 .gstack/
 3d-models/

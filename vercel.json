@@ -1,0 +1,12 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "functions": {
+    "api/billing/**/*.js": {
+      "maxDuration": 15
+    },
+    "api/stripe/**/*.js": {
+      "maxDuration": 15
+    }
+  }
+}

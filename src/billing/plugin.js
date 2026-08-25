@@ -1,3 +1,4 @@
+import { publicBillingError } from './env.js';
 import { getBillingRuntime, handleBillingHttp, rejectIfVoiceForbidden } from './http.js';
 
 const BILLING_PATHS = [
@@ -24,7 +25,7 @@ export function meridianBillingPlugin(runtimeFactory = getBillingRuntime) {
         if (res.headersSent) return;
         res.statusCode = 500;
         res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: error?.message || 'Billing request failed' }));
+        res.end(JSON.stringify({ error: publicBillingError(error, 'Billing request failed') }));
       }
     });
   }

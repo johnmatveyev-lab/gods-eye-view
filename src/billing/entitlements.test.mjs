@@ -38,6 +38,42 @@ test('unsigned hosted users get a working globe, no voice, and an upgrade path',
   assert.equal(entitlement.upgrade.priceUsd, PRO_PRICE_USD);
 });
 
+test('hosted Free vs Pro gates stay 15 min/day no voice versus $29/mo voice', () => {
+  assert.equal(PLAN_LIMITS[PLANS.FREE].voice, false);
+  assert.equal(PLAN_LIMITS[PLANS.FREE].dailySessionSeconds, 15 * 60);
+  assert.equal(PLAN_LIMITS[PLANS.PRO].voice, true);
+  assert.equal(PLAN_LIMITS[PLANS.PRO].priceUsd, PRO_PRICE_USD);
+  assert.equal(PRO_PRICE_USD, 29);
+  assert.equal(PLAN_LIMITS[PLANS.PRO].interval, 'month');
+
+  const free = resolveEntitlements({
+    hosted: true,
+    signedIn: true,
+    plan: PLANS.FREE,
+    stripeConfigured: true,
+    clerkConfigured: true,
+    nowMs: NOON,
+  });
+  assert.equal(free.voice, false);
+  assert.equal(free.remaining.sessionSeconds, 15 * 60);
+  assert.equal(free.upgrade.available, true);
+  assert.equal(free.upgrade.priceUsd, 29);
+  assert.equal(voiceDenial(free).code, BILLING_CODES.VOICE_REQUIRES_PRO);
+
+  const pro = resolveEntitlements({
+    hosted: true,
+    signedIn: true,
+    plan: PLANS.PRO,
+    stripeConfigured: true,
+    clerkConfigured: true,
+    nowMs: NOON,
+  });
+  assert.equal(pro.voice, true);
+  assert.equal(canUseVoice(pro), true);
+  assert.equal(voiceDenial(pro), null);
+  assert.equal(pro.upgrade.available, false);
+});
+
 test('Free accounts cannot use voice even with remaining budget', () => {
   const entitlement = resolveEntitlements({
     hosted: true,
@@ -136,6 +172,35 @@ test('checkout.session.completed marks the Clerk user Pro from metadata', () => 
     stripeSubscriptionId: 'sub_123',
     subscriptionStatus: 'active',
   });
+});
+
+test('subscription.updated maps active and canceled statuses onto Pro or Free', () => {
+  const active = applyStripeEvent({
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_123',
+        customer: 'cus_123',
+        status: 'active',
+        metadata: { userId: 'user_abc' },
+      },
+    },
+  });
+  assert.equal(active.plan, PLANS.PRO);
+  assert.equal(active.userId, 'user_abc');
+
+  const canceled = applyStripeEvent({
+    type: 'customer.subscription.updated',
+    data: {
+      object: {
+        id: 'sub_123',
+        customer: 'cus_123',
+        status: 'canceled',
+        metadata: { userId: 'user_abc' },
+      },
+    },
+  });
+  assert.equal(canceled.plan, PLANS.FREE);
 });
 
 test('subscription deletion returns the account to Free', () => {

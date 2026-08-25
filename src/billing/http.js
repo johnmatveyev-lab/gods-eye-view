@@ -1,6 +1,14 @@
 import { authenticateRequest, readBearerToken } from './auth.js';
+import { clerkMetadataFromAccount, hydrateAccountFromClerk } from './clerkSync.js';
 import { BILLING_CODES, publicAccountView, resolveEntitlements, voiceDenial } from './entitlements.js';
-import { readBillingEnv } from './env.js';
+import {
+  formatMissingEnvError,
+  missingClerkEnv,
+  missingStripeCheckoutEnv,
+  missingStripeWebhookEnv,
+  publicBillingError,
+  readBillingEnv,
+} from './env.js';
 import { MERIDIAN_TERMS, PLANS, PRO_PRICE_USD } from './plans.js';
 import { applyStripeEvent, buildCheckoutSessionParams } from './stripeEvents.js';
 import { createAccountStore } from './store.js';
@@ -13,6 +21,8 @@ export function createBillingRuntime({
   verifyToken,
   createStripe,
   getUserEmail,
+  getUserRecord,
+  updateUserMetadata,
   readBody,
 } = {}) {
   const config = readBillingEnv(env);
@@ -30,14 +40,16 @@ export function createBillingRuntime({
     verifyToken,
     createStripe,
     getUserEmail,
+    getUserRecord,
+    updateUserMetadata,
     readJson,
 
     entitlementsFor(user, extras = {}) {
       const account = user ? accounts.getOrCreate(user.id) : null;
       return resolveEntitlements({
-        hosted: config.hosted,
+        hosted: config.hostedIntent,
         signedIn: Boolean(user),
-        plan: account?.plan,
+        plan: account?.plan || user?.plan,
         usage: account?.usage,
         savedViews: account?.savedViews,
         nowMs: now(),
@@ -48,7 +60,11 @@ export function createBillingRuntime({
     },
 
     async authorize(req) {
-      return authenticateRequest(req, { env, verifyToken });
+      const auth = await authenticateRequest(req, { env, verifyToken });
+      if (auth.ok && auth.hosted && auth.user) {
+        auth.user = await hydrateAccountFromClerk(auth.user, this);
+      }
+      return auth;
     },
   };
 }
@@ -142,20 +158,25 @@ export async function handleBillingHttp(req, res, runtime = getBillingRuntime())
 }
 
 async function handleCheckout(req, res, runtime) {
-  const auth = await runtime.authorize(req);
-  if (!auth.hosted) {
+  const clerkMissing = missingClerkEnv(runtime.config);
+  if (clerkMissing.length) {
     return writeJson(res, 503, {
-      error: 'Hosted billing is not configured. Set CLERK_PUBLISHABLE_KEY and CLERK_SECRET_KEY.',
+      error: `Hosted billing is not configured. ${formatMissingEnvError(clerkMissing)}`,
       code: BILLING_CODES.CLERK_NOT_CONFIGURED,
+      missing: clerkMissing,
     });
   }
-  if (!auth.ok) return writeJson(res, auth.status, { error: auth.error, code: auth.code });
-  if (!runtime.config.stripeConfigured) {
+  const stripeMissing = missingStripeCheckoutEnv(runtime.config);
+  if (stripeMissing.length) {
     return writeJson(res, 503, {
-      error: 'Stripe is not configured. Set STRIPE_SECRET_KEY and STRIPE_PRICE_PRO.',
+      error: `Stripe Checkout is not configured. ${formatMissingEnvError(stripeMissing)}`,
       code: BILLING_CODES.STRIPE_NOT_CONFIGURED,
+      missing: stripeMissing,
     });
   }
+
+  const auth = await runtime.authorize(req);
+  if (!auth.ok) return writeJson(res, auth.status, { error: auth.error, code: auth.code, missing: auth.missing });
 
   const entitlement = runtime.entitlementsFor(auth.user);
   if (entitlement.plan === PLANS.PRO) {
@@ -187,25 +208,36 @@ async function handleCheckout(req, res, runtime) {
       return writeJson(res, 502, { error: 'Stripe Checkout did not return a session URL.' });
     }
     return writeJson(res, 200, { url: session.url, id: session.id || null });
-  } catch (error) {
+  } catch {
     return writeJson(res, 502, {
-      error: error?.message || 'Failed to create Stripe Checkout session.',
+      error: 'Stripe Checkout failed. Check STRIPE_SECRET_KEY and STRIPE_PRICE_PRO.',
     });
   }
 }
 
 async function handlePortal(req, res, runtime) {
-  const auth = await runtime.authorize(req);
-  if (!auth.hosted || !auth.ok) {
-    return writeJson(res, auth.hosted ? auth.status : 503, {
-      error: auth.error || 'Sign in required.',
-      code: auth.code || BILLING_CODES.AUTH_REQUIRED,
+  const clerkMissing = missingClerkEnv(runtime.config);
+  if (clerkMissing.length) {
+    return writeJson(res, 503, {
+      error: `Hosted billing is not configured. ${formatMissingEnvError(clerkMissing)}`,
+      code: BILLING_CODES.CLERK_NOT_CONFIGURED,
+      missing: clerkMissing,
     });
   }
-  if (!runtime.config.stripeConfigured) {
+  const stripeMissing = missingStripeCheckoutEnv(runtime.config);
+  if (stripeMissing.length) {
     return writeJson(res, 503, {
-      error: 'Stripe is not configured. Set STRIPE_SECRET_KEY and STRIPE_PRICE_PRO.',
+      error: `Stripe Checkout is not configured. ${formatMissingEnvError(stripeMissing)}`,
       code: BILLING_CODES.STRIPE_NOT_CONFIGURED,
+      missing: stripeMissing,
+    });
+  }
+  const auth = await runtime.authorize(req);
+  if (!auth.ok) {
+    return writeJson(res, auth.status, {
+      error: auth.error || 'Sign in required.',
+      code: auth.code || BILLING_CODES.AUTH_REQUIRED,
+      missing: auth.missing,
     });
   }
   const account = runtime.accounts.get(auth.user.id);
@@ -219,19 +251,32 @@ async function handlePortal(req, res, runtime) {
       return_url: originFromRequest(req),
     });
     return writeJson(res, 200, { url: portal.url });
-  } catch (error) {
-    return writeJson(res, 502, { error: error?.message || 'Failed to open the Stripe customer portal.' });
+  } catch {
+    return writeJson(res, 502, { error: 'Failed to open the Stripe customer portal.' });
   }
 }
 
 async function handleWebhook(req, res, runtime) {
-  const raw = await runtime.readJson(req, { raw: true });
+  const webhookMissing = missingStripeWebhookEnv(runtime.config);
+  if (webhookMissing.length) {
+    return writeJson(res, 503, {
+      error: `Stripe webhook is not configured. ${formatMissingEnvError(webhookMissing)}`,
+      code: BILLING_CODES.STRIPE_WEBHOOK_NOT_CONFIGURED,
+      missing: webhookMissing,
+    });
+  }
   const signature = header(req, 'stripe-signature');
+  if (!signature) {
+    return writeJson(res, 400, { error: 'Missing Stripe-Signature header.' });
+  }
+  const raw = await runtime.readJson(req, { raw: true });
   let event;
   try {
     event = await constructWebhookEvent(runtime, raw, signature);
   } catch (error) {
-    return writeJson(res, 400, { error: error?.message || 'Invalid Stripe webhook signature.' });
+    return writeJson(res, 400, {
+      error: publicBillingError(error, 'Invalid Stripe webhook signature.'),
+    });
   }
 
   const mapped = applyStripeEvent(event);
@@ -249,8 +294,8 @@ async function handleWebhook(req, res, runtime) {
 
   const { lookupByCustomerId, patch, ...fields } = mapped;
   const next = patch || fields;
-  runtime.accounts.applyPatch(userId, next);
-  void syncClerkPlan(userId, next.plan, runtime);
+  const account = runtime.accounts.applyPatch(userId, next);
+  void syncClerkPlan(userId, account, runtime);
   return writeJson(res, 200, { received: true, applied: true, userId, plan: next.plan });
 }
 
@@ -348,7 +393,7 @@ async function createPortalSession(stripe, params) {
 
 async function constructWebhookEvent(runtime, raw, signature) {
   if (!runtime.config.stripeWebhookSecret) {
-    throw new Error('STRIPE_WEBHOOK_SECRET is not set.');
+    throw new Error('Stripe webhook is not configured.');
   }
   const stripe = await stripeClient(runtime);
   if (stripe?.webhooks?.constructEvent) {
@@ -360,24 +405,23 @@ async function constructWebhookEvent(runtime, raw, signature) {
   throw new Error('Stripe webhook verification is unavailable.');
 }
 
-async function syncClerkPlan(userId, plan, runtime) {
-  if (!userId || !plan || !runtime.config.clerkSecretKey) return;
+async function syncClerkPlan(userId, account, runtime) {
+  if (!userId || !account || !runtime.config.clerkSecretKey) return;
+  const metadata = clerkMetadataFromAccount(account);
   if (runtime.updateUserMetadata) {
     try {
-      await runtime.updateUserMetadata(userId, plan);
+      await runtime.updateUserMetadata(userId, metadata);
     } catch {
-      /* store remains authoritative */
+      /* store remains authoritative when it persists */
     }
     return;
   }
   try {
     const { createClerkClient } = await import('@clerk/backend');
     const clerk = createClerkClient({ secretKey: runtime.config.clerkSecretKey });
-    await clerk.users.updateUserMetadata(userId, {
-      publicMetadata: { meridianPlan: plan },
-    });
+    await clerk.users.updateUserMetadata(userId, metadata);
   } catch {
-    /* store remains authoritative */
+    /* store remains authoritative when it persists */
   }
 }
 

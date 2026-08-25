@@ -6,6 +6,7 @@ export const BILLING_CODES = Object.freeze({
   VOICE_REQUIRES_PRO: 'voice_requires_pro',
   BUDGET_EXHAUSTED: 'budget_exhausted',
   STRIPE_NOT_CONFIGURED: 'stripe_not_configured',
+  STRIPE_WEBHOOK_NOT_CONFIGURED: 'stripe_webhook_not_configured',
   CLERK_NOT_CONFIGURED: 'clerk_not_configured',
   ALREADY_PRO: 'already_pro',
 });
