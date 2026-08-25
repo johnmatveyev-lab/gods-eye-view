@@ -148,6 +148,40 @@ html, body {
   pointer-events: none;
 }
 
+/* Camera-center plus — same CSS-pixel center copy-coords / measure pick.
+   Not a Cesium layer. Clean view may keep it; credits stay on. */
+#camera-crosshair {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 8;
+  pointer-events: none;
+}
+#camera-crosshair[hidden] {
+  display: none;
+}
+#camera-crosshair::before,
+#camera-crosshair::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 0 1px rgba(10, 10, 15, 0.55);
+  pointer-events: none;
+}
+#camera-crosshair::before {
+  width: 16px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+}
+#camera-crosshair::after {
+  width: 1px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+}
+
 /* The detection surface is host-owned but parented into #cesiumContainer
    (position:absolute, z-index:auto — NOT a stacking context) so its
    `mix-blend-mode: screen` composites against the WebGL scene. z5 keeps it

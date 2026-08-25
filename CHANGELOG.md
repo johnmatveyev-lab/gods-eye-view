@@ -25,6 +25,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
+  camera-center aim point copy-coords and measure already use. Default off.
+  Persists as `meridian.crosshair`. Clean view may keep it; credits stay
+  on. Not a Cesium layer, not a geo entity, and no `/api`.
 - Added a left-stack **FIRES** list from the existing trailing-24h NASA FIRMS
   payload (`/api/firms` `fires[]`). Up to 50 detections nearest the camera;
   clicking a row flies there with the current world-focus helper. Keyless 503
