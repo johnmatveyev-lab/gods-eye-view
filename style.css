@@ -309,6 +309,13 @@ body.cockpit-mode #cockpit-cloud-effects.active {
   color: rgba(232, 234, 237, 0.7);
 }
 
+/* Fullscreen targets documentElement so this line stays in the tree. Pin it. */
+:fullscreen #cesium-credits {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
 /* Cesium's stock attribution lightbox grows with every registered data source.
    Keep the title and close affordance fixed while the complete, unabridged
    credit list wraps and scrolls inside a compact panel. */
@@ -3937,7 +3944,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #copy-view-link, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #copy-view-link, #fullscreen-view, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
