@@ -5,9 +5,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BILLING_CODES } from '../billing/entitlements.js';
-import { createBillingRuntime } from '../billing/http.js';
-import { PLANS } from '../billing/plans.js';
-import { createAccountStore } from '../billing/store.js';
 import {
   buildHudSummaryInput,
   extractOpenAiResponseText,
@@ -42,19 +39,9 @@ function mockRes() {
   };
 }
 
-function hostedRuntime(overrides = {}) {
-  const store = createAccountStore({ now: () => Date.parse('2026-08-25T12:00:00.000Z') });
-  return createBillingRuntime({
-    env: {
-      CLERK_PUBLISHABLE_KEY: 'pk_test_example',
-      CLERK_SECRET_KEY: 'sk_test_example',
-    },
-    now: () => Date.parse('2026-08-25T12:00:00.000Z'),
-    store,
-    verifyToken: async () => ({ sub: 'user_abc', email: 'ops@example.com' }),
-    getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.FREE } }),
-    ...overrides,
-  });
+function assertNotVoiceAuthRequired(json) {
+  assert.notEqual(json?.code, BILLING_CODES.AUTH_REQUIRED);
+  assert.notEqual(json?.error, 'Sign in required for voice.');
 }
 
 function mockOpenAiFetch() {
@@ -84,7 +71,6 @@ async function dispatchHud(options = {}, deps = {}) {
   await handleHudSummaryHttp(req, res, {
     env: { OPENAI_API_KEY: SERVER_KEY, ...deps.env },
     fetchImpl: deps.fetchImpl,
-    runtime: deps.runtime,
   });
   return {
     status: res.statusCode,
@@ -95,7 +81,6 @@ async function dispatchHud(options = {}, deps = {}) {
 
 test('GET /api/openai/hud-summary is 405 JSON, never NOT_FOUND', async () => {
   const { status, json, body } = await dispatchHud({ method: 'GET' }, {
-    runtime: createBillingRuntime({ env: {} }),
     fetchImpl: mockOpenAiFetch().fetchImpl,
   });
   assert.equal(status, 405);
@@ -107,51 +92,38 @@ test('POST {} without key is 503 OPENAI_API_KEY is not set', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
   const { status, json } = await dispatchHud({ body: {} }, {
     env: { OPENAI_API_KEY: '' },
-    runtime: createBillingRuntime({ env: {} }),
     fetchImpl,
   });
   assert.equal(status, 503);
   assert.match(json.error, /OPENAI_API_KEY is not set/);
+  assertNotVoiceAuthRequired(json);
   assert.equal(calls.length, 0);
 });
 
-test('POST {} unauth/Free is the same forbid JSON as voice', async () => {
-  const free = mockOpenAiFetch();
-  const denied = await dispatchHud({
-    headers: { authorization: 'Bearer sess_test' },
-    body: {},
-  }, {
-    runtime: hostedRuntime(),
-    fetchImpl: free.fetchImpl,
+test('POST without Clerk or session never returns voice auth_required', async () => {
+  const missingKey = mockOpenAiFetch();
+  const denied = await dispatchHud({ body: {} }, {
+    env: { OPENAI_API_KEY: '' },
+    fetchImpl: missingKey.fetchImpl,
   });
-  assert.equal(denied.status, 403);
-  assert.equal(denied.json.code, BILLING_CODES.VOICE_REQUIRES_PRO);
-  assert.equal(free.calls.length, 0);
+  assert.equal(denied.status, 503);
+  assert.match(denied.json.error, /OPENAI_API_KEY is not set/);
+  assertNotVoiceAuthRequired(denied.json);
+  assert.equal(missingKey.calls.length, 0);
 
-  const pro = mockOpenAiFetch();
-  const allowed = await dispatchHud({
-    headers: { authorization: 'Bearer sess_test' },
-    body: {},
-  }, {
-    runtime: hostedRuntime({
-      getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.PRO } }),
-    }),
-    fetchImpl: pro.fetchImpl,
+  const withKey = mockOpenAiFetch();
+  const allowed = await dispatchHud({ body: {} }, {
+    fetchImpl: withKey.fetchImpl,
   });
   assert.equal(allowed.status, 200);
   assert.equal(allowed.json.summary, 'Austin skyline flights visible');
+  assertNotVoiceAuthRequired(allowed.json);
+  assert.equal(withKey.calls.length, 1);
 });
 
 test('HUD summary uses the server key and does not leak it', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
-  const { status, json, body } = await dispatchHud({
-    headers: { authorization: 'Bearer sess_test' },
-  }, {
-    runtime: hostedRuntime({
-      getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.PRO } }),
-    }),
-    fetchImpl,
-  });
+  const { status, json, body } = await dispatchHud({}, { fetchImpl });
   assert.equal(status, 200);
   assert.equal(json.summary, 'Austin skyline flights visible');
   assert.equal(calls.length, 1);
@@ -184,40 +156,21 @@ test('invented-coord-only context does not add a place name in the prompt path',
 
   const { fetchImpl, calls } = mockOpenAiFetch();
   await dispatchHud({
-    headers: { authorization: 'Bearer sess_test' },
     body: { lat: 30.2672, lon: -97.7431, placeName: 'Austin' },
-  }, {
-    runtime: hostedRuntime({
-      getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.PRO } }),
-    }),
-    fetchImpl,
-  });
+  }, { fetchImpl });
   assert.equal(calls.length, 1);
   const posted = JSON.parse(calls[0].init.body);
   assert.doesNotMatch(posted.input, /Austin|30\.2672|-97\.7431|placeName/);
   assert.match(posted.instructions, /Do not infer from coordinates or invent a place/);
 });
 
-test('Clerk unset fails closed for HUD summary', async () => {
+test('Clerk unset does not apply the voice spend gate to HUD summary', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
-  const { status, json } = await dispatchHud({ body: {} }, {
-    runtime: createBillingRuntime({ env: {} }),
-    fetchImpl,
-  });
-  assert.equal(status, 401);
-  assert.equal(json.code, BILLING_CODES.AUTH_REQUIRED);
-  assert.equal(calls.length, 0);
-});
-
-test('Vercel without Clerk fails closed for HUD summary', async () => {
-  const { fetchImpl, calls } = mockOpenAiFetch();
-  const { status, json } = await dispatchHud({ body: {} }, {
-    runtime: createBillingRuntime({ env: { VERCEL: '1' } }),
-    fetchImpl,
-  });
-  assert.equal(status, 401);
-  assert.equal(json.code, BILLING_CODES.AUTH_REQUIRED);
-  assert.equal(calls.length, 0);
+  const { status, json } = await dispatchHud({ body: {} }, { fetchImpl });
+  assert.equal(status, 200);
+  assert.equal(json.summary, 'Austin skyline flights visible');
+  assertNotVoiceAuthRequired(json);
+  assert.equal(calls.length, 1);
 });
 
 test('Vercel HUD wrapper exists and does not embed the server key', () => {

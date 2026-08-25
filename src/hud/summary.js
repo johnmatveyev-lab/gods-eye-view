@@ -1,5 +1,4 @@
-import { getBillingRuntime } from '../billing/http.js';
-import { readRequestBody, rejectIfRealtimeSpendForbidden } from '../voice/openaiApi.js';
+import { readRequestBody } from '../voice/openaiApi.js';
 
 export const OPENAI_HUD_SUMMARY_MODEL_DEFAULT = 'gpt-5-nano';
 
@@ -29,7 +28,6 @@ const HUD_LABEL_KEYS = Object.freeze([
 export async function handleHudSummaryHttp(req, res, {
   env = process.env,
   fetchImpl = fetch,
-  runtime = getBillingRuntime(),
 } = {}) {
   if ((req.method || 'GET') !== 'POST') {
     writeJson(res, 405, { error: 'Method not allowed' });
@@ -41,7 +39,6 @@ export async function handleHudSummaryHttp(req, res, {
     writeJson(res, 503, { error: 'OPENAI_API_KEY is not set' });
     return;
   }
-  if (await rejectIfRealtimeSpendForbidden(req, res, runtime)) return;
 
   try {
     const raw = await readRequestBody(req, 64 * 1024);
