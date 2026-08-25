@@ -3876,7 +3876,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -6787,7 +6787,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #home-view, #reset-globe-view) {
   display: none !important;
 }
 
@@ -9197,6 +9197,117 @@ body.scene-playback-mode #first-run-launcher {
   .first-run-arrow { transition: none; }
   /* Scrolling a tile into view must not animate either. */
   .first-run-choices { scroll-behavior: auto; }
+}
+
+/* ── First-visit responsible-use notice ───────────────────────────
+   Compact and non-modal: the globe stays clickable around the card.
+   Required Google/Cesium credits live bottom-left; this card stays top-center
+   and hides in clean-view / recording so that credit line is never covered. */
+#responsible-use-notice {
+  position: fixed;
+  z-index: 1100;
+  top: 5.6rem;
+  left: 50%;
+  width: min(30rem, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem;
+  color: var(--text-primary);
+  background:
+    linear-gradient(145deg, rgba(10, 27, 37, 0.94), rgba(7, 13, 22, 0.92)),
+    rgba(7, 17, 25, 0.9);
+  border: 1px solid rgba(54, 220, 255, 0.36);
+  border-radius: 0.55rem;
+  box-shadow: 0 0.8rem 2.2rem rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(20px) saturate(1.15);
+  -webkit-backdrop-filter: blur(20px) saturate(1.15);
+  opacity: 0;
+  transform: translate(-50%, 0.4rem);
+  transition: opacity 200ms ease, transform 240ms ease;
+  pointer-events: none;
+}
+
+#responsible-use-notice[hidden] {
+  display: none;
+}
+
+#responsible-use-notice.visible {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+#responsible-use-title {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+#responsible-use-copy {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+.responsible-use-terms {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  line-height: 1.4;
+  color: rgba(232, 234, 237, 0.55);
+}
+
+.responsible-use-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+}
+
+.responsible-use-actions a,
+.responsible-use-actions button {
+  pointer-events: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(54, 220, 255, 0.92);
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.responsible-use-actions a:hover,
+.responsible-use-actions button:hover {
+  color: #fff;
+}
+
+.responsible-use-actions [data-responsible-use-dismiss] {
+  margin-left: auto;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid var(--glass-border-hover);
+  border-radius: 8px;
+  background: var(--accent-dim);
+  color: var(--text-primary);
+}
+
+body.ui-clean-view #responsible-use-notice,
+body.recording-mode #responsible-use-notice,
+body.cockpit-mode #responsible-use-notice,
+body.scene-playback-mode #responsible-use-notice {
+  display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #responsible-use-notice { transition: none; }
 }
 
 /* ── Hosted account / billing ─────────────────── */

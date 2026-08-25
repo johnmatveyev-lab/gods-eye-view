@@ -51,6 +51,7 @@ import { rejectIfVoiceForbidden } from '../billing/http.js';
 import { parseSilenceTimeoutEnv } from '../data/aisWatchdog.js';
 import { createTerrainHeightsProxy } from '../data/terrainHeightsProxy.js';
 import { gbfsProxy } from '../data/gbfs.js';
+import { adsbdbProxy } from '../data/adsbdb.js';
 import { handleOsrmRouteHttp } from '../data/osrmRoute.js';
 import { weatherEffectsProxy } from '../data/weatherEffects.js';
 import { celestrakProxy } from '../data/celestrak.js';
@@ -61,6 +62,7 @@ import {
 } from '../data/launches.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from '../voice/voiceCost.js';
 import { trackBackfillProxies } from '../data/trackBackfill.js';
+import { approximateDistanceM, handleNearbyPlacesHttp } from '../google/nearbyPlaces.js';
 
 export { LL2_CACHE_TTL_MS, launchLibraryRequestHeaders };
 
@@ -381,7 +383,7 @@ function openAiRateLimiter() {
   if (_openAiRateLimiter === undefined) _openAiRateLimiter = makeOptInRateLimiter(process.env.GEV_RATELIMIT_OPENAI_PER_MIN);
   return _openAiRateLimiter;
 }
-/** Google cost endpoint (nearby-places). Null = unlimited (default). */
+/** Google cost endpoint (text-search; nearby-places has its own limiter). Null = unlimited. */
 function googleRateLimiter() {
   if (_googleRateLimiter === undefined) _googleRateLimiter = makeOptInRateLimiter(process.env.GEV_RATELIMIT_GOOGLE_PER_MIN);
   return _googleRateLimiter;
@@ -1496,126 +1498,8 @@ function tomtomProxy() {
 
 /** NASA FIRMS handlers live in src/data/firms.js (Vite + Vercel /api/firms). */
 
-/**
- * adsbdb.com enrichment proxy: callsign → route (airline + origin/destination
- * airports) and hex → aircraft type/registration. Free community API — cached
- * aggressively: ONE upstream request per new key ever (404s negative-cached),
- * persisted to disk so restarts don't re-hammer it. Adapted from skylight
- * (MIT) server/src/enrich/routes.ts.
- */
-function adsbdbProxy() {
-  const TTL_MS = 24 * 3600_000;
-  const CACHE_PATH = path.join(process.cwd(), '.gev-cache', 'adsbdb.json');
-  let cache = { routes: {}, aircraft: {} };
-  let dirty = false;
-  let loaded = false;
-  const inflight = new Map();
-
-  async function loadOnce() {
-    if (loaded) return;
-    loaded = true;
-    try {
-      const parsed = JSON.parse(await fsp.readFile(CACHE_PATH, 'utf8'));
-      cache = { routes: parsed.routes ?? {}, aircraft: parsed.aircraft ?? {} };
-    } catch { /* first run */ }
-    setInterval(async () => {
-      if (!dirty) return;
-      dirty = false;
-      try {
-        await fsp.mkdir(path.dirname(CACHE_PATH), { recursive: true });
-        await fsp.writeFile(CACHE_PATH, JSON.stringify(cache), 'utf8');
-      } catch { dirty = true; } // retry next tick
-    }, 15_000).unref?.();
-  }
-
-  const fresh = (e) => e && Date.now() - e.at < TTL_MS;
-
-  function parseRoute(json) {
-    const fr = json?.response?.flightroute;
-    if (!fr?.origin || !fr?.destination) return null;
-    const airport = (a) => ({
-      code: a.iata_code || a.icao_code || '',
-      name: a.municipality || a.name || '',
-      lat: Number.isFinite(a.latitude) ? a.latitude : null,
-      lon: Number.isFinite(a.longitude) ? a.longitude : null,
-    });
-    return { airline: fr.airline?.name || null, origin: airport(fr.origin), destination: airport(fr.destination) };
-  }
-
-  function parseAircraft(json) {
-    const a = json?.response?.aircraft;
-    if (!a) return null;
-    return {
-      typeCode: a.icao_type || null, // ICAO designator, e.g. "B738" — feeds classifyAircraft
-      typeName: a.manufacturer && a.type ? `${a.manufacturer} ${a.type}` : (a.type || null),
-      registration: a.registration || null,
-    };
-  }
-
-  function lookup(kind, key) {
-    const store = kind === 'route' ? cache.routes : cache.aircraft;
-    if (fresh(store[key])) return Promise.resolve(store[key].data);
-    const ik = `${kind}:${key}`;
-    if (!inflight.has(ik)) {
-      inflight.set(ik, (async () => {
-        try {
-          const url = kind === 'route'
-            ? `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(key)}`
-            : `https://api.adsbdb.com/v0/aircraft/${encodeURIComponent(key)}`;
-          const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-          if (res.ok) {
-            const data = kind === 'route' ? parseRoute(await res.json()) : parseAircraft(await res.json());
-            store[key] = { at: Date.now(), data }; // data may be null — negative cache
-            dirty = true;
-            return data;
-          }
-          if (res.status === 404) {
-            store[key] = { at: Date.now(), data: null }; // known-missing — cache the miss
-            dirty = true;
-          }
-          // other statuses: leave uncached so we retry later
-          return fresh(store[key]) ? store[key].data : null;
-        } catch {
-          return fresh(store[key]) ? store[key].data : null; // network error → stale if any
-        } finally {
-          inflight.delete(ik);
-        }
-      })());
-    }
-    return inflight.get(ik);
-  }
-
-  return {
-    name: 'adsbdb-proxy',
-    configureServer(server) {
-      server.middlewares.use('/api/adsbdb', async (req, res) => {
-        await loadOnce();
-        const send = (status, obj) => {
-          res.writeHead(status, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(obj));
-        };
-        try {
-          const [, kind, rawKey] = String(req.url || '').split('?')[0].split('/');
-          if (kind === 'route') {
-            const cs = String(rawKey || '').toUpperCase();
-            if (!/^[A-Z0-9]{2,8}$/.test(cs)) return send(400, { error: 'invalid callsign' });
-            const data = await lookup('route', cs);
-            return send(200, data ? { found: true, ...data } : { found: false });
-          }
-          if (kind === 'type') {
-            const hex = String(rawKey || '').toLowerCase();
-            if (!/^[0-9a-f]{6}$/.test(hex)) return send(400, { error: 'invalid hex' });
-            const data = await lookup('aircraft', hex);
-            return send(200, data ? { found: true, ...data } : { found: false });
-          }
-          return send(404, { error: 'unknown endpoint' });
-        } catch (err) {
-          return send(500, { error: String(err?.message || err) });
-        }
-      });
-    },
-  };
-}
+// adsbdb enrichment lives in src/data/adsbdb.js. The Vite plugin forwards
+// /api/adsbdb to that shared handler (24h Map, 8s timeout, 404 negative-cache).
 
 /**
  * Detect whether an Overpass API response body indicates rate-limiting.
@@ -2352,113 +2236,7 @@ function readRequestBody(req, maxBytes = 1024 * 1024) {
 function googlePlacesContextProxy() {
   function install(middlewares) {
     middlewares.use('/api/google/nearby-places', async (req, res) => {
-      if (req.method !== 'GET') {
-        res.statusCode = 405;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Method not allowed', places: [] }));
-        return;
-      }
-
-      // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
-      // Inlined (not the shared helper) so the 429 body keeps this endpoint's
-      // `places: []` contract that the client expects on every error response.
-      const _grl = googleRateLimiter();
-      if (_grl && !_grl(clientKey(req))) {
-        res.statusCode = 429;
-        res.setHeader('Content-Type', 'application/json');
-        res.setHeader('Retry-After', '5');
-        res.end(JSON.stringify({ error: 'Rate limit exceeded', places: [] }));
-        return;
-      }
-
-      const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-      if (!apiKey) {
-        res.statusCode = 503;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'GOOGLE_MAPS_API_KEY is not set', places: [] }));
-        return;
-      }
-
-      const requestUrl = new URL(req.url || '', 'http://localhost');
-      const latitude = Number(requestUrl.searchParams.get('lat'));
-      const longitude = Number(requestUrl.searchParams.get('lon'));
-      const radiusM = Math.max(25, Math.min(5000, Number(requestUrl.searchParams.get('radiusM')) || 250));
-      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-        res.statusCode = 400;
-        res.setHeader('Content-Type', 'application/json');
-        res.end(JSON.stringify({ error: 'Valid lat and lon are required', places: [] }));
-        return;
-      }
-
-      try {
-        const response = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-Goog-Api-Key': apiKey,
-            'X-Goog-FieldMask': [
-              'places.id',
-              'places.displayName',
-              'places.formattedAddress',
-              'places.shortFormattedAddress',
-              'places.location',
-              'places.primaryType',
-              'places.primaryTypeDisplayName',
-              'places.types',
-            ].join(','),
-          },
-          body: JSON.stringify({
-            maxResultCount: 20,
-            rankPreference: 'DISTANCE',
-            locationRestriction: {
-              circle: {
-                center: { latitude, longitude },
-                radius: radiusM,
-              },
-            },
-          }),
-        });
-        const data = await response.json().catch(() => ({}));
-        const seenPlaces = new Set();
-        const places = Array.isArray(data.places) ? data.places
-          .map((place) => {
-            const placeLatitude = place.location?.latitude ?? null;
-            const placeLongitude = place.location?.longitude ?? null;
-            const types = Array.isArray(place.types) ? place.types.slice(0, 8) : [];
-            return {
-              id: place.id || null,
-              name: place.displayName?.text || null,
-              address: place.shortFormattedAddress || place.formattedAddress || null,
-              latitude: placeLatitude,
-              longitude: placeLongitude,
-              distanceM: approximateDistanceM(latitude, longitude, placeLatitude, placeLongitude),
-              primaryType: place.primaryTypeDisplayName?.text || place.primaryType || null,
-              types,
-              contextPriority: placeContextPriority(types),
-            };
-          })
-          .filter((place) => {
-            const key = `${place.name}:${place.address || ''}`.toLowerCase();
-            if (!place.name || seenPlaces.has(key)) return false;
-            seenPlaces.add(key);
-            return true;
-          })
-          .sort((a, b) => b.contextPriority - a.contextPriority || a.distanceM - b.distanceM)
-          .map(({ contextPriority, ...place }) => place)
-          .slice(0, 20) : [];
-
-        res.statusCode = response.ok ? 200 : response.status;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.setHeader('Cache-Control', 'private, max-age=300');
-        res.end(JSON.stringify({
-          places,
-          error: response.ok ? null : data.error?.message || 'Google Places request failed',
-        }));
-      } catch (error) {
-        res.statusCode = 502;
-        res.setHeader('Content-Type', 'application/json; charset=utf-8');
-        res.end(JSON.stringify({ error: error?.message || 'Google Places request failed', places: [] }));
-      }
+      await handleNearbyPlacesHttp(req, res);
     });
 
     // Text Search: resolve a named landmark/POI to a real coordinate, biased to
@@ -2474,8 +2252,8 @@ function googlePlacesContextProxy() {
       }
 
       // Opt-in per-IP throttle (GEV_RATELIMIT_GOOGLE_PER_MIN). No-op when unset.
-      // Inlined (like nearby-places) so the 429 body keeps the `places: []`
-      // contract the client expects on every error response.
+      // Inlined (nearby-places lives in src/google/nearbyPlaces.js) so the 429
+      // body keeps the `places: []` contract the client expects on errors.
       const _grl = googleRateLimiter();
       if (_grl && !_grl(clientKey(req))) {
         res.statusCode = 429;
@@ -2587,26 +2365,6 @@ function googlePlacesContextProxy() {
       install(server.middlewares);
     },
   };
-}
-
-function placeContextPriority(types) {
-  const typeSet = new Set(types);
-  if (typeSet.has('historical_landmark') || typeSet.has('monument')) return 100;
-  if (typeSet.has('tourist_attraction') || typeSet.has('museum')) return 90;
-  if (typeSet.has('premise') || typeSet.has('street_address')) return 75;
-  if (typeSet.has('point_of_interest')) return 60;
-  if (typeSet.has('public_bathroom')) return 10;
-  return 40;
-}
-
-function approximateDistanceM(latA, lonA, latB, lonB) {
-  if (![latA, lonA, latB, lonB].every(Number.isFinite)) return Number.MAX_SAFE_INTEGER;
-  const latitudeScale = 111320;
-  const longitudeScale = latitudeScale * Math.cos((latA * Math.PI) / 180);
-  return Math.round(Math.hypot(
-    (latB - latA) * latitudeScale,
-    (lonB - lonA) * longitudeScale
-  ));
 }
 
 const GEV_REALTIME_TOOLS = [
