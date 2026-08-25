@@ -8,6 +8,7 @@ import * as Cesium from 'cesium';
 import {
   DEFAULT_EARTHQUAKE_DEPTH_BANDS,
   DEFAULT_EARTHQUAKE_EVENT_TYPES,
+  DEFAULT_EARTHQUAKE_FELT_ONLY,
   DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
   DEFAULT_EARTHQUAKE_PAGER_ALERTS,
   DEFAULT_EARTHQUAKE_REVIEWED_ONLY,
@@ -26,6 +27,7 @@ import {
   filterEarthquakeFeatures,
   filterEarthquakeFeaturesByDepthBands,
   filterEarthquakeFeaturesByEventType,
+  filterEarthquakeFeaturesByFeltReports,
   filterEarthquakeFeaturesByMagnitudeFloor,
   filterEarthquakeFeaturesByPagerAlert,
   filterEarthquakeFeaturesByReviewedStatus,
@@ -34,6 +36,7 @@ import {
   isSignificantEarthquake,
   mapAnalystRecord,
   normalizeEarthquakeEventTypes,
+  normalizeEarthquakeFeltOnly,
   normalizeEarthquakePagerAlerts,
   normalizeEarthquakeReviewedOnly,
   normalizeEarthquakeTimeWindowHours,
@@ -2278,6 +2281,325 @@ test('event type chips sit next to mag/depth/time/tsunami/PAGER/reviewed, persis
     assert.equal(layer.getParams().tsunamiOnly, false);
     assert.equal(layer.getParams().reviewedOnly, false);
     assert.equal(layer.getParams().pagerAlerts, 'GYORN');
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 168: felt-only toggle (client-side, same USGS all_day) ───────────────
+
+function feltFeature(id, mag, felt, {
+  depthKm = 8.2,
+  tsunami,
+  alert,
+  type,
+  status,
+  time = 1_753_600_000_000,
+} = {}) {
+  const properties = { mag, place: String(id), time };
+  if (felt !== undefined) properties.felt = felt;
+  if (tsunami !== undefined) properties.tsunami = tsunami;
+  if (alert !== undefined) properties.alert = alert;
+  if (type !== undefined) properties.type = type;
+  if (status !== undefined) properties.status = status;
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties,
+  };
+}
+
+const MIXED_FELT_DAY = Object.freeze({
+  features: Object.freeze([
+    feltFeature('felt-lo', 3.1, 4),
+    feltFeature('felt-sig', 5.4, 12, { depthKm: 80 }),
+    feltFeature('felt-deep', 4.8, 2, { depthKm: 410 }),
+    feltFeature('unfelt-zero', 4.2, 0),
+    feltFeature('unfelt-missing', 4.1),
+    feltFeature('unfelt-null', 3.3, null),
+    feltFeature('unfelt-nan', 3.6, 'nope'),
+    feltFeature('felt-micro', 2.4, 8),
+    feltFeature('felt-tsunami', 4.4, 6, {
+      tsunami: 1,
+      alert: 'green',
+      type: 'earthquake',
+      status: 'reviewed',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+    feltFeature('unfelt-tsunami', 4.0, 0, { tsunami: 1 }),
+    feltFeature('felt-old', 4.6, 3, { time: 1_800_000_000_000 - 20 * HOUR_MS }),
+    feltFeature('felt-fresh', 4.7, 9, {
+      alert: 'green',
+      status: 'reviewed',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+  ]),
+});
+
+test('Felt only defaults off and matches the current mag/depth/time/tsunami/PAGER/reviewed/type view', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_FELT_ONLY, false);
+  assert.equal(normalizeEarthquakeFeltOnly(undefined), false);
+  assert.equal(normalizeEarthquakeFeltOnly(false), false);
+  assert.equal(normalizeEarthquakeFeltOnly(true), true);
+  assert.equal(normalizeEarthquakeFeltOnly('1'), true);
+  assert.equal(normalizeEarthquakeFeltOnly('bogus'), null);
+
+  const current = filterEarthquakeFeatures(MIXED_FELT_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    timeWindowHours: 24,
+    tsunamiOnly: false,
+    reviewedOnly: false,
+    pagerAlerts: DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+  }).map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByFeltReports(MIXED_FELT_DAY.features, false)
+      .map((feature) => feature.id),
+    MIXED_FELT_DAY.features.map((feature) => feature.id),
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_FELT_DAY.features, {
+      magnitudeFloor: 2.5,
+      feltOnly: false,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_FELT_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().feltOnly, false);
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Felt only keeps felt > 0 and hides missing/0/NaN', async () => {
+  const felt = filterEarthquakeFeaturesByFeltReports(MIXED_FELT_DAY.features, true)
+    .map((feature) => feature.id);
+  assert.deepEqual(felt, [
+    'felt-lo',
+    'felt-sig',
+    'felt-deep',
+    'felt-micro',
+    'felt-tsunami',
+    'felt-old',
+    'felt-fresh',
+  ]);
+  assert.ok(!felt.includes('unfelt-zero'));
+  assert.ok(!felt.includes('unfelt-missing'));
+  assert.ok(!felt.includes('unfelt-null'));
+  assert.ok(!felt.includes('unfelt-nan'));
+  assert.ok(!felt.includes('unfelt-tsunami'));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_FELT_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ feltOnly: true }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.deepEqual(ids, [
+      'felt-deep',
+      'felt-fresh',
+      'felt-lo',
+      'felt-old',
+      'felt-sig',
+      'felt-tsunami',
+    ]);
+    assert.ok(!ids.includes('unfelt-zero'));
+    assert.ok(!ids.includes('unfelt-missing'));
+    assert.ok(!ids.includes('unfelt-null'));
+    assert.ok(!layer.getListRecords().some((row) => row.id.startsWith('unfelt-')));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('selected event stays visible when Felt only hides its report count', async () => {
+  assert.deepEqual(
+    filterEarthquakeFeaturesByFeltReports(MIXED_FELT_DAY.features, true, {
+      selectedId: 'unfelt-zero',
+    }).map((feature) => feature.id),
+    [
+      'felt-lo',
+      'felt-sig',
+      'felt-deep',
+      'unfelt-zero',
+      'felt-micro',
+      'felt-tsunami',
+      'felt-old',
+      'felt-fresh',
+    ],
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_FELT_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ selectedId: 'unfelt-zero', feltOnly: true }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('unfelt-zero'));
+    assert.ok(ids.includes('felt-lo'));
+    assert.ok(!ids.includes('unfelt-missing'));
+    assert.ok(layer.getListRecords().some((row) => row.id === 'unfelt-zero'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Felt only ANDs with mag/depth/time/tsunami/PAGER/reviewed/type and redraws from cached geojson', async () => {
+  const now = 1_800_000_000_000;
+  const anded = filterEarthquakeFeatures(MIXED_FELT_DAY.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 1,
+    tsunamiOnly: true,
+    reviewedOnly: true,
+    feltOnly: true,
+    pagerAlerts: 'G',
+    eventTypes: 'Q',
+    now,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['felt-tsunami']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(MIXED_FELT_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({
+      magnitudeFloor: 4.0,
+      depthBands: 'S',
+      timeWindowHours: 1,
+      tsunamiOnly: true,
+      reviewedOnly: true,
+      feltOnly: true,
+      pagerAlerts: 'G',
+      eventTypes: 'Q',
+    }), true);
+    assert.equal(feed.fetches, 1, 'felt chip must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['felt-tsunami']);
+    assert.equal(layer.getParams().feltOnly, true);
+    assert.equal(layer.getParams().reviewedOnly, true);
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().eventTypes, 'Q');
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+    assert.equal(layer.getParams().timeWindowHours, 1);
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('USGS refresh keeps Felt only applied to the new payload', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const first = stubUsgs(MIXED_FELT_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ feltOnly: true }), true);
+    assert.ok(entityIds(viewer._dataSources[0]).every((id) => id.startsWith('felt-')));
+    first.restore();
+    const second = stubUsgs({
+      features: [
+        feltFeature('fresh-felt', 3.3, 5),
+        feltFeature('fresh-zero', 4.4, 0),
+        feltFeature('felt-lo', 3.1, 4),
+      ],
+    });
+    try {
+      assert.equal(await layer.update(viewer), true);
+      assert.equal(layer.getParams().feltOnly, true);
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['felt-lo', 'fresh-felt']);
+      assert.ok(!entityIds(viewer._dataSources[0]).includes('fresh-zero'));
+    } finally {
+      second.restore();
+    }
+  } finally {
+    first.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Felt only chip sits next to mag/depth/time/tsunami/PAGER/reviewed/type, persists, and hides with the layer', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('./earthquakeFeltFilter.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-felt-chips"/);
+  assert.match(html, /data-earthquake-felt="only"/);
+  assert.match(html, /Felt only/);
+  assert.match(html, /id="earthquake-reviewed-chips"/);
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /id="earthquake-type-chips"/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(ui, /earthquake-felt-chips|data-earthquake-felt/);
+  assert.match(ui, /_earthquakeFeltChips\.hidden = !enabled/);
+  assert.match(css, /earthquake-felt-chip/);
+  assert.match(helper, /properties\.felt/);
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+  assert.doesNotMatch(helper, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const felt = chips.filter((chip) => chip.id.startsWith('felt-'));
+    assert.deepEqual(felt.map((chip) => chip.label), ['Felt only']);
+    assert.equal(felt[0].active, false);
+    assert.equal(felt[0].params.feltOnly, true);
+    assert.equal(layer.setParams({ feltOnly: true }), true);
+    assert.equal(
+      layer.getRowControls().chips.find((chip) => chip.id === 'felt-only')?.active,
+      true,
+    );
+    assert.equal(layer.getRowControls().chips.find((chip) => chip.id === 'felt-only')?.params.feltOnly, false);
+    assert.equal(layer.setParams({ feltOnly: 'nope' }), false);
+    assert.equal(layer.getParams().feltOnly, true);
+    assert.equal(layer.getParams().reviewedOnly, false);
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(layer.getParams().pagerAlerts, 'GYORN');
+    assert.equal(layer.getParams().eventTypes, 'QERO');
   } finally {
     layer.destroy(viewer);
   }

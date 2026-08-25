@@ -241,6 +241,7 @@ import {
   normalizeEarthquakeTimeWindowHours,
   normalizeEarthquakeTsunamiOnly,
   normalizeEarthquakeReviewedOnly,
+  normalizeEarthquakeFeltOnly,
   toggleEarthquakeDepthBand,
   toggleEarthquakeEventType,
   toggleEarthquakePagerAlert,
@@ -2977,6 +2978,7 @@ export class StyleManager {
     this._earthquakeTimeChips = document.getElementById('earthquake-time-chips');
     this._earthquakeTsunamiChips = document.getElementById('earthquake-tsunami-chips');
     this._earthquakeReviewedChips = document.getElementById('earthquake-reviewed-chips');
+    this._earthquakeFeltChips = document.getElementById('earthquake-felt-chips');
     this._earthquakePagerChips = document.getElementById('earthquake-pager-chips');
     this._earthquakeTypeChips = document.getElementById('earthquake-type-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
@@ -5444,6 +5446,7 @@ export class StyleManager {
           this._syncEarthquakeTimeChips();
           this._syncEarthquakeTsunamiChip();
           this._syncEarthquakeReviewedChip();
+          this._syncEarthquakeFeltChip();
           this._syncEarthquakePagerChips();
           this._syncEarthquakeTypeChips();
         }
@@ -11929,6 +11932,34 @@ export class StyleManager {
     this._syncEarthquakeReviewedChip();
   }
 
+  _syncEarthquakeFeltChip() {
+    const enabled = this._dataManager?.isEnabled?.('earthquakes') === true;
+    if (this._earthquakeFeltChips) {
+      this._earthquakeFeltChips.hidden = !enabled;
+    }
+    const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+    const only = normalizeEarthquakeFeltOnly(layer?.getParams?.()?.feltOnly) === true;
+    const chips = this._earthquakeFeltChips?.querySelectorAll?.('[data-earthquake-felt]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initEarthquakeFeltChip() {
+    if (!this._earthquakeFeltChips) return;
+    this._earthquakeFeltChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-felt]');
+      if (!chip || !this._earthquakeFeltChips.contains(chip)) return;
+      const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+      const current = normalizeEarthquakeFeltOnly(layer?.getParams?.()?.feltOnly) === true;
+      this._dataManager?.setLayerParams?.('earthquakes', { feltOnly: !current }, { origin: 'user' });
+      this._syncEarthquakeFeltChip();
+    });
+    this._syncEarthquakeFeltChip();
+  }
+
   _syncEarthquakePagerChips() {
     const enabled = this._dataManager?.isEnabled?.('earthquakes') === true;
     if (this._earthquakePagerChips) {
@@ -11994,6 +12025,7 @@ export class StyleManager {
     this._initEarthquakeDepthChips();
     this._initEarthquakeTsunamiChip();
     this._initEarthquakeReviewedChip();
+    this._initEarthquakeFeltChip();
     this._initEarthquakePagerChips();
     this._initEarthquakeTypeChips();
     this._earthquakeListControl = initEarthquakeListControl({
