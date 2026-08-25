@@ -283,6 +283,15 @@ test('first run opens with tracked-target trails on', () => {
     'ui.js: a stored meridian.trails value still wins over the default');
 });
 
+test('first run opens with emergency highlight on', () => {
+  assert.match(indexHtml, /class="pp-toggle-btn active" id="emergency-highlight-toggle" aria-pressed="true"/,
+    'index.html: Emergency paints lit before ui.js hydrates storage');
+  assert.match(uiSource, /this\._emergencyHighlightEnabled = true;/,
+    'ui.js: the DISPLAY rail believes Emergency is on before hydrate');
+  assert.match(uiSource, /hydrateEmergencyHighlightEnabled\(\)/,
+    'ui.js: a stored meridian.emergencyHighlight value still wins over the default');
+});
+
 test('first run keeps the camera above ground', () => {
   assert.match(indexHtml, /class="pp-toggle-btn active" id="keep-above-toggle" aria-pressed="true"/,
     'index.html: Keep above paints lit before ui.js hydrates storage');

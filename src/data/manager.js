@@ -2302,7 +2302,10 @@ export class DataLayerManager {
       && !headingText && !picker;
     this._syncRowPicker(container, picker);
 
-    let heading = container.querySelector?.('.data-toggle-heading');
+    let heading = [...(container.children || [])].find((node) => (
+      String(node.className).split(/\s+/).includes('data-toggle-heading')
+      && !node.dataset?.groupHeading
+    ));
     if (headingText) {
       if (!heading) {
         heading = document.createElement('span');
@@ -2318,12 +2321,24 @@ export class DataLayerManager {
       if (String(node.className).split(/\s+/).includes('data-toggle-legend-item')) node.remove();
     }
 
+    const wantedGroups = new Set(
+      chips
+        .map((chip) => (typeof chip.group === 'string' ? chip.group.trim() : ''))
+        .filter(Boolean),
+    );
+    for (const node of [...container.children]) {
+      const group = node.dataset?.groupHeading || node.dataset?.groupBreak;
+      if (group && !wantedGroups.has(group)) node.remove();
+    }
+
     const stale = new Map();
     for (const node of [...container.children]) {
       if (node.dataset?.chipId) stale.set(node.dataset.chipId, node);
     }
 
     for (const chip of chips) {
+      const group = typeof chip.group === 'string' ? chip.group.trim() : '';
+      if (group) this._ensureRowControlGroup(container, group);
       let button = stale.get(chip.id);
       stale.delete(chip.id);
       if (!button) {
@@ -2391,6 +2406,27 @@ export class DataLayerManager {
       entry.append(swatch, text);
       container.appendChild(entry);
     }
+  }
+
+  /**
+   * Insert a wrap-break + heading for a chip `group` once, so Uncovered:
+   * Sim | Hide can sit under Traffic: Live | Sim without rebuilding chips.
+   * @param {HTMLElement} container The row's `.data-toggle-controls` node.
+   * @param {string} group Group heading text (e.g. Uncovered).
+   */
+  _ensureRowControlGroup(container, group) {
+    const children = [...(container.children || [])];
+    if (children.some((node) => node.dataset?.groupHeading === group)) return;
+    const br = document.createElement('span');
+    br.className = 'data-toggle-row-break';
+    br.dataset.groupBreak = group;
+    br.setAttribute('aria-hidden', 'true');
+    const heading = document.createElement('span');
+    heading.className = 'data-toggle-heading';
+    heading.dataset.groupHeading = group;
+    heading.textContent = group;
+    container.appendChild(br);
+    container.appendChild(heading);
   }
 
   /**

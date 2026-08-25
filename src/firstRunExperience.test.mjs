@@ -527,9 +527,17 @@ test('no mission writes a preference the visitor did not choose by picking it', 
     '_initTrailsToggle',
     '_setContactLabelsEnabled',
     'setContactLabelsEnabled',
+    'writeDoubleClickFlyPreference',
+    'bindDoubleClickFly',
     'setAltitudeBand',
     'writeAltitudeBand',
     'hydrateAltitudeBand',
+    'setEmergencyHighlightEnabled',
+    'hydrateEmergencyHighlightEnabled',
+    '_initEmergencyHighlightToggle',
+    'setLaunchStatusFilter',
+    'writeLaunchStatusFilter',
+    'hydrateLaunchStatusFilter',
     'setFeather',
   ]) {
     assert.doesNotMatch(code, new RegExp(forbidden), `a mission must never touch ${forbidden}`);
@@ -644,7 +652,7 @@ test('the DISPLAY rail starts collapsed on a first run, and a stored choice wins
   );
   // The first-run default may only apply when NOTHING is stored: a visitor who
   // opened the rail keeps it open, and one who closed it keeps it closed.
-  const block = ui.slice(ui.indexOf('stored = localStorage.getItem(this._panelCollapseStorageKey(panelId))'));
+  const block = ui.slice(ui.indexOf('stored = readPrefKey(localStorage, this._panelCollapseStorageKey(panelId))'));
   const guard = block.slice(0, block.indexOf('panelEl.classList.toggle'));
   assert.match(guard, /if \(stored === '1'\) collapsed = true;/);
   assert.match(guard, /if \(stored === '0'\) collapsed = false;/);
@@ -688,6 +696,9 @@ test('the voice TOOL SCHEMA is byte-identical to main — the mission mapping is
     assert.ok(paragraph.includes(layerId), `mapping must name the existing ${layerId} enum value`);
   }
   assert.match(paragraph, /submarine-cables layer is a commercial no-op/);
+  const bans = fs.readFileSync(new URL('./data/commercialBans.js', import.meta.url), 'utf8');
+  assert.match(bans, /OpenSky is disabled/);
+  assert.match(bans, /Google News RSS is disabled/);
   assert.match(instructions, /OpenSky Network is disabled in this commercial build/);
   assert.match(instructions, /Google News RSS is disabled/);
   assert.ok(paragraph.includes('zoom_to_globe'));

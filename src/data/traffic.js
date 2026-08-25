@@ -29,6 +29,18 @@ import {
   trafficSourceControls,
   trafficUsesLiveTiles,
 } from './trafficSource.js';
+import {
+  getUncoveredRoads,
+  setUncoveredRoads,
+  uncoveredRoadSpawns,
+  uncoveredRoadsControls,
+} from './uncoveredRoads.js';
+import {
+  getJamViz,
+  jamVizControls,
+  jamVizEffects,
+  setJamViz,
+} from './trafficJamViz.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -46,9 +58,9 @@ import {
  *    tiles (`flowTiles.js`) are matched onto the same Overpass roads
  *    (`flowMatch.js`); matched roads color/slow/densify their dots by real
  *    congestion (`trafficFlowStyle.js`), closed roads spawn no dots, and
- *    unmatched roads keep the simulated white. Hosted users can force Sim
- *    when Live is over budget. TomTom attribution registers only after Live
- *    actually paints a tile.
+ *    unmatched roads keep the simulated white unless Uncovered is Hide.
+ *    Hosted users can force Sim when Live is over budget. TomTom
+ *    attribution registers only after Live actually paints a tile.
  *
  * Architecture overview:
  *  - Camera-change listener triggers debounced road fetching per viewport tile.
@@ -246,17 +258,17 @@ let _bucketCounts = { free: 0, slow: 0, jam: 0, sim: 0 };
 /** @type {number} Roads in the current render skipped entirely as closed. */
 let _closedRoads = 0;
 /** @type {'sim'|'hide'} Live-mode treatment of roads without flow data. */
-let _uncoveredMode = 'sim';
+let _uncoveredMode = getUncoveredRoads();
 /**
  * Jam-viz prototype mode: 'density' = deep-jam density boost + platoon queues
  * + stop-and-go creep; 'heatline' = congestion corridor polylines; 'both';
  * 'none' = shipped main behavior. Live mode only — the keyless simulation
  * never has `road.flow`, so every jamViz path is unreachable there.
  * Default 'density' — A/B verdict 2026-07-23 (heatline stays available
- * via setParams).
+ * via setParams). Persisted in localStorage; no cheap layer-option slot.
  * @type {'none'|'density'|'heatline'|'both'}
  */
-let _jamViz = 'density';
+let _jamViz = getJamViz();
 /**
  * Congestion heat-lines are GroundPolylinePrimitive batches draped onto the
  * rendered 3D tiles (ClassificationType.CESIUM_3D_TILE) — polylines at the
@@ -395,9 +407,9 @@ function setStylePreset(name) {
 }
 
 /** @returns {boolean} Density/queue/creep prototype active. */
-const jamDensityOn = () => _jamViz === 'density' || _jamViz === 'both';
+const jamDensityOn = () => jamVizEffects(_jamViz).densityBoost;
 /** @returns {boolean} Heat-line prototype active. */
-const heatlineOn = () => _jamViz === 'heatline' || _jamViz === 'both';
+const heatlineOn = () => jamVizEffects(_jamViz).heatline;
 /**
  * Dot fade-out distances, recomputed per render from the camera-to-area
  * distance. The original constants (8 km scale / 10 km translucency)
@@ -684,7 +696,11 @@ function computeDotCount(road, altitude) {
   const flow = _liveMode ? road.flow : null;
   if (flow?.closure) return 0;
   // Strict data-integrity view: uncovered roads spawn nothing when hidden.
-  if (_liveMode && !flow && _uncoveredMode === 'hide') return 0;
+  if (!uncoveredRoadSpawns({
+    liveMode: _liveMode,
+    hasFlow: Boolean(flow),
+    uncoveredRoads: _uncoveredMode,
+  })) return 0;
 
   const lengthM = estimateRoadLengthDeg(road.coords);
 
@@ -748,7 +764,11 @@ function spawnDotsForRoad(road, altitude, budgetCount = null) {
   // byte-identical): closures spawn nothing, congestion colors/slows dots.
   const flow = _liveMode ? road.flow : null;
   if (flow?.closure) return;
-  if (_liveMode && !flow && _uncoveredMode === 'hide') return;
+  if (!uncoveredRoadSpawns({
+    liveMode: _liveMode,
+    hasFlow: Boolean(flow),
+    uncoveredRoads: _uncoveredMode,
+  })) return;
 
   const count = Number.isFinite(budgetCount)
     ? Math.max(0, Math.floor(budgetCount))
@@ -2513,13 +2533,17 @@ const trafficLayer = {
     // data-integrity view). Owner-explorable; re-render applies on the next
     // camera-driven load.
     if (params.uncoveredRoads === 'sim' || params.uncoveredRoads === 'hide') {
-      _uncoveredMode = params.uncoveredRoads;
+      _uncoveredMode = setUncoveredRoads(params.uncoveredRoads);
+      _rowControlsListener?.();
     }
     // Jam-viz prototype toggle (A/B): 'none' = shipped main behavior;
     // live mode only, applies on the next camera-driven load like the
     // uncoveredRoads param above.
     if (['none', 'density', 'heatline', 'both'].includes(params.jamViz)) {
-      _jamViz = params.jamViz;
+      if (_jamViz !== params.jamViz) {
+        _jamViz = setJamViz(params.jamViz);
+        _rowControlsListener?.();
+      }
     }
     // Preset-aware dot styling kill switch (A/B): 'off' forces the
     // shipped palette under every post-FX preset. Applies immediately via
@@ -2555,15 +2579,26 @@ const trafficLayer = {
   },
 
   /**
-   * Street Traffic Live | Sim chips. Live is disabled without a host key.
+   * Street Traffic row chrome. Live | Sim, Uncovered Sim | Hide, and Jam
+   * Density | Heatline | Both | Off are independent chip groups. Jam is
+   * live-only. Each group writes only its own setParams key.
    * @returns {{heading: string, chips: Array<object>}}
    */
   getRowControls() {
-    return trafficSourceControls({
+    const source = trafficSourceControls({
       hasKey: _hasKey,
       source: _sourcePreference,
       flowError: _flowError,
     });
+    const uncovered = uncoveredRoadsControls({ uncoveredRoads: _uncoveredMode });
+    const jam = jamVizControls({
+      jamViz: _jamViz,
+      liveMode: _liveMode,
+    });
+    return {
+      heading: source.heading,
+      chips: [...source.chips, ...uncovered.chips, ...jam.chips],
+    };
   },
 
   /**

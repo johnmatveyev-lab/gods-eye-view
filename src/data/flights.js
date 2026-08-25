@@ -39,6 +39,13 @@ import {
   trailDrawingVisible,
 } from './trailPreference.js';
 import {
+  EMERGENCY_HIGHLIGHT_CSS,
+  getEmergencyHighlightEnabled,
+  normalizeSquawk,
+  shouldPaintEmergencyHighlight,
+  subscribeEmergencyHighlightEnabled,
+} from './emergencySquawk.js';
+import {
   aircraftMatchesAltitudeBand,
   getAltitudeBand,
   hydrateAltitudeBand,
@@ -46,6 +53,7 @@ import {
   subscribeAltitudeBand,
 } from './flightAltitudeBand.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
+import { contactPassesInFlightFilters, normalizeSpeedBand } from './flightSpeedBand.js';
 import {
   screenProjectedRotation,
   stabilizeScreenRotation,
@@ -111,6 +119,9 @@ const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
 /** Amber tint for known-military aircraft rendered by this layer (matches the military layer's icon color). */
 const MIL_TINT = Cesium.Color.fromCssColorString('#FFB800');
+/** Existing annotation alert red for public emergency squawks 7500/7600/7700. */
+const EMERGENCY_HIGHLIGHT_COLOR = Cesium.Color.fromCssColorString(EMERGENCY_HIGHLIGHT_CSS);
+const EMERGENCY_TRANSPARENT = EMERGENCY_HIGHLIGHT_COLOR.withAlpha(0);
 
 // --- Ground traffic (product change 2026-07-03: "absolutely we should see planes
 // taxiing and landing") -----------------------------------------------------------
@@ -133,9 +144,25 @@ const MIL_TINT = Cesium.Color.fromCssColorString('#FFB800');
 const GROUND_SCALE = 0.8;
 
 /** Fleet (untracked) billboard tint: amber for known-military, white otherwise.
- *  Ground traffic gets NO special tint (validated behavior 2026-07-03 field test). */
-function _fleetBillboardColor(icao24) {
+ *  Ground traffic gets NO special tint (validated behavior 2026-07-03 field test).
+ *  Public emergency squawks 7500/7600/7700 use the existing alert-red token
+ *  when Emergency highlight is on. Altitude-band hide still wins. */
+function _contactUsesEmergencyHighlight(icao24) {
+  return shouldPaintEmergencyHighlight({
+    squawk: _flightData.get(icao24)?.squawk,
+    highlightEnabled: getEmergencyHighlightEnabled(),
+    inAltitudeBand: _inAltitudeBand(icao24),
+  });
+}
+
+function _contactIconColor(icao24, { tracked = false } = {}) {
+  if (_contactUsesEmergencyHighlight(icao24)) return EMERGENCY_HIGHLIGHT_COLOR;
+  if (tracked || icao24 === _trackedIcao) return Cesium.Color.CYAN;
   return isMilitaryIcao(icao24) ? MIL_TINT : Cesium.Color.WHITE;
+}
+
+function _fleetBillboardColor(icao24) {
+  return _contactIconColor(icao24);
 }
 
 /** Fleet billboard scale: per-class scale, ×GROUND_SCALE while grounded. */
@@ -265,6 +292,9 @@ let _modelEpoch = 0;
  *  light a button the layer has not armed. */
 let _models3dEnabled = true;
 let _models3dMode = 'proximity'; // 'proximity' = nearest MODEL_MAX in view; 'all' = every in-view plane (≤ MODEL_MAX_ALL)
+/** Ground-speed band in knots. Null/null is OFF (show all). */
+let _speedMinKt = null;
+let _speedMaxKt = null;
 let _lastModelCapWarnMs = 0; // throttle the "more planes in view than the cap" console notice
 // The tracked entity's billboard goes transparent (rather than hidden) once the model takes
 // over, so it keeps supplying a bounding sphere for follow-camera framing. We only drop its
@@ -498,7 +528,9 @@ function _applyFleetBillboardPresentation(icao24, bb) {
     bb.height = COCKPIT_CONTACT_SIZE_PX;
     bb.scale = limbScale;
     bb.scaleByDistance = _cockpitBillboardScaleByDistance();
-    bb.color = (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR).withAlpha(freshnessAlpha);
+    bb.color = (_contactUsesEmergencyHighlight(icao24)
+      ? EMERGENCY_HIGHLIGHT_COLOR
+      : (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR)).withAlpha(freshnessAlpha);
     bb.rotation = 0;
     return;
   }
@@ -614,6 +646,22 @@ function _applyTrailDrawing() {
 
 subscribeTrailsEnabled(_applyTrailDrawing);
 
+/** Restyle fleet billboards/models when Emergency highlight flips. Click still tracks. */
+function _applyEmergencyHighlightPaint() {
+  if (typeof _billboardCollection?.add !== 'function') return;
+  for (const [icao24, bb] of _billboards) {
+    _applyFleetBillboardPresentation(icao24, bb);
+  }
+  if (!_irBoost) {
+    for (const [icao24, model] of _models) {
+      if (model?.color) model.color = _modelColor(icao24);
+    }
+  }
+  _viewer?.scene?.requestRender?.();
+}
+
+subscribeEmergencyHighlightEnabled(_applyEmergencyHighlightPaint);
+
 hydrateAltitudeBand();
 subscribeAltitudeBand(_applyAltitudeBandVisibility);
 
@@ -625,22 +673,40 @@ function _inAltitudeBand(icao24, info = _flightData.get(icao24)) {
   }, getAltitudeBand());
 }
 
-/** Reveal an untracked fleet billboard only when the altitude band allows it. */
+/** PLAN 93 altitude matcher — honors the existing band module, no reimplementation. */
+function _altitudeAndMatcher(contact) {
+  return _inAltitudeBand(contact?.icao24 || contact?.id, contact);
+}
+
+/**
+ * Strict in-flight AND (speed × altitude). Tracked/selected exemption is
+ * applied only by `_passesInFlightFilters`, not here — counts stay honest.
+ */
+function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
+  return contactPassesInFlightFilters(info || {}, {
+    id: icao24,
+    speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
+    andMatchers: [_altitudeAndMatcher],
+  });
+}
+
+/** Reveal an untracked fleet billboard only when in-flight filters allow it. */
 function _revealUntrackedBillboard(icao24, bb) {
   if (!bb || icao24 === _trackedIcao) return;
-  bb.show = _inAltitudeBand(icao24);
+  bb.show = _matchesInFlightFilters(icao24);
 }
 
 /**
  * Hide out-of-band fleet contacts immediately. In-band contacts are shown
  * unless a 3D model already owns the visual; the next fleet tick re-applies
  * the horizon cull. Empty band → zero visible, no hang.
+ * Emergency squawk does not punch through this hide.
  */
 function _applyAltitudeBandVisibility() {
   if (!_billboards) return;
   let visible = 0;
   for (const [icao24, bb] of _billboards) {
-    const inBand = _inAltitudeBand(icao24);
+    const inBand = _matchesInFlightFilters(icao24);
     if (inBand) visible += 1;
     if (icao24 === _trackedIcao) continue;
     if (!inBand) {
@@ -1537,8 +1603,7 @@ function _resetTrackedDisplay() {
 
 /** Model tint, mirroring the billboard color rules. */
 function _modelColor(icao24) {
-  if (icao24 === _trackedIcao) return Cesium.Color.CYAN;
-  return isMilitaryIcao(icao24) ? MIL_TINT : Cesium.Color.WHITE;
+  return _contactIconColor(icao24, { tracked: icao24 === _trackedIcao });
 }
 
 /** The FLEET's 3D-model regime: models3d enabled AND the camera zoomed in past the altitude
@@ -2721,6 +2786,7 @@ function _fleetTick() {
     const cand = [];
     for (const [icao, bb] of _billboards) {
       if (icao === _trackedIcao) continue;
+      if (!_passesInFlightFilters(icao, _flightData.get(icao))) continue;
       // A converted TR-3B renders as a billboard and can never take a model, so
       // it must not occupy a CAP SLOT either — excluded here at selection time,
       // not just at the handoff below, or accumulated conversions would starve
@@ -2763,6 +2829,12 @@ function _fleetTick() {
     if (icao24 === _trackedIcao) continue; // tracked entity owns its own motion
 
     const info = _flightData.get(icao24);
+    if (!_passesInFlightFilters(icao24, info)) {
+      if (bb.show) bb.show = false;
+      const hiddenModel = _models.get(icao24);
+      if (hiddenModel && hiddenModel.show) hiddenModel.show = false;
+      continue;
+    }
 
     const dr = _deadReckon(icao24, _scratchFleetPos);
     // The dead-reckoned point drifts away from the fix whose cell supplied the
@@ -2787,7 +2859,7 @@ function _fleetTick() {
     // otherwise it reappears wearing its stale (often creation-north) nose for
     // up to ROTATION_REFRESH_MS. (Model-handed-off planes also read show=false
     // here; harmless — the model branch below `continue`s past the rotation.)
-    const inBand = _inAltitudeBand(icao24, info);
+    const inBand = _matchesInFlightFilters(icao24, info);
     const hideFleet = beyondHorizon || !inBand;
     const revealed = !hideFleet && !bb.show;
     if (bb.show === hideFleet) bb.show = !hideFleet;
@@ -2820,7 +2892,9 @@ function _fleetTick() {
     );
     const isCockpitNear = _cockpitContactMode && _cockpitNearContacts.has(icao24);
     const baseColor = _cockpitContactMode && !isCockpitNear
-      ? (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR)
+      ? (_contactUsesEmergencyHighlight(icao24)
+        ? EMERGENCY_HIGHLIGHT_COLOR
+        : (isMilitaryIcao(icao24) ? MIL_TINT : COCKPIT_CIVILIAN_COLOR))
       : _fleetBillboardColor(icao24);
     const treatment = applyAircraftBillboardTreatment({
       billboard: bb,
@@ -3223,7 +3297,7 @@ function _clearTracking(skipViewerUntrack = false, {
   // ROTATION_REFRESH_MS of a wrong (possibly reversed) nose on release.
   if (_billboards.has(_trackedIcao)) {
     const bb = _billboards.get(_trackedIcao);
-    bb.show = _inAltitudeBand(_trackedIcao);
+    bb.show = _matchesInFlightFilters(_trackedIcao);
     bb.width = 20;
     bb.height = 20;
     // Ground/military-aware restore (a plane untracked while taxiing must come
@@ -3542,7 +3616,15 @@ export function _updateTrackedModelForTest() {
 
 /** Evaluate the production tracked-billboard handoff colour for focused tests. */
 export function _trackedBillboardColorForTest() {
-  return _modelOwnsVisual(_trackedIcao) ? CYAN_TRANSPARENT : Cesium.Color.CYAN;
+  if (_modelOwnsVisual(_trackedIcao)) {
+    return _contactUsesEmergencyHighlight(_trackedIcao) ? EMERGENCY_TRANSPARENT : CYAN_TRANSPARENT;
+  }
+  return _contactIconColor(_trackedIcao, { tracked: true });
+}
+
+/** Evaluate the production fleet/emergency icon colour for focused tests. */
+export function _contactIconColorForTest(icao24, options) {
+  return _contactIconColor(icao24, options);
 }
 
 /** Drive the exact fleet billboard-to-model handoff used by `_fleetTick`. */
@@ -3658,9 +3740,12 @@ function _trackFlight(icao24, { origin = 'programmatic' } = {}) {
       scale: CLASS_SCALE_2D[_flightData.get(_trackedIcao)?.klass] || 1,
       // Solid cyan when the billboard is the visual (zoomed out, 3D off, or model still loading);
       // transparent once the STANDALONE tracked model is actually up (ready + shown).
-      color: new Cesium.CallbackProperty(() => (
-        _modelOwnsVisual(_trackedIcao) ? CYAN_TRANSPARENT : Cesium.Color.CYAN
-      ), false),
+      color: new Cesium.CallbackProperty(() => {
+        const paint = _contactIconColor(_trackedIcao, { tracked: true });
+        return _modelOwnsVisual(_trackedIcao)
+          ? (_contactUsesEmergencyHighlight(_trackedIcao) ? EMERGENCY_TRANSPARENT : CYAN_TRANSPARENT)
+          : paint;
+      }, false),
       sizeInMeters: false,
       scaleByDistance: new Cesium.NearFarScalar(1000, 3.0, 8000000, 0.5),
       alignedAxis: Cesium.Cartesian3.ZERO,
@@ -3768,7 +3853,7 @@ function _onMilitaryActiveChange(active) {
       _groundSnap.forget(icao24);
       _missingPolls.delete(icao24);
     }
-    _count = [..._billboards.keys()].filter((icao24) => _inAltitudeBand(icao24)).length;
+    _count = [..._billboards.keys()].filter((icao24) => _matchesInFlightFilters(icao24)).length;
   } else if (_billboardCollection.show) {
     // Fire-and-forget refresh; only while the layer is actually enabled.
     void flightsLayer.update(_viewer);
@@ -3940,6 +4025,30 @@ function _focusEvidenceSnapshot() {
         : null,
     };
   });
+}
+
+function _passesInFlightFilters(icao24, info) {
+  return contactPassesInFlightFilters(info || {}, {
+    id: icao24,
+    speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
+    trackedId: _trackedIcao,
+    selectedId: _trackedIcao,
+    andMatchers: [_altitudeAndMatcher],
+  });
+}
+
+function _applySpeedBandParams(params) {
+  if (!Object.hasOwn(params, 'speedMinKt') && !Object.hasOwn(params, 'speedMaxKt')) return;
+  const band = normalizeSpeedBand({
+    minKt: Object.hasOwn(params, 'speedMinKt') ? params.speedMinKt : _speedMinKt,
+    maxKt: Object.hasOwn(params, 'speedMaxKt') ? params.speedMaxKt : _speedMaxKt,
+  });
+  if (band.minKt === _speedMinKt && band.maxKt === _speedMaxKt) return;
+  _speedMinKt = band.minKt;
+  _speedMaxKt = band.maxKt;
+  _lastFleetTickMs = 0;
+  _lastCamPoseSig = '';
+  _applyAltitudeBandVisibility();
 }
 
 /**
@@ -4238,7 +4347,8 @@ const flightsLayer = {
       // [4] last_contact, [5] longitude, [6] latitude, [7] baro_altitude,
       // [8] on_ground, [9] velocity, [10] true_track, [11] vertical_rate,
       // [12] sensors, [13] geo_altitude (WGS84 ellipsoidal — the CORRECT
-      // globe-render height when present; height-datum fix Task 6).
+      // globe-render height when present; height-datum fix Task 6),
+      // [14] squawk (public transponder code; 7500/7600/7700 paint only).
       // Keep military classification fresh while the military layer is off
       refreshMilitaryRegistryIfStale();
 
@@ -4247,6 +4357,7 @@ const flightsLayer = {
         const icao24 = _normalizeTrackedIcao(rawIcao24);
         const category = Number.isFinite(state[17]) ? state[17] : null; // extended=1 emitter category
         const vertical_rate = Number.isFinite(state[11]) ? state[11] : null; // m/s, + = climbing
+        const squawk = normalizeSquawk(state[14]);
         acceptedSnapshotIcaos.add(icao24);
         const onGround = on_ground === true;
 
@@ -4435,6 +4546,9 @@ const flightsLayer = {
           // Analyst seam: OpenSky origin_country (state[2]) — additive, sticky
           // like callsign so a transient blank row doesn't blank the field.
           originCountry: stickyText(origin_country, prevMeta?.originCountry) || null,
+          // Current-payload public squawk only. Not sticky: a dropped field
+          // is not treated as an ongoing emergency.
+          squawk,
           // OpenSky distinguishes the last position epoch from the last
           // transponder message. The fleet coast horizon uses this actual
           // contact time so a temporarily old position does not hard-freeze
@@ -4555,7 +4669,9 @@ const flightsLayer = {
             // Screen-projected rotation lands on the next fleet tick.
             rotation: 0,
             alignedAxis: Cesium.Cartesian3.ZERO,
-            color: isTracked ? Cesium.Color.CYAN : _fleetBillboardColor(icao24),
+            color: isTracked
+              ? _contactIconColor(icao24, { tracked: true })
+              : _fleetBillboardColor(icao24),
             sizeInMeters: false,
             scaleByDistance: _normalBillboardScaleByDistance(),
             // Grounded/near-surface planes sit at/below the photoreal tile
@@ -4563,7 +4679,7 @@ const flightsLayer = {
             // close (_groundDepthDistance).
             disableDepthTestDistance: _groundDepthDistance(),
             id: icao24,
-            show: !isTracked && _inAltitudeBand(icao24, meta), // hidden if tracked or out-of-band
+            show: !isTracked && _matchesInFlightFilters(icao24, meta), // hidden if tracked or out-of-band
           });
           _billboards.set(icao24, bb);
           _applyFleetBillboardPresentation(icao24, bb);
@@ -4664,7 +4780,7 @@ const flightsLayer = {
       // in place is safe (the DR extrapolates a zero-velocity fix).
       _refloorStaleGroundedContacts(currentIcaos);
 
-      _count = [...currentIcaos].filter((icao24) => _inAltitudeBand(icao24)).length;
+      _count = [...currentIcaos].filter((icao24) => _matchesInFlightFilters(icao24)).length;
       // Freshness belongs to the source snapshot, not the moment this browser
       // received a cached 200 response.
       _lastUpdate = sourceEpochMs ?? Date.now();
@@ -4783,7 +4899,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', selectedFlightsTrackingId?: string|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -4820,6 +4936,7 @@ const flightsLayer = {
       // own conversions, so this never touches the ordinary fleet.
       _refreshTr3bForStyle();
     }
+    _applySpeedBandParams(params);
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -4842,6 +4959,8 @@ const flightsLayer = {
       models3dMode: _models3dMode,
       irBoost: _irBoost,
       selectedFlightsTrackingId: _trackedIcao,
+      speedMinKt: _speedMinKt,
+      speedMaxKt: _speedMaxKt,
     };
   },
 
@@ -4884,6 +5003,7 @@ const flightsLayer = {
       idx++;
       if (!shouldTake) continue;
       if (_cockpitContactMode && icao24.toLowerCase() === _cockpitSubjectId) continue;
+      if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) continue;
       const isTracked = icao24 === _trackedIcao;
       // Keep planes rendered as a 3D model (billboard hidden) so the detection box
       // doesn't vanish on the 2D→3D handoff; bb.position stays current while hidden.
@@ -4999,6 +5119,7 @@ const flightsLayer = {
 
     for (const [icao24, bb] of _billboards) {
       const isTracked = icao24 === _trackedIcao;
+      if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) continue;
       // Keep planes rendered as a 3D model (billboard hidden) so proximity counts
       // don't drop to zero on the 2D→3D handoff; bb.position stays current while hidden.
       if (!aircraftIncludedInNearby({
@@ -5072,11 +5193,12 @@ const flightsLayer = {
 
     const result = [];
     for (const [icao24, bb] of _billboards) {
+      const info = _flightData.get(icao24);
+      if (!_passesInFlightFilters(icao24, info)) continue;
       const pos = bb.position;
       if (!pos) continue;
       const carto = Cesium.Cartographic.fromCartesian(pos, Cesium.Ellipsoid.WGS84, _scratchCarto);
       if (!carto) continue;
-      const info = _flightData.get(icao24);
       result.push({
         id: icao24, // identity (trackById resolves this)
         label: _contactLabel(icao24, info),
@@ -5110,6 +5232,7 @@ const flightsLayer = {
     const limit = Number.isFinite(maxCount) ? Math.max(1, Math.floor(maxCount)) : 2000;
     const result = [];
     for (const [icao24, info] of _flightData) {
+      if (!_passesInFlightFilters(icao24, info)) continue;
       const routeOk = !!info?.route && _routeIsPlausible(icao24, info.route);
       result.push(mapAnalystRecord(icao24, info, { military: isMilitaryIcao(icao24), routeOk }));
       if (result.length >= limit) break;

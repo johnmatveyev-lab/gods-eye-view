@@ -1350,6 +1350,44 @@ body.recording-mode #scale-bar {
   white-space: nowrap;
 }
 
+#speed-band-row {
+  flex-wrap: wrap;
+}
+
+.pp-speed-band-input {
+  width: 3.6em;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.pp-speed-band-input::-webkit-outer-spin-button,
+.pp-speed-band-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pp-speed-band-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.speed-band-sep {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+#speed-band-clear {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 2px 6px;
+}
+
 .detection-slider-row {
   min-width: 170px;
   padding: 5px 8px 6px;
@@ -2202,7 +2240,8 @@ body.ui-clean-view #scene-runtime.active {
   line-height: 1;
 }
 
-#clear-selected-layers {
+#clear-selected-layers,
+#restore-live-layers {
   width: auto;
   min-width: 36px;
   padding: 0 10px;
@@ -2214,8 +2253,13 @@ body.ui-clean-view #scene-runtime.active {
   letter-spacing: 0.08em;
 }
 
-#clear-selected-layers .all-off-layers-label {
+#clear-selected-layers .all-off-layers-label,
+#restore-live-layers .restore-live-layers-label {
   line-height: 1;
+}
+
+#top-center-actions #restore-live-layers[hidden] {
+  display: none;
 }
 
 #contacts-roster-toggle.active,
@@ -4677,7 +4721,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #undo-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
+body.cockpit-mode :is(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 body.cockpit-mode :is(#measure-toggle, #measure-readout) {
@@ -5738,6 +5782,33 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   color: #22e6e6;
   font-size: 9px;
   letter-spacing: .08em;
+}
+#space-mission-panel-host .space-mission-status-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 3px 2px;
+}
+#space-mission-panel-host .space-mission-status-chip {
+  padding: 2px 7px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  letter-spacing: .12em;
+  color: rgba(190, 230, 230, .55);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(34, 230, 230, .16);
+  border-radius: 3px;
+  cursor: pointer;
+}
+#space-mission-panel-host .space-mission-status-chip:hover,
+#space-mission-panel-host .space-mission-status-chip:focus-visible {
+  color: #d7f7f7;
+  border-color: rgba(34, 230, 230, .42);
+}
+#space-mission-panel-host .space-mission-status-chip.active {
+  color: #22e6e6;
+  border-color: #22e6e6;
+  background: rgba(34, 230, 230, .12);
 }
 #space-mission-panel-host .space-mission-roster-list {
   display: grid;
@@ -7161,6 +7232,16 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   margin-right: 2px;
 }
 
+.data-toggle-row-break {
+  flex-basis: 100%;
+  width: 100%;
+  height: 0;
+  overflow: hidden;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
 .data-toggle-chip:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -8068,7 +8149,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #undo-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
+body.scene-playback-mode :is(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 body.scene-playback-mode :is(#measure-toggle, #measure-readout) {

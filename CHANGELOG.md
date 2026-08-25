@@ -38,6 +38,36 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   the board. Undo does not bump the clear() generation or abort in-flight
   annotate. Disabled when the board is empty. Clear still empties all. No
   new `/api`, GeoJSON export, or voice/LLM change.
+- Street Traffic has an Uncovered: Sim | Hide control. Sim keeps today's
+  white ambient dots on roads TomTom has no flow for. Hide spawns nothing
+  on those roads; colored live flow stays. Applies on the next camera-driven
+  load. Distinct from Traffic: Live | Sim, which still changes the whole
+  feed. The choice persists as `meridian.uncoveredRoads` (default Sim).
+  Share URLs stay enabled-only. No extra `/api`.
+- FIRMS row chips filter already-fetched detections by FRP floor
+  (`All` | `10+` | `50+` | `100+ MW`, default All). Cells, sprites, overlay
+  cards, and the Plan 70 FIRES list hide below the floor without a new NASA
+  fetch. Failed/stale last-good still filters. The choice persists on
+  `local-firms` (`w.f.*`). Same VIIRS proxy, quota, and TTL.
+- Satellites row has an **ORBITS** on/off chip over the existing
+  `setParams({ showOrbits })` path (default ON). Off hides orbit rings;
+  ISS / core / dense points stay. The choice persists in layer-state /
+  share links (`s.o.0` when off). It does not change catalog core|dense,
+  the CelesTrak group picker, or add an `/api` route.
+- Emergency highlight paints contacts whose current public ADS-B squawk is
+  7500, 7600, or 7700 using the existing annotation alert-red token. DISPLAY
+  **Emergency** defaults on and persists as `meridian.emergencyHighlight`.
+  Off removes the special paint only; click still tracks. Altitude-band
+  visibility still hides out-of-band contacts even when the squawk is
+  emergency. Client-side current payload only — not an alert service and
+  not a verified emergency. No `/api`.
+- Double-click on empty globe terrain flies to the pick with the existing
+  landmark helper (reasonable height and tilt). Double-click on a contact or
+  contact card still tracks. Wheel zoom-to-pointer is unchanged. Optional
+  persist is `meridian.doubleClickFly` (default on). No `/api`.
+- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
+  a row to fly to that event (cap 50). Empty or failed feed shows
+  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
 - Added a two-click Measure mode on the globe: two terrain picks draw a
   geodesic line and show the distance in the current `km | nm | mi` units.
   Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
@@ -51,9 +81,6 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
   the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
   `meridian.altBand`. Empty bands show an empty layer. No `/api`.
-- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
-  a row to fly to that event (cap 50). Empty or failed feed shows
-  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
 - Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
   camera-center aim point copy-coords and measure already use. Default off.
   Persists as `meridian.crosshair`. Clean view may keep it; credits stay
@@ -78,7 +105,6 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   The choice persists as `meridian.lockTilt` and defaults off. Home and
   cockpit still set their own pitch. Wheel zoom / invert scroll stay
   wheel-only. No `/api`.
-
 - Added a DISPLAY-rail Keep above ground control. After the camera moves, if
   `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
   below terrain plus a small margin, the camera is lifted. The preference
@@ -145,6 +171,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   camera. `meridian.lastView` is not cleared. The next enable is manual.
   First-visit layer defaults still apply only on a fresh profile. Banned
   layers stay off. No `/api`.
+- **Restore** sits next to All off and reapplies the enabled-layer snapshot
+  taken immediately before All off. Hidden until All off has been used this
+  session. Does not move the camera. Banned cables / OpenSky / GNews never
+  restore on. No `/api`.
 - Added a city/provider filter on the CCTV panel list. It uses `city`,
   `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
   isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.
@@ -305,6 +335,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “Google News” / “news RSS” is refused with “Google News RSS is
   disabled”. Cockpit headlines stay GDELT with citation and never fetch
   news.google.com. No Google News source picker.
+
+### Changed
+
+- Remaining runtime preference keys now write `meridian.*`. A first read of a
+  known `godsEyeView.*` layout or settings key copies it once and leaves the
+  older key in place. Proxy User-Agents identify as Meridian; the window
+  handle is `window.__meridian`. LICENSE credit and the UI title are unchanged.
 
 ### Fixed
 

@@ -15,7 +15,12 @@ import {
 import {
   ALL_OFF_ARIA_LABEL,
   ALL_OFF_BUSY_ARIA_LABEL,
+  RESTORE_LIVE_LAYERS_ARIA_LABEL,
+  RESTORE_LIVE_LAYERS_BUSY_ARIA_LABEL,
   allOffLiveLayers,
+  restoreLiveLayers,
+  shouldShowRestoreControl,
+  snapshotEnabledLayerIds,
 } from './allOffLayers.js';
 import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
@@ -103,12 +108,16 @@ import {
   setTrailsEnabled,
 } from './data/trailPreference.js';
 import {
+  hydrateEmergencyHighlightEnabled,
+  setEmergencyHighlightEnabled,
+} from './data/emergencySquawk.js';
+import {
   hydrateKeepAboveEnabled,
   installKeepAboveGround,
   setKeepAboveEnabled,
 } from './cameraAboveGround.js';
 import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
-import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
+import { destroyWorldOverlay, getOverlayPaintRect, hitTestWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
   initDetection,
@@ -289,6 +298,12 @@ import {
   setMeasureActive,
 } from './measure.js';
 import {
+  displaySpeedToKt,
+  ktToDisplaySpeed,
+  normalizeSpeedBand,
+  speedUnitSuffix,
+} from './data/flightSpeedBand.js';
+import {
   getPowerMode as readViewerPowerMode,
   installPowerMode,
   setPowerMode as writeViewerPowerMode,
@@ -375,6 +390,11 @@ import {
   writeCrosshairPreference,
 } from './cameraCrosshair.js';
 import {
+  bindDoubleClickFly,
+  DOUBLE_CLICK_FLY_DEFAULT,
+  readDoubleClickFlyPreference,
+} from './doubleClickFly.js';
+import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -401,6 +421,13 @@ import {
   slewHeading,
   speedRulerTicks,
 } from './cockpitMath.js';
+import {
+  hasPanelPrefix,
+  layoutResetNotifiedSuffix,
+  prefKey,
+  readPrefKey,
+  writePrefKey,
+} from './prefStorage.js';
 import {
   peekModelsPreference,
   writeModelsPreference,
@@ -2529,6 +2556,7 @@ export class StyleManager {
     this._syncScaleBarUi();
     this._unitsUnsubscribe = subscribeDistanceUnit(() => {
       this._syncUnitsUi();
+      this._syncSpeedBandUi();
       this.hud?.refreshDisplayUnits?.();
       militaryAwarenessLayer.refreshDistanceLabels?.();
       this.cockpitView?.refreshDistanceUnits?.();
@@ -2566,6 +2594,8 @@ export class StyleManager {
     this._gridBtn = document.getElementById('grid-toggle');
     this._crosshairBtn = document.getElementById('crosshair-toggle');
     this._crosshairEnabled = CROSSHAIR_DEFAULT;
+    this._doubleClickFlyEnabled = DOUBLE_CLICK_FLY_DEFAULT;
+    this._removeDoubleClickFly = null;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2703,6 +2733,10 @@ export class StyleManager {
     this._measureClearBtn = document.getElementById('measure-clear');
     this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
+    this._restoreLiveLayersBtn = document.getElementById('restore-live-layers');
+    this._preAllOffLayerSnapshot = null;
+    this._allOffUsedThisSession = false;
+    this._restoreLiveLayersPromise = null;
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
@@ -2972,10 +3006,20 @@ export class StyleManager {
     // button and the armed layer in agreement.
     this._models3dEnabled = true;
     this._models3dMode = 'proximity'; // 'proximity' (nearest in view) | 'all' (every in-view plane)
+    this._speedBandMin = document.getElementById('speed-band-min');
+    this._speedBandMax = document.getElementById('speed-band-max');
+    this._speedBandUnit = document.getElementById('speed-band-unit');
+    this._speedBandClear = document.getElementById('speed-band-clear');
+    this._speedMinKt = null;
+    this._speedMaxKt = null;
     this._trailsBtn = document.getElementById('trails-toggle');
     // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
     // existing tracked-target trail renderer without stopping track.
     this._trailsEnabled = true;
+    this._emergencyHighlightBtn = document.getElementById('emergency-highlight-toggle');
+    // DISPLAY-rail Emergency highlight. Default ON (`meridian.emergencyHighlight`);
+    // paints public squawk 7500/7600/7700. Click still tracks.
+    this._emergencyHighlightEnabled = true;
     this._keepAboveBtn = document.getElementById('keep-above-toggle');
     // DISPLAY-rail Keep above ground. Default ON (`meridian.keepAbove`);
     // lifts the map camera after a move when an existing terrain helper
@@ -3027,17 +3071,21 @@ export class StyleManager {
     this._initFullscreenButton();
     this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
+    this._initRestoreLiveLayersButton();
     this._initHomeViewButton();
     this._initLaunchesPanel();
     this._initStopTrackingButton();
     this._initDamsInViewList();
+    this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initZoomToPointer();
+    this._initSpeedBandControl();
     this._initTrailsToggle();
+    this._initEmergencyHighlightToggle();
     this._initKeepAboveToggle();
     this._initLiveSunToggle();
     this._initScaleBar();
@@ -4685,7 +4733,8 @@ export class StyleManager {
 
   /**
    * On boot, clamp or reset leftover/current panelPos keys that would restore
-   * a panel off-screen. Does not rename leftover godsEyeView.* keys.
+   * a panel off-screen. Leftover godsEyeView.* keys copy onto meridian.*
+   * once and stay in place; leftover versions are not rewritten to v8.
    * @returns {void}
    */
   _sanitizeRestoredPanelPositions() {
@@ -4816,11 +4865,10 @@ export class StyleManager {
    */
   _maybeNotifyLayoutReset() {
     try {
-      const marker = `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.layoutResetNotified`;
-      if (localStorage.getItem(marker)) return;
-      localStorage.setItem(marker, '1');
-      const hadOldPositions = Object.keys(localStorage)
-        .some((key) => key.startsWith('godsEyeView.v6.panelPos.'));
+      const marker = prefKey(layoutResetNotifiedSuffix(PANEL_POSITION_STORAGE_VERSION));
+      if (readPrefKey(localStorage, marker)) return;
+      writePrefKey(localStorage, marker, '1');
+      const hadOldPositions = hasPanelPrefix(localStorage, 'v6.panelPos.');
       if (hadOldPositions) {
         this._showToast('Panel layout updated — positions reset to new defaults');
       }
@@ -5282,7 +5330,10 @@ export class StyleManager {
         this._dataManager,
         this.shareLinkManager,
         {
-          onDurableStateChange: (state) => this._syncModels3dFromLayerState(state),
+          onDurableStateChange: (state) => {
+            this._syncModels3dFromLayerState(state);
+            this._syncSpeedBandFromLayerState(state);
+          },
           onTrackingRestoreStatus: (result) => this._handleShareTrackingRestoreStatus(result),
         },
       );
@@ -5300,7 +5351,9 @@ export class StyleManager {
         );
       }
       void this._layerStateRestorePromise.then(() => {
-        this._syncModels3dFromLayerState(this._layerStateCoordinator?.getDurableState());
+        const durable = this._layerStateCoordinator?.getDurableState();
+        this._syncModels3dFromLayerState(durable);
+        this._syncSpeedBandFromLayerState(durable);
         // Share links keep their encoded models3d; a laptop that chose Models
         // off via meridian.models otherwise stays on the billboard path.
         if (!this._initialShareState) this._applyStoredModelsPreference();
@@ -7636,7 +7689,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelStorageKey(panelId) {
-    return `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`;
+    return prefKey(`${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`);
   }
 
   /**
@@ -7645,7 +7698,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelCollapseStorageKey(panelId) {
-    return `godsEyeView.${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`;
+    return prefKey(`${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`);
   }
 
   /**
@@ -7661,7 +7714,7 @@ export class StyleManager {
     let stored = null;
     if (allowStored) {
       try {
-        stored = localStorage.getItem(this._panelCollapseStorageKey(panelId));
+        stored = readPrefKey(localStorage, this._panelCollapseStorageKey(panelId));
         if (stored === '1') collapsed = true;
         if (stored === '0') collapsed = false;
       } catch {
@@ -7689,7 +7742,7 @@ export class StyleManager {
    */
   _savePanelCollapsedState(panelId, collapsed) {
     try {
-      localStorage.setItem(this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
+      writePrefKey(localStorage, this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
     } catch {
       // storage unavailable
     }
@@ -8475,8 +8528,8 @@ export class StyleManager {
       );
       if (!resolved?.pos) return;
       // Clamp leftover or current coords: a position saved at one window size
-      // would otherwise land off-screen at another. Same-key leftovers are
-      // not renamed this cycle.
+      // would otherwise land off-screen at another. Leftover versions stay on
+      // their version; only the prefix copies onto meridian.*.
       const clamped = this._clampToViewport(
         Math.round(resolved.pos.left),
         Math.round(resolved.pos.top),
@@ -8524,7 +8577,7 @@ export class StyleManager {
   _savePanelPosition(panelId, panelEl) {
     const rect = panelEl.getBoundingClientRect();
     try {
-      localStorage.setItem(this._panelStorageKey(panelId), JSON.stringify({
+      writePrefKey(localStorage, this._panelStorageKey(panelId), JSON.stringify({
         left: Math.round(rect.left),
         top: Math.round(rect.top),
       }));
@@ -10869,6 +10922,30 @@ export class StyleManager {
   }
 
   /**
+   * Double-click empty terrain flies to the pick. Contact cards and
+   * registered contact picks keep the existing track path.
+   */
+  _initDoubleClickFly() {
+    this._removeDoubleClickFly?.();
+    let stored = DOUBLE_CLICK_FLY_DEFAULT;
+    try {
+      stored = readDoubleClickFlyPreference(window.localStorage);
+    } catch {
+      stored = DOUBLE_CLICK_FLY_DEFAULT;
+    }
+    this._doubleClickFlyEnabled = stored;
+    this._removeDoubleClickFly = bindDoubleClickFly(this.viewer, {
+      getEnabled: () => this._doubleClickFlyEnabled !== false,
+      isCockpitActive: () => !!this.cockpitView?.active
+        || document.body.classList.contains('cockpit-mode'),
+      isMeasureActive: () => isMeasureActive(),
+      hitTestOverlay: (x, y) => hitTestWorldOverlay(x, y),
+      flyTo: (viewer, lat, lon, framing) => flyToLandmark(viewer, lat, lon, framing),
+      navigate: (run) => this._runExplicitNavigation('pick', run),
+    });
+  }
+
+  /**
    * Fly to the default first-load camera. Does not delete lastView;
    * moveEnd overwrites the slot after the flight.
    */
@@ -10983,13 +11060,85 @@ export class StyleManager {
     this._clearSelectedLayersBtn.addEventListener('click', this._clearSelectedLayersHandler);
   }
 
+  /** Restore stays hidden until All off captures a snapshot this session. */
+  _initRestoreLiveLayersButton() {
+    if (!this._restoreLiveLayersBtn) return;
+    this._restoreLiveLayersHandler = () => { void this.restoreLiveLayers(); };
+    this._restoreLiveLayersBtn.addEventListener('click', this._restoreLiveLayersHandler);
+    this._syncRestoreLiveLayersButton();
+  }
+
+  _snapshotEnabledLayersBeforeAllOff() {
+    if (this._clearSelectedLayersPromise) return;
+    const ids = this._dataManager?.getEnabledLayerIds?.() || [];
+    this._preAllOffLayerSnapshot = snapshotEnabledLayerIds(ids);
+    this._allOffUsedThisSession = true;
+    this._syncRestoreLiveLayersButton();
+  }
+
+  _syncRestoreLiveLayersButton() {
+    const btn = this._restoreLiveLayersBtn;
+    if (!btn) return;
+    btn.hidden = !shouldShowRestoreControl({
+      snapshot: this._preAllOffLayerSnapshot,
+      allOffUsedThisSession: this._allOffUsedThisSession,
+    });
+  }
+
   /**
    * Panic All off: disable every live data layer. Globe, credits, camera, and
-   * lastView stay. Next enable is manual.
+   * lastView stay. Next enable is manual. Snapshots the current enabled set
+   * first so Restore can put those layers back.
    * @returns {Promise<object>} Aggregate manager lifecycle truth for the batch.
    */
   allOff() {
+    this._snapshotEnabledLayersBeforeAllOff();
     return this.clearSelectedLayers();
+  }
+
+  /**
+   * Re-enable the layers that were on immediately before All off. Banned
+   * commercial sources stay off. Camera and lastView stay put.
+   * @returns {Promise<{enabledLayerIds:string[], restored:boolean}|void>}
+   */
+  restoreLiveLayers() {
+    if (this._restoreLiveLayersPromise) return this._restoreLiveLayersPromise;
+    if (this._clearSelectedLayersPromise) return this._clearSelectedLayersPromise.then(() => this.restoreLiveLayers());
+    const enabledLayerIds = snapshotEnabledLayerIds(this._preAllOffLayerSnapshot);
+    if (!enabledLayerIds.length || !this._dataManager?.restoreEnabledLayerIds) {
+      this._syncRestoreLiveLayersButton();
+      return Promise.resolve({ enabledLayerIds, restored: false });
+    }
+    const notificationToken = Symbol('restore-live-layers');
+    this._userFacingContextNotificationTokens.add(notificationToken);
+    if (this._restoreLiveLayersBtn) {
+      this._restoreLiveLayersBtn.disabled = true;
+      this._restoreLiveLayersBtn.setAttribute('aria-label', RESTORE_LIVE_LAYERS_BUSY_ARIA_LABEL);
+    }
+    if (this._clearSelectedLayersBtn) this._clearSelectedLayersBtn.disabled = true;
+    const operation = restoreLiveLayers(this._dataManager, enabledLayerIds, {
+      origin: 'user',
+      notificationToken,
+    }).then((result) => {
+      if (result.restored) this._showToast('Restored');
+      else this._showToast('Nothing to restore');
+      return result;
+    }).catch((error) => {
+      console.warn('[Data] Restore failed', error);
+      this._showToast('Restore could not finish');
+      return { enabledLayerIds, restored: false, error };
+    }).finally(() => {
+      this._userFacingContextNotificationTokens.delete(notificationToken);
+      if (this._restoreLiveLayersBtn) {
+        this._restoreLiveLayersBtn.disabled = false;
+        this._restoreLiveLayersBtn.setAttribute('aria-label', RESTORE_LIVE_LAYERS_ARIA_LABEL);
+      }
+      if (this._clearSelectedLayersBtn) this._clearSelectedLayersBtn.disabled = false;
+      this._restoreLiveLayersPromise = null;
+      this._syncRestoreLiveLayersButton();
+    });
+    this._restoreLiveLayersPromise = operation;
+    return operation;
   }
 
   /**
@@ -11020,6 +11169,7 @@ export class StyleManager {
     this._globalContextMissionsBtn && (this._globalContextMissionsBtn.disabled = true);
     this._clearSelectedLayersBtn.disabled = true;
     this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_BUSY_ARIA_LABEL);
+    if (this._restoreLiveLayersBtn) this._restoreLiveLayersBtn.disabled = true;
 
     const managerOperation = allOffLiveLayers(this._dataManager, {
       origin: 'user',
@@ -11055,6 +11205,8 @@ export class StyleManager {
       }
       this._clearSelectedLayersBtn.disabled = false;
       this._clearSelectedLayersBtn.setAttribute('aria-label', ALL_OFF_ARIA_LABEL);
+      if (this._restoreLiveLayersBtn) this._restoreLiveLayersBtn.disabled = false;
+      this._syncRestoreLiveLayersButton();
       this._preservePanelStateDuringLayerClear = false;
       this._clearSelectedLayersManagerPromise = null;
       this._clearSelectedLayersPromise = null;
@@ -11384,6 +11536,61 @@ export class StyleManager {
     this._models3dBtn?.setAttribute('aria-pressed', String(this._models3dEnabled));
   }
 
+  _initSpeedBandControl() {
+    this._syncSpeedBandUi();
+    const commit = () => this._commitSpeedBandFromInputs();
+    this._speedBandMin?.addEventListener('change', commit);
+    this._speedBandMax?.addEventListener('change', commit);
+    this._speedBandClear?.addEventListener('click', () => {
+      this._applySpeedBand({ minKt: null, maxKt: null });
+    });
+  }
+
+  _syncSpeedBandFromLayerState(state) {
+    const options = state?.options?.flights;
+    if (!options) return;
+    const band = normalizeSpeedBand({
+      minKt: options.speedMinKt,
+      maxKt: options.speedMaxKt,
+    });
+    this._speedMinKt = band.minKt;
+    this._speedMaxKt = band.maxKt;
+    this._syncSpeedBandUi();
+  }
+
+  _syncSpeedBandUi() {
+    const unit = getDistanceUnit();
+    if (this._speedBandUnit) this._speedBandUnit.textContent = speedUnitSuffix(unit);
+    if (this._speedBandMin && document.activeElement !== this._speedBandMin) {
+      this._speedBandMin.value = this._speedMinKt == null
+        ? ''
+        : String(Math.round(ktToDisplaySpeed(this._speedMinKt, unit)));
+    }
+    if (this._speedBandMax && document.activeElement !== this._speedBandMax) {
+      this._speedBandMax.value = this._speedMaxKt == null
+        ? ''
+        : String(Math.round(ktToDisplaySpeed(this._speedMaxKt, unit)));
+    }
+    this._speedBandClear?.classList.toggle('active', this._speedMinKt != null || this._speedMaxKt != null);
+  }
+
+  _commitSpeedBandFromInputs() {
+    const unit = getDistanceUnit();
+    const minRaw = this._speedBandMin?.value;
+    const maxRaw = this._speedBandMax?.value;
+    const minKt = minRaw === '' || minRaw == null ? null : displaySpeedToKt(Number(minRaw), unit);
+    const maxKt = maxRaw === '' || maxRaw == null ? null : displaySpeedToKt(Number(maxRaw), unit);
+    this._applySpeedBand(normalizeSpeedBand({ minKt, maxKt }));
+  }
+
+  _applySpeedBand(band) {
+    const next = normalizeSpeedBand(band);
+    this._speedMinKt = next.minKt;
+    this._speedMaxKt = next.maxKt;
+    this._setModels3dParams({ speedMinKt: next.minKt, speedMaxKt: next.maxKt });
+    this._syncSpeedBandUi();
+  }
+
   /**
    * Wires the DISPLAY-rail Trails toggle to the existing trail renderer.
    * Off hides drawing (body + already-drawn path) and persists `meridian.trails`.
@@ -11401,6 +11608,24 @@ export class StyleManager {
   _syncTrailsButtonState() {
     this._trailsBtn?.classList.toggle('active', this._trailsEnabled);
     this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
+  }
+
+  /**
+   * Wires the DISPLAY-rail Emergency highlight toggle.
+   * Off removes the special paint only. Click-to-track is unchanged.
+   */
+  _initEmergencyHighlightToggle() {
+    this._emergencyHighlightEnabled = hydrateEmergencyHighlightEnabled();
+    this._emergencyHighlightBtn?.addEventListener('click', () => {
+      this._emergencyHighlightEnabled = setEmergencyHighlightEnabled(!this._emergencyHighlightEnabled);
+      this._syncEmergencyHighlightButtonState();
+    });
+    this._syncEmergencyHighlightButtonState();
+  }
+
+  _syncEmergencyHighlightButtonState() {
+    this._emergencyHighlightBtn?.classList.toggle('active', this._emergencyHighlightEnabled);
+    this._emergencyHighlightBtn?.setAttribute('aria-pressed', String(this._emergencyHighlightEnabled));
   }
 
   /**
@@ -11762,6 +11987,8 @@ export class StyleManager {
     this._removeWorldRequestFocusListener?.();
     this._removeWorldRequestFocusListener = null;
     this._worldRequestFocusHandler = null;
+    this._removeDoubleClickFly?.();
+    this._removeDoubleClickFly = null;
     this._navigationOwnerChangedRemover?.();
     this._navigationOwnerChangedRemover = null;
     this._removeNavigationAuthorityListener?.();
@@ -11823,6 +12050,10 @@ export class StyleManager {
     if (this._clearSelectedLayersBtn && this._clearSelectedLayersHandler) {
       this._clearSelectedLayersBtn.removeEventListener('click', this._clearSelectedLayersHandler);
       this._clearSelectedLayersHandler = null;
+    }
+    if (this._restoreLiveLayersBtn && this._restoreLiveLayersHandler) {
+      this._restoreLiveLayersBtn.removeEventListener('click', this._restoreLiveLayersHandler);
+      this._restoreLiveLayersHandler = null;
     }
     this._cctvUnsubscribe?.();
     this._cctvUnsubscribe = null;
