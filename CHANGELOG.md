@@ -29,7 +29,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).
-  `GET /api/billing/me` and checkout `ALREADY_PRO` read
+  `createBillingRuntime` defaults `getUserRecord` to Clerk `users.getUser`
+  when `CLERK_SECRET_KEY` is set, so `/me` reads `publicMetadata.meridianPlan`
+  in production. Webhook still awaits that Clerk write and returns non-2xx
+  if it fails. `GET /api/billing/me` and checkout `ALREADY_PRO` read
   `publicMetadata.meridianPlan` from Clerk (`users.getUser`) so Pro survives
   an empty isolate. Webhook `checkout.session.completed` awaits that Clerk
   write (including `stripeCustomerId` / `stripeSubscriptionId`) and returns
