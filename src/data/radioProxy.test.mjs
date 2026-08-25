@@ -38,6 +38,7 @@ function station(overrides = {}) {
     geo_lat: 30.2672,
     geo_long: -97.7431,
     clickcount: 42,
+    votes: 42,
     ...overrides,
   };
 }
@@ -84,6 +85,7 @@ test('normalization keeps only healthy geolocated public HTTPS MP3/AAC streams',
   assert.equal(normalized.country, 'United States');
   assert.equal(normalized.countryCode, 'US');
   assert.equal(normalized.metadataTrust, 'untrusted-community');
+  assert.equal(normalized.votes, 42);
   assert.equal(normalized.lastCheckOk, true);
   assert.equal(normalizeRadioBrowserStation(station({ lastcheckok: true })).lastCheckOk, true);
   const franceByName = normalizeRadioBrowserStation(station({ country: 'France', countrycode: '' }));
@@ -110,8 +112,9 @@ test('catalog endpoint stations are reconstructed from the public field allowlis
   assert.deepEqual(Object.keys(publicStation), [
     'id', 'name', 'lat', 'lon', 'streamUrl', 'homepage', 'tags', 'languages',
     'state', 'country', 'countryCode', 'metadataTrust', 'codec', 'bitrate',
-    'lastCheckOk',
+    'votes', 'lastCheckOk',
   ]);
+  assert.equal(publicStation.votes, 42);
   assert.equal(publicStation.lastCheckOk, true);
   assert.equal('clickCount' in publicStation, false);
   assert.equal('internalExtension' in publicStation, false);

@@ -13,6 +13,7 @@
  * @module radioDirectory
  */
 import { normalizeRadioCountryInput } from './radioCountry.js';
+import { normalizeRadioVotes } from './radioVotesFilter.js';
 
 const RADIO_DIRECTORY_CACHE_MS = 45 * 60 * 1000;
 const RADIO_DIRECTORY_STALE_MS = 7 * 24 * 60 * 60 * 1000;
@@ -117,6 +118,7 @@ export function normalizeRadioBrowserStation(raw) {
     ? normalizedCode
     : normalizeRadioCountryInput(cleanRadioText(raw?.country, 80));
   const bitrate = Number(raw?.bitrate);
+  const votes = normalizeRadioVotes(raw?.votes);
   const lastCheckOk = raw?.lastcheckok === 1 || raw?.lastcheckok === true
     ? true
     : (raw?.lastcheckok === 0 || raw?.lastcheckok === false ? false : undefined);
@@ -138,6 +140,7 @@ export function normalizeRadioBrowserStation(raw) {
     codec,
     bitrate: Number.isInteger(bitrate) && bitrate >= 8 && bitrate <= 1024 ? bitrate : null,
     clickCount: Math.max(0, Math.min(10_000_000, Number(raw?.clickcount) || 0)),
+    ...(votes == null ? {} : { votes }),
     ...(lastCheckOk === undefined ? {} : { lastCheckOk }),
   };
 }
@@ -158,6 +161,7 @@ export function publicRadioStation(station) {
     metadataTrust: station.metadataTrust,
     codec: station.codec,
     bitrate: station.bitrate,
+    ...(Number.isInteger(station.votes) && station.votes >= 0 ? { votes: station.votes } : {}),
     ...(station.lastCheckOk === true || station.lastCheckOk === false
       ? { lastCheckOk: station.lastCheckOk }
       : {}),
