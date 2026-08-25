@@ -1,3 +1,10 @@
+import {
+  DEFAULT_HEADING_SECTORS,
+  decodeHeadingSectors,
+  encodeHeadingSectors,
+  normalizeHeadingSectors,
+} from './inFlightFilters.js';
+
 const VALID_DISPOSITIONS = new Set([
   'enabled-only',
   'enabled+options',
@@ -160,6 +167,20 @@ function enumOption(key, token, defaultValue, values, codes) {
   });
 }
 
+function headingSectorsOption() {
+  return Object.freeze({
+    key: 'headingSectors',
+    token: 'h',
+    defaultValue: DEFAULT_HEADING_SECTORS,
+    normalize: (value) => {
+      if (value === undefined || value === null) return null;
+      return normalizeHeadingSectors(value);
+    },
+    encode: encodeHeadingSectors,
+    decode: decodeHeadingSectors,
+  });
+}
+
 function integerOption(key, token, defaultValue) {
   return Object.freeze({
     key,
@@ -225,6 +246,7 @@ const OPTION_GROUPS = Object.freeze({
       proximity: 'p',
       all: 'a',
     }),
+    headingSectorsOption(),
     trackingIdOption('selectedFlightsTrackingId', 't', null),
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
     nullableIntegerOption('speedMinKt', 's', null),

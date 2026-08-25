@@ -115,6 +115,14 @@ import {
 } from './contextStore.js';
 import { CONTACT_MATCH_TIER, contactMatchWins, rankContactMatch } from './contactMatch.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import {
+  contactTrueTrack,
+  getHeadingSectors,
+  headingSectorChipModels,
+  onHeadingSectorsChange,
+  passesHeadingSectorFilter,
+  setHeadingSectors,
+} from './inFlightFilters.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -706,11 +714,17 @@ function _altitudeAndMatcher(contact) {
   return _inAltitudeBand(contact?.icao24 || contact?.id, contact);
 }
 
+/** PLAN 101 heading matcher — uses already-ingested true_track. */
+function _headingAndMatcher(contact) {
+  return passesHeadingSectorFilter(contactTrueTrack(contact), getHeadingSectors());
+}
+
 /**
- * Strict in-flight AND (speed × altitude). Tracked/selected exemption is
+ * Strict in-flight AND (speed × altitude × heading). Tracked/selected exemption is
  * applied only by `_passesInFlightFilters`, not here — counts stay honest.
  */
 function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
+  if (!_headingAndMatcher(info || {})) return false;
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
@@ -731,21 +745,7 @@ function _revealUntrackedBillboard(icao24, bb) {
  * Emergency squawk does not punch through this hide.
  */
 function _applyAltitudeBandVisibility() {
-  if (!_billboards) return;
-  let visible = 0;
-  for (const [icao24, bb] of _billboards) {
-    const inBand = _matchesInFlightFilters(icao24);
-    if (inBand) visible += 1;
-    if (icao24 === _trackedIcao) continue;
-    if (!inBand) {
-      if (bb.show) bb.show = false;
-      const model = _models.get(icao24);
-      if (model && model.show) model.show = false;
-      continue;
-    }
-    if (!_modelOwnsVisual(icao24)) bb.show = true;
-  }
-  _count = visible;
+  _applyInFlightFilterVisibility();
 }
 
 // ---------------------------------------------------------------------------
@@ -2820,7 +2820,8 @@ function _fleetTick() {
       // not just at the handoff below, or accumulated conversions would starve
       // ordinary contacts of 3D models. (The handoff guard stays as defence.)
       if (isTr3b(icao)) continue;
-      // Ground planes compete for model slots like everyone else (product rule
+      if (_contactHiddenByOperatorFilter(icao, _flightData.get(icao))) continue;
+      // Ground planes compete for model slots like everyone else (product rule)
       // 2026-07-03: "3D mode is respected regardless of whether a plane is on the
       // ground or in the air — no distinction"). The cap + nearest-first ordering
       // below already bound airport clusters; grounded placement is handled by the
@@ -2882,13 +2883,13 @@ function _fleetTick() {
     // pass would hide a plane that is really just low over high-N terrain
     // waiting for its floor to warm (ATL grounded contacts at geoid −31 m).
     const beyondHorizon = !occluder.isPointVisible(info?.cullPosition || bb.position);
+    const inBand = _matchesInFlightFilters(icao24, info);
+    const hideFleet = beyondHorizon || !inBand;
     // A billboard flipping INTO view (horizon reveal while the camera idles)
     // gets its rotation refreshed THIS tick even without a pose change —
     // otherwise it reappears wearing its stale (often creation-north) nose for
     // up to ROTATION_REFRESH_MS. (Model-handed-off planes also read show=false
     // here; harmless — the model branch below `continue`s past the rotation.)
-    const inBand = _matchesInFlightFilters(icao24, info);
-    const hideFleet = beyondHorizon || !inBand;
     const revealed = !hideFleet && !bb.show;
     if (bb.show === hideFleet) bb.show = !hideFleet;
     if (hideFleet) {
@@ -3351,6 +3352,7 @@ function _clearTracking(skipViewerUntrack = false, {
   _releaseTrackedModel();
   _resetTrackedSelectionState(); // the zoom band + load-failure budget belong to the selection we just dropped
   _trackedIcao = null;
+  _applyInFlightFilterVisibility();
   _applyFleetBillboardPresentation(clearedIcao, _billboards.get(clearedIcao));
   clearTrackedSubjectContext('flights');
   _emitAwarenessEvent('gev:awareness-subject-cleared', {
@@ -3581,11 +3583,44 @@ export function _setFlightTrackingRefreshOutcomeForTest({
   };
 }
 
+function _contactHiddenByOperatorFilter(icao24, info) {
+  return !_passesInFlightFilters(icao24, info);
+}
+
+function _applyInFlightFilterVisibility() {
+  if (!_billboards) return;
+  let visible = 0;
+  for (const [icao24, bb] of _billboards) {
+    const hidden = _contactHiddenByOperatorFilter(icao24, _flightData.get(icao24));
+    if (!hidden) visible += 1;
+    if (!bb) continue;
+    if (bb.show === hidden) bb.show = !hidden;
+    const model = _models.get(icao24);
+    if (hidden && model && model.show) model.show = false;
+    else if (!hidden && icao24 !== _trackedIcao && !_modelOwnsVisual(icao24) && !bb.show) {
+      bb.show = true;
+    }
+  }
+  _count = visible;
+}
+onHeadingSectorsChange(_applyInFlightFilterVisibility);
+
 /** Add a cached contact so tests can model a target arriving on a later feed. */
 export function _addFlightTrackingCandidateForTest({ icao24, meta, billboard, history = [] }) {
   _billboards.set(icao24, billboard);
   _flightData.set(icao24, meta);
   _positionHistory.set(icao24, history);
+}
+
+export function _clearFlightFilterFixturesForTest() {
+  _billboards.clear();
+  _flightData.clear();
+  _positionHistory.clear();
+  _trackedIcao = null;
+}
+
+export function _setTrackedFlightIcaoForTest(id) {
+  _trackedIcao = id ? String(id).trim().toLowerCase() : null;
 }
 
 /** Expose the military-suppression decision for the civil duplicate. */
@@ -4061,7 +4096,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher],
   });
 }
 
@@ -4707,7 +4742,7 @@ const flightsLayer = {
             // close (_groundDepthDistance).
             disableDepthTestDistance: _groundDepthDistance(),
             id: icao24,
-            show: !isTracked && _matchesInFlightFilters(icao24, meta), // hidden if tracked or out-of-band
+            show: !isTracked && _matchesInFlightFilters(icao24, meta), // hidden if tracked, heading, speed, or out-of-band
           });
           _billboards.set(icao24, bb);
           _applyFleetBillboardPresentation(icao24, bb);
@@ -4946,6 +4981,7 @@ const flightsLayer = {
         if (_billboardCollection) {
           for (const [icao, bb] of _billboards) _revealUntrackedBillboard(icao, bb);
         }
+        _applyInFlightFilterVisibility();
       }
     }
     if ((params.models3dMode === 'proximity' || params.models3dMode === 'all') && params.models3dMode !== _models3dMode) {
@@ -4965,6 +5001,10 @@ const flightsLayer = {
       _refreshTr3bForStyle();
     }
     _applySpeedBandParams(params);
+    if (Object.hasOwn(params, 'headingSectors')) {
+      setHeadingSectors(params.headingSectors);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -4972,6 +5012,7 @@ const flightsLayer = {
       } else if (requested === null) {
         _cancelPendingTrackingRestore();
         if (_trackedIcao) _clearTracking(false, { origin });
+        _applyInFlightFilterVisibility();
       } else {
         const generation = ++_trackingIntentGeneration;
         _pendingTrackingRestore = { id: requested, generation, origin };
@@ -4986,10 +5027,15 @@ const flightsLayer = {
       models3d: _models3dEnabled,
       models3dMode: _models3dMode,
       irBoost: _irBoost,
+      headingSectors: getHeadingSectors(),
       selectedFlightsTrackingId: _trackedIcao,
       speedMinKt: _speedMinKt,
       speedMaxKt: _speedMaxKt,
     };
+  },
+
+  getRowControls() {
+    return { chips: headingSectorChipModels(getHeadingSectors()) };
   },
 
   /**
@@ -5033,6 +5079,7 @@ const flightsLayer = {
       if (_cockpitContactMode && icao24.toLowerCase() === _cockpitSubjectId) continue;
       if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) continue;
       const isTracked = icao24 === _trackedIcao;
+      if (_contactHiddenByOperatorFilter(icao24, _flightData.get(icao24))) continue;
       // Keep planes rendered as a 3D model (billboard hidden) so the detection box
       // doesn't vanish on the 2D→3D handoff; bb.position stays current while hidden.
       const model = _models.get(icao24);

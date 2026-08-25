@@ -256,6 +256,7 @@ test('unknown and forbidden option fields are ignored while missing options use 
   assert.deepEqual(decoded.options.flights, {
     models3d: true,
     models3dMode: 'all',
+    headingSectors: 'NESW',
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
@@ -614,12 +615,14 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
   assert.deepEqual(calls.flights, [{
     models3d: false,
     models3dMode: 'proximity',
+    headingSectors: 'NESW',
     speedMinKt: null,
     speedMaxKt: null,
   }]);
   assert.deepEqual(calls.military, [{
     models3d: false,
     models3dMode: 'proximity',
+    headingSectors: 'NESW',
     speedMinKt: null,
     speedMaxKt: null,
   }]);
@@ -1050,6 +1053,7 @@ test('later explicit params during init replace options without cancelling visib
   assert.deepEqual(coordinator.getDurableState().options.flights, {
     models3d: false,
     models3dMode: 'proximity',
+    headingSectors: 'NESW',
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
@@ -1097,6 +1101,7 @@ test('explicit navigation preserves unrelated visibility and option restoration'
   assert.deepEqual(paramsCalls, [{
     models3d: true,
     models3dMode: 'all',
+    headingSectors: 'NESW',
     speedMinKt: null,
     speedMaxKt: null,
   }]);
@@ -1157,6 +1162,7 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     models3d: true,
     models3dMode: 'all',
     irBoost: true,
+    headingSectors: 'NESW',
     selectedFlightsTrackingId: null,
     speedMinKt: null,
     speedMaxKt: null,
@@ -1221,6 +1227,7 @@ test('shared flight selection is deferred until destination refresh and then fol
   assert.deepEqual(paramsCalls, [{
     models3d: true,
     models3dMode: 'proximity',
+    headingSectors: 'NESW',
     speedMinKt: null,
     speedMaxKt: null,
   }]);
