@@ -70,6 +70,15 @@ import {
   writeRadioCountry,
 } from './radioCountryFilter.js';
 import {
+  DEFAULT_RADIO_ENGLISH_ONLY,
+  filterRadioStationsByEnglish,
+  isEnglishRadioStation,
+  normalizeRadioEnglishOnly,
+  readRadioEnglishOnly,
+  stationMatchesRadioEnglishFilter,
+  writeRadioEnglishOnly,
+} from './radioEnglishFilter.js';
+import {
   DEFAULT_RADIO_VOLUME_PCT,
   radioMuteToggle,
   radioVolumePctToUnit,
@@ -131,6 +140,7 @@ const _radioEarthScreenCenter = new Cesium.Cartesian2();
 const _radioEarthToCenter = new Cesium.Cartesian3();
 export const DEFAULT_RADIO_FILTER = 'all';
 export { DEFAULT_RADIO_BITRATE_FLOOR };
+export { isEnglishRadioStation };
 export const GLOBAL_RADIO_ALTITUDE_M = 2_000_000;
 
 const MUSIC_GENRES = Object.freeze([
@@ -232,6 +242,7 @@ let _codecFilter = { ...DEFAULT_RADIO_CODEC_FILTER };
 let _favoriteIds = [];
 let _favoritesOnly = false;
 let _country = DEFAULT_RADIO_COUNTRY;
+let _englishOnly = DEFAULT_RADIO_ENGLISH_ONLY;
 let _selectedId = null;
 let _selectedEntity = null;
 let _selectionGeneration = 0;
@@ -752,6 +763,10 @@ function applyPersistedRadioCountry() {
   _country = readRadioCountry();
 }
 
+function applyPersistedRadioEnglishOnly() {
+  _englishOnly = readRadioEnglishOnly();
+}
+
 function commitUserVolume(volume) {
   const next = clampRadioVolume(volume);
   if (next > 0) _unmutedVolume = next;
@@ -924,15 +939,6 @@ export function buildRadioCategories(stations) {
 export function filterRadioStations(stations, categoryId = 'all') {
   return (Array.isArray(stations) ? stations : [])
     .filter((station) => stationMatchesRadioCategory(station, categoryId));
-}
-
-/** Return whether Radio Browser metadata identifies a station as English-language. */
-export function isEnglishRadioStation(station) {
-  const languages = Array.isArray(station?.languages) ? station.languages : [];
-  return languages.some((language) => {
-    const normalized = normalizeRadioTag(language);
-    return normalized === 'en' || normalized === 'eng' || normalized.startsWith('english');
-  });
 }
 
 function radioAngularDistance(station, anchor) {
@@ -1238,21 +1244,25 @@ function playingStationKeepId() {
 
 function directoryStations({ keepPlaying = true } = {}) {
   const keepStationId = keepPlaying ? playingStationKeepId() : null;
-  return filterRadioStationsByCountry(
-    filterRadioStationsByFavorites(
-      filterRadioStationsByCodec(
-        filterRadioStationsByBitrateFloor(
-          filterRadioStations(_stations, _filter),
-          _bitrateFloor,
+  return filterRadioStationsByEnglish(
+    filterRadioStationsByCountry(
+      filterRadioStationsByFavorites(
+        filterRadioStationsByCodec(
+          filterRadioStationsByBitrateFloor(
+            filterRadioStations(_stations, _filter),
+            _bitrateFloor,
+            { keepStationId },
+          ),
+          _codecFilter,
           { keepStationId },
         ),
-        _codecFilter,
-        { keepStationId },
+        _favoriteIds,
+        { favoritesOnly: _favoritesOnly },
       ),
-      _favoriteIds,
-      { favoritesOnly: _favoritesOnly },
+      _country,
+      { keepStationId },
     ),
-    _country,
+    _englishOnly,
     { keepStationId },
   );
 }
@@ -1272,7 +1282,8 @@ function stationMatchesCurrentDirectory(station, { keepPlaying = true } = {}) {
     && stationMatchesRadioBitrateFloor(station, _bitrateFloor, { keepStationId })
     && stationMatchesRadioCodecFilter(station, _codecFilter, { keepStationId })
     && stationMatchesRadioFavorites(station, _favoriteIds, { favoritesOnly: _favoritesOnly })
-    && stationMatchesRadioCountry(station, _country, { keepStationId });
+    && stationMatchesRadioCountry(station, _country, { keepStationId })
+    && stationMatchesRadioEnglishFilter(station, _englishOnly, { keepStationId });
 }
 
 function viewportRadioAnchor() {
@@ -1351,6 +1362,7 @@ export function getRadioUIState() {
     minBitrate: _bitrateFloor,
     codecs: Object.freeze({ ..._codecFilter }),
     favoritesOnly: _favoritesOnly,
+    englishOnly: _englishOnly,
     favoriteIds: Object.freeze([..._favoriteIds]),
     selectedFavorite: Boolean(selected && isRadioFavorite(selected.id, _favoriteIds)),
     categories: _categories,
@@ -2627,6 +2639,18 @@ export function setRadioFavoritesOnly(enabled) {
   return true;
 }
 
+/** Hide non-English stations without fetching or stopping audio. */
+export function setRadioEnglishOnly(enabled) {
+  if (!radioPresentationAllowed()) return false;
+  const next = normalizeRadioEnglishOnly(enabled);
+  const changed = next !== _englishOnly;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _englishOnly = writeRadioEnglishOnly(next);
+  if (changed) applyRadioDirectoryFilterChange();
+  emitState();
+  return true;
+}
+
 /** Pin or unpin the selected (or playing) station. Caps at 20 stored ids. */
 export function toggleRadioFavorite(stationId) {
   if (!radioPresentationAllowed()) return false;
@@ -2866,6 +2890,7 @@ export const radioLayer = {
     applyPersistedRadioFavorites();
     applyPersistedRadioCodecs();
     applyPersistedRadioCountry();
+    applyPersistedRadioEnglishOnly();
     installAudio();
     if (!_dataSource) {
       _dataSource = new Cesium.CustomDataSource('Radio stations');
@@ -3079,6 +3104,7 @@ export const radioLayer = {
     _favoriteIds = [];
     _favoritesOnly = false;
     _country = DEFAULT_RADIO_COUNTRY;
+    _englishOnly = DEFAULT_RADIO_ENGLISH_ONLY;
     _renderById.clear();
     resetRadioClusterOverlayIdentities();
     _lastHorizonCameraPosition = null;
@@ -3147,6 +3173,7 @@ export const radioLayer = {
   setBitrateFloor: setRadioBitrateFloor,
   setCodecs: setRadioCodecs,
   setFavoritesOnly: setRadioFavoritesOnly,
+  setEnglishOnly: setRadioEnglishOnly,
   toggleFavorite: toggleRadioFavorite,
   selectStation: selectRadioStation,
   selectRequestedStation: selectRequestedRadioStation,
