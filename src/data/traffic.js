@@ -35,6 +35,12 @@ import {
   uncoveredRoadSpawns,
   uncoveredRoadsControls,
 } from './uncoveredRoads.js';
+import {
+  getJamViz,
+  jamVizControls,
+  jamVizEffects,
+  setJamViz,
+} from './trafficJamViz.js';
 
 /**
  * @file Street Traffic — animated dots along OSM road polylines, colored by
@@ -259,10 +265,10 @@ let _uncoveredMode = getUncoveredRoads();
  * 'none' = shipped main behavior. Live mode only — the keyless simulation
  * never has `road.flow`, so every jamViz path is unreachable there.
  * Default 'density' — A/B verdict 2026-07-23 (heatline stays available
- * via setParams).
+ * via setParams). Persisted in localStorage; no cheap layer-option slot.
  * @type {'none'|'density'|'heatline'|'both'}
  */
-let _jamViz = 'density';
+let _jamViz = getJamViz();
 /**
  * Congestion heat-lines are GroundPolylinePrimitive batches draped onto the
  * rendered 3D tiles (ClassificationType.CESIUM_3D_TILE) — polylines at the
@@ -401,9 +407,9 @@ function setStylePreset(name) {
 }
 
 /** @returns {boolean} Density/queue/creep prototype active. */
-const jamDensityOn = () => _jamViz === 'density' || _jamViz === 'both';
+const jamDensityOn = () => jamVizEffects(_jamViz).densityBoost;
 /** @returns {boolean} Heat-line prototype active. */
-const heatlineOn = () => _jamViz === 'heatline' || _jamViz === 'both';
+const heatlineOn = () => jamVizEffects(_jamViz).heatline;
 /**
  * Dot fade-out distances, recomputed per render from the camera-to-area
  * distance. The original constants (8 km scale / 10 km translucency)
@@ -2534,7 +2540,10 @@ const trafficLayer = {
     // live mode only, applies on the next camera-driven load like the
     // uncoveredRoads param above.
     if (['none', 'density', 'heatline', 'both'].includes(params.jamViz)) {
-      _jamViz = params.jamViz;
+      if (_jamViz !== params.jamViz) {
+        _jamViz = setJamViz(params.jamViz);
+        _rowControlsListener?.();
+      }
     }
     // Preset-aware dot styling kill switch (A/B): 'off' forces the
     // shipped palette under every post-FX preset. Applies immediately via
@@ -2570,8 +2579,9 @@ const trafficLayer = {
   },
 
   /**
-   * Street Traffic Live | Sim chips plus Uncovered: Sim | Hide.
-   * Live is disabled without a host key. Uncovered only writes uncoveredRoads.
+   * Street Traffic row chrome. Live | Sim, Uncovered Sim | Hide, and Jam
+   * Density | Heatline | Both | Off are independent chip groups. Jam is
+   * live-only. Each group writes only its own setParams key.
    * @returns {{heading: string, chips: Array<object>}}
    */
   getRowControls() {
@@ -2581,9 +2591,13 @@ const trafficLayer = {
       flowError: _flowError,
     });
     const uncovered = uncoveredRoadsControls({ uncoveredRoads: _uncoveredMode });
+    const jam = jamVizControls({
+      jamViz: _jamViz,
+      liveMode: _liveMode,
+    });
     return {
       heading: source.heading,
-      chips: [...source.chips, ...uncovered.chips],
+      chips: [...source.chips, ...uncovered.chips, ...jam.chips],
     };
   },
 

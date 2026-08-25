@@ -177,4 +177,44 @@ test('the shipped layer boots keyless-honest before any status check', () => {
   assert.equal(live.disabled, true);
   assert.equal(sim.active, true);
   assert.equal(sim.disabled, false);
+  assert.equal(controls.chips.some((chip) => String(chip.id).startsWith('jam-viz-')), false,
+    'jam chrome stays off in sim — those paths have no road.flow');
+  assert.ok(controls.chips.some((chip) => chip.id === 'uncovered-sim'));
+});
+
+test('setParams({ jamViz }) is independent of Uncovered and Live | Sim and does not fetch', () => {
+  trafficLayer.setParams({
+    jamViz: 'density',
+    uncoveredRoads: 'sim',
+    trafficSource: 'sim',
+  });
+  const tilesBefore = trafficLayer.getStats().tilesFetched;
+  trafficLayer.setParams({ jamViz: 'heatline' });
+  const afterJam = trafficLayer.getParams();
+  assert.equal(afterJam.jamViz, 'heatline');
+  assert.equal(afterJam.uncoveredRoads, 'sim');
+  assert.equal(afterJam.trafficSource, 'sim');
+  assert.equal(trafficLayer.getStats().jamViz, 'heatline');
+  assert.equal(trafficLayer.getStats().tilesFetched, tilesBefore);
+
+  trafficLayer.setParams({ uncoveredRoads: 'hide' });
+  assert.equal(trafficLayer.getParams().jamViz, 'heatline');
+  assert.equal(trafficLayer.getParams().uncoveredRoads, 'hide');
+
+  trafficLayer.setParams({ trafficSource: 'live' });
+  assert.equal(trafficLayer.getParams().jamViz, 'heatline');
+  assert.equal(trafficLayer.getParams().uncoveredRoads, 'hide');
+
+  trafficLayer.setParams({ jamViz: 'both' });
+  assert.equal(trafficLayer.getParams().jamViz, 'both');
+  trafficLayer.setParams({ jamViz: 'none' });
+  assert.equal(trafficLayer.getParams().jamViz, 'none');
+  trafficLayer.setParams({ jamViz: 'not-a-mode' });
+  assert.equal(trafficLayer.getParams().jamViz, 'none');
+
+  trafficLayer.setParams({
+    jamViz: 'density',
+    uncoveredRoads: 'sim',
+    trafficSource: 'sim',
+  });
 });
