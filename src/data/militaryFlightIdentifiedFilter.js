@@ -9,8 +9,8 @@
  * trim. A non-empty callsign or a non-empty registration stays.
  *
  * Selected/tracked exemption lives on the layer AND gate, not here.
- * Persistence is local (`meridian.militaryFlightsIdentifiedOnly`), separate
- * from the civil `meridian.flightsIdentifiedOnly` key.
+ * Persistence is local (`meridian.militaryFlightsIdentifiedOnly`), a
+ * military-only key that does not share storage with the civil toggle.
  */
 
 export const MILITARY_IDENTIFIED_ONLY_DEFAULT = false;

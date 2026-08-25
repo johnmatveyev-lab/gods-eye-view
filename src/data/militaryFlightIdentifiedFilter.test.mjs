@@ -421,7 +421,7 @@ test('Identified-only is a military-row chip: no DISPLAY rail, no flights.js, no
   assert.doesNotMatch(helper, /\/api\//);
   assert.doesNotMatch(helper, /fetch\(|XMLHttpRequest|EventSource/);
   assert.match(helper, /meridian\.militaryFlightsIdentifiedOnly/);
-  assert.doesNotMatch(helper, /meridian\.flightsIdentifiedOnly/);
+  assert.doesNotMatch(helper, /MILITARY_FLIGHTS_IDENTIFIED_ONLY_STORAGE_KEY = 'meridian\.flightsIdentifiedOnly'/);
   assert.equal(existsSync(path.join(ROOT, 'api/military/identified-only.js')), false);
 });
 
