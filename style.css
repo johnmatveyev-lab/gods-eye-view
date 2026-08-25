@@ -2077,6 +2077,53 @@ body.ui-clean-view #scene-runtime.active {
   text-align: center;
 }
 
+/* Camera-center lat,lon readout. Coordinates only — no height, so no units toggle. */
+#camera-coords {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#top-center-actions #camera-coords-value,
+#top-center-actions #camera-coords-copy {
+  width: auto;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transform: none;
+}
+#top-center-actions #camera-coords-value {
+  padding: 0 4px;
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+#top-center-actions #camera-coords-copy {
+  width: 28px;
+  flex: 0 0 28px;
+  color: var(--text-secondary);
+}
+#top-center-actions #camera-coords-value:hover,
+#top-center-actions #camera-coords-value:focus-visible,
+#top-center-actions #camera-coords-copy:hover,
+#top-center-actions #camera-coords-copy:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  transform: none;
+  color: var(--text-primary, #e8f0f4);
+}
+#top-center-actions #camera-coords-copy .material-symbols-outlined {
+  font-size: 16px;
+}
+
 #global-loading-status {
   position: fixed;
   top: 74px;

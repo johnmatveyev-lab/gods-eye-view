@@ -79,6 +79,7 @@ import {
   hydrateTrailsEnabled,
   setTrailsEnabled,
 } from './data/trailPreference.js';
+import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -2813,6 +2814,10 @@ export class StyleManager {
       showToast: (text) => this._showToast(text),
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
+    });
+    initCameraCoords({
+      viewer,
+      showToast: (text) => this._showToast(text),
     });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
@@ -11149,6 +11154,7 @@ export class StyleManager {
       this._radioSelectedHandler = null;
     }
     destroySelectedContactIdent();
+    destroyCameraCoords();
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();
