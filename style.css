@@ -2043,6 +2043,21 @@ body.ui-clean-view #scene-runtime.active {
   background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
 }
 
+#top-center-actions #stop-tracking {
+  width: auto;
+  min-width: 36px;
+  padding: 0 12px 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+#top-center-actions #stop-tracking[hidden] {
+  display: none;
+}
+
 #global-loading-status {
   position: fixed;
   top: 74px;
@@ -3996,7 +4011,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #copy-view-link, #fullscreen-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -6182,6 +6197,82 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   display: none;
 }
 
+/* Existing OSM datacenter payload — in-view list + fly-to. */
+#datacenter-in-view.in-view-site-list {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#datacenter-in-view[hidden] {
+  display: none;
+}
+
+#datacenter-in-view .in-view-site-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#datacenter-in-view .in-view-site-list-header strong {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+#datacenter-in-view .in-view-site-list-header output {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+#datacenter-in-view .in-view-site-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#datacenter-in-view .in-view-site-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#datacenter-in-view .in-view-site-list-item:hover,
+#datacenter-in-view .in-view-site-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--text-primary);
+}
+
+#datacenter-in-view .in-view-site-list-empty {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 2px 6px;
+}
+
+#datacenter-in-view .in-view-site-list-credit {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
+}
+
 .data-toggle-chip {
   padding: 2px 7px;
   font-family: var(--font-mono);
@@ -6401,6 +6492,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.45;
 }
 
+#cctv-city-filter,
 #cctv-camera-select {
   flex: 1;
   min-width: 0;
@@ -6414,6 +6506,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   outline: none;
 }
 
+#cctv-city-filter:disabled,
 #cctv-camera-select:disabled {
   opacity: 0.45;
 }
@@ -7030,7 +7123,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #stop-tracking, #reset-globe-view) {
   display: none !important;
 }
 

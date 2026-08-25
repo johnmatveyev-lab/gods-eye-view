@@ -2,6 +2,16 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — stop-tracking control (plan 54)** (`src/chrome/stopTracking.js`,
+> `#stop-tracking` in `#top-center-actions`). While a contact owns the follow
+> camera, camera chrome shows **Stop tracking**. The click calls the existing
+> untrack/clear-target path (`_releaseFollowCamera` / layer `stopTracking`) and
+> leaves the camera pose where it is. Hidden when nothing is tracked. Home
+> (`#home-view` / `goHome` / `flyToHomeView`) still flies the full default
+> pose reset. Roster click
+> still tracks. Not on the roster and not on cockpit enter. Camera/target
+> chrome only — no person-search, no `/api`.
+
 > **2026-08-25 — chrome live-poll pause (plans 37 + 38)** (`src/chrome/scheduler.js`).
 > `document.visibilityState === 'hidden'` or `window` offline pauses manager-owned
 > flight/layer poll timers and the HUD summary interval. No new OpenAI HUD or

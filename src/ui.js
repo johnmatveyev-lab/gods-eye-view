@@ -101,6 +101,11 @@ import {
 import trafficLayer from './data/traffic.js';
 import flightsLayer from './data/flights.js';
 import militaryFlightsLayer from './data/militaryFlights.js';
+import {
+  readTrackingState,
+  stopTrackingInPlace,
+  syncStopTrackingButton,
+} from './chrome/stopTracking.js';
 import { isTr3b, toggleTr3b } from './data/tr3bRegistry.js';
 import satellitesLayer from './data/satellites.js';
 import cctvLayer from './data/cctv.js';
@@ -186,6 +191,12 @@ import {
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
 import {
+  DATACENTER_LAYER_ID,
+  bindDatacenterInViewList,
+  datacenterFlyDestination,
+  viewFromCamera,
+} from './data/datacenterList.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -205,6 +216,13 @@ import {
   registerCctvFocusRequestListener,
   routeCctvFocusRequest,
 } from './cctvFocusRequest.js';
+import {
+  cycleFilteredCctvCamera,
+  filterCctvSources,
+  listCctvCityFilterOptions,
+  readCctvCityFilter,
+  writeCctvCityFilter,
+} from './data/cctvCityFilter.js';
 import {
   flyToWorldTarget,
   registerWorldFocusRequestListener,
@@ -2316,6 +2334,8 @@ export class StyleManager {
     this._radioTunerCameraRemove = null;
     this._refreshRadioTunerBand = null;
     this._cctvState = null;
+    this._cctvCityFilterValue = readCctvCityFilter(globalThis.localStorage);
+    this._cctvCityFilterSignature = '';
     this._cctvSummaryTypingTimer = null;
     this._lastCctvSummaryText = '';
     // Auto-expand guard: last active camera id seen while the layer was
@@ -2503,6 +2523,7 @@ export class StyleManager {
     this._cctvPrevBtn = document.getElementById('cctv-prev-btn');
     this._cctvNextBtn = document.getElementById('cctv-next-btn');
     this._cctvSelect = document.getElementById('cctv-camera-select');
+    this._cctvCityFilter = document.getElementById('cctv-city-filter');
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
     this._cctvCoverageBtn = document.getElementById('cctv-coverage-btn');
     this._cctvAutoHopBtn = document.getElementById('cctv-auto-hop-btn');
@@ -2528,6 +2549,7 @@ export class StyleManager {
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
     this._homeViewBtn = document.getElementById('home-view');
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
+    this._stopTrackingBtn = document.getElementById('stop-tracking');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -2809,8 +2831,10 @@ export class StyleManager {
     this._initShareButton();
     this._initCopyViewLinkButton();
     this._initFullscreenButton();
+    this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
+    this._initStopTrackingButton();
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -2935,6 +2959,7 @@ export class StyleManager {
     );
     this._navigationOwnerChangedRemover = viewer.trackedEntityChanged.addEventListener((entity) => {
       if (entity && !this._disposed) this._stampNavigation({ cancelPendingSelection: false });
+      this._syncStopTrackingButton();
     });
     // Vessel/installation focus flies without ever assigning a tracked entity,
     // so it cannot reach the listener above. It announces instead.
@@ -4679,6 +4704,9 @@ export class StyleManager {
       this._dataManagerUnsubscribe = this._dataManager.subscribe((change) => {
         if (String(change?.type || '').startsWith('visibility')) {
           this._handleContextLayerChange(change);
+          if (change?.layerId === DATACENTER_LAYER_ID) {
+            this._datacenterInViewList?.refresh();
+          }
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -4815,8 +4843,14 @@ export class StyleManager {
       });
     }
     if (!this._awarenessSelectedHandler) {
-      this._awarenessSelectedHandler = (event) => this._persistAwarenessSelection(event, false);
-      this._awarenessClearedHandler = (event) => this._persistAwarenessSelection(event, true);
+      this._awarenessSelectedHandler = (event) => {
+        this._persistAwarenessSelection(event, false);
+        this._syncStopTrackingButton();
+      };
+      this._awarenessClearedHandler = (event) => {
+        this._persistAwarenessSelection(event, true);
+        this._syncStopTrackingButton();
+      };
       window.addEventListener('gev:awareness-subject-selected', this._awarenessSelectedHandler);
       window.addEventListener('gev:awareness-subject-cleared', this._awarenessClearedHandler);
     }
@@ -6548,10 +6582,18 @@ export class StyleManager {
       );
     });
 
+    this._cctvCityFilter?.addEventListener('change', () => {
+      this._cctvCityFilterValue = writeCctvCityFilter(
+        globalThis.localStorage,
+        this._cctvCityFilter.value,
+      );
+      this._renderCctvState(this._cctvState);
+    });
+
     this._cctvPrevBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(-1),
+        () => cycleFilteredCctvCamera(this._visibleCctvCameras(), this._activeCctvCameraId(), -1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
     });
@@ -6559,7 +6601,7 @@ export class StyleManager {
     this._cctvNextBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
-        () => cctvLayer.cycleCamera(1),
+        () => cycleFilteredCctvCamera(this._visibleCctvCameras(), this._activeCctvCameraId(), 1),
         (cameraId) => cctvLayer.focusCamera(cameraId, 1.4),
       );
     });
@@ -6644,6 +6686,14 @@ export class StyleManager {
    */
   _activeCctvCameraId() {
     return this._cctvState?.activeCameraId || this._cctvSelect?.value || '';
+  }
+
+  /**
+   * Camera rows visible in the panel list for the persisted city/provider filter.
+   * @returns {Array<object>}
+   */
+  _visibleCctvCameras() {
+    return filterCctvSources(this._cctvState?.cameras || [], this._cctvCityFilterValue);
   }
 
   /**
@@ -6958,19 +7008,42 @@ export class StyleManager {
       this._cctvEnableBtn.textContent = enabled ? 'CCTV ON' : 'CCTV OFF';
     }
 
+    const cityOptions = listCctvCityFilterOptions(cameras);
+    if (cameras.length && this._cctvCityFilterValue
+      && !cityOptions.some((option) => option.key === this._cctvCityFilterValue)) {
+      this._cctvCityFilterValue = '';
+    }
+    const visibleCameras = filterCctvSources(cameras, this._cctvCityFilterValue);
+    if (this._cctvCityFilter) {
+      const citySignature = cityOptions.map((option) => `${option.key}:${option.count}`).join('|');
+      if (citySignature !== this._cctvCityFilterSignature) {
+        const nodes = [{ key: '', label: 'All sources', count: cameras.length }, ...cityOptions]
+          .map((option) => {
+            const node = document.createElement('option');
+            node.value = option.key;
+            node.textContent = option.key ? `${option.label} (${option.count})` : option.label;
+            return node;
+          });
+        this._cctvCityFilter.replaceChildren(...nodes);
+        this._cctvCityFilterSignature = citySignature;
+      }
+      this._cctvCityFilter.value = this._cctvCityFilterValue;
+      this._cctvCityFilter.disabled = cameras.length === 0;
+    }
+
     if (this._cctvSelect) {
-      const shouldRebuild = this._cctvSelect.options.length !== cameras.length
-        || cameras.some((cam, idx) => this._cctvSelect.options[idx]?.value !== cam.id);
+      const shouldRebuild = this._cctvSelect.options.length !== visibleCameras.length
+        || visibleCameras.some((cam, idx) => this._cctvSelect.options[idx]?.value !== cam.id);
       if (shouldRebuild) {
         this._cctvSelect.innerHTML = '';
-        for (const camera of cameras) {
+        for (const camera of visibleCameras) {
           const option = document.createElement('option');
           option.value = camera.id;
           option.textContent = `${camera.city} · ${camera.name}`;
           this._cctvSelect.appendChild(option);
         }
       }
-      this._cctvSelect.disabled = !enabled || cameras.length === 0;
+      this._cctvSelect.disabled = !enabled || visibleCameras.length === 0;
       if (activeId && Array.from(this._cctvSelect.options).some((opt) => opt.value === activeId)) {
         this._cctvSelect.value = activeId;
       } else if (!activeId) {
@@ -6978,9 +7051,12 @@ export class StyleManager {
       }
     }
 
-    for (const btn of [this._cctvNearestBtn, this._cctvPrevBtn, this._cctvNextBtn]) {
+    if (this._cctvNearestBtn) {
+      this._cctvNearestBtn.disabled = !enabled || cameras.length === 0;
+    }
+    for (const btn of [this._cctvPrevBtn, this._cctvNextBtn]) {
       if (!btn) continue;
-      btn.disabled = !enabled || cameras.length === 0;
+      btn.disabled = !enabled || visibleCameras.length === 0;
     }
     if (this._cctvFocusBtn) {
       this._cctvFocusBtn.disabled = !enabled || cameras.length === 0 || !activeId;
@@ -7064,6 +7140,7 @@ export class StyleManager {
 
     this._syncCctvSourceBadge(activeCamera, enabled);
     this._typeCctvSummary(state?.summary || 'Enable CCTV to start camera-linked intelligence summaries.');
+    this._syncCctvPanelViewport();
   }
 
   /**
@@ -10175,6 +10252,31 @@ export class StyleManager {
     flyToHomeView(this.viewer);
   }
 
+  /** Show Stop tracking only while a contact owns the follow camera. */
+  _syncStopTrackingButton() {
+    syncStopTrackingButton(this._stopTrackingBtn, readTrackingState({
+      viewer: this.viewer,
+      cockpitTrackedEntity: this.cockpitView?.trackedEntity,
+      getFlightInfo: () => flightsLayer.getTrackedInfo?.(),
+      getMilitaryInfo: () => militaryFlightsLayer.getTrackedInfo?.(),
+      getSatelliteInfo: () => satellitesLayer.getTrackedInfo?.(),
+    }));
+  }
+
+  /** Wire camera chrome that releases tracking without flying Home. */
+  _initStopTrackingButton() {
+    if (!this._stopTrackingBtn) return;
+    this._stopTrackingHandler = () => {
+      stopTrackingInPlace({
+        releaseFollow: () => this._releaseFollowCamera({ trackingOrigin: 'user' }),
+        camera: this.viewer?.camera,
+      });
+      this._syncStopTrackingButton();
+    };
+    this._stopTrackingBtn.addEventListener('click', this._stopTrackingHandler);
+    this._syncStopTrackingButton();
+  }
+
   /** Wire the persistent reset control to the same route used by voice. */
   _initResetGlobeButton() {
     this._globeResetHandler = () => { this.resetToGlobeView(); };
@@ -10345,6 +10447,48 @@ export class StyleManager {
     this._copyViewLinkBtn?.addEventListener('click', async () => {
       const success = await this.shareLinkManager.copyViewLink();
       this._showToast(success ? 'Link copied' : 'Copy failed');
+    });
+  }
+
+  /**
+   * In-view OSM datacenter list. Reads the existing layer payload and flies
+   * with the same stem-click destination. Installations stay on their own list.
+   */
+  _initDatacenterInViewList() {
+    const root = document.getElementById('datacenter-in-view');
+    const items = document.getElementById('datacenter-in-view-items');
+    const count = document.getElementById('datacenter-in-view-count');
+    this._datacenterInViewList = bindDatacenterInViewList({
+      root,
+      items,
+      count,
+      getEnabled: () => Boolean(this._dataManager?.isEnabled(DATACENTER_LAYER_ID)),
+      getRecords: () => {
+        const module = this._dataManager?.layers?.get(DATACENTER_LAYER_ID)?.module;
+        if (typeof module?.getListPayload !== 'function') return [];
+        return module.getListPayload() || [];
+      },
+      getView: () => viewFromCamera(this.viewer?.camera, Cesium.Math),
+      flyTo: (site) => {
+        const module = this._dataManager?.layers?.get(DATACENTER_LAYER_ID)?.module;
+        if (typeof module?.flyToRecord === 'function') {
+          return module.flyToRecord(this.viewer, site.id);
+        }
+        const destination = datacenterFlyDestination(site);
+        if (!destination || !this.viewer?.camera) return false;
+        this.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(
+            destination.longitude,
+            destination.latitude,
+            destination.height,
+          ),
+          duration: destination.duration,
+        });
+        return true;
+      },
+    });
+    this._datacenterListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
+      this._datacenterInViewList?.refresh();
     });
   }
 
@@ -10773,6 +10917,10 @@ export class StyleManager {
       this.viewer?.canvas?.removeEventListener('wheel', this._initialShareGestureHandler);
       this._initialShareGestureHandler = null;
     }
+    this._datacenterListMoveEndRemove?.();
+    this._datacenterListMoveEndRemove = null;
+    this._datacenterInViewList?.destroy();
+    this._datacenterInViewList = null;
     this.shareLinkManager?.destroy();
     if (this._awarenessSelectedHandler) {
       window.removeEventListener('gev:awareness-subject-selected', this._awarenessSelectedHandler);
@@ -10840,6 +10988,10 @@ export class StyleManager {
       this._resetGlobeBtn?.removeEventListener('click', this._globeResetHandler);
       this._cockpitResetGlobeBtn?.removeEventListener('click', this._globeResetHandler);
       this._globeResetHandler = null;
+    }
+    if (this._stopTrackingBtn && this._stopTrackingHandler) {
+      this._stopTrackingBtn.removeEventListener('click', this._stopTrackingHandler);
+      this._stopTrackingHandler = null;
     }
     if (this._clearSelectedLayersBtn && this._clearSelectedLayersHandler) {
       this._clearSelectedLayersBtn.removeEventListener('click', this._clearSelectedLayersHandler);

@@ -20,6 +20,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Camera chrome shows **Stop tracking** while a contact is followed. The
+  control calls the existing untrack/clear-target action and leaves the camera
+  where it is. Hidden when nothing is tracked. Home still does the full
+  default pose reset. Roster click still tracks. No `/api`.
+- Added a city/provider filter on the CCTV panel list. It uses `city`,
+  `cityId`, and `provider` already on `/api/cctv/sources` so hosted users can
+  isolate Austin, Caltrans, or TfL. Clearing restores the full catalog.
+  Selecting a camera still uses the existing stream/placeholder. Last city
+  persists as `meridian.cctvCity`. Panel clamp is unchanged. No extra `/api`.
 - Added a Display Trails on/off control for the existing tracked-target trail.
   The preference persists as `meridian.trails` and defaults on. Off hides the
   already-drawn path without stopping track; stop tracking still clears the
