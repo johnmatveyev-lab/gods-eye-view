@@ -89,6 +89,8 @@ test('unsigned hosted /me is anonymous with no voice', async () => {
   assert.equal(json.signedIn, false);
   assert.equal(json.voice, false);
   assert.equal(json.exhausted, false);
+  assert.equal(json.savedViews.available, false);
+  assert.deepEqual(json.savedViews.items, []);
 });
 
 test('signed-in Free account can start Checkout against the env price ID', async () => {
@@ -523,6 +525,9 @@ test('empty serverless store hydrates Pro from mocked Clerk so voice unlocks', a
   });
   assert.equal(json.plan, PLANS.PRO);
   assert.equal(json.voice, true);
+  assert.equal(json.savedViews.available, true);
+  assert.equal(json.savedViews.placeholder, false);
+  assert.deepEqual(json.savedViews.items, []);
 
   const voice = await authorizeVoiceRequest(
     mockReq({ headers: { authorization: 'Bearer sess_test' } }),
