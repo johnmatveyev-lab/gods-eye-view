@@ -1358,6 +1358,7 @@ export function _setDenseCatalogStateForTest({
   _denseLoadToken++;
   _denseStatus = 'idle';
   _denseError = null;
+  _lastError = null;
   for (const sat of coreSats) {
     _catalog.set(sat.noradId, {
       name: sat.name,
@@ -1387,6 +1388,7 @@ export function _clearDenseCatalogStateForTest() {
   _denseLoadToken++;
   _denseStatus = 'idle';
   _denseError = null;
+  _lastError = null;
   _count = 0;
   _trackedNorad = null;
   _params = { catalog: 'core', showPoints: true, showOrbits: true };
@@ -2181,7 +2183,7 @@ const satellitesLayer = {
 
   getStats() {
     const denseFailure = _denseStatus === 'failed' ? (_denseError || 'feed unavailable') : null;
-    const error = _lastError || denseFailure;
+    const error = denseFailure || _lastError;
     return {
       count: _count,
       lastUpdate: _lastUpdate,
