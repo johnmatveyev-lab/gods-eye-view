@@ -255,6 +255,12 @@ import {
   viewFromCamera,
 } from './data/datacenterList.js';
 import {
+  DAMS_LAYER_ID,
+  bindDamsInViewList,
+  damFlyDestination,
+  viewFromCamera as damsViewFromCamera,
+} from './data/damsList.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -3001,6 +3007,7 @@ export class StyleManager {
     this._initHomeViewButton();
     this._initLaunchesPanel();
     this._initStopTrackingButton();
+    this._initDamsInViewList();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
     this._initEarthquakeListControl();
@@ -5072,6 +5079,8 @@ export class StyleManager {
       dataManager: this._dataManager,
       setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
     });
+    this._datacenterInViewList?.refresh();
+    this._damsInViewList?.refresh();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5083,6 +5092,9 @@ export class StyleManager {
           this._handleContextLayerChange(change);
           if (change?.layerId === DATACENTER_LAYER_ID) {
             this._datacenterInViewList?.refresh();
+          }
+          if (change?.layerId === DAMS_LAYER_ID) {
+            this._damsInViewList?.refresh();
           }
         }
         if (this._installationsListOpen && change?.layerId === 'military-installations') {
@@ -10790,6 +10802,48 @@ export class StyleManager {
   }
 
   /**
+   * In-view OSM dams list. Reads the existing layer payload and flies
+   * with the same stem-click destination. Datacenters stay on their own list.
+   */
+  _initDamsInViewList() {
+    const root = document.getElementById('dams-in-view');
+    const items = document.getElementById('dams-in-view-items');
+    const count = document.getElementById('dams-in-view-count');
+    this._damsInViewList = bindDamsInViewList({
+      root,
+      items,
+      count,
+      getEnabled: () => Boolean(this._dataManager?.isEnabled(DAMS_LAYER_ID)),
+      getRecords: () => {
+        const module = this._dataManager?.layers?.get(DAMS_LAYER_ID)?.module;
+        if (typeof module?.getListPayload !== 'function') return [];
+        return module.getListPayload() || [];
+      },
+      getView: () => damsViewFromCamera(this.viewer?.camera, Cesium.Math),
+      flyTo: (site) => {
+        const module = this._dataManager?.layers?.get(DAMS_LAYER_ID)?.module;
+        if (typeof module?.flyToRecord === 'function') {
+          return module.flyToRecord(this.viewer, site.id);
+        }
+        const destination = damFlyDestination(site);
+        if (!destination || !this.viewer?.camera) return false;
+        this.viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(
+            destination.longitude,
+            destination.latitude,
+            destination.height,
+          ),
+          duration: destination.duration,
+        });
+        return true;
+      },
+    });
+    this._damsListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
+      this._damsInViewList?.refresh();
+    });
+  }
+
+  /**
    * Fly to the default first-load camera. Does not delete lastView;
    * moveEnd overwrites the slot after the flight.
    */
@@ -11610,6 +11664,10 @@ export class StyleManager {
       this._initialShareGestureHandler = null;
     }
     this._launchesPanelLoadToken += 1;
+    this._damsListMoveEndRemove?.();
+    this._damsListMoveEndRemove = null;
+    this._damsInViewList?.destroy();
+    this._damsInViewList = null;
     this._datacenterListMoveEndRemove?.();
     this._datacenterListMoveEndRemove = null;
     this._datacenterInViewList?.destroy();
