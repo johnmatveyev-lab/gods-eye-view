@@ -315,7 +315,7 @@ const COCKPIT_BRIEF_PAGES = [
     id: 'news',
     kicker: 'REGIONAL NEWS',
     subtitle: 'LATEST LOCATION-MATCHED REPORTING',
-    source: 'GOOGLE NEWS RSS · LOCATION QUERY · RECENT',
+    source: 'GDELT PROJECT · LOCATION QUERY · CITATION REQUIRED',
   },
   {
     id: 'local',

@@ -10,8 +10,12 @@ import createViteConfig, {
 } from '../../vite.config.js';
 import { AISSTREAM_CREDIT, DATA_CREDITS } from './dataCredits.js';
 import flightsLayer from './flights.js';
+import militaryFlightsLayer from './militaryFlights.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const HTML = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+const UI = readFileSync(path.join(ROOT, 'src/ui.js'), 'utf8');
+const ENV_EXAMPLE = readFileSync(path.join(ROOT, '.env.example'), 'utf8');
 
 test('commercial flights are adsb.lol-only; OpenSky and Google News stay off', () => {
   assert.equal(COMMERCIAL_FLIGHT_SOURCE, 'adsb.lol');
@@ -103,6 +107,60 @@ test('AIS stays BYOK on a long-lived Node host; hosted Vercel does not wrap AISS
   assert.doesNotMatch(client, /wss:\/\/stream\.aisstream\.io/);
   assert.doesNotMatch(client, /new WebSocket\(/);
   assert.doesNotMatch(client, /updateInterval:\s*aisRetryInSec/);
+});
+
+test('attribution lists GDELT, not Google News or OpenSky', () => {
+  const creditHtml = DATA_CREDITS.map((credit) => credit.html).join('\n');
+  assert.match(creditHtml, /GDELT Project/);
+  assert.doesNotMatch(creditHtml, /Google News/i);
+  assert.doesNotMatch(creditHtml, /OpenSky/i);
+  const matrix = readFileSync(path.join(ROOT, 'scripts/qa-l9-matrix.mjs'), 'utf8');
+  assert.match(matrix, /flights:\s*\/adsb\\\.lol\/i/);
+  assert.doesNotMatch(matrix, /flights:\s*\/OpenSky\/i/);
+});
+
+test('no UI control is labeled OpenSky', () => {
+  assert.equal(flightsLayer.name, 'Live Flights');
+  assert.equal(militaryFlightsLayer.name, 'Military Flights');
+  assert.doesNotMatch(flightsLayer.name, /OpenSky/i);
+  assert.doesNotMatch(militaryFlightsLayer.name, /OpenSky/i);
+  assert.doesNotMatch(HTML, /<button\b[^>]*>[\s\S]{0,80}OpenSky/i);
+  assert.doesNotMatch(HTML, /aria-label=["'][^"']*OpenSky/i);
+  assert.doesNotMatch(HTML, /<option\b[^>]*>[\s\S]{0,80}OpenSky/i);
+  assert.doesNotMatch(UI, /name:\s*['"][^'"]*OpenSky/i);
+  assert.doesNotMatch(UI, /label:\s*['"][^'"]*OpenSky/i);
+  assert.doesNotMatch(UI, /aria-label=["'][^"']*OpenSky/i);
+});
+
+test('no Google News source picker in the UI', () => {
+  assert.doesNotMatch(HTML, /Google News/i);
+  assert.doesNotMatch(HTML, /news RSS/i);
+  assert.doesNotMatch(UI, /Google News/i);
+  assert.doesNotMatch(UI, /news RSS/i);
+  assert.match(UI, /source: 'GDELT PROJECT · LOCATION QUERY · CITATION REQUIRED'/);
+  assert.doesNotMatch(HTML, /<select\b[^>]*(news-source|headline-source|google-news)/i);
+});
+
+test('voice instructions refuse OpenSky and Google News RSS', () => {
+  const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
+  assert.match(proxies, /OpenSky Network is disabled/);
+  assert.match(proxies, /Google News RSS is disabled/);
+  assert.match(proxies, /never fetch OpenSky/);
+  assert.match(proxies, /Never fetch Google News RSS/);
+  assert.doesNotMatch(proxies, /news\.google\.com/);
+  assert.doesNotMatch(proxies, /opensky-network\.org/);
+  assert.doesNotMatch(proxies, /function normalizeRssArticles/);
+});
+
+test('this fork does not add OPENSKY_* environment variables', () => {
+  assert.doesNotMatch(ENV_EXAMPLE, /^OPENSKY_[A-Z0-9_]+=/m);
+  const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
+  const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
+  const flights = readFileSync(path.join(ROOT, 'src/server/openskyFlights.js'), 'utf8');
+  for (const source of [vite, proxies, flights]) {
+    assert.doesNotMatch(source, /process\.env\.OPENSKY_/);
+    assert.doesNotMatch(source, /Netlify\.env\.get\(["']OPENSKY_/);
+  }
 });
 
 test('TeleGeography cable GeoJSON is not present on disk', () => {

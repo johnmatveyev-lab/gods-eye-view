@@ -6,7 +6,7 @@
  *   - Weather: Open-Meteo (CC BY 4.0)
  *   - News: GDELT Project DOC 2.0 only
  *
- * Google News RSS is never queried.
+ * Google News RSS is never queried. The flag stays hard-false.
  * Vite and Vercel both forward to `handleRegionalBrief`.
  */
 
@@ -16,6 +16,8 @@ import {
   normalizeRegionalWeather,
 } from './regionalBrief.js';
 
+/** Hard off — cockpit headlines use GDELT only. */
+export const GOOGLE_NEWS_RSS_ENABLED = false;
 export const REGIONAL_BRIEF_CACHE_MS = 5 * 60_000;
 export const REGIONAL_BRIEF_STALE_MS = 60 * 60_000;
 export const REGIONAL_BRIEF_MAX_CACHE = 120;
@@ -321,6 +323,9 @@ async function fetchRegionalPlace(point, { fetchImpl, scheduleNominatim }) {
 }
 
 async function fetchRegionalNews(place, { fetchImpl }) {
+  if (GOOGLE_NEWS_RSS_ENABLED !== false) {
+    throw new Error('Google News RSS must stay hard-disabled');
+  }
   const query = place?.locality || place?.region || place?.country;
   if (!query) return { status: 'unavailable', query: null, articles: [], source: null };
   const params = new URLSearchParams({
