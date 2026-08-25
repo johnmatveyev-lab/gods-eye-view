@@ -25,6 +25,7 @@ import { applyNorthUp, compassNeedleDeg, resolveNorthUpTarget } from './cameraNo
 import { handleKeyboardPanKeyDown } from './keyboardPan.js';
 import { handleLookKeyDown } from './cameraLookKeys.js';
 import {
+  bindKeyboardShortcutsToggle,
   handleShortcutsOverlayKeyDown,
   isKeyboardShortcutsOverlayOpen,
   renderKeyboardShortcutsOverlay,
@@ -3741,6 +3742,7 @@ export class StyleManager {
     // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Q/E heading,
     // R/PageUp/PageDown pitch (not F), ? overlay, Escape
     renderKeyboardShortcutsOverlay();
+    bindKeyboardShortcutsToggle();
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f', 'n') otherwise fire while a
@@ -3761,6 +3763,7 @@ export class StyleManager {
 
       const look = handleLookKeyDown(e, this.viewer, {
         cockpitActive: this.cockpitView?.active,
+        tiltLocked: this._lockTiltEnabled === true,
         storage: globalThis.localStorage,
       });
       if (look) {
