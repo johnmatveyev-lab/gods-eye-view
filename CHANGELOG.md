@@ -10,6 +10,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Pro accounts can save, restore, and delete up to 10 camera/style/layer
+  views in `localStorage` (`meridian.savedViews.<clerkUserId>`). Share-link
+  encode/decode is reused. Free and anonymous stay hidden and write nothing.
 - Added Vercel Node functions `api/billing/[...path].js` and
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env

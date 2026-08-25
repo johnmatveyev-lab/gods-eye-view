@@ -70,7 +70,7 @@ export function resolveEntitlements(input) {
     voice: Boolean(limits.voice) && !exhausted,
     savedViews: {
       available: Boolean(limits.savedViews),
-      placeholder: true,
+      placeholder: !Boolean(limits.savedViews),
       items: Array.isArray(input.savedViews) ? input.savedViews : [],
     },
     capped: true,
