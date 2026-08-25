@@ -326,7 +326,7 @@ test('panel render ANDs hide-no-feed with the city filter and keeps the selected
   assert.match(ui, /_cctvHideNoFeed/);
   const visible = ui.match(/_visibleCctvCameras\(\) \{[\s\S]*?\n  \}/);
   assert.ok(visible, '_visibleCctvCameras is missing');
-  assert.match(visible[0], /filterCctvSources/);
+  assert.match(visible[0], /filterVisibleCctvSources/);
   assert.match(visible[0], /hideNoFeed/);
   assert.match(visible[0], /selectedId/);
   const renderer = ui.match(/_renderCctvState\(state\) \{[\s\S]*?\n  \}\n/);
