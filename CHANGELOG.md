@@ -20,6 +20,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a bike-share system picker for the existing allowlisted GBFS city list.
+  Switching a system uses the current `/api/gbfs` URL builder only, persists
+  the last system locally, and does not add hosts or open the proxy.
+- Added a top-center north-up compass. Click or `N` sets heading 0 and keeps
+  the current target, range, and tilt. The needle tracks camera heading.
+  Home still returns the full default pose. Share links keep using the
+  existing `heading` field.
+- Hosted `/api/military-installations` on Vercel through the existing live
+  catch-all (`api/[...path].js`), forwarding the GET handler extracted to
+  `src/data/militaryInstallationsHttp.js`. Keeps the non-dateline ≤10° bbox
+  gate, snap-to-cache, `exact=1` after saturated tiles, element cap +
+  `saturated` flag, and the independent 90/300 rate limiter. Public OSM
+  Overpass mapped context only. This extract does not add a dedicated
+  serverless function and does not wrap `/api/ais-live`.
 - Camera chrome shows **Stop tracking** while a contact is followed. The
   control calls the existing untrack/clear-target action and leaves the camera
   where it is. Hidden when nothing is tracked. Home still does the full

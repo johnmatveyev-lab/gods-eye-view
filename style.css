@@ -2058,6 +2058,25 @@ body.ui-clean-view #scene-runtime.active {
   display: none;
 }
 
+#north-up-compass .north-up-compass-rose {
+  display: block;
+  width: 18px;
+  height: 18px;
+  transform: rotate(var(--north-up-heading, 0deg));
+  transition: transform 80ms linear;
+}
+
+#north-up-compass .north-up-needle {
+  display: block;
+  color: #ff8a80;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 18px;
+  text-align: center;
+}
+
 #global-loading-status {
   position: fixed;
   top: 74px;
@@ -4011,7 +4030,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -6353,6 +6372,51 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   flex: none;
 }
 
+/* Allowlisted-system picker (bikeshare). A compact select of known feeds —
+   not Radio search and not a layer-filter chip. */
+.data-toggle-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 168px;
+}
+
+.data-toggle-picker-label {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.data-toggle-picker-select {
+  min-width: 0;
+  flex: 1;
+  max-width: 100%;
+  padding: 3px 18px 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+}
+
+.data-toggle-picker-select:hover,
+.data-toggle-picker-select:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.data-toggle-picker-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 /* ── CCTV Panel ─────────────────────────────── */
 #cctv-panel {
   --panel-expanded-width: 360px;
@@ -7123,7 +7187,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #stop-tracking, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view) {
   display: none !important;
 }
 
