@@ -305,3 +305,33 @@ test('layer setParams hides point pins; selected stays; refresh keeps toggle', a
     run.restore();
   }
 });
+
+test('Austin-style geom-only way is painted; Footprints only keeps it and hides the node', async () => {
+  const run = await runInstallationLoad([
+    {
+      type: 'node',
+      id: 42,
+      lat: 30.27,
+      lon: -97.73,
+      tags: { military: 'base', name: 'Audie Murphy Training Center' },
+    },
+    {
+      type: 'way',
+      id: 27894251,
+      tags: { landuse: 'military', name: 'Camp Mabry' },
+      geometry: wayGeometry(),
+    },
+  ]);
+  try {
+    const ids = () => run.entities().map((entity) => entity.id).sort();
+    assert.deepEqual(ids(), ['osm:node:42', 'osm:way:27894251'], 'chip off shows the node pin and the geom-only way');
+    assert.equal(militaryInstallationsLayer.setParams({ footprintsOnly: true }), true);
+    assert.deepEqual(ids(), ['osm:way:27894251'], 'chip on keeps the outlined way and hides the node');
+    assert.deepEqual(
+      militaryInstallationsLayer.getViewportRecords().map((record) => record.id),
+      ['osm:way:27894251'],
+    );
+  } finally {
+    run.restore();
+  }
+});
