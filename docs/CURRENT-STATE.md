@@ -2,6 +2,16 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — military footprints-only toggle (plan 165)** (`src/data/militaryFootprintFilter.js`).
+> **Footprints only** chip on the Mapped Sites list, next to class chips.
+> Default **off** is the current points + polygons view. On hides records
+> whose `footprint` is missing, empty, or not a usable 3+ vertex `[lon, lat]`
+> ring. Selected installation stays. AND with Airfield | Naval | Range |
+> Land | Places. Re-applies from in-memory OSM/Places records — no extra
+> fetch. Persists as `military-installations.footprintsOnly` (`i.f.1`).
+> Hidden when the installations layer is off. Viewport refresh keeps the
+> toggle. Client-only; no `/api`.
+
 > **2026-08-25 — satellite period chips (plan 164)** (`src/data/satellitePeriodFilter.js`).
 > Exclusive **All | <100m | <128m** chips on the Satellites DATA LAYERS row,
 > next to class chips. Default **All** is the current catalog. Filters
@@ -1715,7 +1725,7 @@ its criteria cannot be silently ignored.
 | Live Flights ✈️ | adsb.lol 250 nm regional snapshot (OpenSky disabled) | `src/data/flights.js` | `/api/opensky` (adsb.lol compatibility path) | 30s |
 | Military Flights 🎖️ | adsb.lol /v2/mil | `src/data/militaryFlights.js` | `/api/adsblol/mil` | 15s |
 | Live AIS Vessels 🚢 | AISStream websocket | `src/data/aisLiveVessels.js` | `/api/ais-live` | 60s (+800ms visibility pass) |
-| Mapped Installations ⌖ | OpenStreetMap mapped context; on-demand Google Maps Places supplement | `src/data/militaryInstallations.js` | `/api/military-installations`, `/api/google/text-search` | viewport-driven + user search; while unavailable, auto-retry 30 s → 240 s backoff. Sites list class chips Airfield / Naval / Range / Land / Places (default all on) re-filter the in-memory viewport by `record.class`; missing/unknown class and the selected installation stay. Persists on `military-installations` (`i.k.*`). |
+| Mapped Installations ⌖ | OpenStreetMap mapped context; on-demand Google Maps Places supplement | `src/data/militaryInstallations.js` | `/api/military-installations`, `/api/google/text-search` | viewport-driven + user search; while unavailable, auto-retry 30 s → 240 s backoff. Sites list class chips Airfield / Naval / Range / Land / Places (default all on) re-filter the in-memory viewport by `record.class`; missing/unknown class and the selected installation stay. Persists on `military-installations` (`i.k.*`). Footprints only (default off) hides pins with no usable `footprint` ring; selected stays. AND with class chips. Persists as `footprintsOnly` (`i.f.1`). |
 | Earthquakes | USGS | `src/data/earthquakes.js` | — | 60s. Operator floor chips 2.5+ / 4.0+ / 5.0+ / 6.0+ (default 2.5+), 1h / 6h / 24h chips (default 24h; 24h matches the current all_day view), Shallow / Intermediate / Deep chips (default all on; same &lt;70 / 70–300 / ≥300 km buckets as disc color), a Tsunami only toggle (default off; `properties.tsunami === 1`, selected event stays), a Reviewed only toggle (default off; `properties.status === 'reviewed'`, selected event stays), Quake / Explosion / Quarry / Other type chips (default all on; `properties.type`, quarry/quarry blast share Quarry, missing/ice quake/other is Other, selected event stays), and Green / Yellow / Orange / Red / None PAGER chips (default all on; `properties.alert`, missing/null is None, selected event stays) re-filter the last `all_day` GeoJSON in memory. Hosted Quakes list (`#earthquake-list-toggle`) reads this same filtered payload (cap 50) and flies to a clicked event. Failed/empty feed is UNAVAILABLE. |
 | Satellites | CelesTrak | `src/data/satellites.js` | `/api/celestrak` (hosted `api/celestrak/[...group].js`) | 120s. Operator period chips All / &lt;100m / &lt;128m (default All) re-filter the in-memory catalog by `orbitalPeriodSeconds(satrec) / 60`; missing/non-finite period and the tracked satellite stay. Persists as `meridian.satPeriod`. AND with Core\|Dense, class chips, POINTS, and ORBITS. |
 | Space Missions (30d) | Launch Library 2 + CelesTrak | `src/data/rocketLaunches.js` | `/api/launches` + `/api/celestrak/active` | 5 min |

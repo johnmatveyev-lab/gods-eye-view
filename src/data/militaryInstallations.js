@@ -22,6 +22,11 @@ import {
   filterInstallationsByClass,
   normalizeInstallationClassFilter,
 } from './militaryInstallationClassFilter.js';
+import {
+  DEFAULT_INSTALLATION_FOOTPRINTS_ONLY,
+  filterInstallationsByFootprint,
+  normalizeInstallationFootprintsOnly,
+} from './militaryFootprintFilter.js';
 import { isSceneClickCaptured, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 
 const LAYER_ID = 'military-installations';
@@ -84,6 +89,7 @@ const state = {
   timer: null,
   googleSearchRequested: false,
   classFilter: DEFAULT_INSTALLATION_CLASS_FILTER,
+  footprintsOnly: DEFAULT_INSTALLATION_FOOTPRINTS_ONLY,
 };
 
 function colorFor(record) {
@@ -238,7 +244,11 @@ function clearRendered() {
  * @returns {Array<object>} Records to render this paint.
  */
 function visibleRecords() {
-  return filterInstallationsByClass(state.records, state.classFilter, state.selectedId);
+  return filterInstallationsByFootprint(
+    filterInstallationsByClass(state.records, state.classFilter, state.selectedId),
+    state.footprintsOnly,
+    state.selectedId,
+  );
 }
 
 function renderableRecords() {
@@ -557,24 +567,43 @@ const militaryInstallationsLayer = {
     state.selectedId = null;
   },
   /**
-   * Class chips re-filter in-memory records. Never hits Overpass or Places.
-   * @param {{ installationClassFilter?: unknown }} [params]
+   * Class chips and Footprints only re-filter in-memory records.
+   * Never hits Overpass or Places.
+   * @param {{ installationClassFilter?: unknown, footprintsOnly?: unknown }} [params]
    * @returns {boolean}
    */
   setParams(params = {}) {
     if (!params || typeof params !== 'object') return false;
-    if (!Object.hasOwn(params, 'installationClassFilter')) return true;
-    const next = normalizeInstallationClassFilter(params.installationClassFilter);
-    if (next == null) return false;
-    if (next !== state.classFilter) {
-      state.classFilter = next;
-      if (state.enabled && state.dataSource) renderRecords();
+    const hasClass = Object.hasOwn(params, 'installationClassFilter');
+    const hasFootprints = Object.hasOwn(params, 'footprintsOnly');
+    if (!hasClass && !hasFootprints) return true;
+
+    let nextClass = state.classFilter;
+    if (hasClass) {
+      const klass = normalizeInstallationClassFilter(params.installationClassFilter);
+      if (klass == null) return false;
+      nextClass = klass;
     }
+
+    let nextFootprints = state.footprintsOnly;
+    if (hasFootprints) {
+      const only = normalizeInstallationFootprintsOnly(params.footprintsOnly);
+      if (only == null) return false;
+      nextFootprints = only;
+    }
+
+    if (nextClass === state.classFilter && nextFootprints === state.footprintsOnly) return true;
+    state.classFilter = nextClass;
+    state.footprintsOnly = nextFootprints;
+    if (state.enabled && state.dataSource) renderRecords();
     return true;
   },
-  /** @returns {{ installationClassFilter: string }} */
+  /** @returns {{ installationClassFilter: string, footprintsOnly: boolean }} */
   getParams() {
-    return { installationClassFilter: state.classFilter };
+    return {
+      installationClassFilter: state.classFilter,
+      footprintsOnly: state.footprintsOnly,
+    };
   },
   update() { return loadInstallations(); },
   /** Request a one-shot Google Maps Places search around the current map view. */
@@ -591,6 +620,7 @@ const militaryInstallationsLayer = {
     if (state.dataSource && viewer) viewer.dataSources.remove(state.dataSource, true);
     state.dataSource = null;
     state.classFilter = DEFAULT_INSTALLATION_CLASS_FILTER;
+    state.footprintsOnly = DEFAULT_INSTALLATION_FOOTPRINTS_ONLY;
   },
   /**
    * Snapshot the current bbox payload. Does not fetch.

@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Mapped Installations has a client-only **Footprints only** toggle next to
+  the Plan 151 class chips. Default off matches the current points +
+  polygons view. On skips in-memory records whose `footprint` is missing,
+  empty, or not a usable 3+ vertex `[lon, lat]` ring. A selected
+  installation stays even if it is a point-only pin. Chip changes re-filter
+  already-fetched OSM/Places rows and AND with Airfield | Naval | Range |
+  Land | Places — no extra Overpass or Places fetch and no `/api`.
+  Preference persists as `military-installations.footprintsOnly` (`i.f.1`).
+  Hidden when the installations layer is off. Viewport refresh keeps the
+  toggle.
 - Satellites row has client-only **All | <100m | <128m** period chips next
   to class chips. Default All matches the current catalog. The chips filter
   already-fetched CelesTrak satrecs by `orbitalPeriodSeconds(satrec) / 60`
