@@ -262,7 +262,8 @@ test('the shipped layer hides Jams only in keyless sim and does not add an endpo
 
   assert.match(traffic, /from '\.\/trafficJamFilter\.js'/);
   assert.match(traffic, /trafficJamsOnlyControls\(/);
-  assert.match(traffic, /trafficRoadSpawnsDots\(/);
+  assert.match(traffic, /roadPassesJamFilter\(/);
+  assert.match(traffic, /uncoveredRoadSpawns\(/);
   assert.match(traffic, /params\.jamsOnly/);
   assert.match(traffic, /setTrafficJamsOnly\(/);
   assert.match(filter, /flowBucket\(/);

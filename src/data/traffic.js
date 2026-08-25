@@ -32,6 +32,7 @@ import {
 import {
   getUncoveredRoads,
   setUncoveredRoads,
+  uncoveredRoadSpawns,
   uncoveredRoadsControls,
 } from './uncoveredRoads.js';
 import {
@@ -43,9 +44,9 @@ import {
 import {
   getTrafficJamsOnly,
   normalizeTrafficJamsOnly,
+  roadPassesJamFilter,
   setTrafficJamsOnly,
   trafficJamsOnlyControls,
-  trafficRoadSpawnsDots,
 } from './trafficJamFilter.js';
 import {
   getTrafficDensity,
@@ -715,14 +716,18 @@ function computeDotCount(road, altitude) {
   // `road.flow` is only ever set in live mode, so the keyless path is
   // untouched (flow stays undefined → multiplier 1, identical output).
   const flow = _liveMode ? road.flow : null;
-  // Closures spawn nothing, uncovered hide skips unmatched roads, and
-  // Jams only keeps `flowBucket(level) === 'jam'`. All three AND. Sim /
-  // keyless (`_liveMode` false) always pass — the built-in model is
-  // unchanged even when the toggle is on.
-  if (!trafficRoadSpawnsDots(road, {
+  if (flow?.closure) return 0;
+  // Strict data-integrity view: uncovered roads spawn nothing when hidden.
+  if (!uncoveredRoadSpawns({
     liveMode: _liveMode,
-    jamsOnly: _jamsOnly,
+    hasFlow: Boolean(flow),
     uncoveredRoads: _uncoveredMode,
+  })) return 0;
+  // Jams only: live roads whose bucket is not `jam` spawn nothing. Sim /
+  // keyless always pass. AND with the two checks above.
+  if (!roadPassesJamFilter(road, {
+    jamsOnly: _jamsOnly,
+    liveMode: _liveMode,
   })) return 0;
 
   const lengthM = estimateRoadLengthDeg(road.coords);
@@ -787,10 +792,15 @@ function spawnDotsForRoad(road, altitude, budgetCount = null) {
   // byte-identical): closures spawn nothing, uncovered hide skips unmatched
   // roads, Jams only keeps jammed flow, congestion colors/slows dots.
   const flow = _liveMode ? road.flow : null;
-  if (!trafficRoadSpawnsDots(road, {
+  if (flow?.closure) return;
+  if (!uncoveredRoadSpawns({
     liveMode: _liveMode,
-    jamsOnly: _jamsOnly,
+    hasFlow: Boolean(flow),
     uncoveredRoads: _uncoveredMode,
+  })) return;
+  if (!roadPassesJamFilter(road, {
+    jamsOnly: _jamsOnly,
+    liveMode: _liveMode,
   })) return;
 
   const count = Number.isFinite(budgetCount)
