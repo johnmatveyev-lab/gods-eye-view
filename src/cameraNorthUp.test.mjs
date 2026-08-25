@@ -253,7 +253,7 @@ test('the compass is map camera chrome beside Share and Reset Globe', () => {
   assert.match(css, /--north-up-heading/);
   assert.match(
     css,
-    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #import-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
+    /body\.cockpit-mode :is\(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #import-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #share-view-qr, #share-view-qr-popover, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)/,
   );
   assert.match(
     css,

@@ -133,6 +133,11 @@ import {
 } from './cameraAboveGround.js';
 import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
 import { copyViewSnapshot, snapshotToast } from './viewSnapshot.js';
+import {
+  destroyShareViewQr,
+  handleShareViewQrEscape,
+  initShareViewQr,
+} from './shareViewQr.js';
 import { destroyWorldOverlay, getOverlayPaintRect, hitTestWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
@@ -3106,6 +3111,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initShareViewQrButton();
     this._initCopyViewSnapshotButton();
     this._initMeasureButton();
     this._initFullscreenButton();
@@ -3890,10 +3896,12 @@ export class StyleManager {
       };
       if (keyMap[e.key]) this.setStyle(keyMap[e.key]);
       if (e.key === 'Escape') {
-        if (handleCleanViewEscape(e)) {
-          this.toggleCleanView(false);
-        } else {
-          handleFullscreenEscape(e);
+        if (!handleShareViewQrEscape(e)) {
+          if (handleCleanViewEscape(e)) {
+            this.toggleCleanView(false);
+          } else {
+            handleFullscreenEscape(e);
+          }
         }
         if (this._locationSearch.classList.contains('expanded')) {
           this._locationSearch.classList.remove('expanded');
@@ -11395,6 +11403,16 @@ export class StyleManager {
     });
   }
 
+  /** Wire Share view QR — same currentShareUrl helper, in-page encode only. */
+  _initShareViewQrButton() {
+    initShareViewQr({
+      button: document.getElementById('share-view-qr'),
+      popover: document.getElementById('share-view-qr-popover'),
+      svg: document.getElementById('share-view-qr-svg'),
+      getShareUrl: () => this.shareLinkManager?.currentShareUrl?.() || null,
+    });
+  }
+
   /** Wire Copy snapshot — Cesium canvas PNG + #cesium-credits, local only. */
   _initCopyViewSnapshotButton() {
     this._copyViewSnapshotBtn?.addEventListener('click', async () => {
@@ -12386,6 +12404,7 @@ export class StyleManager {
     this._watchlistBinder?.destroy();
     this._watchlistBinder = null;
     destroySelectedContactIdent();
+    destroyShareViewQr();
     destroyCameraCoords();
     destroyTrackedReadout();
     destroyDetection();

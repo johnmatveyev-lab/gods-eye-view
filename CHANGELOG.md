@@ -33,6 +33,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Share view QR control next to Copy view link. It opens a popover
+  with an in-page QR of the current camera+layers share URL (same
+  `currentShareUrl()` helper Copy view link copies). No shortener, upload,
+  or `/api`. A second click or Escape closes the popover. Copy view link
+  still copies the URL text only. Credits stay on the globe.
 - Added a Copy card control next to Copy ident on the selected-contact
   readout. It pastes the public ADS-B fields already shown from describe()
   (ident, registration, hex, type, alt, speed, heading, lat/lon) and omits
