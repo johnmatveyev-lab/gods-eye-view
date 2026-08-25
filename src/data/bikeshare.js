@@ -28,6 +28,14 @@ import {
   stationMatchesBikeshareEbikesOnly,
 } from './bikeshareEbikeFilter.js';
 import {
+  BIKESHARE_LAST_REPORTED_WINDOWS,
+  DEFAULT_BIKESHARE_LAST_REPORTED,
+  normalizeBikeshareLastReported,
+  readPersistedBikeshareLastReported,
+  stationMatchesBikeshareLastReported,
+  writePersistedBikeshareLastReported,
+} from './bikeshareLastReportedFilter.js';
+import {
   BIKESHARE_MIN_AVAILABLE_FLOORS,
   DEFAULT_BIKESHARE_MIN_AVAILABLE,
   normalizeBikeshareMinAvailable,
@@ -593,6 +601,8 @@ let _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
 let _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
 /** Hide stations whose last-good ebikesAvailable is exactly 0. Default OFF. */
 let _ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY;
+/** Last-reported freshness window. Default All — no max age. */
+let _lastReported = DEFAULT_BIKESHARE_LAST_REPORTED;
 /** Optional storage override for picker persistence tests. */
 let _storageOverride = null;
 /** Manager callback when picker state changes. */
@@ -641,11 +651,13 @@ function isClosedBikeshareStation(record) {
 
 /**
  * Whether a station should stay on the globe under Hide empty / Hide full /
- * Hide closed / min-available / min-docks / E-bikes only. Unknown / non-finite
- * counts stay visible for empty, full, the bike floor, the dock floor, and
- * e-bikes. Unknown operational flags stay visible for Hide closed. A selected
- * station stays visible even after it goes empty, full, closed, below a
- * floor, or to zero e-bikes, until deselected. The filters AND independently.
+ * Hide closed / min-available / min-docks / E-bikes only / last-reported.
+ * Unknown / non-finite counts stay visible for empty, full, the bike floor,
+ * the dock floor, and e-bikes. Unknown operational flags stay visible for
+ * Hide closed. Unknown / non-finite lastReported stays visible for the
+ * freshness window. A selected station stays visible even after it goes
+ * empty, full, closed, below a floor, to zero e-bikes, or stale, until
+ * deselected. The filters AND independently.
  * @param {Object|null|undefined} record
  * @param {{
  *   hideEmpty?: boolean,
@@ -654,7 +666,9 @@ function isClosedBikeshareStation(record) {
  *   minAvailable?: string|number|null,
  *   minDocks?: string|number|null,
  *   ebikesOnly?: boolean,
+ *   lastReported?: string|number|null,
  *   selectedKey?: string|null,
+ *   now?: number,
  * }} [options]
  * @returns {boolean}
  */
@@ -665,7 +679,9 @@ export function shouldShowBikeshareStation(record, {
   minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE,
   minDocks = DEFAULT_BIKESHARE_MIN_DOCKS,
   ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY,
+  lastReported = DEFAULT_BIKESHARE_LAST_REPORTED,
   selectedKey = null,
+  now = Date.now(),
 } = {}) {
   if (record?.key && record.key === selectedKey) return true;
   if (hideEmpty && Number.isFinite(record?.bikesAvailable) && record.bikesAvailable === 0) {
@@ -684,6 +700,9 @@ export function shouldShowBikeshareStation(record, {
     return false;
   }
   if (!stationMatchesBikeshareEbikesOnly(record, ebikesOnly)) {
+    return false;
+  }
+  if (!stationMatchesBikeshareLastReported(record, lastReported, { now })) {
     return false;
   }
   return true;
@@ -708,6 +727,7 @@ function applyStationVisibility(record) {
     minAvailable: _minAvailable,
     minDocks: _minDocks,
     ebikesOnly: _ebikesOnly,
+    lastReported: _lastReported,
     selectedKey: _selectedKey,
   });
   if (isSelected) {
@@ -780,6 +800,16 @@ function setEbikesOnly(nextValue) {
   if (next === _ebikesOnly) return false;
   _ebikesOnly = next;
   writePersistedBikeshareEbikesOnly(next, safeBikeshareStorage());
+  applyAllStationVisibility();
+  notifyRowControlsChanged();
+  return true;
+}
+
+function setLastReported(nextValue) {
+  const next = normalizeBikeshareLastReported(nextValue);
+  if (next == null || next === _lastReported) return false;
+  _lastReported = next;
+  writePersistedBikeshareLastReported(next, safeBikeshareStorage());
   applyAllStationVisibility();
   notifyRowControlsChanged();
   return true;
@@ -1102,7 +1132,8 @@ function parseStationInformation(payload) {
  * Parse a GBFS station_status payload into a Map of real-time availability.
  * @param {Object} payload - Parsed station_status.json response.
  * @returns {Map<string, Object>} Map of stationId to status objects containing
- *   bikesAvailable, docksAvailable, ebikesAvailable, and operational flags.
+ *   bikesAvailable, docksAvailable, ebikesAvailable, lastReported, and
+ *   operational flags.
  */
 function parseStationStatus(payload) {
   const stations = extractStationsArray(payload);
@@ -1563,6 +1594,7 @@ function ensureCityPoints(cityId, stationMap) {
       bikesAvailable: null,
       docksAvailable: null,
       ebikesAvailable: null,
+      lastReported: null,
       isInstalled: station.isInstalled,
       isRenting: station.isRenting,
       isReturning: station.isReturning,
@@ -1622,6 +1654,7 @@ function applyStatusToPoints(cityId, statusMap) {
     record.bikesAvailable = toNonNegativeInteger(status?.bikesAvailable);
     record.docksAvailable = toNonNegativeInteger(status?.docksAvailable);
     record.ebikesAvailable = toNonNegativeInteger(status?.ebikesAvailable);
+    record.lastReported = toNonNegativeInteger(status?.lastReported);
     record.isInstalled = normalizeGbfsBool(status?.isInstalled, true);
     record.isRenting = normalizeGbfsBool(status?.isRenting, true);
     record.isReturning = normalizeGbfsBool(status?.isReturning, true);
@@ -1879,6 +1912,8 @@ const bikeshareLayer = {
     _minDocks = readPersistedBikeshareMinDocks(safeBikeshareStorage())
       || DEFAULT_BIKESHARE_MIN_DOCKS;
     _ebikesOnly = readPersistedBikeshareEbikesOnly(safeBikeshareStorage()) === true;
+    _lastReported = readPersistedBikeshareLastReported(safeBikeshareStorage())
+      || DEFAULT_BIKESHARE_LAST_REPORTED;
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -2012,10 +2047,11 @@ const bikeshareLayer = {
 
   /**
    * Picker of allowlisted systems plus Hide empty / Hide full / Hide closed /
-   * E-bikes only and All | 3+ | 5+ bike / dock chips. The picker stays Plan
-   * 68: it still switches allowlisted systems. The chips are draw filters on
-   * already-fetched status, not a new feed. Manager hides this row while
-   * the bike layer is off.
+   * E-bikes only, All | 3+ | 5+ bike / dock chips, and All | 15m | 60m
+   * last-reported chips. The picker stays Plan 68: it still switches
+   * allowlisted systems. The chips are draw filters on already-fetched
+   * status, not a new feed. Manager hides this row while the bike layer is
+   * off.
    * @returns {{ picker: object, chips: Array<object> }}
    */
   getRowControls() {
@@ -2077,6 +2113,13 @@ const bikeshareLayer = {
         active: _minDocks === floor.id,
         group: 'Docks',
         params: { minDocks: floor.id },
+      })), ...BIKESHARE_LAST_REPORTED_WINDOWS.map((window) => ({
+        id: `last-reported-${window.id}`,
+        label: window.label,
+        title: window.title,
+        active: _lastReported === window.id,
+        group: 'Reported',
+        params: { lastReported: window.id },
       }))],
     };
   },
@@ -2089,13 +2132,14 @@ const bikeshareLayer = {
       minAvailable: _minAvailable,
       minDocks: _minDocks,
       ebikesOnly: _ebikesOnly,
+      lastReported: _lastReported,
     };
   },
 
   /**
    * Apply Hide empty / Hide full / Hide closed / min-available / min-docks /
-   * E-bikes only without refetching GBFS. System switching stays on
-   * setSelectedSystem (Plan 68) and is not accepted here.
+   * E-bikes only / last-reported without refetching GBFS. System switching
+   * stays on setSelectedSystem (Plan 68) and is not accepted here.
    * @param {Object} [params]
    * @returns {boolean}
    */
@@ -2124,6 +2168,10 @@ const bikeshareLayer = {
     if (Object.hasOwn(params, 'ebikesOnly')) {
       const next = normalizeBikeshareEbikesOnly(params.ebikesOnly);
       if (next !== null) setEbikesOnly(next);
+    }
+    if (Object.hasOwn(params, 'lastReported')) {
+      const next = normalizeBikeshareLastReported(params.lastReported);
+      if (next !== null) setLastReported(next);
     }
     return true;
   },
@@ -2232,6 +2280,7 @@ export function _resetBikeshareSystemPickerForTest() {
   _minAvailable = DEFAULT_BIKESHARE_MIN_AVAILABLE;
   _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
   _ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY;
+  _lastReported = DEFAULT_BIKESHARE_LAST_REPORTED;
   _unavailable = false;
   _error = null;
   _enabled = false;
