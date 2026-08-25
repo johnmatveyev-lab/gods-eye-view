@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.git
+.gev-cache
+.gev-logs
+screenshots
+qa-shots
+output
+*.log
+.DS_Store
+.gstack
+3d-models
+docs/media
