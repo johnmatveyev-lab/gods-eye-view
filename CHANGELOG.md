@@ -25,6 +25,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   The choice persists as `meridian.power`. Data polls, the idle render
   governor, and required credits are unchanged. Clean view still keeps
   Google Maps and Data attribution on screen.
+- Hosted WX OFF | ON chrome sits next to the HUD and cockpit clocks and
+  toggles the existing cockpit weather-effects render flag
+  (`godsEyeView.cockpitWeatherEffects.enabled`). Off removes globe FX;
+  Local Info still fetches Open-Meteo and shows the credit when weather
+  values are on screen. Hidden-tab and offline pauses still apply. No new
+  weather vendor or `/api`.
+- Added a bike-share system picker for the existing allowlisted GBFS city list.
+  Switching a system uses the current `/api/gbfs` URL builder only, persists
+  the last system locally, and does not add hosts or open the proxy.
 - Added a top-center north-up compass. Click or `N` sets heading 0 and keeps
   the current target, range, and tilt. The needle tracks camera heading.
   Home still returns the full default pose. Share links keep using the

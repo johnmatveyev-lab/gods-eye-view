@@ -216,6 +216,9 @@ async function init() {
     // Cesium fog or post-process stages and is fully stopped in map mode.
     const weatherEffects = null;
     const cockpitCloudEffects = initCockpitCloudEffects(viewer);
+    livePollScheduler.subscribe((state) => {
+      cockpitCloudEffects?.setSuspended?.(state.suspended);
+    });
 
     // If no share link state, do default fly-to Austin
     if (!styleManager.hasShareState) {
@@ -319,7 +322,6 @@ async function init() {
     const syncVisibilitySuspension = () => {
       const hidden = document.hidden;
       viewer.useDefaultRenderLoop = !hidden;
-      cockpitCloudEffects?.setSuspended?.(hidden);
       if (!hidden) {
         if (dataManager._panelRefreshPendingOnVisible) {
           dataManager._panelRefreshPendingOnVisible = false;

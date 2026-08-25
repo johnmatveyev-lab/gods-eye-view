@@ -4454,7 +4454,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
-.clock-mode-toggle {
+.clock-mode-toggle,
+.wx-mode-toggle {
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
@@ -4465,7 +4466,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   pointer-events: auto;
 }
 
-.clock-mode-toggle button {
+.clock-mode-toggle button,
+.wx-mode-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -4479,12 +4481,14 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.55;
 }
 
-.clock-mode-toggle button[aria-pressed="true"] {
+.clock-mode-toggle button[aria-pressed="true"],
+.wx-mode-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
 
-.cockpit-clock-row .clock-mode-toggle {
+.cockpit-clock-row .clock-mode-toggle,
+.cockpit-clock-row .wx-mode-toggle {
   margin-left: 0;
 }
 
@@ -6375,6 +6379,51 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
      hairline ring so a near-black class still reads on the panel glass. */
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
   flex: none;
+}
+
+/* Allowlisted-system picker (bikeshare). A compact select of known feeds —
+   not Radio search and not a layer-filter chip. */
+.data-toggle-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 168px;
+}
+
+.data-toggle-picker-label {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.data-toggle-picker-select {
+  min-width: 0;
+  flex: 1;
+  max-width: 100%;
+  padding: 3px 18px 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+}
+
+.data-toggle-picker-select:hover,
+.data-toggle-picker-select:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.data-toggle-picker-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ── CCTV Panel ─────────────────────────────── */

@@ -41,6 +41,14 @@ import {
   readStoredHudVariant,
   writeStoredHudVariant,
 } from './hudCycle.js';
+import {
+  WX_STATE_EVENT,
+  WX_TOGGLE_EVENT,
+  bindWxToggle,
+  getWxEnabled,
+  syncWxToggleButtons,
+  weatherChromePresentation,
+} from './weatherChrome.js';
 import { ShareLinkManager } from './sharelink.js';
 import {
   cycleSensorLook,
@@ -924,6 +932,15 @@ class CockpitViewController {
       syncClockToggleButtons(this.clockToggle, getClockMode());
     });
     this._paintChromeClock();
+    this._unbindWxToggle = bindWxToggle(this.hud, { stateEl: this.weatherState });
+    this._listenerRemovers.push(() => this._unbindWxToggle?.());
+    this._listen(window, WX_TOGGLE_EVENT, (event) => {
+      this.syncWeatherToggle(event?.detail?.enabled === true);
+    });
+    this._listen(window, WX_STATE_EVENT, (event) => {
+      this.syncWeatherToggle(event?.detail?.enabled === true);
+    });
+    this.syncWeatherToggle(getWxEnabled());
     this._listen(this.entry, 'click', () => {
       this.onEnterRequest();
     });
@@ -935,16 +952,6 @@ class CockpitViewController {
     this._listen(this.contextPrevious, 'click', () => this.navigateContext(-1, { origin: 'user' }));
     this._listen(this.contextNext, 'click', () => this.navigateContext(1, { origin: 'user' }));
     this._listen(this.contextToggle, 'click', () => this.setContextCollapsed(!this.contextCollapsed));
-    this._listen(this.weatherToggle, 'click', () => {
-      const enabled = this.weatherToggle.getAttribute('aria-pressed') !== 'true';
-      this.syncWeatherToggle(enabled);
-      window.dispatchEvent(new CustomEvent('gev:cockpit-weather-toggle', {
-        detail: { enabled },
-      }));
-    });
-    this._listen(window, 'gev:cockpit-weather-state', (event) => {
-      this.syncWeatherToggle(event?.detail?.enabled !== false);
-    });
     this._listen(this.signalToggle, 'click', () => this.setSignalCollapsed(
       !this.signalCollapsed,
       { user: true },
@@ -986,15 +993,14 @@ class CockpitViewController {
   }
 
   syncWeatherToggle(enabled) {
-    if (!this.weatherToggle) return;
     const active = !!enabled;
-    this.weatherToggle.setAttribute('aria-pressed', String(active));
-    this.weatherToggle.setAttribute(
-      'aria-label',
-      `${active ? 'Disable' : 'Enable'} cockpit weather effects`,
-    );
-    this.weatherToggle.title = `${active ? 'Disable' : 'Enable'} cockpit weather effects`;
-    if (this.weatherState) this.weatherState.textContent = active ? 'ON' : 'OFF';
+    syncWxToggleButtons(this.hud, active, this.weatherState);
+    if (!this.weatherToggle) return;
+    const presentation = weatherChromePresentation(active);
+    this.weatherToggle.setAttribute('aria-pressed', presentation.pressed);
+    this.weatherToggle.setAttribute('aria-label', presentation.ariaLabel);
+    this.weatherToggle.title = presentation.title;
+    if (this.weatherState) this.weatherState.textContent = presentation.stateText;
   }
 
   readAircraftInfo() {
