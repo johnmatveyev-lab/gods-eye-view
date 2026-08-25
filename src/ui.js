@@ -243,6 +243,14 @@ import {
   installPowerMode,
   setPowerMode as writeViewerPowerMode,
 } from './powerMode.js';
+import {
+  initScaleBarPreference,
+  installScaleBar,
+  isScaleBarEnabled,
+  refreshScaleBar,
+  setScaleBarEnabled,
+  uninstallScaleBar,
+} from './scaleBar.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -2437,11 +2445,15 @@ export class StyleManager {
     ].filter(Boolean);
     initDistanceUnits();
     this._syncUnitsUi();
+    initScaleBarPreference();
+    this._scaleBarBtn = document.getElementById('scale-bar-toggle');
+    this._syncScaleBarUi();
     this._unitsUnsubscribe = subscribeDistanceUnit(() => {
       this._syncUnitsUi();
       this.hud?.refreshDisplayUnits?.();
       militaryAwarenessLayer.refreshDistanceLabels?.();
       this.cockpitView?.refreshDistanceUnits?.();
+      refreshScaleBar();
     });
     this._powerBtns = [
       document.getElementById('power-normal'),
@@ -2916,6 +2928,7 @@ export class StyleManager {
     this._initZoomToPointer();
     this._initTrailsToggle();
     this._initLiveSunToggle();
+    this._initScaleBar();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -3794,6 +3807,12 @@ export class StyleManager {
       });
     }
 
+    this._scaleBarBtn?.addEventListener('click', () => {
+      setScaleBarEnabled(!isScaleBarEnabled());
+      this._syncScaleBarUi();
+      refreshScaleBar();
+    });
+
     for (const slider of [this._detectionFadeSlider, this._detectionOpacitySlider]) {
       slider?.addEventListener('input', () => {
         this.shareLinkManager?.claimRestoreLane?.('visual');
@@ -3967,6 +3986,18 @@ export class StyleManager {
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', String(active));
     }
+  }
+
+  _syncScaleBarUi() {
+    const enabled = isScaleBarEnabled();
+    this._scaleBarBtn?.classList.toggle('active', enabled);
+    this._scaleBarBtn?.setAttribute('aria-pressed', String(enabled));
+  }
+
+  _initScaleBar() {
+    installScaleBar(this.viewer);
+    this._syncScaleBarUi();
+    refreshScaleBar();
   }
 
   _syncUnitsUi() {
@@ -11180,6 +11211,7 @@ export class StyleManager {
     this._unitsUnsubscribe = null;
     this._unbindZoomToPointer?.();
     this._unbindZoomToPointer = null;
+    uninstallScaleBar();
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
     this._layerStateCoordinator = null;

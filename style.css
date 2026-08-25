@@ -376,6 +376,60 @@ body.recording-mode #cesium-credits {
   pointer-events: auto !important;
 }
 
+/* Local scale bar. Lives next to the required credit line and stays up in
+   clean-view / recording so operators can still eyeball 1 km vs 1 nmi. */
+.scale-bar {
+  position: fixed;
+  left: 36px;
+  bottom: 68px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: rgba(232, 234, 237, 0.78);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.scale-bar[hidden] {
+  display: none;
+}
+
+.scale-bar-track {
+  display: flex;
+  align-items: stretch;
+  height: 8px;
+}
+
+.scale-bar-tick {
+  width: 1px;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-shaft {
+  width: 96px;
+  height: 2px;
+  margin: auto 0 0;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-label {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.ui-clean-view #scale-bar,
+body.recording-mode #scale-bar {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
 #gev-voice-control {
   position: fixed;
   right: 36px;
