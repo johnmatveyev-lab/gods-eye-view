@@ -127,6 +127,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _lastUpdate = null;
   let _lastError = null;
   let _enabled = false;
+  let _listRecords = [];
 
   const layer = {
   id: 'earthquakes',
@@ -143,6 +144,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _lastUpdate = null;
     _lastError = null;
     _enabled = false;
+    _listRecords = [];
     overlayHost.setVisible(EARTHQUAKE_OVERLAY_SOURCE_ID, false);
     console.log('[Data:Earthquakes] Initialized');
   },
@@ -167,6 +169,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       const response = await fetch(API_URL);
       if (!response.ok) {
         _lastError = `USGS HTTP ${response.status}`;
+        _listRecords = [];
         console.warn(`[Data:Earthquakes] API returned ${response.status}`);
         return false;
       }
@@ -174,12 +177,14 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       const geojson = await response.json();
       if (!geojson || !Array.isArray(geojson.features)) {
         _lastError = 'Malformed USGS response';
+        _listRecords = [];
         return false;
       }
 
       _dataSource.entities.removeAll();
       let count = 0;
       const overlayEntries = [];
+      const listRecords = [];
 
       for (const feature of geojson.features) {
         const [lon, lat, depthKm] = feature.geometry.coordinates;
@@ -229,6 +234,15 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
           magnitude: mag,
           accent: color.toCssColorString(),
         }));
+        listRecords.push(mapAnalystRecord({
+          id: feature.id ?? null,
+          mag,
+          place,
+          time,
+          depth: depthKm,
+          lat,
+          lon,
+        }, listRecords.length));
       }
 
       if (_enabled) {
@@ -246,12 +260,14 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       _count = count;
       _lastUpdate = Date.now();
       _lastError = null;
+      _listRecords = listRecords;
       console.log(`[Data:Earthquakes] Updated: ${_count} events (M2.5+)`);
       return true;
 
     } catch (e) {
       console.warn('[Data:Earthquakes] Fetch error:', e);
       _lastError = 'USGS network error';
+      _listRecords = [];
       return false;
     }
   },
@@ -267,6 +283,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _count = 0;
     _lastUpdate = null;
     _lastError = null;
+    _listRecords = [];
   },
 
   /**
@@ -300,6 +317,16 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       }, result.length));
     }
     return result;
+  },
+
+  /**
+   * Snapshot for the hosted Quakes list. Same USGS features the discs
+   * already parsed — no second fetch. A failed feed returns [] so the
+   * list can show UNAVAILABLE instead of stale rows or a hang.
+   * @returns {Array<Object>}
+   */
+  getListRecords() {
+    return _lastError ? [] : _listRecords.slice();
   },
 
   getStats() {

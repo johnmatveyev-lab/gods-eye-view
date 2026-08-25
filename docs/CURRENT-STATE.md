@@ -2,6 +2,13 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — camera crosshair (plan 80)** (`src/cameraCrosshair.js`).
+> DISPLAY-rail Crosshair draws a CSS plus at the canvas center — the hosted
+> aim point for copy-coords (`src/copyCameraCoords.js`, still
+> `positionCartographic`) and measure. Default off; persist
+> `meridian.crosshair`. Clean view may keep the plus; `#cesium-credits`
+> stays visible. Local overlay only: no Cesium entity, no `/api`.
+
 > **2026-08-25 — contact label declutter (plan 59)** (`src/contactLabels.js`).
 > DISPLAY gets a Labels on/off control (`#contact-labels-toggle`). Off hides
 > ambient contact billboard text (detection callsigns and contact-source
@@ -1636,7 +1643,7 @@ its criteria cannot be silently ignored.
 | Military Flights 🎖️ | adsb.lol /v2/mil | `src/data/militaryFlights.js` | `/api/adsblol/mil` | 15s |
 | Live AIS Vessels 🚢 | AISStream websocket | `src/data/aisLiveVessels.js` | `/api/ais-live` | 60s (+800ms visibility pass) |
 | Mapped Installations ⌖ | OpenStreetMap mapped context; on-demand Google Maps Places supplement | `src/data/militaryInstallations.js` | `/api/military-installations`, `/api/google/text-search` | viewport-driven + user search; while unavailable, auto-retry 30 s → 240 s backoff |
-| Earthquakes | USGS | `src/data/earthquakes.js` | — | 60s |
+| Earthquakes | USGS | `src/data/earthquakes.js` | — | 60s. Hosted Quakes list (`#earthquake-list-toggle`) reads this same payload (cap 50) and flies to a clicked event. Failed/empty feed is UNAVAILABLE. |
 | Satellites | CelesTrak | `src/data/satellites.js` | `/api/celestrak` (hosted `api/celestrak/[...group].js`) | 120s |
 | Space Missions (30d) | Launch Library 2 + CelesTrak | `src/data/rocketLaunches.js` | `/api/launches` + `/api/celestrak/active` | 5 min |
 | Traffic | OSM Overpass (+ optional TomTom live flow) | `src/data/traffic.js` | `/api/overpass` + `/api/tomtom` | viewport-driven |
@@ -2175,7 +2182,7 @@ silently demoting every later lookup for the session.
 
 ### Voice Control (June 2026)
 
-`Meridian MIC` button (bottom UI) starts an OpenAI Realtime session over WebRTC:
+`Meridian MIC` button (bottom UI) starts an OpenAI Realtime session over WebRTC. Hosted Free, anonymous, and budget-exhausted sessions keep MIC disabled and open the existing upgrade / sign-in / budget modal — they never request `/api/realtime/token`. A Pro token 404/503 is a single “Voice is not available on this host yet” / “Voice is not configured” line, not a generic ERROR and not a retry storm. Self-host BYOK keeps MIC enabled.
 
 - **Token flow**: browser fetches a short-lived client secret from `/api/realtime/token`. Shared handlers in `src/voice/openaiApi.js` hold `OPENAI_API_KEY` and post the full session config (instructions, tool schemas, VAD, truncation) to `api.openai.com/v1/realtime/client_secrets`. Vite middleware and Vercel Node (`api/realtime/token.js`) use the same handler. Hosted/Vercel minting fails closed unless Clerk is configured and the user is Pro; local self-host without Clerk stays BYOK. SDP exchange goes directly to `api.openai.com/v1/realtime/calls` with the ephemeral token.
 - **Session defaults** (env-tunable): model `gpt-realtime-2` (or `gpt-realtime-2.1-mini` when the MINI tier is selected — see the model-tier entry below), voice `marin`, reasoning effort `low`, semantic VAD with low eagerness, no response interruption, context window truncated to ~3,000 post-instruction tokens with 0.5 retention ratio — the conversational window stays short because map state is fetched live per turn.

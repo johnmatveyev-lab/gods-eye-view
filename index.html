@@ -131,6 +131,9 @@
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
+    <button id="earthquake-list-toggle" type="button" aria-label="Quakes" title="Recent earthquakes" aria-expanded="false" aria-controls="earthquake-list-panel" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">landslide</span>
+    </button>
   </nav>
   <div id="measure-readout" hidden>
     <span id="measure-readout-label">Click two globe points</span>
@@ -159,6 +162,16 @@
         <div class="launches-panel-empty">LOADING 30-DAY MISSION INDEX</div>
       </div>
     </div>
+  </aside>
+  <aside id="earthquake-list-panel" hidden>
+    <div class="earthquake-list-header">
+      <div>
+        <strong>QUAKES</strong>
+        <span>USGS · 24H · M2.5+</span>
+      </div>
+      <output id="earthquake-list-count" data-earthquake-list-count>—</output>
+    </div>
+    <div id="earthquake-list" class="earthquake-list" role="list" aria-live="polite"></div>
   </aside>
   <div id="global-loading-status" role="status" aria-live="polite" aria-atomic="true" hidden>
     <span id="global-loading-label">LOADING LIVE DATA</span>
@@ -516,6 +529,16 @@
           <button class="pp-mode-btn" id="units-mi" data-units="mi" role="radio" aria-checked="false">mi</button>
         </div>
       </div>
+      <div class="pp-slider-row visible" id="alt-band-row">
+        <span class="pp-slider-mini-label">Alt</span>
+        <div class="pp-mode-seg alt-band-seg" role="radiogroup" aria-label="Flight altitude band">
+          <button class="pp-mode-btn active" id="alt-band-all" data-alt-band="all" role="radio" aria-checked="true">All</button>
+          <button class="pp-mode-btn" id="alt-band-surface" data-alt-band="surface" role="radio" aria-checked="false">Surface</button>
+          <button class="pp-mode-btn" id="alt-band-lt10k" data-alt-band="lt10k" role="radio" aria-checked="false">&lt;3.0 km</button>
+          <button class="pp-mode-btn" id="alt-band-mid" data-alt-band="mid" role="radio" aria-checked="false">3.0 km–9.1 km</button>
+          <button class="pp-mode-btn" id="alt-band-gt30k" data-alt-band="gt30k" role="radio" aria-checked="false">&gt;9.1 km</button>
+        </div>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="scale-bar-toggle" title="Scale bar — on-globe distance in the current unit" aria-pressed="true">
@@ -640,6 +663,12 @@
       <button class="pp-toggle-btn" id="grid-toggle" type="button" title="Lat/lon grid" aria-pressed="false" aria-label="Lat/lon grid">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">grid_on</span>
         <span class="pp-label">Grid</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="crosshair-toggle" title="Crosshair — mark the camera-center aim point" aria-pressed="false">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">add</span>
+        <span class="pp-label">Crosshair</span>
       </button>
     </div>
     <button class="pp-toggle-btn" id="clean-view-toggle" title="Hide UI chrome">
@@ -829,6 +858,14 @@
           <output id="datacenter-in-view-count" aria-live="polite">0</output>
         </div>
         <div id="datacenter-in-view-items" class="in-view-site-list-items" role="list"></div>
+        <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
+      </div>
+      <div id="dams-in-view" class="in-view-site-list" hidden>
+        <div class="in-view-site-list-header">
+          <strong>DAMS IN VIEW</strong>
+          <output id="dams-in-view-count" aria-live="polite">0</output>
+        </div>
+        <div id="dams-in-view-items" class="in-view-site-list-items" role="list"></div>
         <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
       </div>
     </div>

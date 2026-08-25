@@ -243,7 +243,7 @@ test('both flight layers keep a converted contact 2D and visible (render invaria
     // 2. The billboard is never hidden by that suppression — it must keep
     //    satisfying the getNearby/getDetectableObjects visibility guards, so a
     //    converted contact still works in Contacts and Cockpit.
-    assert.match(source, /if \(bb && id !== _trackedIcao\) bb\.show = true;|if \(modelled && id !== _trackedIcao\) modelled\.show = true;/,
+    assert.match(source, /if \(bb && id !== _trackedIcao\) (?:bb\.show = true|_revealUntrackedBillboard\(id, bb\));|if \(modelled && id !== _trackedIcao\) modelled\.show = true;/,
       `${name}: converting restores the billboard the model handoff had hidden`);
 
     // 3. Every aircraftIcon() CALL SITE routes through the kind resolver, so no

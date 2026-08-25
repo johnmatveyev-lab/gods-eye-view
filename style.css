@@ -152,6 +152,40 @@ html, body {
   pointer-events: none;
 }
 
+/* Camera-center plus — same CSS-pixel center copy-coords / measure pick.
+   Not a Cesium layer. Clean view may keep it; credits stay on. */
+#camera-crosshair {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 8;
+  pointer-events: none;
+}
+#camera-crosshair[hidden] {
+  display: none;
+}
+#camera-crosshair::before,
+#camera-crosshair::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 0 1px rgba(10, 10, 15, 0.55);
+  pointer-events: none;
+}
+#camera-crosshair::before {
+  width: 16px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+}
+#camera-crosshair::after {
+  width: 1px;
+  height: 16px;
+  transform: translate(-50%, -50%);
+}
+
 /* The detection surface is host-owned but parented into #cesiumContainer
    (position:absolute, z-index:auto — NOT a stacking context) so its
    `mix-blend-mode: screen` composites against the WebGL scene. z5 keeps it
@@ -1541,6 +1575,17 @@ body.recording-mode #scale-bar {
 .pp-mode-btn + .pp-mode-btn { border-left: 1px solid rgba(255, 255, 255, 0.14); }
 .pp-mode-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
 .pp-mode-btn.active { background: var(--accent); color: #000; }
+#alt-band-row { align-items: flex-start; }
+.alt-band-seg {
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+.alt-band-seg .pp-mode-btn {
+  flex: 1 1 28%;
+  min-width: 0;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
 
 #clean-view-toggle {
   width: var(--pp-expanded-width);
@@ -1574,6 +1619,7 @@ body.ui-clean-view #top-center-actions,
 body.ui-clean-view #measure-readout,
 body.ui-clean-view #installations-viewport-list,
 body.ui-clean-view #launches-panel,
+body.ui-clean-view #earthquake-list-panel,
 body.ui-clean-view #global-loading-status,
 body.ui-clean-view #traffic-sync-chip,
 body.ui-clean-view #cctv-sync-chip,
@@ -2506,6 +2552,96 @@ body.ui-clean-view #scene-runtime.active {
 }
 #top-center-actions #camera-coords-copy .material-symbols-outlined {
   font-size: 16px;
+}
+
+#earthquake-list-panel {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 120px));
+  padding: 10px 10px 8px;
+  transform: translateX(-50%);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-secondary);
+}
+#earthquake-list-panel[hidden] { display: none; }
+.earthquake-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.earthquake-list-header strong {
+  display: block;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+.earthquake-list-header span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.earthquake-list-header output {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+.earthquake-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.earthquake-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.earthquake-list-item:hover,
+.earthquake-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+}
+.earthquake-list-item strong {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.earthquake-list-item span {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.earthquake-list-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
 }
 
 #global-loading-status {
@@ -4512,12 +4648,12 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-help span { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
-  #title-bar, #style-indicator, #top-center-actions, #installations-viewport-list, #launches-panel, #traffic-sync-chip, #cctv-sync-chip,
+  #title-bar, #style-indicator, #top-center-actions, #installations-viewport-list, #launches-panel, #earthquake-list-panel, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 body.cockpit-mode :is(#measure-toggle, #measure-readout) {
@@ -5308,6 +5444,82 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .data-toggle-list::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, rgba(0, 212, 255, 0.65), rgba(0, 212, 255, 0.2));
   border-radius: 999px;
+}
+
+/* Existing OSM dams payload — in-view list + fly-to. Independent of datacenters. */
+#dams-in-view.in-view-site-list {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#dams-in-view[hidden] {
+  display: none;
+}
+
+#dams-in-view .in-view-site-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#dams-in-view .in-view-site-list-header strong {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+#dams-in-view .in-view-site-list-header output {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+#dams-in-view .in-view-site-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#dams-in-view .in-view-site-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#dams-in-view .in-view-site-list-item:hover,
+#dams-in-view .in-view-site-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--text-primary);
+}
+
+#dams-in-view .in-view-site-list-empty {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 2px 6px;
+}
+
+#dams-in-view .in-view-site-list-credit {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
 }
 
 .data-toggle-row {
@@ -7736,6 +7948,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #fires-panel.collapsed .fires-list,
 #fires-panel.collapsed .fires-list-meta,
 #fires-panel.collapsed .fires-list-ack,
+#data-panel.collapsed #datacenter-in-view,
+#data-panel.collapsed #dams-in-view,
 #global-context-panel.collapsed #radio-panel,
 #global-context-panel.collapsed #military-awareness-panel,
 #global-context-panel.collapsed .global-context-actions,
@@ -7804,6 +8018,7 @@ body.recording-mode #top-center-actions,
 body.recording-mode #measure-readout,
 body.recording-mode #installations-viewport-list,
 body.recording-mode #launches-panel,
+body.recording-mode #earthquake-list-panel,
 body.recording-mode #global-loading-status,
 body.recording-mode #traffic-sync-chip,
 body.recording-mode #cctv-sync-chip,
@@ -7829,7 +8044,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 body.scene-playback-mode :is(#measure-toggle, #measure-readout) {

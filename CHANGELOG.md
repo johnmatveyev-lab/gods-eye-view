@@ -7,6 +7,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Hosted MIC stays locked for Free, anonymous, and exhausted sessions and
+  reuses the existing upgrade / sign-in / budget modal. A 404/503 token
+  response shows “Voice is not available on this host yet” or
+  “Voice is not configured” instead of a generic ERROR. Self-host BYOK MIC
+  is unchanged. Token and HUD mint handlers are not modified in this slice.
 - Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
   the Radio layer also silences it. Starting a station unmutes. Compact
   Context and Cockpit transports now expose the same control. No voice ducking
@@ -29,6 +34,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   geodesic line and show the distance in the current `km | nm | mi` units.
   Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
   points only — no person-search, OpenSky, Google News, or TeleGeography.
+- Hosted Data Layers now list in-view OSM dams from the existing bundled
+  payload (cap 50). Clicking a row flies to those coords using the layer's
+  current stem-click camera. Empty or off yields an empty list. The
+  datacenter roster stays independent. No new Overpass fetch. © OpenStreetMap
+  credit is unchanged.
+- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
+  a row to fly to that event (cap 50). Empty or failed feed shows
+  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
+- Flights layer has a client-side altitude band (All / Surface / &lt;10k /
+  10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
+  the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
+  `meridian.altBand`. Empty bands show an empty layer. No `/api`.
+- Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
+  camera-center aim point copy-coords and measure already use. Default off.
+  Persists as `meridian.crosshair`. Clean view may keep it; credits stay
+  on. Not a Cesium layer, not a geo entity, and no `/api`.
 - Added a left-stack **FIRES** list from the existing trailing-24h NASA FIRMS
   payload (`/api/firms` `fires[]`). Up to 50 detections nearest the camera;
   clicking a row flies there with the current world-focus helper. Keyless 503
