@@ -257,6 +257,7 @@ test('unknown and forbidden option fields are ignored while missing options use 
     models3d: true,
     models3dMode: 'all',
     headingSectors: 'NESW',
+    hideStale: false,
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
@@ -616,6 +617,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     models3d: false,
     models3dMode: 'proximity',
     headingSectors: 'NESW',
+    hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
   }]);
@@ -623,6 +625,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     models3d: false,
     models3dMode: 'proximity',
     headingSectors: 'NESW',
+    hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
   }]);
@@ -1054,6 +1057,7 @@ test('later explicit params during init replace options without cancelling visib
     models3d: false,
     models3dMode: 'proximity',
     headingSectors: 'NESW',
+    hideStale: false,
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
@@ -1102,6 +1106,7 @@ test('explicit navigation preserves unrelated visibility and option restoration'
     models3d: true,
     models3dMode: 'all',
     headingSectors: 'NESW',
+    hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
   }]);
@@ -1161,6 +1166,7 @@ test('startup gesture clears passive Follow but preserves slow layer and display
   assert.deepEqual(manager.getLayerParams('flights'), {
     models3d: true,
     models3dMode: 'all',
+    hideStale: false,
     irBoost: true,
     headingSectors: 'NESW',
     selectedFlightsTrackingId: null,
@@ -1228,6 +1234,7 @@ test('shared flight selection is deferred until destination refresh and then fol
     models3d: true,
     models3dMode: 'proximity',
     headingSectors: 'NESW',
+    hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
   }]);

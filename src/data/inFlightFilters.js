@@ -3,6 +3,9 @@
  * in-flight plans (watchlist / altitude / squawk / airborne / speed /
  * climb / class / stale / airline prefix) compose here as AND predicates
  * when they register, instead of each rewriting billboard.show.
+ *
+ * Hide stale is feed-health (missed polls), not a kinematic band. It never
+ * treats the global feed `_backoff` as stale — a 429 must not blank the fleet.
  */
 
 export const HEADING_SECTORS = Object.freeze(['N', 'E', 'S', 'W']);
@@ -22,6 +25,19 @@ let _headingSectors = DEFAULT_HEADING_SECTORS;
 const _extraPredicateHooks = [];
 /** Layers re-apply billboard visibility when the shared sector set changes. */
 const _visibilityListeners = [];
+
+/** Shared Hide stale flag — one flights-option toggle for both fleets. */
+let hideStaleEnabled = false;
+
+const SIBLING_FILTER_EXPORTS = [
+  'passesWatchlistFilter',
+  'passesAltitudeBandFilter',
+  'passesEmergencySquawkFilter',
+  'passesAirborneOnlyFilter',
+  'passesSpeedBandFilter',
+  'passesVerticalRateFilter',
+  'passesClassChipFilter',
+];
 
 export function getHeadingSectors() {
   return _headingSectors;
@@ -110,6 +126,79 @@ export function passesHeadingSectorFilter(trueTrack, sectors) {
   const selected = normalizeHeadingSectors(sectors);
   const flags = selected === null ? DEFAULT_HEADING_SECTORS : selected;
   return flags.includes(sector);
+}
+
+/**
+ * Whether Hide stale is on. Shared by commercial and military layers so one
+ * persisted flights-option toggle governs both fleets.
+ * @returns {boolean}
+ */
+export function getHideStaleEnabled() {
+  return hideStaleEnabled;
+}
+
+/**
+ * Set the shared Hide stale flag.
+ * @param {boolean} next
+ * @returns {boolean} The stored value.
+ */
+export function setHideStaleEnabled(next) {
+  hideStaleEnabled = next === true;
+  return hideStaleEnabled;
+}
+
+/** Test seam: restore the default OFF between cases. */
+export function resetHideStaleEnabledForTest() {
+  hideStaleEnabled = false;
+}
+
+/**
+ * Per-contact missing-polls stale, never the global feed backoff.
+ * `described.stale` ORs `_backoff` and must not be used here — a 429 would
+ * blank the whole fleet.
+ *
+ * @param {object} contact
+ * @param {string} contact.icao24
+ * @param {Map<string, number>|Set<string>|null} [contact.missingPolls]
+ * @param {boolean} [contact.describedStaleFromMissingPolls]
+ * @param {string|null} [contact.trackedIcao]
+ * @param {string|null} [contact.selectedIcao]
+ * @param {boolean} [contact.hideStale]
+ * @returns {boolean} True when the contact should still render.
+ */
+export function passesHideStaleFilter(contact = {}) {
+  const hide = contact.hideStale === true || hideStaleEnabled;
+  if (!hide) return true;
+  const icao24 = String(contact.icao24 || '').trim().toLowerCase();
+  if (!icao24) return true;
+  const tracked = String(contact.trackedIcao || contact.selectedIcao || '').trim().toLowerCase();
+  if (tracked && icao24 === tracked) return true;
+  if (contact.describedStaleFromMissingPolls === true) return false;
+  const missing = contact.missingPolls;
+  if (missing && typeof missing.has === 'function') return !missing.has(icao24);
+  return true;
+}
+
+function siblingPredicates(mod) {
+  return SIBLING_FILTER_EXPORTS
+    .map((name) => mod[name])
+    .filter((fn) => typeof fn === 'function');
+}
+
+/**
+ * AND of Hide stale and any sibling in-flight filters that have landed.
+ * @param {object} contact
+ * @param {object} [options]
+ * @param {object} [options.module] Alternate module object (tests / rebase).
+ * @returns {boolean}
+ */
+export function passesInFlightFilters(contact = {}, options = {}) {
+  if (!passesHideStaleFilter(contact)) return false;
+  const mod = options.module || {};
+  for (const pred of siblingPredicates(mod)) {
+    if (pred(contact, options) === false) return false;
+  }
+  return true;
 }
 
 /**

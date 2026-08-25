@@ -55,6 +55,7 @@ import {
 } from './flightAltitudeBand.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
 import { contactPassesInFlightFilters, normalizeSpeedBand } from './flightSpeedBand.js';
+import * as inFlightFilters from './inFlightFilters.js';
 import {
   screenProjectedRotation,
   stabilizeScreenRotation,
@@ -719,16 +720,26 @@ function _headingAndMatcher(contact) {
   return passesHeadingSectorFilter(contactTrueTrack(contact), getHeadingSectors());
 }
 
+/** PLAN 99 feed-health matcher — missing polls only, never global `_backoff`. */
+function _hideStaleAndMatcher(contact, ctx = {}) {
+  return inFlightFilters.passesHideStaleFilter({
+    icao24: ctx.id || contact?.icao24 || contact?.id,
+    hideStale: inFlightFilters.getHideStaleEnabled(),
+    missingPolls: _missingPolls,
+  });
+}
+
 /**
- * Strict in-flight AND (speed × altitude × heading). Tracked/selected exemption is
- * applied only by `_passesInFlightFilters`, not here — counts stay honest.
+ * Strict in-flight AND (speed × altitude × heading × hide-stale).
+ * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
+ * not here — counts stay honest.
  */
 function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   if (!_headingAndMatcher(info || {})) return false;
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _hideStaleAndMatcher],
   });
 }
 
@@ -790,6 +801,29 @@ const GROUND_FLOOR_WARM_MAX_ALT_M = 4500;
 const GROUND_FLOOR_CLAMP_RADIUS_KM = 150;
 /** @type {Map<string, number>} icao24 -> consecutive missed polls */
 let _missingPolls = new Map();
+
+function _hideStaleRowControls() {
+  const active = inFlightFilters.getHideStaleEnabled();
+  return {
+    chips: [{
+      id: 'hide-stale',
+      label: 'Hide stale',
+      active,
+      title: 'Hide contacts coasting after missed polls. A feed backoff does not hide the live fleet.',
+      params: { hideStale: !active },
+    }],
+  };
+}
+
+/**
+ * Seed missed-poll / backoff state for Hide stale tests. Does not invent a
+ * new heuristic — writes the same maps the poll reconciler already owns.
+ * @param {{missingPolls?: Map<string, number>|Iterable<[string, number]>, backoff?: boolean}} [state]
+ */
+export function _setFlightFeedHealthForTest({ missingPolls, backoff } = {}) {
+  if (missingPolls) _missingPolls = new Map(missingPolls);
+  if (typeof backoff === 'boolean') _backoff = backoff;
+}
 
 /**
  * Cheap equirectangular distance (km) — plenty accurate for the ~150 km
@@ -2856,7 +2890,6 @@ function _fleetTick() {
 
   for (const [icao24, bb] of _billboards) {
     if (icao24 === _trackedIcao) continue; // tracked entity owns its own motion
-
     const info = _flightData.get(icao24);
     if (!_passesInFlightFilters(icao24, info)) {
       if (bb.show) bb.show = false;
@@ -3365,6 +3398,7 @@ function _clearTracking(skipViewerUntrack = false, {
   // cannot read the previous aircraft's cached/smoothed position.
   _resetTrackedDisplay();
   _clearTrail();
+  _applyInFlightFilterVisibility();
 }
 
 function _normalizeTrackedIcao(candidate) {
@@ -4096,7 +4130,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher],
   });
 }
 
@@ -4962,7 +4996,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, headingSectors?: string, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5005,6 +5039,10 @@ const flightsLayer = {
       setHeadingSectors(params.headingSectors);
       _applyInFlightFilterVisibility();
     }
+    if (typeof params.hideStale === 'boolean') {
+      inFlightFilters.setHideStaleEnabled(params.hideStale);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -5028,14 +5066,19 @@ const flightsLayer = {
       models3dMode: _models3dMode,
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
+      hideStale: inFlightFilters.getHideStaleEnabled(),
       selectedFlightsTrackingId: _trackedIcao,
       speedMinKt: _speedMinKt,
       speedMaxKt: _speedMaxKt,
     };
   },
-
   getRowControls() {
-    return { chips: headingSectorChipModels(getHeadingSectors()) };
+    return {
+      chips: [
+        ...headingSectorChipModels(getHeadingSectors()),
+        ..._hideStaleRowControls().chips,
+      ],
+    };
   },
 
   /**
