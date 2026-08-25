@@ -34,6 +34,15 @@ Updated: August 25, 2026
 > `meridian.satInclination`. Hidden when the satellites layer is off.
 > Catalog refresh and group switch keep the chip set. Client-only; no `/api`.
 
+> **2026-08-25 — military geom-only ways (plan 165 leftover)** (`src/data/militaryInstallationData.js`).
+> Overpass `out center tags geom 700` prints `geom` (last geometry mode),
+> so ways in the 200 body have rings and no `center`. `pointFrom` now
+> derives the display pin from finite `geometry` vertices when lat/lon/
+> center are missing, so `normalizeMilitaryInstallations` stores
+> `footprint` and **Footprints only** can keep outlined bases. Nodes
+> without a ring still hide. Selected / class AND unchanged. No query
+> change and no new `/api`.
+
 > **2026-08-25 — military footprints-only toggle (plan 165)** (`src/data/militaryFootprintFilter.js`).
 > **Footprints only** chip on the Mapped Sites list, next to class chips.
 > Default **off** is the current points + polygons view. On hides records

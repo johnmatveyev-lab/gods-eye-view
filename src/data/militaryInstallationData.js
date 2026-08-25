@@ -51,10 +51,39 @@ function finiteLongitude(value) {
   return Number.isFinite(value) && value >= -180 && value <= 180;
 }
 
+/**
+ * Display pin when Overpass omitted lat/lon/center. `out center tags geom N`
+ * is one geometry mode per print; `geom` is last, so ways arrive as rings
+ * with no `center`. Mean of finite vertices, else the first finite vertex.
+ * @param {unknown} geometry
+ * @returns {{latitude: number, longitude: number}|null}
+ */
+function pointFromGeometry(geometry) {
+  if (!Array.isArray(geometry) || !geometry.length) return null;
+  let latSum = 0;
+  let lonSum = 0;
+  let count = 0;
+  let first = null;
+  for (const vertex of geometry) {
+    const latitude = Number(vertex?.lat);
+    const longitude = Number(vertex?.lon);
+    if (!finiteLatitude(latitude) || !finiteLongitude(longitude)) continue;
+    if (!first) first = { latitude, longitude };
+    latSum += latitude;
+    lonSum += longitude;
+    count += 1;
+  }
+  if (!count) return null;
+  const latitude = latSum / count;
+  const longitude = lonSum / count;
+  return finiteLatitude(latitude) && finiteLongitude(longitude) ? { latitude, longitude } : first;
+}
+
 function pointFrom(element) {
   const lat = Number(element?.lat ?? element?.center?.lat);
   const longitude = Number(element?.lon ?? element?.center?.lon);
-  return finiteLatitude(lat) && finiteLongitude(longitude) ? { latitude: lat, longitude } : null;
+  if (finiteLatitude(lat) && finiteLongitude(longitude)) return { latitude: lat, longitude };
+  return pointFromGeometry(element?.geometry);
 }
 
 function footprintFrom(element) {

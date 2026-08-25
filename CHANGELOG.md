@@ -69,6 +69,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Mapped Installations now keep Overpass ways that arrive as `geometry`
+  rings with no `center` (Austin Camp Mabry and the other geom-only
+  barracks). `pointFrom` derives the display pin from the ring so
+  `footprintFrom` can store the outline the **Footprints only** chip
+  already filters. Nodes without a ring still hide when the chip is on.
+  Selected installation and class-chip AND are unchanged. No Overpass
+  query change and no new `/api`.
 - Space Missions PREV/NEXT and the N/M index walk the chip-filtered roster
   (status AND provider), not the full 30-day launch list. Rocket Lab-only is
   `1 / 2` then `2 / 2`; NEXT from Grain Goddess is Lightning God, never the
