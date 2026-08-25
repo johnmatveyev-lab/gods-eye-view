@@ -1350,6 +1350,44 @@ body.recording-mode #scale-bar {
   white-space: nowrap;
 }
 
+#speed-band-row {
+  flex-wrap: wrap;
+}
+
+.pp-speed-band-input {
+  width: 3.6em;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.pp-speed-band-input::-webkit-outer-spin-button,
+.pp-speed-band-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pp-speed-band-input {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.speed-band-sep {
+  color: var(--text-dim);
+  font-size: 10px;
+}
+
+#speed-band-clear {
+  flex: 0 0 auto;
+  min-width: 0;
+  padding: 2px 6px;
+}
+
 .detection-slider-row {
   min-width: 170px;
   padding: 5px 8px 6px;

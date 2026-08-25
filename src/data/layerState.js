@@ -181,6 +181,24 @@ function integerOption(key, token, defaultValue) {
   });
 }
 
+/** Optional non-negative integer. Null (absent) is the default OFF value. */
+function nullableIntegerOption(key, token, defaultValue = null, { max = 9999 } = {}) {
+  const bound = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numeric = typeof value === 'number' ? value : Number(String(value).trim());
+    if (!Number.isInteger(numeric) || numeric < 0 || numeric > max) return null;
+    return numeric;
+  };
+  return Object.freeze({
+    key,
+    token,
+    defaultValue,
+    normalize: bound,
+    encode: (value) => String(Math.trunc(value)),
+    decode: bound,
+  });
+}
+
 const OPTION_GROUPS = Object.freeze({
   flights: Object.freeze([
     // Product invariant 2026-08-22: the fleet's 3D models are DEFAULT-ON in
@@ -209,6 +227,8 @@ const OPTION_GROUPS = Object.freeze({
     }),
     trackingIdOption('selectedFlightsTrackingId', 't', null),
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
+    nullableIntegerOption('speedMinKt', 's', null),
+    nullableIntegerOption('speedMaxKt', 'p', null),
   ]),
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),

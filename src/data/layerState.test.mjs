@@ -257,6 +257,8 @@ test('unknown and forbidden option fields are ignored while missing options use 
     models3dMode: 'all',
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
+    speedMinKt: null,
+    speedMaxKt: null,
   });
   assert.deepEqual(decoded.options.radio, { filter: 'news', volume: 0.35 });
 
@@ -592,8 +594,18 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
   });
   const coordinator = new LayerStateCoordinator(manager, shareSink(), { storage: memoryStorage() });
   await coordinator.start({ shareLayerState: decoded, shareCreatedAtMs: 1_000 });
-  assert.deepEqual(calls.flights, [{ models3d: false, models3dMode: 'proximity' }]);
-  assert.deepEqual(calls.military, [{ models3d: false, models3dMode: 'proximity' }]);
+  assert.deepEqual(calls.flights, [{
+    models3d: false,
+    models3dMode: 'proximity',
+    speedMinKt: null,
+    speedMaxKt: null,
+  }]);
+  assert.deepEqual(calls.military, [{
+    models3d: false,
+    models3dMode: 'proximity',
+    speedMinKt: null,
+    speedMaxKt: null,
+  }]);
   assert.equal(coordinator.getDurableState().options.flights.models3d, false);
   coordinator.destroy();
 });
@@ -1022,6 +1034,8 @@ test('later explicit params during init replace options without cancelling visib
     models3dMode: 'proximity',
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
+    speedMinKt: null,
+    speedMaxKt: null,
   });
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   assert.equal(storage.writes.length, 1);
@@ -1065,6 +1079,8 @@ test('explicit navigation preserves unrelated visibility and option restoration'
   assert.deepEqual(paramsCalls, [{
     models3d: true,
     models3dMode: 'all',
+    speedMinKt: null,
+    speedMaxKt: null,
   }]);
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   coordinator.destroy();
@@ -1124,6 +1140,8 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     models3dMode: 'all',
     irBoost: true,
     selectedFlightsTrackingId: null,
+    speedMinKt: null,
+    speedMaxKt: null,
   });
   assert.deepEqual(manager.getLayerParams('radio'), {
     filter: 'genre:r&b',
@@ -1181,7 +1199,12 @@ test('shared flight selection is deferred until destination refresh and then fol
     onTrackingRestoreStatus: (status) => statuses.push(status),
   });
   await coordinator.start({ shareLayerState: state, shareCreatedAtMs: 1_000 });
-  assert.deepEqual(paramsCalls, [{ models3d: true, models3dMode: 'proximity' }]);
+  assert.deepEqual(paramsCalls, [{
+    models3d: true,
+    models3dMode: 'proximity',
+    speedMinKt: null,
+    speedMaxKt: null,
+  }]);
 
   const result = await coordinator.restoreShareTrackingSelection();
   assert.equal(result.status, 'found');
