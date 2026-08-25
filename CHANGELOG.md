@@ -51,6 +51,7 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   pad when coordinates are present, otherwise the row is only selected.
   Empty or failed payloads use the existing unavailable/empty language and
   do not hang. No new vendor or `/api`.
+- Satellites row can pick a CelesTrak TLE group (stations, weather, visual, GPS, GLONASS, Galileo, GEO). Changing the group refetches `/api/celestrak/<group>` and replaces the layer. The choice persists as `meridian.satGroup` (`stations` default). Invalid groups are not listed. Space Missions still uses `/api/celestrak/active` independently; the Launches panel stays on `/api/launches`. No new `/api`.
 - Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
   Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
   The choice persists as `meridian.power`. Data polls, the idle render
