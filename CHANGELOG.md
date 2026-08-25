@@ -147,6 +147,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   6-hour memory + optional `/tmp` cache and stale-on-failure. Vite forwards
   through `src/data/celestrak.js`. User-Agent is
   `Meridian-celestrak-proxy/1.0 (+https://github.com/johnmatveyev-lab/gods-eye-view)`.
+- Added dedicated Vercel Node functions `api/realtime/token.js` and
+  `api/openai/hud-summary.js` that mint ephemeral OpenAI sessions / HUD
+  summaries with the server `OPENAI_API_KEY`. HUD logic lives in
+  `src/hud/summary.js`. Hosted/Vercel spend fails closed without Clerk +
+  Pro; local self-host BYOK stays. Hosted Free/anonymous MIC is locked to
+  the existing upgrade/sign-in modal. The long-lived key is never injected
+  into the client bundle.
 
 ### Changed
 
