@@ -2915,13 +2915,15 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 11px;
   color: var(--accent);
 }
-.earthquake-depth-chips {
+.earthquake-depth-chips,
+.earthquake-time-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 8px;
 }
-.earthquake-depth-chip {
+.earthquake-depth-chip,
+.earthquake-time-chip {
   padding: 3px 7px;
   border: 1px solid var(--glass-border);
   border-radius: 999px;
@@ -2933,13 +2935,16 @@ body.ui-clean-view #scene-runtime.active {
   text-transform: uppercase;
   cursor: pointer;
 }
-.earthquake-depth-chip.active {
+.earthquake-depth-chip.active,
+.earthquake-time-chip.active {
   border-color: var(--glass-border-hover);
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
 }
 .earthquake-depth-chip:hover,
-.earthquake-depth-chip:focus-visible {
+.earthquake-depth-chip:focus-visible,
+.earthquake-time-chip:hover,
+.earthquake-time-chip:focus-visible {
   border-color: var(--glass-border-hover);
 }
 .earthquake-list {

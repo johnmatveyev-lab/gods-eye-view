@@ -8,10 +8,12 @@ import * as Cesium from 'cesium';
 import {
   DEFAULT_EARTHQUAKE_DEPTH_BANDS,
   DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
+  DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
   EARTHQUAKE_DEPTH_BANDS,
   EARTHQUAKE_MAGNITUDE_FLOORS,
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
+  EARTHQUAKE_TIME_WINDOWS_HOURS,
   USGS_ALL_DAY_URL,
   createEarthquakeOverlayEntry,
   createEarthquakesLayer,
@@ -19,8 +21,10 @@ import {
   filterEarthquakeFeatures,
   filterEarthquakeFeaturesByDepthBands,
   filterEarthquakeFeaturesByMagnitudeFloor,
+  filterEarthquakeFeaturesByTimeWindow,
   isSignificantEarthquake,
   mapAnalystRecord,
+  normalizeEarthquakeTimeWindowHours,
   selectEarthquakeOverlayCohort,
   toggleEarthquakeDepthBand,
 } from './earthquakes.js';
@@ -854,6 +858,257 @@ test('earthquake depth chips default all on and sit next to the magnitude floor'
     );
     assert.equal(layer.setParams({ depthBands: 'bogus' }), false);
     assert.equal(layer.getParams().depthBands, 'D');
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 136: operator time window (client-side, same USGS all_day) ───────────
+
+const HOUR_MS = 60 * 60 * 1000;
+
+function timedFeature(id, mag, ageMs, depthKm = 8.2, time = Date.now() - ageMs) {
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties: { mag, place: String(id), time },
+  };
+}
+
+function makeTimedDay(now) {
+  return {
+    features: [
+      timedFeature('fresh-30m', 3.2, 0.5 * HOUR_MS, 12, now - 0.5 * HOUR_MS),
+      timedFeature('fresh-2h', 5.1, 2 * HOUR_MS, 80, now - 2 * HOUR_MS),
+      timedFeature('mid-8h', 3.6, 8 * HOUR_MS, 12, now - 8 * HOUR_MS),
+      timedFeature('old-20h', 4.8, 20 * HOUR_MS, 12, now - 20 * HOUR_MS),
+      timedFeature('old-shallow-4', 4.1, 20 * HOUR_MS, 15, now - 20 * HOUR_MS),
+      timedFeature('fresh-shallow-4', 4.4, 0.5 * HOUR_MS, 18, now - 0.5 * HOUR_MS),
+      timedFeature('fresh-deep-4', 4.6, 0.5 * HOUR_MS, 410, now - 0.5 * HOUR_MS),
+      {
+        id: 'missing-time',
+        geometry: { coordinates: [-122.4, 37.79, 12] },
+        properties: { mag: 4.0, place: 'missing-time', time: null },
+      },
+      {
+        id: 'nan-time',
+        geometry: { coordinates: [-122.4, 37.79, 12] },
+        properties: { mag: 3.3, place: 'nan-time', time: Number.NaN },
+      },
+    ],
+  };
+}
+
+test('24h matches the current all_day discs and is the default window', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS, 24);
+  assert.deepEqual([...EARTHQUAKE_TIME_WINDOWS_HOURS], [1, 6, 24]);
+  assert.equal(normalizeEarthquakeTimeWindowHours(24), 24);
+  assert.equal(normalizeEarthquakeTimeWindowHours('6'), 6);
+  assert.equal(normalizeEarthquakeTimeWindowHours(12), null);
+
+  const current = filterEarthquakeFeaturesByMagnitudeFloor(MIXED_DAY.features, 2.5)
+    .map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByTimeWindow(MIXED_DAY.features, 24).map((feature) => feature.id),
+    MIXED_DAY.features.map((feature) => feature.id),
+    '24h must not clip the already-24h all_day product',
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_DAY.features, {
+      magnitudeFloor: 2.5,
+      depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+      timeWindowHours: 24,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('1h and 6h drop older events and keep newer ones; missing time stays visible', async () => {
+  const now = 1_800_000_000_000;
+  const day = makeTimedDay(now);
+  const atOne = filterEarthquakeFeaturesByTimeWindow(day.features, 1, now)
+    .map((feature) => feature.id);
+  const atSix = filterEarthquakeFeaturesByTimeWindow(day.features, 6, now)
+    .map((feature) => feature.id);
+  assert.deepEqual(atOne, ['fresh-30m', 'fresh-shallow-4', 'fresh-deep-4', 'missing-time', 'nan-time']);
+  assert.ok(!atOne.includes('fresh-2h') && !atOne.includes('mid-8h') && !atOne.includes('old-20h'));
+  assert.deepEqual(atSix, [
+    'fresh-30m', 'fresh-2h', 'fresh-shallow-4', 'fresh-deep-4', 'missing-time', 'nan-time',
+  ]);
+  assert.ok(!atSix.includes('mid-8h') && !atSix.includes('old-20h'));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(day);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ timeWindowHours: 1 }), true);
+    assert.deepEqual(
+      entityIds(viewer._dataSources[0]),
+      ['fresh-30m', 'fresh-deep-4', 'fresh-shallow-4', 'missing-time', 'nan-time'],
+    );
+    assert.equal(layer.setParams({ timeWindowHours: 6 }), true);
+    assert.deepEqual(
+      entityIds(viewer._dataSources[0]),
+      ['fresh-2h', 'fresh-30m', 'fresh-deep-4', 'fresh-shallow-4', 'missing-time', 'nan-time'],
+    );
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('time-window chip change redraws from cached geojson without a new USGS fetch', async () => {
+  const now = 1_800_000_000_000;
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(makeTimedDay(now));
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({ timeWindowHours: 1 }), true);
+    assert.equal(feed.fetches, 1, 'time chips must not refetch the already-cached all_day feed');
+    assert.ok(entityIds(viewer._dataSources[0]).includes('fresh-30m'));
+    assert.ok(!entityIds(viewer._dataSources[0]).includes('old-20h'));
+    assert.equal(layer.setParams({ timeWindowHours: 6 }), true);
+    assert.equal(feed.fetches, 1);
+    assert.ok(entityIds(viewer._dataSources[0]).includes('fresh-2h'));
+    assert.ok(!entityIds(viewer._dataSources[0]).includes('mid-8h'));
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Mag 4.0+ and Shallow still AND with the time window', async () => {
+  const now = 1_800_000_000_000;
+  const day = makeTimedDay(now);
+  const anded = filterEarthquakeFeatures(day.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 1,
+    now,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['fresh-shallow-4', 'missing-time']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(day);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({
+      magnitudeFloor: 4.0,
+      depthBands: 'S',
+      timeWindowHours: 1,
+    }), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['fresh-shallow-4', 'missing-time']);
+    assert.ok(layer.getListRecords().every((row) => (
+      row.magnitude >= 4.0 && (row.depthKm == null || row.depthKm < 70)
+    )));
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('depth chips stay independent of the time window', async () => {
+  const now = 1_800_000_000_000;
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(makeTimedDay(now));
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.getParams().depthBands, 'SID');
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(layer.setParams({ timeWindowHours: 6 }), true);
+    assert.equal(layer.getParams().depthBands, 'SID', 'time chips must not rewrite depth');
+    assert.equal(layer.getParams().timeWindowHours, 6);
+    assert.equal(layer.setParams({ depthBands: 'S' }), true);
+    assert.equal(layer.getParams().timeWindowHours, 6, 'depth chips must not rewrite the time window');
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('earthquake time chips default 24h and sit next to mag/depth with no new endpoint', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(html, /data-earthquake-time="1"/);
+  assert.match(html, /data-earthquake-time="6"/);
+  assert.match(html, /data-earthquake-time="24"/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(ui, /earthquake-time-chips|data-earthquake-time/);
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const floor = chips.filter((chip) => chip.id.startsWith('floor-'));
+    const time = chips.filter((chip) => chip.id.startsWith('time-'));
+    const depth = chips.filter((chip) => chip.id.startsWith('depth-'));
+    assert.deepEqual(floor.map((chip) => chip.label), ['2.5+', '4.0+', '5.0+', '6.0+']);
+    assert.deepEqual(time.map((chip) => chip.label), ['1h', '6h', '24h']);
+    assert.deepEqual(time.map((chip) => chip.params.timeWindowHours), [1, 6, 24]);
+    assert.equal(time.find((chip) => chip.active)?.label, '24h');
+    assert.ok(time.every((chip) => chip.group === 'Time'));
+    assert.deepEqual(depth.map((chip) => chip.label), ['Shallow', 'Intermediate', 'Deep']);
+    assert.equal(layer.setParams({ timeWindowHours: 1 }), true);
+    assert.equal(
+      layer.getRowControls().chips.filter((chip) => chip.id.startsWith('time-')).find((chip) => chip.active)?.label,
+      '1h',
+    );
+    assert.equal(layer.setParams({ timeWindowHours: 12 }), false);
+    assert.equal(layer.getParams().timeWindowHours, 1);
   } finally {
     layer.destroy(viewer);
   }
