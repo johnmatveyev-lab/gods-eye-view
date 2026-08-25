@@ -14,6 +14,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Changed
 
+- A first hosted visit with no lastView, share-URL layers, or saved layer
+  prefs now starts with the globe plus civilian flights only. Returning
+  lastView / share URLs that include layers, and saved `gev:layer-state:v2`
+  prefs, keep that set. No new `/api` routes or sources. Cables, OpenSky,
+  and Google News stay off.
 - Hosted CCTV frames use the rest catch-all `api/cctv/[...path].js` plus dedicated `frame|stream|media/[id].js` entries so `/api/cctv/frame/:id` is not a Vercel platform 404. The client URL is unchanged. Austin / Caltrans / TfL only.
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
 - Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
@@ -25,6 +30,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   pad when coordinates are present, otherwise the row is only selected.
   Empty or failed payloads use the existing unavailable/empty language and
   do not hang. No new vendor or `/api`.
+- Added a DISPLAY Power control (`Normal` | `Low`). Low caps the existing
+  Cesium `targetFrameRate` at 30; Normal restores the current 60 default.
+  The choice persists as `meridian.power`. Data polls, the idle render
+  governor, and required credits are unchanged. Clean view still keeps
+  Google Maps and Data attribution on screen.
 - Added a camera-center lat,lon copy control next to Copy view link. It shows
   the pose already computed from `positionCartographic` (same source as the
   share URL) and copies numeric `lat,lon` for a Slack pin. `lon,lat` is kept

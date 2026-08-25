@@ -18,7 +18,8 @@
 // literal:
 //
 //   • the first-run VALUE, at every surface that independently decides it — a
-//     fresh boot runs no restore, so these literals ARE the startup state and
+//     first-visit restore now enables flights, but these literals ARE still the
+//     pre-restore startup state and
 //     changing one alone ships a UI that disagrees with its own engine;
 //   • explicit state still WINS over it — a link, or the operator's own hand,
 //     because "default" means "what you get when you said nothing";
