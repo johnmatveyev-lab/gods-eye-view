@@ -28,6 +28,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted aircraft-trace functions `api/adsblol/trace.js` (real
   adsb.lol tar1090 proxy) and `api/opensky-track.js` (hard 410, no OpenSky
   fetch). Vite forwards to `src/data/trackBackfill.js`.
+- Added dedicated hosted `GET /api/adsblol/mil` (`api/adsblol/mil.js`) for
+  the adsb.lol military feed (ODbL). The Vite plugin forwards to
+  `src/data/adsblolMil.js`: 12s memory cache, stale-on-error, User-Agent
+  `Meridian-adsblol-proxy/1.0`. This extract does not wrap AIS or enable OpenSky.
 
 ### Fixed
 

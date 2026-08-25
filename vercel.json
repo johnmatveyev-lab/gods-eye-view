@@ -29,6 +29,9 @@
     },
     "api/opensky-track.js": {
       "maxDuration": 10
+    },
+    "api/adsblol/mil.js": {
+      "maxDuration": 15
     }
   }
 }

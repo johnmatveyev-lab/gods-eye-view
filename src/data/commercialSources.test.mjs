@@ -56,6 +56,7 @@ test('flights proxy plugin is still installed for the compatibility path', () =>
   const config = createViteConfig({ mode: 'test' });
   const byName = new Map(config.plugins.map((plugin) => [plugin.name, plugin]));
   assert.equal(typeof byName.get('opensky-proxy')?.configureServer, 'function');
+  assert.equal(typeof byName.get('adsblol-proxy')?.configureServer, 'function');
   assert.equal(typeof byName.get('meridian-billing')?.configureServer, 'function');
 });
 
