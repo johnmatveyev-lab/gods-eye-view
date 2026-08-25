@@ -2749,7 +2749,7 @@ body.ui-clean-view #scene-runtime.active {
   text-align: center;
 }
 
-/* Camera-center lat,lon readout. Coordinates only — no height, so no units toggle. */
+/* Camera-center lat,lon + MGRS readout. Coordinates only — no height, so no units toggle. */
 #camera-coords {
   display: flex;
   align-items: center;
@@ -2771,12 +2771,21 @@ body.ui-clean-view #scene-runtime.active {
   background: transparent;
   transform: none;
 }
-#top-center-actions #camera-coords-value {
+#top-center-actions #camera-coords-value,
+#top-center-actions #camera-coords-mgrs {
   padding: 0 4px;
   font: 600 11px "JetBrains Mono", ui-monospace, monospace;
   letter-spacing: 0.02em;
   color: var(--text-secondary);
   white-space: nowrap;
+}
+#top-center-actions #camera-coords-mgrs {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+}
+#top-center-actions #camera-coords-mgrs[hidden] {
+  display: none;
 }
 #top-center-actions #camera-coords-copy {
   width: 28px;

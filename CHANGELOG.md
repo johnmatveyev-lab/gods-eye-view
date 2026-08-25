@@ -33,6 +33,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added an MGRS line next to the camera-center lat,lon readout. It uses the
+  existing `mgrs` package on the same `positionCartographic` pair Copy coords
+  already shows, updates as the pointer moves, and is included on the existing
+  Copy coords clipboard (no second control). Polar or undefined conversions
+  stay blank — no fake grid. No `/api`.
 - Added a Share view QR control next to Copy view link. It opens a popover
   with an in-page QR of the current camera+layers share URL (same
   `currentShareUrl()` helper Copy view link copies). No shortener, upload,
