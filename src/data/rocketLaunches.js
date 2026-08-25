@@ -24,6 +24,19 @@ import {
   subscribeLaunchStatusFilter,
   toggleLaunchStatusFilter,
 } from './launchStatusFilter.js';
+import {
+  DEFAULT_LAUNCH_PROVIDER_FILTER,
+  filterLaunchesByProvider,
+  getLaunchProviderFilter,
+  hydrateLaunchProviderFilter,
+  launchPassesProviderFilter,
+  launchProviderChipLabel,
+  launchProviderFilterFlags,
+  listLaunchProviderChipIds,
+  setLaunchProviderFilter,
+  subscribeLaunchProviderFilter,
+  toggleLaunchProviderFilter,
+} from './launchProviderFilter.js';
 
 const WINDOW_DAYS = 30;
 const API_URL = '/api/launches';
@@ -106,6 +119,7 @@ let _launchPadZoneRemover = null;
 let _launchPadZoneLaunchId = null;
 const _missionOrbitPrimitives = new Map();
 let _statusFilterUnsubscribe = null;
+let _providerFilterUnsubscribe = null;
 
 const REPLAY_ASCENT_FALLBACK_SEC = 12;
 const REPLAY_ASCENT_MIN_SEC = 8;
@@ -770,18 +784,38 @@ export function missionDataCompleteness(launch = {}) {
 }
 
 /**
+ * Status chips AND provider chips. A selected mission stays visible
+ * even when either of its chips is off.
+ * @param {object|null|undefined} launch
+ * @param {unknown} statusFilter
+ * @param {unknown} providerFilter
+ * @param {string|null} [selectedLaunchId]
+ * @returns {boolean}
+ */
+function launchVisibleInRoster(launch, statusFilter, providerFilter, selectedLaunchId = null) {
+  return launchPassesStatusFilter(launch, statusFilter, selectedLaunchId)
+    && launchPassesProviderFilter(launch, providerFilter, selectedLaunchId);
+}
+
+/**
  * Build a data-rich roster while preserving the source-array index
  * used by mission selection and Previous/Next navigation.
  * @param {Array<object>} launches Normalized launch records.
- * @param {{statusFilter?: unknown, selectedLaunchId?: string|null}} [options]
+ * @param {{statusFilter?: unknown, providerFilter?: unknown, selectedLaunchId?: string|null}} [options]
  * @returns {Array<{launch: object, index: number}>}
  */
 export function missionRosterEntries(launches, options = {}) {
   const statusFilter = options.statusFilter ?? DEFAULT_LAUNCH_STATUS_FILTER;
+  const providerFilter = options.providerFilter ?? DEFAULT_LAUNCH_PROVIDER_FILTER;
   const selectedLaunchId = options.selectedLaunchId ?? null;
   return (launches || [])
     .map((launch, index) => ({ launch, index }))
-    .filter(({ launch }) => launchPassesStatusFilter(launch, statusFilter, selectedLaunchId))
+    .filter(({ launch }) => launchVisibleInRoster(
+      launch,
+      statusFilter,
+      providerFilter,
+      selectedLaunchId,
+    ))
     .sort((a, b) => {
       const completeness = missionDataCompleteness(b.launch) - missionDataCompleteness(a.launch);
       if (completeness !== 0) return completeness;
@@ -1067,9 +1101,10 @@ function syncMissionOverlayEntries() {
   _missionOverlayHost.setVisible(ROCKET_MISSION_SELECTED_OVERLAY_SOURCE_ID, false);
   _selectedMissionOverlayTimeText = null;
   const statusFilter = getLaunchStatusFilter();
+  const providerFilter = getLaunchProviderFilter();
   const entries = selectRocketMissionMarkerOverlayCohort(
     Array.from(_missionOverlayRecords.values(), (record) => {
-      if (!launchPassesStatusFilter(record.launch, statusFilter, _selectedLaunchId)) return null;
+      if (!launchVisibleInRoster(record.launch, statusFilter, providerFilter, _selectedLaunchId)) return null;
       const entry = createRocketMissionMarkerOverlayEntry(
         record.launch,
         record.anchorPosition,
@@ -2345,9 +2380,23 @@ function syncLaunchStatusChips() {
   }
 }
 
+function syncLaunchProviderChips() {
+  if (!_missionRoster) return;
+  const host = _missionRoster.querySelector('[data-mission-provider-chips]');
+  if (!host) return;
+  const chipIds = listLaunchProviderChipIds(_launches);
+  const flags = launchProviderFilterFlags(getLaunchProviderFilter(), chipIds);
+  host.innerHTML = chipIds.map((id) => {
+    const active = flags[id] === true;
+    const label = launchProviderChipLabel(id);
+    return `<button type="button" class="space-mission-provider-chip${active ? ' active' : ''}" data-mission-provider-chip="${escapeMissionText(id)}" aria-pressed="${String(active)}">${escapeMissionText(label)}</button>`;
+  }).join('');
+}
+
 function syncLaunchEntityVisibility() {
   if (!_dataSource) return;
-  const filter = getLaunchStatusFilter();
+  const statusFilter = getLaunchStatusFilter();
+  const providerFilter = getLaunchProviderFilter();
   for (const entity of _dataSource.entities.values) {
     const relatedId = entityLaunchId(entity);
     if (_selectedLaunchId) {
@@ -2358,10 +2407,14 @@ function syncLaunchEntityVisibility() {
     entity.show = Boolean(
       entity.id.startsWith('rocket-launch:')
       && launch
-      && launchPassesStatusFilter(launch, filter),
+      && launchVisibleInRoster(launch, statusFilter, providerFilter),
     );
   }
-  _count = filterLaunchesByStatus(_launches, filter, _selectedLaunchId).length;
+  _count = filterLaunchesByProvider(
+    filterLaunchesByStatus(_launches, statusFilter, _selectedLaunchId),
+    providerFilter,
+    _selectedLaunchId,
+  ).length;
   syncMissionOrbitPrimitiveVisibility();
 }
 
@@ -2370,6 +2423,7 @@ function applyLaunchStatusFilterPresentation() {
   syncLaunchEntityVisibility();
   syncMissionOverlayEntries();
   syncLaunchStatusChips();
+  syncLaunchProviderChips();
 }
 
 function renderMissionRoster() {
@@ -2378,13 +2432,14 @@ function renderMissionRoster() {
   const count = _missionRoster.querySelector('[data-mission-roster-count]');
   const entries = missionRosterEntries(_launches, {
     statusFilter: getLaunchStatusFilter(),
+    providerFilter: getLaunchProviderFilter(),
     selectedLaunchId: _selectedLaunchId,
   });
   if (count) count.textContent = `${entries.length} / 30D`;
   if (!list) return;
   if (!entries.length) {
     list.innerHTML = _launches.length
-      ? '<div class="space-mission-roster-empty">NO MISSIONS MATCH THE SELECTED STATUS FILTER</div>'
+      ? '<div class="space-mission-roster-empty">NO MISSIONS MATCH THE SELECTED FILTERS</div>'
       : '<div class="space-mission-roster-empty">NO MISSIONS AVAILABLE IN THE CURRENT 30-DAY WINDOW</div>';
     return;
   }
@@ -2569,7 +2624,7 @@ function focusLaunchSite(launch) {
 }
 
 function createMissionPanel() {
-  if (_missionPanel || typeof document === 'undefined') return;
+  if (typeof document === 'undefined') return;
   const host = document.getElementById('space-mission-panel-host')
     || document.getElementById('right-context-rail');
   if (!host) return;
@@ -2577,6 +2632,16 @@ function createMissionPanel() {
   if (_missionRoster) {
     _missionRoster.onclick = (event) => {
       const target = event.target instanceof Element ? event.target : null;
+      const providerChip = target?.closest('[data-mission-provider-chip]');
+      if (providerChip) {
+        setLaunchProviderFilter(toggleLaunchProviderFilter(
+          getLaunchProviderFilter(),
+          providerChip.dataset.missionProviderChip
+            || providerChip.getAttribute('data-mission-provider-chip'),
+          listLaunchProviderChipIds(_launches),
+        ));
+        return;
+      }
       const chip = target?.closest('[data-mission-status-chip]');
       if (chip) {
         setLaunchStatusFilter(toggleLaunchStatusFilter(
@@ -2607,6 +2672,7 @@ function createMissionPanel() {
       if (!_missionRoster.contains(event.relatedTarget)) clearMissionRosterHover();
     };
   }
+  if (_missionPanel) return;
   _missionPanel = document.createElement('aside');
   _missionPanel.id = 'space-mission-panel';
   _missionPanel.className = 'context-space-mission-detail';
@@ -3496,8 +3562,12 @@ const rocketLaunchesLayer = {
     _viewer = viewer;
     _enabled = false;
     hydrateLaunchStatusFilter();
+    hydrateLaunchProviderFilter();
     if (!_statusFilterUnsubscribe) {
       _statusFilterUnsubscribe = subscribeLaunchStatusFilter(applyLaunchStatusFilterPresentation);
+    }
+    if (!_providerFilterUnsubscribe) {
+      _providerFilterUnsubscribe = subscribeLaunchProviderFilter(applyLaunchStatusFilterPresentation);
     }
     createMissionPanel();
     createReplayVehicleOverlay();
@@ -3647,6 +3717,8 @@ const rocketLaunchesLayer = {
     _dataManager = null;
     _statusFilterUnsubscribe?.();
     _statusFilterUnsubscribe = null;
+    _providerFilterUnsubscribe?.();
+    _providerFilterUnsubscribe = null;
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },
