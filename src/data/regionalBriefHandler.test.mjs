@@ -296,7 +296,7 @@ test('handler sources stay GDELT + Open-Meteo; Google News / OpenSky stay out', 
   for (const source of [handler, wrapper]) {
     assert.doesNotMatch(source, /news\.google\.com/);
     assert.doesNotMatch(source, /opensky-network\.org/);
-    assert.doesNotMatch(source, /telegeography/i);
+    assert.doesNotMatch(source, /submarine-cable-map|telegeography\.com/i);
     assert.doesNotMatch(source, /quantum-earth/i);
   }
   assert.match(handler, /api\.gdeltproject\.org/);

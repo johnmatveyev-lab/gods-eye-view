@@ -6,7 +6,7 @@
  *   - Weather: Open-Meteo (CC BY 4.0)
  *   - News: GDELT Project DOC 2.0 only
  *
- * Google News RSS, OpenSky, and TeleGeography are never queried.
+ * Google News RSS is never queried.
  * Vite and Vercel both forward to `handleRegionalBrief`.
  */
 
