@@ -282,6 +282,10 @@ const OPTION_GROUPS = Object.freeze({
       encode: (value) => parseCallsignPrefixes(value).join('-'),
       decode: (value) => formatCallsignPrefixField(String(value || '').split('-')),
     }),
+    // `c` is PLAN 100 callsign prefixes. Rate uses y/l/d so share tokens stay unique.
+    booleanOption('showClimb', 'y', true),
+    booleanOption('showLevel', 'l', true),
+    booleanOption('showDescent', 'd', true),
   ]),
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),
