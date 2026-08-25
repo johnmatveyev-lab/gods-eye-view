@@ -34,7 +34,7 @@ function orbitsChip() {
 }
 
 function catalogChip() {
-  return satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'catalog');
+  return satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'catalog-dense');
 }
 
 async function settleDense(maxTicks = 50) {
@@ -57,7 +57,11 @@ test('ORBITS chip is stateless and only writes showOrbits', () => {
     assert.deepEqual(chip.params, { showOrbits: false });
     assert.equal(Object.hasOwn(chip.params, 'catalog'), false);
     assert.equal(Object.hasOwn(chip.params, 'satGroup'), false);
-    assert.ok(catalogChip(), 'DENSE catalog chip is unchanged');
+    assert.ok(catalogChip(), 'Core | Dense catalog chips stay on the row');
+    assert.ok(
+      satellitesLayer.getRowControls().chips.some((entry) => entry.id === 'catalog-core'),
+      'Core chip is present',
+    );
     assert.ok(
       (satellitesLayer.getRowControls().selects || []).some((entry) => entry.id === 'sat-group'),
       'Plan 65 CelesTrak group picker stays on the row',

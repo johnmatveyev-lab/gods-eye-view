@@ -33,14 +33,18 @@ const DENSE_TLE = tleFor('44444', 'STARLINK-TEST');
 const ALT_TLE = tleFor('33333', 'DRIFTER-1');
 const ISS_TLE = tleFor('25544', 'ISS (ZARYA)');
 
-/** Poll the chip until the async dense load settles (or give up). */
+function catalogChip(id) {
+  return satellitesLayer.getRowControls().chips.find((entry) => entry.id === id);
+}
+
+/** Poll Dense until the async load settles (or give up). */
 async function settleChip(maxTicks = 50) {
   for (let i = 0; i < maxTicks; i++) {
-    const chip = satellitesLayer.getRowControls().chips[0];
+    const chip = catalogChip('catalog-dense');
     if (chip && !chip.busy) return chip;
     await new Promise((resolve) => setTimeout(resolve, 1));
   }
-  return satellitesLayer.getRowControls().chips[0];
+  return catalogChip('catalog-dense');
 }
 
 /** Every CelesTrak group the catalog ingests, plus the dense-mode tag. */
@@ -210,21 +214,25 @@ test('the legend drops zero and negative counts', () => {
   assert.deepEqual(satelliteClassLegend(null), []);
 });
 
-test('the DENSE row chip is stateless and declares the params to apply', () => {
-  // The chip never carries its own state: it declares the params to apply, so
+test('the Core | Dense chips are stateless and declare the params to apply', () => {
+  // The chips never carry their own state: they declare the params to apply, so
   // whatever else drives the catalog param (Space Missions capture/restore)
-  // stays authoritative. Whether it reads ACTIVE is decided by the dense LOAD,
-  // not the param — see the load-lifecycle tests below.
+  // stays authoritative. Whether Dense reads ACTIVE is decided by the dense
+  // LOAD, not the param — see the load-lifecycle tests below.
   try {
     _setDenseCatalogStateForTest({});
-    const chip = satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'catalog');
-    assert.equal(chip.id, 'catalog');
-    assert.equal(chip.label, 'DENSE');
-    assert.equal(chip.active, false);
-    assert.equal(chip.busy, false);
-    assert.equal(chip.state, 'idle');
-    assert.deepEqual(chip.params, { catalog: 'dense' }, 'clicking from core requests dense');
-    assert.ok(chip.title.length > 0, 'the chip explains itself on hover');
+    const core = catalogChip('catalog-core');
+    const dense = catalogChip('catalog-dense');
+    assert.equal(core.label, 'Core');
+    assert.equal(core.active, true);
+    assert.deepEqual(core.params, { catalog: 'core' });
+    assert.equal(dense.id, 'catalog-dense');
+    assert.equal(dense.label, 'Dense');
+    assert.equal(dense.active, false);
+    assert.equal(dense.busy, false);
+    assert.equal(dense.state, 'idle');
+    assert.deepEqual(dense.params, { catalog: 'dense' }, 'clicking Dense requests dense');
+    assert.ok(dense.title.length > 0, 'the chip explains itself on hover');
   } finally {
     _clearDenseCatalogStateForTest();
   }
@@ -234,7 +242,7 @@ test('an invalid catalog mode is rejected without disturbing the chip', () => {
   satellitesLayer.setParams({ catalog: 'core' });
   satellitesLayer.setParams({ catalog: 'everything' });
   assert.equal(satellitesLayer.getParams().catalog, 'core');
-  const chip = satellitesLayer.getRowControls().chips.find((entry) => entry.id === 'catalog');
+  const chip = catalogChip('catalog-dense');
   assert.equal(chip.active, false);
 });
 
@@ -249,17 +257,19 @@ test('DENSE reports loading, then ACTIVE only once the points exist', async () =
     satellitesLayer.setParams({ catalog: 'dense' });
     // The param flips synchronously, but the shell has not arrived yet — the
     // chip must say BUSY, never ACTIVE.
-    const pending = satellitesLayer.getRowControls().chips[0];
+    const pending = catalogChip('catalog-dense');
     assert.equal(pending.busy, true);
     assert.equal(pending.disabled, true);
     assert.equal(pending.active, false, 'never active before the points exist');
     assert.equal(pending.state, 'loading');
+    assert.equal(catalogChip('catalog-core').active, false, 'Core is not active while Dense is loading');
 
     const settled = await settleChip();
     assert.equal(settled.active, true, 'active once the dense points are on screen');
     assert.equal(settled.state, 'active');
-    assert.equal(settled.label, 'DENSE');
-    assert.deepEqual(settled.params, { catalog: 'core' }, 'a settled chip toggles back off');
+    assert.equal(settled.label, 'Dense');
+    assert.deepEqual(settled.params, { catalog: 'dense' }, 'a settled Dense chip still requests dense');
+    assert.equal(catalogChip('catalog-core').active, false);
 
     // The completion pushed a refresh, and the legend gained COMMS with it —
     // without that push the row would keep the pre-load counts for 5 minutes.
@@ -287,7 +297,7 @@ test('a failed DENSE load reverts the mode rather than leaving an active chip', 
 
     assert.equal(settled.active, false, 'a 502 must never present as a live dense catalog');
     assert.equal(settled.state, 'error');
-    assert.equal(settled.label, 'DENSE ✕');
+    assert.equal(settled.label, 'Dense ✕');
     assert.match(settled.title, /502/, 'the chip explains why');
     assert.equal(satellitesLayer.getParams().catalog, 'core', 'the mode reverts to reality');
     assert.deepEqual(settled.params, { catalog: 'dense' }, 'clicking retries');
@@ -367,10 +377,11 @@ test('an explicit return to core clears a failure the user never caused', async 
 
     // A no-op restore of the pre-mission snapshot.
     satellitesLayer.setParams({ catalog: 'core', showPoints: true, showOrbits: true });
-    const restored = satellitesLayer.getRowControls().chips[0];
+    const restored = catalogChip('catalog-dense');
     assert.equal(restored.state, 'idle', 'the error does not survive the restore');
-    assert.equal(restored.label, 'DENSE');
+    assert.equal(restored.label, 'Dense');
     assert.doesNotMatch(restored.title, /502/);
+    assert.equal(catalogChip('catalog-core').active, true);
   } finally {
     console.warn = warn;
     globalThis.fetch = originalFetch;
@@ -463,7 +474,7 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
 test('a dependency owner hiding the points surrenders the whole row', async () => {
   try {
     _setDenseCatalogStateForTest({});
-    assert.equal(satellitesLayer.getRowControls().chips.length, 2);
+    assert.equal(satellitesLayer.getRowControls().chips.length, 3);
 
     // Space Missions borrows this layer for TLE lookup with showPoints:false.
     satellitesLayer.setParams({ showPoints: false });
@@ -472,7 +483,7 @@ test('a dependency owner hiding the points surrenders the whole row', async () =
     assert.deepEqual(owned.legend, [], 'no legend describing an empty sky');
 
     satellitesLayer.setParams({ showPoints: true });
-    assert.equal(satellitesLayer.getRowControls().chips.length, 2, 'released on restore');
+    assert.equal(satellitesLayer.getRowControls().chips.length, 3, 'released on restore');
   } finally {
     _clearDenseCatalogStateForTest();
   }

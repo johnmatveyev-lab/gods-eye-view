@@ -2777,10 +2777,10 @@ test('destroy settles an explicit refresh waiting behind invalidated periodic wo
 });
 
 // ── Per-layer row controls (chips + color legend) ───────────────────────────
-// The satellites layer is the first consumer: a DENSE catalog chip and a class
-// legend rendered under its row. The manager owns the DOM and the param write;
-// the layer only declares what it wants, so the chip can never disagree with
-// the layer's real state.
+// The satellites layer is the first consumer: Core | Dense catalog chips and a
+// class legend rendered under its row. The manager owns the DOM and the param
+// write; the layer only declares what it wants, so the chips can never
+// disagree with the layer's real state.
 
 /** DOM double rich enough for the row-controls render path. */
 function makeControlElement(tagName = 'div') {
@@ -2894,13 +2894,22 @@ function makeRowControlLayer() {
       getRowControls() {
         const dense = mode === 'dense';
         return {
-          chips: [{
-            id: 'catalog',
-            label: 'DENSE',
-            active: dense,
-            title: 'toggle the dense catalog',
-            params: { catalog: dense ? 'core' : 'dense' },
-          }],
+          chips: [
+            {
+              id: 'catalog-core',
+              label: 'Core',
+              active: !dense,
+              title: 'six-group core catalog',
+              params: { catalog: 'core' },
+            },
+            {
+              id: 'catalog-dense',
+              label: 'Dense',
+              active: dense,
+              title: 'toggle the dense catalog',
+              params: { catalog: 'dense' },
+            },
+          ],
           selects: [{
             id: 'sat-group',
             label: 'Sats',
@@ -2944,11 +2953,14 @@ test('a layer that declares row controls renders its chips and color legend', as
     assert.equal(controls.hidden, false);
 
     const chips = collectByClass(controls, 'data-toggle-chip');
-    assert.equal(chips.length, 1);
-    assert.equal(chips[0].textContent, 'DENSE');
-    assert.equal(chips[0].dataset.chipId, 'catalog');
-    assert.equal(chips[0].attributes['aria-pressed'], 'false');
-    assert.equal(chips[0].title, 'toggle the dense catalog');
+    assert.equal(chips.length, 2);
+    assert.equal(chips[0].textContent, 'Core');
+    assert.equal(chips[0].dataset.chipId, 'catalog-core');
+    assert.equal(chips[0].attributes['aria-pressed'], 'true');
+    assert.equal(chips[1].textContent, 'Dense');
+    assert.equal(chips[1].dataset.chipId, 'catalog-dense');
+    assert.equal(chips[1].attributes['aria-pressed'], 'false');
+    assert.equal(chips[1].title, 'toggle the dense catalog');
 
     const picker = collectByClass(controls, 'data-toggle-select')[0];
     assert.ok(picker, 'the sats group select is on the row');
@@ -2985,18 +2997,25 @@ test('clicking a row chip applies the params it declared and re-renders', async 
     assert.equal(await mgr.setEnabled('satellites', true), true);
     const row = container.querySelector('[data-layer-id="satellites"]');
     const controls = row.querySelector('.data-toggle-controls');
-    const chip = collectByClass(controls, 'data-toggle-chip')[0];
+    const chips = collectByClass(controls, 'data-toggle-chip');
+    const dense = chips.find((chip) => chip.dataset.chipId === 'catalog-dense');
+    const core = chips.find((chip) => chip.dataset.chipId === 'catalog-core');
 
-    controls.listeners.click({ target: chip });
-    assert.equal(layer.mode, 'dense', 'the chip wrote the params it declared');
-    // setLayerParams refreshes the panel, so the chip already reflects the flip.
-    const afterOn = collectByClass(controls, 'data-toggle-chip')[0];
+    controls.listeners.click({ target: dense });
+    assert.equal(layer.mode, 'dense', 'Dense wrote the params it declared');
+    // setLayerParams refreshes the panel, so the chips already reflect the flip.
+    const afterOn = collectByClass(controls, 'data-toggle-chip')
+      .find((chip) => chip.dataset.chipId === 'catalog-dense');
     assert.equal(afterOn.attributes['aria-pressed'], 'true');
     assert.equal(afterOn.className.includes('active'), true);
 
-    controls.listeners.click({ target: afterOn });
-    assert.equal(layer.mode, 'core', 'the chip toggles back rather than latching');
-    assert.equal(collectByClass(controls, 'data-toggle-chip')[0].attributes['aria-pressed'], 'false');
+    controls.listeners.click({ target: core });
+    assert.equal(layer.mode, 'core', 'Core writes back rather than latching Dense');
+    assert.equal(
+      collectByClass(controls, 'data-toggle-chip')
+        .find((chip) => chip.dataset.chipId === 'catalog-core').attributes['aria-pressed'],
+      'true',
+    );
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;
@@ -3133,8 +3152,8 @@ test('an async layer pushes its own row refresh, and a busy chip refuses clicks'
     getRowControls() {
       return {
         chips: [{
-          id: 'catalog',
-          label: settled ? 'DENSE' : 'DENSE ···',
+          id: 'catalog-dense',
+          label: settled ? 'Dense' : 'Dense ···',
           active: settled,
           busy: !settled,
           disabled: !settled,
@@ -3159,7 +3178,7 @@ test('an async layer pushes its own row refresh, and a busy chip refuses clicks'
       .querySelector('[data-layer-id="satellites"]')
       .querySelector('.data-toggle-controls');
     const chip = collectByClass(controls, 'data-toggle-chip')[0];
-    assert.equal(chip.textContent, 'DENSE ···');
+    assert.equal(chip.textContent, 'Dense ···');
     assert.equal(chip.disabled, true);
     assert.equal(chip.attributes['aria-busy'], 'true');
     assert.equal(chip.attributes['aria-pressed'], 'false', 'busy is never reported as active');
@@ -3171,7 +3190,7 @@ test('an async layer pushes its own row refresh, and a busy chip refuses clicks'
     // The layer settles and pushes its own refresh — no panel poll involved.
     settled = true;
     module._listener();
-    assert.equal(chip.textContent, 'DENSE');
+    assert.equal(chip.textContent, 'Dense');
     assert.equal(chip.disabled, false);
     assert.equal(chip.attributes['aria-pressed'], 'true');
     assert.equal(chip.attributes['aria-busy'], 'false');
@@ -3206,7 +3225,7 @@ test('a layer that surrenders its row controls hides the block entirely', async 
       .querySelector('[data-layer-id="satellites"]')
       .querySelector('.data-toggle-controls');
     assert.equal(controls.hidden, false);
-    assert.equal(collectByClass(controls, 'data-toggle-chip').length, 1);
+    assert.equal(collectByClass(controls, 'data-toggle-chip').length, 2);
 
     surrendered = true;
     mgr._refreshTogglePanel();
@@ -3218,7 +3237,7 @@ test('a layer that surrenders its row controls hides the block entirely', async 
     surrendered = false;
     mgr._refreshTogglePanel();
     assert.equal(controls.hidden, false, 'the row returns when the owner releases it');
-    assert.equal(collectByClass(controls, 'data-toggle-chip').length, 1);
+    assert.equal(collectByClass(controls, 'data-toggle-chip').length, 2);
   } finally {
     await mgr.destroyAll();
     if (originalDocument === undefined) delete globalThis.document;

@@ -33,6 +33,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites DATA LAYERS row now has a **Core | Dense** catalog control. Core
+  is the current catalog (Plan 65 group picker). Dense calls the existing
+  `setParams({ catalog: 'dense' })` Starlink path (chunked, points-only). A
+  failed `/api/celestrak/starlink` load stays on Core and shows the existing
+  feed-unavailable status. The choice persists through the existing layerState
+  `catalog` option. Not the Plan 65 core-group picker. No new `/api`.
 - Added an Undo last annotation control next to Clear on the globe chrome.
   It calls `removeLast()` so one wrong pin or area comes off without wiping
   the board. Undo does not bump the clear() generation or abort in-flight
