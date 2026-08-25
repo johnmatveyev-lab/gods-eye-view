@@ -7,6 +7,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Hosted `POST /api/realtime/debug-log` writes `/tmp/meridian-gev-logs` on
+  Netlify / Vercel / Lambda instead of mkdir `/var/task/.gev-logs` (400
+  ENOENT). A write failure still returns empty 204 and warns, so the voice
+  beacon never 400s. Radio click and AISStream are unchanged.
 - Hosted `/api/ais-live` answers an honest unsupported empty snapshot (and
   `/track` → `{samples:[]}`) instead of a generic catch-all 404. No AISStream
   websocket and no `AISSTREAM_API_KEY`. Vite still owns the live feed.
