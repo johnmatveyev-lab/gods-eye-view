@@ -73,6 +73,9 @@
     "api/google/nearby-places.js": {
       "maxDuration": 15
     },
+    "api/google/text-search.js": {
+      "maxDuration": 15
+    },
     "api/radio/[...path].js": {
       "maxDuration": 30
     },

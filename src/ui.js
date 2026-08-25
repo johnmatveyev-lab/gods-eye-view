@@ -190,7 +190,9 @@ import {
 import bikeshareLayer from './data/bikeshare.js';
 import aisLiveVesselsLayer from './data/aisLiveVessels.js';
 import militaryAwarenessLayer from './data/militaryAwareness.js';
-import militaryInstallationsLayer from './data/militaryInstallations.js';
+import militaryInstallationsLayer, {
+  installationsSearchToastMessage,
+} from './data/militaryInstallations.js';
 import rocketLaunchesLayer, { flyToExistingLaunchPad } from './data/rocketLaunches.js';
 import {
   applyLaunchesPanelToggle,
@@ -5566,9 +5568,10 @@ export class StyleManager {
         const searched = await militaryInstallationsLayer.searchNearby?.();
         if (searched === false) return false;
         const stats = militaryInstallationsLayer.getStats?.();
-        this._showToast(stats?.status === 'zoom-in'
-          ? 'Zoom in to search mapped installations'
-          : 'Nearby installations refreshed');
+        this._showToast(installationsSearchToastMessage({
+          status: stats?.status,
+          error: stats?.error,
+        }));
         return true;
       }, 'Nearby installations could not be refreshed; try again').finally(() => {
         button.disabled = false;

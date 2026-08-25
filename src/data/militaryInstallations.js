@@ -644,4 +644,17 @@ const militaryInstallationsLayer = {
   },
 };
 
+/**
+ * Toast for SEARCH NEARBY SITES. Reads getStats() so a Places failure
+ * cannot report “Nearby installations refreshed” while OSM sites remain.
+ *
+ * @param {{status?: string, error?: string|null}|null|undefined} stats
+ * @returns {string}
+ */
+export function installationsSearchToastMessage(stats) {
+  if (stats?.status === 'zoom-in') return 'Zoom in to search mapped installations';
+  if (stats?.error) return stats.error;
+  return 'Nearby installations refreshed';
+}
+
 export default militaryInstallationsLayer;

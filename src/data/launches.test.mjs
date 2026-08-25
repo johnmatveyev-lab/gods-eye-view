@@ -169,7 +169,6 @@ test('Vercel api/launches.js forwards to handleLaunchesHttp', () => {
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.ok(vercelJson.functions['api/launches.js']);
   assert.equal(vercelJson.functions['api/ais-live.js'], undefined);
-  assert.equal(vercelJson.functions['api/google/text-search.js'], undefined);
   for (const rule of vercelJson.rewrites || []) {
     assert.match(rule.source, /^\/api\/tomtom\//);
     assert.match(rule.destination, /^\/api\/tomtom\//);

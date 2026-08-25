@@ -164,7 +164,7 @@ test('OpenSky URL is never built; only valid adsb.lol traces get a URL', () => {
   assert.match(moduleSource, /adsb\.lol\/data\/traces/);
 });
 
-test('hosted Node entrypoints forward; ais-live and text-search stay unwrapped', () => {
+test('hosted Node entrypoints forward; ais-live stays unwrapped', () => {
   assert.equal(existsSync(path.join(ROOT, 'api/adsblol/trace.js')), true);
   assert.equal(existsSync(path.join(ROOT, 'api/opensky-track.js')), true);
 
@@ -180,7 +180,6 @@ test('hosted Node entrypoints forward; ais-live and text-search stay unwrapped',
   for (const forbidden of [
     'api/ais-live.js',
     'api/ais-live/[...path].js',
-    'api/google/text-search.js',
     'api/google/[...path].js',
   ]) {
     assert.equal(existsSync(path.join(ROOT, forbidden)), false, forbidden);
@@ -195,7 +194,7 @@ test('hosted Node entrypoints forward; ais-live and text-search stay unwrapped',
     assert.match(rule.destination, /^\/api\/tomtom\//);
   }
   const functionKeys = Object.keys(vercelJson.functions);
-  assert.equal(functionKeys.some((key) => /ais-live|google\/text-search/.test(key)), false);
+  assert.equal(functionKeys.some((key) => /ais-live/.test(key)), false);
 });
 
 test('Vite and the live catch-all forward to the extracted plugin', async () => {
