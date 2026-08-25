@@ -384,7 +384,7 @@ test('Identified-only persists meridian.flightsIdentifiedOnly and flights.identi
   assert.equal(flightsLayer.getRowControls().chips.find((entry) => entry.id === IDENTIFIED_ONLY_CHIP_ID).active, false);
 });
 
-test('military shares the same contact shape without a military-only chip', () => {
+test('military Identified-only is a separate persist and chip from civil', () => {
   const hex = emptyBillboard();
   const callsign = emptyBillboard();
   _setTrackedMilitaryRefreshStateForTest({
@@ -407,15 +407,21 @@ test('military shares the same contact shape without a military-only chip', () =
     assert.equal(callsign.show, true);
 
     flightsLayer.setParams({ identifiedOnly: true });
-    assert.equal(militaryFlightsLayer.getParams().identifiedOnly, true);
+    assert.equal(militaryFlightsLayer.getParams().identifiedOnly, false,
+      'civil persist does not arm the military toggle');
     _applyMilitaryVisibilityForTest();
-    assert.equal(hex.show, false, 'shared identified-only hides hex-only military');
+    assert.equal(hex.show, true, 'civil Identified-only does not hide military hexes');
     assert.equal(callsign.show, true);
     assert.equal(
       militaryFlightsLayer.getRowControls().chips.some((entry) => entry.id === IDENTIFIED_ONLY_CHIP_ID),
-      false,
-      'no military-only chip',
+      true,
+      'military row ships its own Identified-only chip',
     );
+
+    militaryFlightsLayer.setParams({ identifiedOnly: true });
+    assert.equal(militaryFlightsLayer.getParams().identifiedOnly, true);
+    assert.equal(hex.show, false, 'military Identified-only hides hex-only tracks');
+    assert.equal(callsign.show, true);
   } finally {
     resetIdentifiedOnlyLayers();
   }
@@ -433,8 +439,9 @@ test('Identified-only is a flights-row chip: no DISPLAY rail, no new /api', () =
   assert.match(flights, /passesIdentifiedOnlyFilter/);
   assert.match(flights, /_identifiedOnlyMatcher/);
   assert.match(military, /_identifiedOnlyMatcher/);
-  assert.match(military, /passesIdentifiedOnlyFilter/);
-  assert.doesNotMatch(military, /identifiedOnlyChipModel/);
+  assert.match(military, /passesMilitaryIdentifiedOnlyFilter/);
+  assert.match(military, /militaryIdentifiedOnlyChipModel/);
+  assert.doesNotMatch(military, /from '\.\/flightIdentifiedFilter\.js'/);
   assert.doesNotMatch(flights, /google\.com\/news|telegeography|quantum-earth/i);
   assert.doesNotMatch(helper, /\/api\//);
   assert.doesNotMatch(helper, /fetch\(|XMLHttpRequest|EventSource/);

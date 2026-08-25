@@ -407,7 +407,7 @@ test('Identified-only is a military-row chip: no DISPLAY rail, no flights.js, no
   const manager = data('manager.js');
   assert.doesNotMatch(html, /identified-only|Identified only/);
   assert.doesNotMatch(ui, /identifiedOnly|_initIdentifiedOnly|militaryFlightsIdentifiedOnly/);
-  assert.doesNotMatch(flights, /identifiedOnly|militaryFlightIdentifiedFilter|militaryFlightsIdentifiedOnly/);
+  assert.doesNotMatch(flights, /militaryFlightIdentifiedFilter|militaryFlightsIdentifiedOnly/);
   assert.match(military, /militaryIdentifiedOnlyChipModel\(/);
   assert.match(military, /passesMilitaryIdentifiedOnlyFilter/);
   assert.match(military, /_identifiedOnlyMatcher/);
