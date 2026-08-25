@@ -70,6 +70,27 @@ test('parseAcquisitionMs: memo cache is honored, invalid input → 0', () => {
   assert.equal(parseAcquisitionMs(undefined, '1006', cache), 0);
 });
 
+test('parseAcquisitionMs values compare against a 6h / 12h / 24h age window', () => {
+  const now = Date.UTC(2026, 7, 25, 16, 0);
+  const recent = parseAcquisitionMs('2026-08-25', '1400'); // 2h before
+  const mid = parseAcquisitionMs('2026-08-25', '0600'); // 10h before
+  const older = parseAcquisitionMs('2026-08-24', '2000'); // 20h before
+  assert.equal(recent, now - 2 * 3600000);
+  assert.equal(mid, now - 10 * 3600000);
+  assert.equal(older, now - 20 * 3600000);
+  assert.ok(recent >= now - 6 * 3600000);
+  assert.ok(mid < now - 6 * 3600000);
+  assert.ok(mid >= now - 12 * 3600000);
+  assert.ok(older < now - 12 * 3600000);
+  assert.ok(older >= now - 24 * 3600000);
+});
+
+test('unparseable acquisition is 0 so an age window can keep it visible', () => {
+  assert.equal(parseAcquisitionMs('', '1006'), 0);
+  assert.equal(parseAcquisitionMs('not-a-date', '1006'), 0);
+  assert.equal(parseAcquisitionMs('2026-08-25', undefined), Date.UTC(2026, 7, 25, 0, 0));
+});
+
 test('daynight "D" → night false', () => {
   const [fire] = adaptFirmsRecords([proxyRecord({ daynight: 'D' })]);
   assert.equal(fire.night, false);

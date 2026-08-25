@@ -27,7 +27,7 @@ function makeFire(overrides = {}) {
     confidence: 0.9,
     satellite: 'N21',
     sensor: 'VIIRS',
-    acqMs: 1_753_600_000_000,
+    acqMs: Date.now() - 2 * 3600000,
     ...overrides,
   };
 }
@@ -292,7 +292,7 @@ test('a refresh that drops the selected fire emits an eviction the readout can a
   // record first and the clear then fails its ownership guard silently.
   const kept = makeFire({ index: 0 });
   const dropped = makeFire({
-    index: 1, lat: 31.77, lon: -99.02, acqMs: 1_753_600_100_000, satellite: 'N20',
+    index: 1, lat: 31.77, lon: -99.02, acqMs: Date.now() - 90 * 60 * 1000, satellite: 'N20',
   });
   const h = harness({
     fires: [dropped, kept],
@@ -323,8 +323,8 @@ test('a refresh that drops the selected fire emits an eviction the readout can a
           confidence: 'h',
           brightness: 330,
           daynight: 'D',
-          acqDate: '2025-07-27',
-          acqTime: '0412',
+          acqDate: new Date(Date.now() - 2 * 3600000).toISOString().slice(0, 10),
+          acqTime: `${String(new Date(Date.now() - 2 * 3600000).getUTCHours()).padStart(2, '0')}${String(new Date(Date.now() - 2 * 3600000).getUTCMinutes()).padStart(2, '0')}`,
           instrument: 'VIIRS',
           satellite: kept.satellite,
         }],

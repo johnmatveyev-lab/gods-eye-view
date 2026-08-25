@@ -74,6 +74,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   Dense and ORBITS. COMMS is a no-op in Core (dense-only) and hides the
   Starlink shell in Dense. Persists on the existing satellites layerState
   option (`s.k.*`). Not an alert service. No new `/api`.
+- FIRMS row chips filter already-fetched detections by age window
+  (`6h` | `12h` | `24h`, default 24h). Cells, sprites, overlay cards,
+  and the Plan 70 FIRES list hide older detections without a new NASA
+  fetch. Missing or non-finite acquisition time stays visible. The
+  window ANDs with FRP, confidence, and day/night. The choice persists on
+  `local-firms` (`w.a.*`). Same VIIRS proxy, quota, and TTL. Not an
+  alert service.
 - FIRMS row chips filter already-fetched detections by Day | Night
   (default both on). Night off hides `N` detections and keeps day.
   Missing or unknown daynight stays visible. The chips AND with the
