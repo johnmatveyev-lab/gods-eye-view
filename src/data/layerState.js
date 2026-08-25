@@ -430,6 +430,9 @@ const OPTION_GROUPS = Object.freeze({
       encode: encodeVesselTypeFilter,
       decode: decodeVesselTypeFilter,
     }),
+    // PLAN 157: hide parked default OFF. Omitted `p` keeps the current harbor
+    // view — there was no prior parked filter, so absent === default.
+    booleanOption('hideParked', 'p', false),
   ]),
 });
 

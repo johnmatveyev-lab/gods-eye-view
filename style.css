@@ -5775,18 +5775,21 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   line-height: 1.4;
 }
 
-.ais-type-chips {
+.ais-type-chips,
+.ais-parked-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin: 0 10px 8px;
 }
 
-.ais-type-chips[hidden] {
+.ais-type-chips[hidden],
+.ais-parked-chips[hidden] {
   display: none;
 }
 
-.ais-type-chip {
+.ais-type-chip,
+.ais-parked-chip {
   padding: 3px 7px;
   border: 1px solid var(--glass-border);
   border-radius: 999px;
@@ -5799,18 +5802,22 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   cursor: pointer;
 }
 
-.ais-type-chip.active {
+.ais-type-chip.active,
+.ais-parked-chip.active {
   border-color: var(--glass-border-hover);
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
 }
 
 .ais-type-chip:hover,
-.ais-type-chip:focus-visible {
+.ais-type-chip:focus-visible,
+.ais-parked-chip:hover,
+.ais-parked-chip:focus-visible {
   border-color: var(--glass-border-hover);
 }
 
-#data-panel.collapsed .ais-type-chips {
+#data-panel.collapsed .ais-type-chips,
+#data-panel.collapsed .ais-parked-chips {
   display: none;
 }
 
