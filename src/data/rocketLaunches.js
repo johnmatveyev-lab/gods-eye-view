@@ -13,6 +13,17 @@ import {
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { isSceneClickCaptured } from './pickRegistry.js';
 import { launchPadCoordinates } from './launchesPanel.js';
+import {
+  DEFAULT_LAUNCH_STATUS_FILTER,
+  filterLaunchesByStatus,
+  getLaunchStatusFilter,
+  hydrateLaunchStatusFilter,
+  launchPassesStatusFilter,
+  launchStatusFilterFlags,
+  setLaunchStatusFilter,
+  subscribeLaunchStatusFilter,
+  toggleLaunchStatusFilter,
+} from './launchStatusFilter.js';
 
 const WINDOW_DAYS = 30;
 const API_URL = '/api/launches';
@@ -94,6 +105,7 @@ let _launchPadZonePrimitive = null;
 let _launchPadZoneRemover = null;
 let _launchPadZoneLaunchId = null;
 const _missionOrbitPrimitives = new Map();
+let _statusFilterUnsubscribe = null;
 
 const REPLAY_ASCENT_FALLBACK_SEC = 12;
 const REPLAY_ASCENT_MIN_SEC = 8;
@@ -761,11 +773,15 @@ export function missionDataCompleteness(launch = {}) {
  * Build a data-rich roster while preserving the source-array index
  * used by mission selection and Previous/Next navigation.
  * @param {Array<object>} launches Normalized launch records.
+ * @param {{statusFilter?: unknown, selectedLaunchId?: string|null}} [options]
  * @returns {Array<{launch: object, index: number}>}
  */
-export function missionRosterEntries(launches) {
+export function missionRosterEntries(launches, options = {}) {
+  const statusFilter = options.statusFilter ?? DEFAULT_LAUNCH_STATUS_FILTER;
+  const selectedLaunchId = options.selectedLaunchId ?? null;
   return (launches || [])
     .map((launch, index) => ({ launch, index }))
+    .filter(({ launch }) => launchPassesStatusFilter(launch, statusFilter, selectedLaunchId))
     .sort((a, b) => {
       const completeness = missionDataCompleteness(b.launch) - missionDataCompleteness(a.launch);
       if (completeness !== 0) return completeness;
@@ -1050,8 +1066,10 @@ function syncMissionOverlayEntries() {
   _missionOverlayHost.clearSource(ROCKET_MISSION_SELECTED_OVERLAY_SOURCE_ID);
   _missionOverlayHost.setVisible(ROCKET_MISSION_SELECTED_OVERLAY_SOURCE_ID, false);
   _selectedMissionOverlayTimeText = null;
+  const statusFilter = getLaunchStatusFilter();
   const entries = selectRocketMissionMarkerOverlayCohort(
     Array.from(_missionOverlayRecords.values(), (record) => {
+      if (!launchPassesStatusFilter(record.launch, statusFilter, _selectedLaunchId)) return null;
       const entry = createRocketMissionMarkerOverlayEntry(
         record.launch,
         record.anchorPosition,
@@ -1061,7 +1079,7 @@ function syncMissionOverlayEntries() {
         entry.priority = Number.MAX_SAFE_INTEGER - 1;
       }
       return entry;
-    }),
+    }).filter(Boolean),
   );
   _missionOverlayHost.setEntries(
     ROCKET_MISSION_AMBIENT_OVERLAY_SOURCE_ID,
@@ -1092,14 +1110,7 @@ function setSelectedMission(launchId, isolate = true) {
     _viewer.selectedEntity = undefined;
   }
   if (!_dataSource) return;
-  for (const entity of _dataSource.entities.values) {
-    const relatedId = entityLaunchId(entity);
-    entity.show = launchId
-      ? relatedId === launchId
-      : entity.id.startsWith('rocket-launch:');
-  }
-  syncMissionOrbitPrimitiveVisibility();
-  syncMissionOverlayEntries();
+  applyLaunchStatusFilterPresentation();
   renderMissionPanel();
 }
 
@@ -2323,15 +2334,58 @@ function renderMissionPanel() {
   if (panelScroller) panelScroller.scrollTop = 0;
 }
 
+function syncLaunchStatusChips() {
+  if (!_missionRoster) return;
+  const flags = launchStatusFilterFlags(getLaunchStatusFilter());
+  for (const chip of _missionRoster.querySelectorAll('[data-mission-status-chip]')) {
+    const id = chip.dataset?.missionStatusChip || chip.getAttribute?.('data-mission-status-chip');
+    const active = flags[id] === true;
+    chip.classList?.toggle?.('active', active);
+    chip.setAttribute?.('aria-pressed', String(active));
+  }
+}
+
+function syncLaunchEntityVisibility() {
+  if (!_dataSource) return;
+  const filter = getLaunchStatusFilter();
+  for (const entity of _dataSource.entities.values) {
+    const relatedId = entityLaunchId(entity);
+    if (_selectedLaunchId) {
+      entity.show = relatedId === _selectedLaunchId;
+      continue;
+    }
+    const launch = relatedId ? _launches.find((item) => item.id === relatedId) : null;
+    entity.show = Boolean(
+      entity.id.startsWith('rocket-launch:')
+      && launch
+      && launchPassesStatusFilter(launch, filter),
+    );
+  }
+  _count = filterLaunchesByStatus(_launches, filter, _selectedLaunchId).length;
+  syncMissionOrbitPrimitiveVisibility();
+}
+
+function applyLaunchStatusFilterPresentation() {
+  renderMissionRoster();
+  syncLaunchEntityVisibility();
+  syncMissionOverlayEntries();
+  syncLaunchStatusChips();
+}
+
 function renderMissionRoster() {
   if (!_missionRoster) return;
   const list = _missionRoster.querySelector('[data-mission-roster-list]');
   const count = _missionRoster.querySelector('[data-mission-roster-count]');
-  if (count) count.textContent = `${_launches.length} / 30D`;
+  const entries = missionRosterEntries(_launches, {
+    statusFilter: getLaunchStatusFilter(),
+    selectedLaunchId: _selectedLaunchId,
+  });
+  if (count) count.textContent = `${entries.length} / 30D`;
   if (!list) return;
-  const entries = missionRosterEntries(_launches);
   if (!entries.length) {
-    list.innerHTML = '<div class="space-mission-roster-empty">NO MISSIONS AVAILABLE IN THE CURRENT 30-DAY WINDOW</div>';
+    list.innerHTML = _launches.length
+      ? '<div class="space-mission-roster-empty">NO MISSIONS MATCH THE SELECTED STATUS FILTER</div>'
+      : '<div class="space-mission-roster-empty">NO MISSIONS AVAILABLE IN THE CURRENT 30-DAY WINDOW</div>';
     return;
   }
   list.innerHTML = entries.map(({ launch, index }) => {
@@ -2522,9 +2576,16 @@ function createMissionPanel() {
   _missionRoster = document.getElementById('space-mission-roster');
   if (_missionRoster) {
     _missionRoster.onclick = (event) => {
-      const button = event.target instanceof Element
-        ? event.target.closest('[data-mission-roster-index]')
-        : null;
+      const target = event.target instanceof Element ? event.target : null;
+      const chip = target?.closest('[data-mission-status-chip]');
+      if (chip) {
+        setLaunchStatusFilter(toggleLaunchStatusFilter(
+          getLaunchStatusFilter(),
+          chip.dataset.missionStatusChip || chip.getAttribute('data-mission-status-chip'),
+        ));
+        return;
+      }
+      const button = target?.closest('[data-mission-roster-index]');
       if (!button) return;
       selectMissionAt(Number(button.dataset.missionRosterIndex));
     };
@@ -3381,8 +3442,7 @@ async function performMissionUpdate(token) {
     launches.forEach((launch) => addLaunchEntity(launch, activeTleText));
     _renderedTleText = activeTleText;
     if (_renderedTleText === _activeTleText) clearPostTleRetry();
-    _count = launches.length;
-    renderMissionRoster();
+    applyLaunchStatusFilterPresentation();
     if (!_selectedLaunchId || !launches.some((launch) => launch.id === _selectedLaunchId)) {
       setSelectedMission(null, false);
     } else {
@@ -3435,6 +3495,10 @@ const rocketLaunchesLayer = {
   init(viewer) {
     _viewer = viewer;
     _enabled = false;
+    hydrateLaunchStatusFilter();
+    if (!_statusFilterUnsubscribe) {
+      _statusFilterUnsubscribe = subscribeLaunchStatusFilter(applyLaunchStatusFilterPresentation);
+    }
     createMissionPanel();
     createReplayVehicleOverlay();
     _dataSource = new Cesium.CustomDataSource('rocket-launches');
@@ -3581,6 +3645,8 @@ const rocketLaunchesLayer = {
     _satelliteStateBeforeMission = null;
     _satelliteActivationPromise = null;
     _dataManager = null;
+    _statusFilterUnsubscribe?.();
+    _statusFilterUnsubscribe = null;
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },

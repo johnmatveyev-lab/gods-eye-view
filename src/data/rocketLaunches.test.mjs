@@ -60,6 +60,11 @@ import {
   satelliteCatalogModeChanged,
   scoreSatelliteNameMatch,
 } from './satellites.js';
+import {
+  DEFAULT_LAUNCH_STATUS_FILTER,
+  resetLaunchStatusFilterForTest,
+  setLaunchStatusFilter,
+} from './launchStatusFilter.js';
 
 const NOW = new Date('2026-07-27T00:00:00Z');
 
@@ -473,6 +478,16 @@ test('orders mission roster newest-first without losing navigation indices', () 
   ]);
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['newest', 'middle', 'oldest']);
   assert.deepEqual(entries.map((entry) => entry.index), [1, 2, 0]);
+});
+
+test('Go-only roster entries hide TBD/Hold and keep source indices', () => {
+  const entries = missionRosterEntries([
+    { id: 'tbd', status: 'TBD', launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'go', status: 'Go', launchTime: '2026-07-10T00:00:00Z' },
+    { id: 'hold', status: 'Hold', launchTime: '2026-07-15T00:00:00Z' },
+  ], { statusFilter: 'g' });
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['go']);
+  assert.deepEqual(entries.map((entry) => entry.index), [1]);
 });
 
 test('prioritizes data-rich missions before newer sparse records', () => {
@@ -1252,4 +1267,333 @@ test('disable reports a semantic failure while restoring the satellites dependen
     () => rocketLaunchesLayer.disable(),
     /could not restore the satellites layer/,
   );
+});
+
+function statusFilterLaunch(id, status, latOffset = 0) {
+  return {
+    id,
+    name: `${id} | Status Filter`,
+    net: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    status: { name: status },
+    pad: {
+      latitude: String(28.608 + latOffset),
+      longitude: '-80.604',
+      name: 'Space Launch Complex 39A',
+    },
+    mission: { name: id, orbit: { name: 'Low Earth Orbit' } },
+  };
+}
+
+function createStatusFilterDocument() {
+  class FakeNode {
+    constructor(tagName) {
+      this.tagName = String(tagName || 'div').toUpperCase();
+      this.children = [];
+      this.parentElement = null;
+      this.hidden = false;
+      this.disabled = false;
+      this.textContent = '';
+      this.innerHTML = '';
+      this.className = '';
+      this.id = '';
+      this.style = { setProperty() {}, removeProperty() {} };
+      this.dataset = {};
+      this.attributes = new Map();
+      this.classList = {
+        toggle() { return false; },
+        add() {},
+        remove() {},
+        contains() { return false; },
+      };
+      this.onclick = null;
+      this.onmouseover = null;
+      this.onfocusin = null;
+      this.onmouseleave = null;
+      this.onfocusout = null;
+    }
+
+    setAttribute(name, value) {
+      this.attributes.set(name, String(value));
+      if (name.startsWith('data-')) {
+        const key = name.slice(5).replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+        this.dataset[key] = String(value);
+      }
+    }
+
+    getAttribute(name) {
+      return this.attributes.has(name) ? this.attributes.get(name) : null;
+    }
+
+    removeAttribute(name) {
+      this.attributes.delete(name);
+    }
+
+    appendChild(child) {
+      child.parentElement = this;
+      this.children.push(child);
+      return child;
+    }
+
+    remove() {
+      if (this.parentElement) {
+        this.parentElement.children = this.parentElement.children.filter((child) => child !== this);
+      }
+      this.parentElement = null;
+    }
+
+    contains(node) {
+      let current = node;
+      while (current) {
+        if (current === this) return true;
+        current = current.parentElement;
+      }
+      return false;
+    }
+
+    insertAdjacentHTML() {
+      return this;
+    }
+
+    closest(selector) {
+      const attr = selector.match(/^\[([^\]]+)\]$/)?.[1];
+      let node = this;
+      while (node) {
+        if (attr && (node.attributes.has(attr) || Object.hasOwn(node.dataset, attr.replace(/^data-/, '').replace(/-([a-z])/g, (_, letter) => letter.toUpperCase())))) {
+          return node;
+        }
+        node = node.parentElement;
+      }
+      return null;
+    }
+
+    querySelector(selector) {
+      if (selector.startsWith('#')) {
+        return this.id === selector.slice(1) ? this : this._find((node) => node.id === selector.slice(1));
+      }
+      const attr = selector.match(/^\[([^\]]+)\]$/)?.[1];
+      if (attr) {
+        return this._find((node) => node.attributes.has(attr) || node.dataset[attr.replace(/^data-/, '')])
+          || this._stub(selector);
+      }
+      if (selector.startsWith('.')) {
+        const className = selector.slice(1);
+        return this._find((node) => String(node.className).split(/\s+/).includes(className))
+          || this._stub(selector);
+      }
+      return this._find((node) => node.tagName === selector.toUpperCase()) || this._stub(selector);
+    }
+
+    _stub(selector) {
+      const stub = new FakeNode('div');
+      if (selector.startsWith('.')) stub.className = selector.slice(1);
+      if (selector.startsWith('[') && selector.endsWith(']')) stub.setAttribute(selector.slice(1, -1), '');
+      this.appendChild(stub);
+      return stub;
+    }
+
+    querySelectorAll(selector) {
+      const out = [];
+      const visit = (node) => {
+        if (selector.startsWith('[') && selector.endsWith(']')) {
+          const attr = selector.slice(1, -1);
+          if (node.attributes.has(attr) || Object.hasOwn(node.dataset, attr.replace(/^data-/, '').replace(/-([a-z])/g, (_, letter) => letter.toUpperCase()))) {
+            out.push(node);
+          }
+        }
+        for (const child of node.children) visit(child);
+      };
+      visit(this);
+      return out;
+    }
+
+    _find(predicate) {
+      for (const child of this.children) {
+        if (predicate(child)) return child;
+        const nested = child._find?.(predicate);
+        if (nested) return nested;
+      }
+      return null;
+    }
+
+    addEventListener() {}
+    insertAdjacentHTML() {}
+  }
+
+  const host = new FakeNode('div');
+  host.id = 'space-mission-panel-host';
+  const roster = new FakeNode('div');
+  roster.id = 'space-mission-roster';
+  const list = new FakeNode('div');
+  list.setAttribute('data-mission-roster-list', '');
+  const count = new FakeNode('output');
+  count.setAttribute('data-mission-roster-count', '');
+  const chips = new FakeNode('div');
+  chips.className = 'space-mission-status-chips';
+  for (const id of ['go', 'tbd', 'hold', 'in-flight', 'other']) {
+    const chip = new FakeNode('button');
+    chip.setAttribute('data-mission-status-chip', id);
+    chip.dataset.missionStatusChip = id;
+    chip.textContent = id;
+    chips.appendChild(chip);
+  }
+  roster.appendChild(count);
+  roster.appendChild(chips);
+  roster.appendChild(list);
+  host.appendChild(roster);
+  const nodes = new Map([
+    ['space-mission-panel-host', host],
+    ['space-mission-roster', roster],
+    ['cockpit-context', new FakeNode('div')],
+  ]);
+  return {
+    host,
+    roster,
+    list,
+    count,
+    document: {
+      body: new FakeNode('body'),
+      createElement: (tagName) => new FakeNode(tagName),
+      getElementById: (id) => nodes.get(id) || null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      addEventListener() {},
+      removeEventListener() {},
+    },
+    FakeNode,
+  };
+}
+
+function createStatusFilterViewer(FakeNode) {
+  const canvas = new FakeNode('canvas');
+  const camera = {
+    positionCartographic: null,
+    positionWC: Cesium.Cartesian3.fromDegrees(-80.604, 28.608, 18_000_000),
+    cancelFlight() {},
+    lookAtTransform() {},
+    lookAt() {},
+    flyToBoundingSphere() {},
+    setView() {},
+  };
+  const scene = {
+    canvas,
+    camera,
+    frameState: { frameNumber: 1 },
+    postRender: new Cesium.Event(),
+    preRender: new Cesium.Event(),
+    preUpdate: new Cesium.Event(),
+    primitives: { add: (primitive) => primitive, remove: () => true },
+    drillPick: () => [],
+  };
+  const dataSources = [];
+  return {
+    camera,
+    scene,
+    selectedEntity: undefined,
+    dataSources: {
+      add(dataSource) { dataSources.push(dataSource); return dataSource; },
+      remove(dataSource) {
+        const index = dataSources.indexOf(dataSource);
+        if (index >= 0) dataSources.splice(index, 1);
+        return index >= 0;
+      },
+    },
+    _dataSources: dataSources,
+  };
+}
+
+test('status chips re-apply the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  let failNextLaunchFetch = false;
+  const payload = {
+    results: [
+      statusFilterLaunch('go-1', 'Go', 0),
+      statusFilterLaunch('tbd-1', 'TBD', 0.1),
+      statusFilterLaunch('hold-1', 'Hold', 0.2),
+      statusFilterLaunch('fly-1', 'In Flight', 0.3),
+    ],
+  };
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    if (failNextLaunchFetch) return { ok: false, status: 502, json: async () => ({ error: 'down' }) };
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:go-1').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:tbd-1').show, true);
+  assert.match(list.innerHTML, /GO-1/);
+  assert.match(list.innerHTML, /TBD-1/);
+  assert.match(list.innerHTML, /HOLD-1/);
+
+  setLaunchStatusFilter({ go: true });
+  assert.equal(launchFetches, 1, 'chip change must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:go-1').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:tbd-1').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:hold-1').show, false);
+  assert.match(list.innerHTML, /GO-1/);
+  assert.doesNotMatch(list.innerHTML, /TBD-1|HOLD-1/);
+
+  setLaunchStatusFilter(DEFAULT_LAUNCH_STATUS_FILTER);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:tbd-1').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:hold-1').show, true);
+  assert.match(list.innerHTML, /TBD-1/);
+  assert.match(list.innerHTML, /HOLD-1/);
+
+  _setSelectedRocketMissionForTest('tbd-1');
+  setLaunchStatusFilter({ go: true });
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:tbd-1').show, true, 'selected TBD stays visible with Go-only');
+  assert.match(list.innerHTML, /TBD-1/);
+  assert.doesNotMatch(list.innerHTML, /HOLD-1/);
+
+  _setSelectedRocketMissionForTest(null);
+  failNextLaunchFetch = true;
+  await rocketLaunchesLayer.update();
+  assert.equal(launchFetches, 2);
+  setLaunchStatusFilter({ go: true, 'in-flight': true });
+  assert.equal(launchFetches, 2, 'failed LL2 fetch still filters last-good in memory');
+  assert.equal(dataSource.entities.getById('rocket-launch:go-1').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:fly-1').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:tbd-1').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:hold-1').show, false);
+  assert.match(list.innerHTML, /GO-1/);
+  assert.match(list.innerHTML, /FLY-1/);
+  assert.doesNotMatch(list.innerHTML, /TBD-1|HOLD-1/);
 });
