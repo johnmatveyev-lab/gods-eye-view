@@ -18,6 +18,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Hidden tabs and offline windows pause flight/layer poll timers and the HUD
+  summary. Returning visible and online runs one refresh, then resumes
+  intervals. An active voice session keeps running. Offline shows
+  "Offline — showing last data". AIS is not wrapped. No service worker.
 
 ### Changed
 

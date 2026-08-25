@@ -1,6 +1,17 @@
 # Meridian Current State
 
-Updated: August 24, 2026
+Updated: August 25, 2026
+
+> **2026-08-25 — chrome live-poll pause (plans 37 + 38)** (`src/chrome/scheduler.js`).
+> `document.visibilityState === 'hidden'` or `window` offline pauses manager-owned
+> flight/layer poll timers and the HUD summary interval. No new OpenAI HUD or
+> Places calls are started from those polls. Visible and online again: one
+> immediate refresh, then the normal intervals. Hidden+offline share one
+> suspended flag so recovering one condition cannot double-start timers.
+> An active voice session is not paused (PTT Space is still released on hide).
+> AIS is not registered as a chrome poll handle. Offline shows a small
+> `#offline-chip` ("Offline — showing last data"); online hides it. Chrome
+> scheduler only — no service worker and no new `/api` routes.
 
 > **2026-08-23 — first-run mission launcher** (`src/firstRunExperience.js`,
 > `#first-run-launcher`, styles at the tail of `style.css`). After startup
@@ -2284,6 +2295,7 @@ silently demoting every later lookup for the session.
 
 ## UI/UX Runtime Defaults
 
+- Hidden or offline chrome pauses manager-owned flight/layer poll timers and the HUD summary. Visible+online runs one refresh and resumes intervals. `#offline-chip` reads "Offline — showing last data". Voice stays up; AIS is not wrapped.
 - Z ladder: panels promote within 100–139 (renormalized on wrap), voice pill 150, toast 200, clean-view exit 300.
 - Panel POSITION keys are versioned `v8` (`godsEyeView.v8.panelPos.<id>`); collapsed-state keys remain `v6`. The one-time position reset clears stale DISPLAY placements that could overlap the Context rail.
 - Map Source lives in the bottom Visual Presets tray. The left accordion contains no MAP STACK panel, and the `k` panel token that addressed it is gone from the share registry, so legacy `ui=k...` state takes the ordinary unknown-token skip.

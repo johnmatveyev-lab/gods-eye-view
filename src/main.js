@@ -33,6 +33,8 @@ import {
 import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
+import { createLivePollScheduler } from './chrome/scheduler.js';
+import { installOfflineBanner } from './chrome/offlineBanner.js';
 
 initLogoGaze();
 const meridianAccountReady = initMeridianAccount();
@@ -192,8 +194,17 @@ async function init() {
     });
     await mapStackController.setStack(tileset ? 'photoreal' : 'osm', { silent: true });
 
+    // Chrome live-poll scheduler: pause flight/layer polls + HUD summary when
+    // the tab is hidden or the window is offline. Voice and AIS are not
+    // registered. Hidden+offline share one suspended flag so timers cannot
+    // double-start when both recover.
+    const livePollScheduler = createLivePollScheduler();
+    livePollScheduler.attach();
+
     // Initialize the style manager (post-processing, HUD, locations, share links)
     const styleManager = new StyleManager(viewer, { mapStackController });
+    styleManager.hud.attachLiveScheduler(livePollScheduler);
+    installOfflineBanner(livePollScheduler);
     // The previous multi-canvas weather compositor remains disabled. Cockpit
     // clouds use a separate, capped low-resolution GPU pass that never attaches
     // Cesium fog or post-process stages and is fully stopped in map mode.
@@ -212,6 +223,7 @@ async function init() {
     const dataManager = new DataLayerManager(viewer, {
       allowQaRegistration: import.meta.env.DEV,
     });
+    dataManager.attachLiveScheduler(livePollScheduler);
     dataManager.register(flightsLayer);
     dataManager.register(militaryFlightsLayer);
     dataManager.register(earthquakesLayer);
@@ -323,6 +335,7 @@ async function init() {
       annotations,
       weatherEffects,
       cockpitCloudEffects,
+      livePollScheduler,
       getRenderGovernorDiagnostics,
       requestRender: governorRequestRender,
     };
