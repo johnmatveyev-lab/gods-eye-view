@@ -576,6 +576,18 @@
       </button>
     </div>
     <div class="pp-toggle-group">
+      <!-- Render pacing only. Low writes Cesium targetFrameRate = 30;
+           Normal restores the current 60 default. Persist meridian.power.
+           Still (reduce-motion) is decoration; this is the frame budget. -->
+      <div class="pp-slider-row visible" id="power-row">
+        <span class="pp-slider-mini-label">Power</span>
+        <div class="pp-mode-seg" role="radiogroup" aria-label="Power">
+          <button class="pp-mode-btn active" id="power-normal" data-power="normal" role="radio" aria-checked="true">Normal</button>
+          <button class="pp-mode-btn" id="power-low" data-power="low" role="radio" aria-checked="false">Low</button>
+        </div>
+      </div>
+    </div>
+    <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="zoom-to-pointer-toggle" type="button" title="Zoom toward the globe under the cursor" aria-pressed="false" aria-label="Zoom to pointer">
         <span class="pp-icon material-symbols-outlined" aria-hidden="true">center_focus_strong</span>
         <span class="pp-label">Zoom to pointer</span>
