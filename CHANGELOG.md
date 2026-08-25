@@ -69,6 +69,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Earthquake **Quake | Explosion | Quarry | Other** chips sit next to the
+  reviewed and PAGER rows. Default all on matches the current USGS all_day
+  discs. Chips filter cached `properties.type`: `earthquake` is Quake,
+  `explosion` is Explosion, `quarry` / `quarry blast` is Quarry, and
+  missing or other values (including ice quake) are Other. A selected
+  event stays. Chip changes re-filter in memory and AND with mag / depth /
+  time / tsunami / PAGER / reviewed — no extra USGS fetch and no `/api`.
+  Preference travels with `earthquakes.eventTypes`. Hidden when the
+  Earthquakes layer is off. Refresh keeps the chip set.
 - Space Missions roster has client-only rocket-family chips derived from the
   cached 30-day Launch Library 2 `rocket.configuration.name` (or `rocket.name`)
   via compact family labels, plus Other for blank or unknown vehicles.

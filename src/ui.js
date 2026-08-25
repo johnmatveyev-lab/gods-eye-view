@@ -232,11 +232,13 @@ import {
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   earthquakeDepthBandFlags,
+  earthquakeEventTypeFlags,
   earthquakePagerAlertFlags,
   normalizeEarthquakeTimeWindowHours,
   normalizeEarthquakeTsunamiOnly,
   normalizeEarthquakeReviewedOnly,
   toggleEarthquakeDepthBand,
+  toggleEarthquakeEventType,
   toggleEarthquakePagerAlert,
 } from './data/earthquakes.js';
 import {
@@ -2970,6 +2972,7 @@ export class StyleManager {
     this._earthquakeTsunamiChips = document.getElementById('earthquake-tsunami-chips');
     this._earthquakeReviewedChips = document.getElementById('earthquake-reviewed-chips');
     this._earthquakePagerChips = document.getElementById('earthquake-pager-chips');
+    this._earthquakeTypeChips = document.getElementById('earthquake-type-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -5432,6 +5435,7 @@ export class StyleManager {
           this._syncEarthquakeTsunamiChip();
           this._syncEarthquakeReviewedChip();
           this._syncEarthquakePagerChips();
+          this._syncEarthquakeTypeChips();
         }
         if (change?.layerId === 'satellites') {
           syncIssPassReadout({ recompute: true });
@@ -11863,12 +11867,43 @@ export class StyleManager {
     this._syncEarthquakePagerChips();
   }
 
+  _syncEarthquakeTypeChips() {
+    const enabled = this._dataManager?.isEnabled?.('earthquakes') === true;
+    if (this._earthquakeTypeChips) {
+      this._earthquakeTypeChips.hidden = !enabled;
+    }
+    const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+    const flags = earthquakeEventTypeFlags(layer?.getParams?.()?.eventTypes);
+    const chips = this._earthquakeTypeChips?.querySelectorAll?.('[data-earthquake-type]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = flags[chip.dataset.earthquakeType] === true;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initEarthquakeTypeChips() {
+    if (!this._earthquakeTypeChips) return;
+    this._earthquakeTypeChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-type]');
+      if (!chip || !this._earthquakeTypeChips.contains(chip)) return;
+      const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+      const current = layer?.getParams?.()?.eventTypes;
+      const next = toggleEarthquakeEventType(current, chip.dataset.earthquakeType);
+      this._dataManager?.setLayerParams?.('earthquakes', { eventTypes: next }, { origin: 'user' });
+      this._syncEarthquakeTypeChips();
+    });
+    this._syncEarthquakeTypeChips();
+  }
+
   _initEarthquakeListControl() {
     this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
     this._initEarthquakeTsunamiChip();
     this._initEarthquakeReviewedChip();
     this._initEarthquakePagerChips();
+    this._initEarthquakeTypeChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,
       panel: this._earthquakeListPanel,

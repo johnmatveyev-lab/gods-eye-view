@@ -2954,7 +2954,8 @@ body.ui-clean-view #scene-runtime.active {
 .earthquake-time-chips,
 .earthquake-tsunami-chips,
 .earthquake-reviewed-chips,
-.earthquake-pager-chips {
+.earthquake-pager-chips,
+.earthquake-type-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -2962,12 +2963,14 @@ body.ui-clean-view #scene-runtime.active {
 }
 .earthquake-tsunami-chips[hidden],
 .earthquake-reviewed-chips[hidden],
-.earthquake-pager-chips[hidden] { display: none; }
+.earthquake-pager-chips[hidden],
+.earthquake-type-chips[hidden] { display: none; }
 .earthquake-depth-chip,
 .earthquake-time-chip,
 .earthquake-tsunami-chip,
 .earthquake-reviewed-chip,
-.earthquake-pager-chip {
+.earthquake-pager-chip,
+.earthquake-type-chip {
   padding: 3px 7px;
   border: 1px solid var(--glass-border);
   border-radius: 999px;
@@ -2983,7 +2986,8 @@ body.ui-clean-view #scene-runtime.active {
 .earthquake-time-chip.active,
 .earthquake-tsunami-chip.active,
 .earthquake-reviewed-chip.active,
-.earthquake-pager-chip.active {
+.earthquake-pager-chip.active,
+.earthquake-type-chip.active {
   border-color: var(--glass-border-hover);
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
@@ -2997,7 +3001,9 @@ body.ui-clean-view #scene-runtime.active {
 .earthquake-reviewed-chip:hover,
 .earthquake-reviewed-chip:focus-visible,
 .earthquake-pager-chip:hover,
-.earthquake-pager-chip:focus-visible {
+.earthquake-pager-chip:focus-visible,
+.earthquake-type-chip:hover,
+.earthquake-type-chip:focus-visible {
   border-color: var(--glass-border-hover);
 }
 .earthquake-list {

@@ -92,6 +92,7 @@ test('helper reads USGS properties.status and the chip sits next to quake filter
   assert.match(html, /Reviewed only/);
   assert.match(html, /id="earthquake-tsunami-chips"/);
   assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /id="earthquake-type-chips"/);
   assert.match(ui, /earthquake-reviewed-chips|data-earthquake-reviewed/);
   assert.match(ui, /_earthquakeReviewedChips\.hidden = !enabled/);
   assert.match(css, /earthquake-reviewed-chip/);

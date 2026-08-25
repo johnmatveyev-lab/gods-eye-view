@@ -263,6 +263,12 @@
           <button type="button" class="earthquake-pager-chip active" data-earthquake-pager="red" aria-pressed="true" title="Show earthquakes with a red PAGER alert">Red</button>
           <button type="button" class="earthquake-pager-chip active" data-earthquake-pager="none" aria-pressed="true" title="Show earthquakes with no PAGER alert">None</button>
         </div>
+        <div class="earthquake-type-chips" id="earthquake-type-chips" role="group" aria-label="Earthquake event type">
+          <button type="button" class="earthquake-type-chip active" data-earthquake-type="quake" aria-pressed="true" title="Show tectonic earthquakes">Quake</button>
+          <button type="button" class="earthquake-type-chip active" data-earthquake-type="explosion" aria-pressed="true" title="Show explosion events">Explosion</button>
+          <button type="button" class="earthquake-type-chip active" data-earthquake-type="quarry" aria-pressed="true" title="Show quarry blasts">Quarry</button>
+          <button type="button" class="earthquake-type-chip active" data-earthquake-type="other" aria-pressed="true" title="Show other seismic events (ice quake, missing type, and similar)">Other</button>
+        </div>
       </div>
       <output id="earthquake-list-count" data-earthquake-list-count>—</output>
     </div>
