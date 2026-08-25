@@ -10,10 +10,16 @@ import {
   ALL_OFF_TITLE,
   LAST_VIEW_KEY,
   LAYER_STATE_STORAGE_KEY,
+  RESTORE_LIVE_LAYERS_ARIA_LABEL,
+  RESTORE_LIVE_LAYERS_BUTTON_ID,
+  RESTORE_LIVE_LAYERS_TITLE,
   allOffLiveLayers,
   hasStoredLayerProfile,
   isBannedLiveLayer,
+  restoreLiveLayers,
   shouldApplyFirstVisitLayerDefault,
+  shouldShowRestoreControl,
+  snapshotEnabledLayerIds,
 } from './allOffLayers.js';
 import { DataLayerManager } from './data/manager.js';
 import {
@@ -120,7 +126,7 @@ describe('All off chrome', () => {
   it('wires All off through the existing disable-all path and not Home', () => {
     const ui = src('ui.js');
     assert.match(ui, /getElementById\('clear-selected-layers'\)/);
-    assert.match(ui, /allOff\(\)\s*\{\s*return this\.clearSelectedLayers\(\);/);
+    assert.match(ui, /allOff\(\)\s*\{\s*this\._snapshotEnabledLayersBeforeAllOff\(\);\s*return this\.clearSelectedLayers\(\);/);
     assert.match(ui, /void this\.allOff\(\)/);
     assert.match(ui, /addEventListener\('click', this\._clearSelectedLayersHandler\)/);
     const allOffFn = ui.match(/allOff\(\)\s*\{[\s\S]*?\n  \}/)[0];
@@ -298,5 +304,125 @@ describe('First-visit default still only applies on a fresh profile', () => {
     assert.equal(hasStoredLayerProfile(storage), true);
     assert.equal(shouldApplyFirstVisitLayerDefault(storage), false);
     assert.ok(REGISTERED_LAYER_IDS.length > 0);
+  });
+});
+
+describe('Restore after All off', () => {
+  it('labels Restore next to All off and keeps it hidden until a snapshot exists', () => {
+    const html = root('index.html');
+    const block = html.match(/id="top-center-actions"[\s\S]*?<\/nav>/)[0];
+    assert.match(block, new RegExp(`id="${RESTORE_LIVE_LAYERS_BUTTON_ID}"`));
+    assert.match(block, /data-restore-live-layers/);
+    assert.match(block, new RegExp(`aria-label="${RESTORE_LIVE_LAYERS_ARIA_LABEL}"`));
+    assert.match(block, new RegExp(`title="${RESTORE_LIVE_LAYERS_TITLE}"`));
+    assert.match(block, /class="restore-live-layers-label">RESTORE</);
+    assert.match(block, /id="restore-live-layers"[\s\S]*?\bhidden\b/);
+    assert.equal((html.match(/id="restore-live-layers"/g) || []).length, 1);
+    assert.equal(shouldShowRestoreControl({}), false);
+    assert.equal(shouldShowRestoreControl({ snapshot: null, allOffUsedThisSession: false }), false);
+    assert.equal(shouldShowRestoreControl({ snapshot: [], allOffUsedThisSession: true }), false);
+    assert.equal(shouldShowRestoreControl({ snapshot: ['local-firms', 'satellites'], allOffUsedThisSession: true }), true);
+  });
+
+  it('wires Restore through the existing enable-set path and not Home or /api', () => {
+    const ui = src('ui.js');
+    assert.match(ui, /getElementById\('restore-live-layers'\)/);
+    assert.match(ui, /_snapshotEnabledLayersBeforeAllOff/);
+    assert.match(ui, /void this\.restoreLiveLayers\(\)/);
+    const restoreFn = ui.match(/restoreLiveLayers\(\)\s*\{[\s\S]*?\n  \}/)[0];
+    assert.doesNotMatch(restoreFn, /flyToHomeView|goHome|resetToGlobeView|setView|LAST_VIEW_KEY|removeItem|\/api\//);
+    const css = root('style.css');
+    assert.match(css, /#restore-live-layers/);
+    assert.match(css, /#restore-live-layers\[hidden\]/);
+    assert.match(css, /body\.cockpit-mode :is\([^)]*#restore-live-layers/);
+    assert.match(css, /body\.scene-playback-mode :is\([^)]*#restore-live-layers/);
+    const module = src('allOffLayers.js');
+    assert.doesNotMatch(module, /\/api\//);
+    assert.match(root('LICENSE'), /Copyright \(c\) 2026 Bilawal Sidhu/);
+  });
+
+  it('turns fires and sats back on after All off', async () => {
+    const { manager, layers } = makeManager(['flights', 'local-firms', 'satellites', 'cctv']);
+    await manager.setEnabled('local-firms', true, { origin: 'user' });
+    await manager.setEnabled('satellites', true, { origin: 'user' });
+    const snapshot = snapshotEnabledLayerIds(manager.getEnabledLayerIds());
+    assert.deepEqual(new Set(snapshot), new Set(['local-firms', 'satellites']));
+
+    await allOffLiveLayers(manager);
+    assert.equal(manager.isEnabled('local-firms'), false);
+    assert.equal(manager.isEnabled('satellites'), false);
+    assert.equal(manager.isEnabled('flights'), false);
+    assert.equal(manager.isEnabled('cctv'), false);
+
+    const result = await restoreLiveLayers(manager, snapshot);
+    assert.equal(result.restored, true);
+    assert.equal(manager.isEnabled('local-firms'), true);
+    assert.equal(manager.isEnabled('satellites'), true);
+    assert.equal(manager.isEnabled('flights'), false);
+    assert.equal(manager.isEnabled('cctv'), false);
+    assert.equal(layers.get('local-firms').calls.enable, 2);
+    assert.equal(layers.get('satellites').calls.enable, 2);
+    await manager.destroyAll();
+  });
+
+  it('never restores banned cables, OpenSky, or GNews', async () => {
+    const manager = new DataLayerManager({});
+    const fires = makeFetchLayer('local-firms', []);
+    const cables = makeFetchLayer('telegeography-submarine-cables', []);
+    cables.module.selectable = false;
+    manager.register(fires.module);
+    manager.register(cables.module);
+    manager.finalizeRegistrations(LAYER_STATE_REGISTRY.filter((entry) => (
+      entry.id === 'local-firms' || entry.id === 'telegeography-submarine-cables'
+    )));
+
+    const dirty = snapshotEnabledLayerIds([
+      'local-firms',
+      'telegeography-submarine-cables',
+      'opensky',
+      'google-news',
+      'google-news-rss',
+    ]);
+    assert.deepEqual(dirty, ['local-firms']);
+    assert.equal(isBannedLiveLayer('telegeography-submarine-cables'), true);
+    assert.equal(isBannedLiveLayer('opensky'), true);
+    assert.equal(isBannedLiveLayer('google-news'), true);
+    assert.equal(isBannedLiveLayer('google-news-rss'), true);
+
+    await restoreLiveLayers(manager, [
+      'local-firms',
+      'telegeography-submarine-cables',
+      'opensky',
+      'google-news-rss',
+    ]);
+    assert.equal(manager.isEnabled('local-firms'), true);
+    assert.equal(manager.isEnabled('telegeography-submarine-cables'), false);
+    assert.equal(await manager.setEnabled('telegeography-submarine-cables', true, { origin: 'user' }), false);
+    await manager.destroyAll();
+  });
+
+  it('does not move the camera or delete lastView', async () => {
+    const camera = {
+      positionCartographic: { latitude: 0.62, longitude: 2.44, height: 1800 },
+      heading: 0.4,
+      pitch: -0.7,
+      cancelFlight() { this.cancelled = true; },
+      setView() { this.moved = true; },
+      flyTo() { this.moved = true; },
+    };
+    const before = poseSnapshot(camera);
+    const storage = memoryStorage();
+    const prior = encodeShareViewUrl(HREF, LAST_VIEW_HASH);
+    writeLastView(storage, prior);
+    const { manager } = makeManager(['local-firms', 'satellites']);
+    await manager.setEnabled('local-firms', true, { origin: 'user' });
+    const snapshot = snapshotEnabledLayerIds(manager.getEnabledLayerIds());
+    await allOffLiveLayers(manager);
+    await restoreLiveLayers(manager, snapshot);
+    assert.deepEqual(poseSnapshot(camera), before);
+    assert.equal(camera.cancelled, undefined);
+    assert.equal(camera.moved, undefined);
+    assert.equal(storage.getItem(LAST_VIEW_KEY), prior);
+    await manager.destroyAll();
   });
 });
