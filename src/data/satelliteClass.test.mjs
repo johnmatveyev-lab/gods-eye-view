@@ -577,23 +577,24 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
 test('hiding points keeps POINTS, ORBITS, Core|Dense, and the class row', async () => {
   try {
     _setDenseCatalogStateForTest({});
-    assert.equal(satellitesLayer.getRowControls().chips.length, 9);
+    assert.equal(satellitesLayer.getRowControls().chips.length, 12);
 
     // Operator (or Space Missions) can hide dots via the existing showPoints
     // param. The row must stay so POINTS can turn back on and Orbits /
-    // Core|Dense / class chips remain independent.
+    // Core|Dense / class / period chips remain independent.
     satellitesLayer.setParams({ showPoints: false });
     const hidden = satellitesLayer.getRowControls();
-    assert.equal(hidden.chips.length, 9, 'row stays while dots are hidden');
+    assert.equal(hidden.chips.length, 12, 'row stays while dots are hidden');
     assert.equal(hidden.chips.find((chip) => chip.id === 'points')?.active, false);
     assert.ok(hidden.chips.some((chip) => chip.id === 'orbits'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'catalog-core'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'class-station'));
+    assert.ok(hidden.chips.some((chip) => chip.id === 'period-all'));
     assert.ok((hidden.selects || []).some((entry) => entry.id === 'sat-group'));
     assert.ok(hidden.readout?.id, 'Next ISS readout stays on the row');
 
     satellitesLayer.setParams({ showPoints: true });
-    assert.equal(satellitesLayer.getRowControls().chips.length, 9, 'POINTS on restores the same row');
+    assert.equal(satellitesLayer.getRowControls().chips.length, 12, 'POINTS on restores the same row');
     assert.equal(satellitesLayer.getRowControls().chips.find((chip) => chip.id === 'points')?.active, true);
   } finally {
     _clearDenseCatalogStateForTest();
@@ -651,7 +652,12 @@ test('all-on class chips match the current catalog', () => {
       SATELLITE_CLASS_ORDER.map((klass) => `class-${klass}`),
       chips.slice(2, 7),
     );
-    assert.deepEqual(chips.slice(7), ['points', 'orbits'], 'POINTS sits next to ORBITS');
+    assert.deepEqual(
+      chips.slice(7, 10),
+      ['period-all', 'period-100', 'period-128'],
+      'period chips sit after class chips',
+    );
+    assert.deepEqual(chips.slice(10), ['points', 'orbits'], 'POINTS sits next to ORBITS');
   } finally {
     _clearDenseCatalogStateForTest();
   }
@@ -798,6 +804,46 @@ test('COMMS is a no-op in Core and hides the Starlink shell in Dense', () => {
     assert.equal(visibleIds().includes(44444), false, 'Dense + COMMS off hides Starlink');
     assert.equal(visibleIds().includes(ISS_NORAD), true);
     assert.equal(_catalogGroupForTest(44444), 'dense', 'the shell stays cached');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('period chips AND with class chips on already-fetched satrecs', () => {
+  const geoOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'geo');
+  try {
+    _setDenseCatalogStateForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      coreSats: [
+        {
+          noradId: ISS_NORAD,
+          name: 'ISS (ZARYA)',
+          group: 'stations',
+          satrec: { no: (2 * Math.PI) / 92 },
+          point: { id: ISS_NORAD, show: true },
+        },
+        {
+          noradId: 40000,
+          name: 'GEO-1',
+          group: 'geo',
+          satrec: { no: (2 * Math.PI) / 1436 },
+          point: { id: 40000, show: true },
+        },
+      ],
+    });
+    assert.deepEqual(visibleIds(), [ISS_NORAD, 40000]);
+
+    satellitesLayer.setParams({ satPeriod: '128' });
+    assert.equal(visibleIds().includes(ISS_NORAD), true);
+    assert.equal(visibleIds().includes(40000), false, '<128m hides GEO-period while GEO class stays on');
+    assert.equal(classChip('geo').active, true);
+
+    satellitesLayer.setParams({ satelliteClassFilter: geoOff, satPeriod: 'all' });
+    assert.equal(visibleIds().includes(ISS_NORAD), true);
+    assert.equal(visibleIds().includes(40000), false, 'GEO class off still hides the GEO sat');
+    assert.equal(satellitesLayer.getParams().satPeriod, 'all');
   } finally {
     _clearDenseCatalogStateForTest();
   }

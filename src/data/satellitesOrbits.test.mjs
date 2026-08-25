@@ -270,6 +270,40 @@ test('a failed CelesTrak fetch leaves the orbits toggle unchanged', async () => 
   }
 });
 
+test('period chips AND with ORBITS on already-fetched satrecs', () => {
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD, 40000],
+      orbits: [ISS_NORAD, 40000],
+      groups: { [ISS_NORAD]: 'stations', 40000: 'geo' },
+      satrecs: {
+        [ISS_NORAD]: { no: (2 * Math.PI) / 92 },
+        40000: { no: (2 * Math.PI) / 1436 },
+      },
+    });
+    satellitesLayer.setParams({ satPeriod: '128' });
+    let state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, true);
+    assert.equal(state.orbitShows[ISS_NORAD], true, 'ISS ring stays under <128m');
+    assert.equal(state.orbitShows[40000], false, 'GEO-period ring hides');
+    assert.equal(state.pointShows[ISS_NORAD], true);
+    assert.equal(state.pointShows[40000], false);
+
+    satellitesLayer.setParams({ showOrbits: false });
+    state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, false);
+    assert.equal(state.orbitShows[ISS_NORAD], false);
+    assert.equal(state.orbitShows[40000], false);
+    assert.equal(state.satPeriod, '128');
+    assert.equal(state.pointShows[ISS_NORAD], true);
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
 test('orbit chrome does not add an API endpoint', () => {
   const satellites = readFileSync(path.join(ROOT, 'src/data/satellites.js'), 'utf8');
   const layerState = readFileSync(path.join(ROOT, 'src/data/layerState.js'), 'utf8');
