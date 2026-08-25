@@ -9,6 +9,10 @@
       "maxDuration": 30,
       "includeFiles": "config/**"
     },
+    "api/cctv/[...path].js": {
+      "maxDuration": 30,
+      "includeFiles": "config/cctv_sources*.json"
+    },
     "api/gbfs/[...target].js": {
       "maxDuration": 15
     },
