@@ -9,6 +9,7 @@ import { getNextIssPass } from '../data/satellites.js';
 import { CCTV_FOCUS_RESULT } from '../data/cctv.js';
 import { contextModeWord } from '../contextModePolicy.js';
 import { createAnalystEngine } from '../data/analystEngine.js';
+import { VOICE_LAYER_ALIASES as LAYER_ALIASES } from '../data/layerAliases.js';
 import { layerFeedState } from '../data/manager.js';
 import militaryAwarenessLayer, {
   collectAircraftProximityWindow,
@@ -20,6 +21,8 @@ import { isPickedWorldPosition } from '../data/scenePick.js';
 import { resolveRegionRingForQuery } from '../annotations/annotationResolver.js';
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import { TR3B_CLASS } from '../data/tr3bRegistry.js';
+import { detectionDensityControlRequest } from '../detectionDensityChrome.js';
+import { refuseBannedCommercialVoiceArgs } from '../data/commercialBans.js';
 
 const ALLOWED_STYLES = new Set(['normal', 'retro', 'surveillance', 'thermal', 'anime', 'noir', 'snow']);
 const PANEL_ALIASES = new Map([
@@ -140,49 +143,6 @@ const COCKPIT_ACTION_ALIASES = new Map([
   ['go to next', 'next'],
 ]);
 const COCKPIT_TARGET_LAYERS = new Set(['flights', 'military', 'ais-live-vessels', 'military-installations']);
-
-const LAYER_ALIASES = new Map([
-  ['flights', 'flights'],
-  ['planes', 'flights'],
-  ['aircraft', 'flights'],
-  ['opensky', 'opensky'],
-  ['open sky', 'opensky'],
-  ['open-sky', 'opensky'],
-  ['military', 'military'],
-  ['military flights', 'military'],
-  ['earthquakes', 'earthquakes'],
-  ['quakes', 'earthquakes'],
-  ['satellites', 'satellites'],
-  ['space mission', 'rocket-launches'],
-  ['space missions', 'rocket-launches'],
-  ['missions', 'rocket-launches'],
-  ['traffic', 'traffic'],
-  ['street traffic', 'traffic'],
-  ['cctv', 'cctv'],
-  ['cameras', 'cctv'],
-  ['radio', 'radio'],
-  ['internet radio', 'radio'],
-  ['radio stations', 'radio'],
-  ['bikeshare', 'bikeshare'],
-  ['bikes', 'bikeshare'],
-  ['ais', 'ais-live-vessels'],
-  ['ships', 'ais-live-vessels'],
-  ['vessels', 'ais-live-vessels'],
-  ['live vessels', 'ais-live-vessels'],
-  ['datacenters', 'local-datacenters'],
-  ['data centers', 'local-datacenters'],
-  ['data centres', 'local-datacenters'],
-  ['dams', 'local-dams'],
-  ['submarine cables', 'telegeography-submarine-cables'],
-  ['submarine cable', 'telegeography-submarine-cables'],
-  ['undersea cables', 'telegeography-submarine-cables'],
-  ['undersea cable', 'telegeography-submarine-cables'],
-  ['cables', 'telegeography-submarine-cables'],
-  ['telegeography', 'telegeography-submarine-cables'],
-  ['firms', 'local-firms'],
-  ['fires', 'local-firms'],
-  ['active fires', 'local-firms'],
-]);
 
 const CITY_ALIASES = new Map([
   ['new york', 'nyc'],
@@ -321,6 +281,8 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'set_layer_visibility') {
+      const bannedLayer = refuseBannedCommercialVoiceArgs(name, args);
+      if (bannedLayer) return bannedLayer;
       const layerId = normalizeLayerId(args.layerId);
       if (!layerId) {
         throw new Error(`Unknown data layer: ${args.layerId || 'missing'}`);
@@ -438,6 +400,8 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'select_nearest_aircraft') {
+      const bannedAircraft = refuseBannedCommercialVoiceArgs(name, args);
+      if (bannedAircraft) return bannedAircraft;
       const layerId = normalizeLayerId(args.layerId || 'flights');
       if (!['flights', 'military'].includes(layerId)) {
         return {
@@ -766,6 +730,8 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'show_data_layers_menu') {
+      const bannedMenu = refuseBannedCommercialVoiceArgs(name, args);
+      if (bannedMenu) return bannedMenu;
       const layerId = normalizeLayerId(args.layerId || args.layer);
       setPanelOpen(styleManager, 'data-panel', true);
       const focusedLayer = layerId && dataManager.layers.has(layerId)
@@ -877,10 +843,13 @@ export function createGevActionRunner({ viewer, styleManager, dataManager, scene
     }
 
     if (name === 'set_detection') {
+      const densityRequest = Number.isFinite(Number(args.densityPct))
+        ? detectionDensityControlRequest(args.densityPct)
+        : {};
       const result = styleManager.setDetection({
-        enabled: typeof args.enabled === 'boolean' ? args.enabled : undefined,
+        enabled: typeof args.enabled === 'boolean' ? args.enabled : densityRequest.enabled,
         mode: typeof args.mode === 'string' ? args.mode : undefined,
-        densityPct: Number.isFinite(Number(args.densityPct)) ? Number(args.densityPct) : undefined,
+        densityPct: Number.isFinite(Number(args.densityPct)) ? densityRequest.densityPct : undefined,
         allocationStrategy: typeof args.allocationStrategy === 'string' ? args.allocationStrategy : undefined,
       });
       return { action: 'set_detection', ...result };
@@ -1672,6 +1641,8 @@ export function formatTrackedEntityLabel(found, query = '') {
 
 /** Finds and tracks/selects an entity by spoken query across layer families. */
 async function trackEntity(viewer, dataManager, styleManager, args = {}) {
+  const bannedTrack = refuseBannedCommercialVoiceArgs('track_entity', args);
+  if (bannedTrack) return bannedTrack;
   const query = String(args.query || '').trim();
   if (!query) throw new Error('track_entity needs a query');
 
@@ -1820,6 +1791,8 @@ function stopAllTracking(viewer, dataManager) {
  * detectionEnabled so the voice agent can mention labels are on.
  */
 async function frameOverhead(viewer, dataManager, styleManager, args = {}) {
+  const bannedFrame = refuseBannedCommercialVoiceArgs('frame_overhead', args);
+  if (bannedFrame) return bannedFrame;
   const targetRaw = String(args.target || 'flights').toLowerCase();
   const layerId = FRAME_TARGETS.get(targetRaw) || normalizeLayerId(targetRaw) || 'flights';
   if (!dataManager.layers.has(layerId)) {

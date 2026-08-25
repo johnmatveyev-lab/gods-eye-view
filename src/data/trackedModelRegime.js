@@ -1,16 +1,16 @@
 /**
  * Zoom-driven 2D↔3D policy for the TRACKED contact (both flight layers).
  *
- * The fleet's 3D models stay behind the DISPLAY-rail "3D" toggle (`models3d`)
- * — hundreds of GLBs are a draw-call budget decision the operator owns. Since
- * 2026-08-22 that toggle DEFAULTS ON in `proximity` (product invariant), so the
+ * Hangar GLBs stay behind the DISPLAY-rail Models control (`models3d`,
+ * persisted as `meridian.models` = on|off). Hundreds of fleet GLBs are a
+ * draw-call budget the operator owns, and PLAN 55 extends that same switch to
+ * the selected contact so a hosted laptop can stay on 2D billboards. Since
+ * 2026-08-22 the control DEFAULTS ON in `proximity` (product invariant), so the
  * fleet is armed on a fresh boot; proximity is itself the budget, admitting only
- * the nearest MODEL_MAX in view below the fleet ceiling. The contact you have
- * SELECTED is still a separate case: it is exactly one model, it is what the
- * camera is pointed at, and the operator's expectation is that zooming in on a
- * target resolves it into an aircraft. So the tracked contact's handoff is
- * DEFAULT behaviour, driven purely by camera distance and never consulting the
- * toggle at all (product invariant, 2026-08-19).
+ * the nearest MODEL_MAX in view below the fleet ceiling. When Models are ON,
+ * the tracked contact still uses this zoom-driven handoff (product invariant,
+ * 2026-08-19). When they are OFF, the layers keep the billboard fallback — the
+ * same path used when a hangar GLB fails to load. Track and cockpit continue.
  *
  * Threshold history — the tracked contact used to inherit the fleet ceiling
  * `MODEL_ALT_CEIL_M = 800_000` m, and a first pass raised it to 1_000_000 m to

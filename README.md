@@ -49,12 +49,13 @@ The dev server binds to **localhost** — your keys stay on your machine.
 ## What's on the globe
 
 - **Cockpit view:** Ride inside a tracked flight.
-- **Contacts:** A 250 km roster of nearby live aircraft.
+- **Contacts:** A 250 km roster of nearby live aircraft. The Contacts control shows and hides that existing list.
 - **Launches panel:** Upcoming Launch Library 2 missions. Click a row to fly to the pad when coordinates are present.
-- **Click-to-track:** Camera locks on, draws a fading trail, surfaces metadata.
-- **Voice whiteboard:** Speak annotations onto the world.
+- **Click-to-track:** Camera locks on, draws a fading trail, surfaces metadata. Display **Trails** hides that path without stopping track.
+- **Voice whiteboard:** Speak annotations onto the world. Clear them from the globe chrome when marks are present.
 - **3D hangar:** Per-class aircraft models as you close in.
-- **Sensor looks:** CRT, NVG, FLIR/thermal, Noir, Snow.
+- **Sensor looks:** CRT, NVG, FLIR/thermal, Noir, Snow. A Look control on
+  Visual Presets cycles those existing styles; voice still sets the same ids.
 - **Share links:** Camera, style, layers, and one tracked target serialize into a URL.
 
 ---
@@ -80,7 +81,7 @@ Setup:
 
 If Stripe keys are missing, the Upgrade button explains that Checkout is not configured instead of failing silently. Unit tests mock Stripe and Clerk — they do not need live keys.
 
-On Vercel the globe is a Vite static build. Hosted billing therefore lives in Node functions (`api/billing/[...path].js` and `api/stripe/webhook.js`) that forward to `handleBillingHttp`. The cockpit regional brief is the same pattern: `api/regional-brief.js` forwards to `handleRegionalBrief` (GDELT + Open-Meteo + Nominatim; no Google News RSS). Optional TomTom live traffic uses `api/tomtom/[...path].js` → `src/data/tomtom.js`: `/api/tomtom/status` is always JSON, and a missing `TOMTOM_API_KEY` is `503 {error:'no_key'}` without contacting TomTom. Leave Clerk/Stripe unset on a preview and billing routes still respond with `503`/`401` JSON — they must not be a Vercel platform 404. This extract does not wrap `/api/ais-live`. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
+On Vercel the globe is a Vite static build. Hosted billing, voice token mint, and HUD summary therefore live in Node functions (`api/billing/[...path].js`, `api/stripe/webhook.js`, `api/realtime/token.js`, `api/openai/hud-summary.js`, plus the live-proxy catch-all `api/[...path].js`). The cockpit regional brief is the same pattern: `api/regional-brief.js` forwards to `handleRegionalBrief` (GDELT + Open-Meteo + Nominatim; no Google News RSS). Optional TomTom live traffic uses `api/tomtom/[...path].js` → `src/data/tomtom.js`: `/api/tomtom/status` is always JSON, and a missing `TOMTOM_API_KEY` is `503 {error:'no_key'}` without contacting TomTom. Leave Clerk/Stripe unset on a preview and billing routes still respond with `503`/`401` JSON — they must not be a Vercel platform 404. Missing `OPENAI_API_KEY` returns `503` on the voice/HUD routes. This extract does not wrap `/api/ais-live`. Docker/`vite preview` (Fly, Render) keeps the same handlers in-process.
 
 Optional: `MERIDIAN_BILLING_STORE_PATH=.meridian-billing/accounts.json` persists plan + daily usage across process restarts (in-memory otherwise).
 

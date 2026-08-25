@@ -1204,7 +1204,9 @@ function makeRecord(overrides = {}) {
 function makeTrailSpy() {
   return {
     clearCalls: 0,
+    visible: true,
     clear() { this.clearCalls += 1; },
+    setVisible(next) { this.visible = next !== false; },
     setPositions() {},
     destroy() {},
   };

@@ -71,6 +71,7 @@ settled and not applicable because no Google 3D tileset is active.
   - `window.__gevAnnotations.demo()` — lays the SF set down at once
   - `window.__gevAnnotations.clear()` — erase all marks
   - `window.__gevAnnotations.count()` — how many marks are live
+  - **Clear annotations** (top-center globe chrome) — same erase, no mic. Disabled when the board is empty.
 
 ---
 
@@ -120,6 +121,12 @@ cancellation, hardened Overpass + route proxies. Not much to see by hand (see §
 1. Keep tracking ~10s. 📸 Snap the cyan trail while it moves.
 - ✅ Trail tail stays attached to the plane; nothing pokes out *in front* of the nose; no ~1s lag.
   ❌ *Was:* trail lagged a beat behind.
+
+**1c2 · Trails on/off (Display rail)**
+1. With a plane tracked and Trails on, confirm the fading path is visible.
+2. Toggle **Trails** off. The path hides; the camera still follows.
+3. Reload: Trails stays off. Toggle 3D off as well: tracking still follows.
+4. Stop tracking: the target still clears. Trails off only hid drawing.
 
 **1d · Military layer (same fixes, mirrored)**
 1. Enable the **Military** layer (left column). Track an **amber** plane. Repeat 1a–1c.
