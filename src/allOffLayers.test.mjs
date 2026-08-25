@@ -24,8 +24,8 @@ import {
   parseStoredLayerState,
   serializeStoredLayerState,
 } from './data/layerState.js';
-import { encodeShareViewUrl } from './sharelink.js';
 import { writeLastView } from './lastView.js';
+import { encodeShareViewUrl } from './shareViewUrl.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(__dirname, '..');
@@ -127,8 +127,11 @@ describe('All off chrome', () => {
     assert.doesNotMatch(allOffFn, /flyToHomeView|goHome|resetToGlobeView|setView/);
     const clearFn = ui.match(/clearSelectedLayers\(\)\s*\{[\s\S]*?\n  \}/)[0];
     assert.doesNotMatch(clearFn, /flyToHomeView|goHome|resetToGlobeView|LAST_VIEW_KEY|removeItem/);
-    assert.match(clearFn, new RegExp(ALL_OFF_BUSY_ARIA_LABEL));
-    assert.match(clearFn, new RegExp(ALL_OFF_ARIA_LABEL));
+    assert.match(clearFn, /ALL_OFF_BUSY_ARIA_LABEL/);
+    assert.match(clearFn, /ALL_OFF_ARIA_LABEL/);
+    assert.match(ui, /ALL_OFF_BUSY_ARIA_LABEL/);
+    assert.match(src('allOffLayers.js'), new RegExp(ALL_OFF_BUSY_ARIA_LABEL));
+    assert.match(src('allOffLayers.js'), new RegExp(ALL_OFF_ARIA_LABEL));
   });
 
   it('hides with the other globe chrome and does not invent /api', () => {
