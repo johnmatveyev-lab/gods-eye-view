@@ -212,6 +212,10 @@ const OPTION_GROUPS = Object.freeze({
   ]),
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),
+    // Default ON matches the long-standing hardcoded ring visibility. This is a
+    // new token, so omitted `o` means the same thing existing v2 links already
+    // showed: rings on.
+    booleanOption('showOrbits', 'o', true),
     integerOption('selectedSatTrackingId', 't', null),
   ]),
   cctv: Object.freeze([
