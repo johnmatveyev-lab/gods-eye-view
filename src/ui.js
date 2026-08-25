@@ -314,6 +314,7 @@ import {
 import { AWARENESS_RADIUS_M, formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
 import {
   formatDistanceMeters,
+  formatWeatherVisibility,
   getDistanceUnit,
   initDistanceUnits,
   setDistanceUnit,
@@ -1065,6 +1066,8 @@ class CockpitViewController {
     this.localCondition = document.getElementById('cockpit-local-condition');
     this.localCloud = document.getElementById('cockpit-local-cloud');
     this.localPrecipitation = document.getElementById('cockpit-local-precipitation');
+    this.localVisibility = document.getElementById('cockpit-local-visibility');
+    this.localVisibilityCell = document.getElementById('cockpit-local-visibility-cell');
     this.weatherCredit = document.querySelector('.cockpit-weather-credit');
     this.signalCollapsed = false;
     this.signalUserCollapsed = false;
@@ -1867,6 +1870,18 @@ class CockpitViewController {
 
   refreshDistanceUnits() {
     if (this._lastContextInfo) this.updateContext(this._lastContextInfo, this._lastContextHeading);
+    this.paintWeatherVisibility(this.regionalBrief?.weather);
+  }
+
+  /**
+   * Re-print stored visibilityM with the current km/nm/mi toggle.
+   * Uses the in-memory regional observation — no weather-effects refetch.
+   * @param {{visibilityM?: unknown}|null|undefined} weather
+   */
+  paintWeatherVisibility(weather) {
+    const text = formatWeatherVisibility(weather?.visibilityM);
+    if (this.localVisibility) this.localVisibility.textContent = text;
+    if (this.localVisibilityCell) this.localVisibilityCell.hidden = text === 'UNAVAILABLE';
   }
 
   updateContext(info, heading) {
@@ -2145,6 +2160,7 @@ class CockpitViewController {
     if (this.localPlace && status === 'unavailable') this.localPlace.textContent = 'REGION UNAVAILABLE';
     this.updateWeatherCredit(null);
     this.updateLocalPosition(info);
+    this.paintWeatherVisibility(null);
   }
 
   renderRegionalBrief(payload, info) {
@@ -2195,6 +2211,7 @@ class CockpitViewController {
       this.localPrecipitation.textContent = Number.isFinite(weather?.precipitationMm)
         ? weather.precipitationMm.toFixed(1) : '—';
     }
+    this.paintWeatherVisibility(weather);
     if (this.signalStream) this.signalStream.dataset.regionalStatus = payload?.status || 'partial';
     if (this.briefPageIndex === 1 && this.briefSource) {
       this.briefSource.textContent = `${String(payload?.newsSource || 'REGIONAL NEWS').toUpperCase()} · LOCATION QUERY`;

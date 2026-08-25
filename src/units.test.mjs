@@ -9,6 +9,7 @@ import {
   convertMeters,
   formatDistanceMeters,
   formatHudAltitude,
+  formatWeatherVisibility,
   getDistanceUnit,
   initDistanceUnits,
   normalizeDistanceUnit,
@@ -98,6 +99,20 @@ test('subscribers hear a unit change once', () => {
     stop();
     resetDistanceUnitsForTests();
   }
+});
+
+test('weather visibility uses the same km / nmi / mi helper as measure and scale', () => {
+  const visibilityM = 18_000;
+  assert.equal(formatWeatherVisibility(visibilityM, 'km'), '18 km');
+  assert.equal(formatWeatherVisibility(visibilityM, 'nm'), '9.7 nmi');
+  assert.equal(formatWeatherVisibility(visibilityM, 'mi'), '11 mi');
+  assert.equal(formatWeatherVisibility(visibilityM, 'km'), formatDistanceMeters(visibilityM, 'km'));
+  assert.equal(formatWeatherVisibility(visibilityM, 'nm'), formatDistanceMeters(visibilityM, 'nm'));
+  assert.equal(formatWeatherVisibility(visibilityM, 'mi'), formatDistanceMeters(visibilityM, 'mi'));
+  assert.equal(formatWeatherVisibility(null), 'UNAVAILABLE');
+  assert.equal(formatWeatherVisibility(Number.NaN), 'UNAVAILABLE');
+  assert.equal(formatWeatherVisibility(undefined), 'UNAVAILABLE');
+  assert.equal(formatWeatherVisibility(0, 'km'), '0 m');
 });
 
 test('Display ships a km | nm | mi control wired to meridian.units', () => {
