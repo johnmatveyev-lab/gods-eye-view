@@ -45,6 +45,15 @@ import {
   stationMatchesRadioBitrateFloor,
 } from './radioBitrateFloor.js';
 import {
+  filterRadioStationsByFavorites,
+  isRadioFavorite,
+  normalizeRadioFavoriteId,
+  readRadioFavoriteIds,
+  stationMatchesRadioFavorites,
+  toggleRadioFavoriteId,
+  writeRadioFavoriteIds,
+} from './radioFavorites.js';
+import {
   DEFAULT_RADIO_VOLUME_PCT,
   radioMuteToggle,
   radioVolumePctToUnit,
@@ -203,6 +212,8 @@ let _renderById = new Map();
 let _filter = DEFAULT_RADIO_FILTER;
 let _stationSearch = '';
 let _bitrateFloor = DEFAULT_RADIO_BITRATE_FLOOR;
+let _favoriteIds = [];
+let _favoritesOnly = false;
 let _selectedId = null;
 let _selectedEntity = null;
 let _selectionGeneration = 0;
@@ -711,6 +722,10 @@ function applyPersistedRadioVolume() {
   _unmutedVolume = radioVolumePctToUnit(rememberRadioVolumePrior(pct, DEFAULT_RADIO_VOLUME_PCT));
 }
 
+function applyPersistedRadioFavorites() {
+  _favoriteIds = readRadioFavoriteIds();
+}
+
 function commitUserVolume(volume) {
   const next = clampRadioVolume(volume);
   if (next > 0) _unmutedVolume = next;
@@ -1196,10 +1211,14 @@ function playingStationKeepId() {
 }
 
 function directoryStations({ keepPlaying = true } = {}) {
-  return filterRadioStationsByBitrateFloor(
-    filterRadioStations(_stations, _filter),
-    _bitrateFloor,
-    { keepStationId: keepPlaying ? playingStationKeepId() : null },
+  return filterRadioStationsByFavorites(
+    filterRadioStationsByBitrateFloor(
+      filterRadioStations(_stations, _filter),
+      _bitrateFloor,
+      { keepStationId: keepPlaying ? playingStationKeepId() : null },
+    ),
+    _favoriteIds,
+    { favoritesOnly: _favoritesOnly },
   );
 }
 
@@ -1216,7 +1235,8 @@ function stationMatchesCurrentDirectory(station, { keepPlaying = true } = {}) {
     && stationMatchesRadioSearch(station, _stationSearch)
     && stationMatchesRadioBitrateFloor(station, _bitrateFloor, {
       keepStationId: keepPlaying ? playingStationKeepId() : null,
-    });
+    })
+    && stationMatchesRadioFavorites(station, _favoriteIds, { favoritesOnly: _favoritesOnly });
 }
 
 function viewportRadioAnchor() {
@@ -1292,6 +1312,9 @@ export function getRadioUIState() {
     filter: _filter,
     stationSearch: _stationSearch,
     minBitrate: _bitrateFloor,
+    favoritesOnly: _favoritesOnly,
+    favoriteIds: Object.freeze([..._favoriteIds]),
+    selectedFavorite: Boolean(selected && isRadioFavorite(selected.id, _favoriteIds)),
     categories: _categories,
     acceptedCatalogGeneration: _acceptedCatalogSnapshot.generation,
     presentationActive: radioPresentationAllowed(),
@@ -2505,6 +2528,18 @@ export function getRadioDirectoryStations(limit = RADIO_TUNER_STATION_LIMIT) {
   return buildRadioTunerBand(directoryStations(), selectedStation(), limit);
 }
 
+function applyRadioDirectoryFilterChange() {
+  resetRadioClusterOverlayIdentities();
+  updateRenderVisibility();
+  if (_dataSource?.clustering?.enabled) {
+    const clusterPoints = _dataSource.clustering.clusterPoints;
+    _dataSource.clustering.clusterPoints = !clusterPoints;
+    _dataSource.clustering.clusterPoints = clusterPoints;
+    _viewer?.scene?.requestRender?.();
+  }
+  scheduleRadioOverlayPublish();
+}
+
 /** Raise or clear the min-bitrate floor without fetching or stopping audio. */
 export function setRadioBitrateFloor(floorId) {
   if (!radioPresentationAllowed()) return false;
@@ -2512,17 +2547,35 @@ export function setRadioBitrateFloor(floorId) {
   const changed = nextFloor !== _bitrateFloor;
   if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
   _bitrateFloor = nextFloor;
-  if (changed) {
-    resetRadioClusterOverlayIdentities();
-    updateRenderVisibility();
-    if (_dataSource?.clustering?.enabled) {
-      const clusterPoints = _dataSource.clustering.clusterPoints;
-      _dataSource.clustering.clusterPoints = !clusterPoints;
-      _dataSource.clustering.clusterPoints = clusterPoints;
-      _viewer?.scene?.requestRender?.();
-    }
-    scheduleRadioOverlayPublish();
-  }
+  if (changed) applyRadioDirectoryFilterChange();
+  emitState();
+  return true;
+}
+
+/** Show only pinned stations without fetching or stopping audio. */
+export function setRadioFavoritesOnly(enabled) {
+  if (!radioPresentationAllowed()) return false;
+  const next = Boolean(enabled);
+  const changed = next !== _favoritesOnly;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _favoritesOnly = next;
+  if (changed) applyRadioDirectoryFilterChange();
+  emitState();
+  return true;
+}
+
+/** Pin or unpin the selected (or playing) station. Caps at 20 stored ids. */
+export function toggleRadioFavorite(stationId) {
+  if (!radioPresentationAllowed()) return false;
+  const id = normalizeRadioFavoriteId(stationId)
+    || _selectedId
+    || _audioStationId
+    || null;
+  if (!id) return false;
+  const next = toggleRadioFavoriteId(_favoriteIds, id);
+  if (!next.ok && next.reason === 'full') return false;
+  _favoriteIds = writeRadioFavoriteIds(next.list);
+  if (_favoritesOnly) applyRadioDirectoryFilterChange();
   emitState();
   return true;
 }
@@ -2747,6 +2800,7 @@ export const radioLayer = {
     _viewer = viewer;
     resetRadioClusterOverlayIdentities();
     applyPersistedRadioVolume();
+    applyPersistedRadioFavorites();
     installAudio();
     if (!_dataSource) {
       _dataSource = new Cesium.CustomDataSource('Radio stations');
@@ -2956,6 +3010,8 @@ export const radioLayer = {
     _filter = DEFAULT_RADIO_FILTER;
     _stationSearch = '';
     _bitrateFloor = DEFAULT_RADIO_BITRATE_FLOOR;
+    _favoriteIds = [];
+    _favoritesOnly = false;
     _renderById.clear();
     resetRadioClusterOverlayIdentities();
     _lastHorizonCameraPosition = null;
@@ -3021,6 +3077,8 @@ export const radioLayer = {
   setFilter: setRadioFilter,
   setStationSearch: setRadioStationSearch,
   setBitrateFloor: setRadioBitrateFloor,
+  setFavoritesOnly: setRadioFavoritesOnly,
+  toggleFavorite: toggleRadioFavorite,
   selectStation: selectRadioStation,
   selectRequestedStation: selectRequestedRadioStation,
   cycleStation: cycleRadioStation,
