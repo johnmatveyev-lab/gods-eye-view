@@ -28,6 +28,13 @@ import {
   getClockMode,
   syncClockToggleButtons,
 } from './clockPreference.js';
+import {
+  cycleHud,
+  hudChromeAriaLabel,
+  hudChromeLabel,
+  readStoredHudVariant,
+  writeStoredHudVariant,
+} from './hudCycle.js';
 import { ShareLinkManager } from './sharelink.js';
 import {
   isExplicitLayerStateOrigin,
@@ -3690,6 +3697,7 @@ export class StyleManager {
     if (this._hudLayoutSelect && this._hudLayoutSelect.value !== this.hud.getVariant()) {
       this._hudLayoutSelect.value = this.hud.getVariant();
     }
+    writeStoredHudVariant(this.hud.getVariant());
     this._syncShareState();
     this._scheduleAdaptivePanelLayout({ settle: true });
   }
@@ -7918,6 +7926,21 @@ export class StyleManager {
   // { ok, ...resultingState } so callers confirm only what actually happened.
 
   /**
+   * Advances the HUD one step along the existing set_hud cycle:
+   * operator → minimal → tactical → off → operator.
+   * @returns {{ok: boolean, visible?: boolean, layout?: string, error?: string}}
+   */
+  cycleHud() {
+    return cycleHud({
+      visible: !!this.hud?.visible,
+      layout: this.hud?.getVariant?.() || 'tactical',
+    }, {
+      setHudLayout: (layout) => this.setHudLayout(layout),
+      setHudVisible: (mode) => this.setHudVisible(mode),
+    });
+  }
+
+  /**
    * Sets HUD visibility mode. 'auto' restores style-driven show/hide.
    * @param {'on'|'off'|'auto'} mode - Visibility mode.
    * @returns {{ok: boolean, visible?: boolean, layout?: string, error?: string}}
@@ -7946,6 +7969,7 @@ export class StyleManager {
     }
     this.shareLinkManager?.claimRestoreLane?.('visual');
     this._setHudVariant(variant);
+    this._updateHudButtonState();
     return { ok: true, layout: this.hud.getVariant(), visible: !!this.hud.visible };
   }
 
@@ -10044,15 +10068,15 @@ export class StyleManager {
   _initHUDToggle() {
     this._hudBtn.addEventListener('click', () => {
       this.shareLinkManager?.claimRestoreLane?.('visual');
-      this.hud.toggle();
-      this._updateHudButtonState();
-      this._syncShareState();
+      this.cycleHud();
     });
 
+    const storedVariant = readStoredHudVariant();
+    const initialVariant = storedVariant || 'tactical';
     if (this._hudLayoutSelect) {
-      this._hudLayoutSelect.value = 'tactical';
+      this._hudLayoutSelect.value = initialVariant;
     }
-    this._setHudVariant('tactical');
+    this._setHudVariant(initialVariant);
     this.hud.setMode('on');
     this._updateHudButtonState();
 
@@ -10169,9 +10193,17 @@ export class StyleManager {
    * @returns {void}
    */
   _updateHudButtonState() {
-    this._hudBtn.classList.toggle('active', this.hud.visible);
+    const hudState = {
+      visible: !!this.hud.visible,
+      layout: this.hud.getVariant(),
+    };
+    this._hudBtn.classList.toggle('active', hudState.visible);
+    this._hudBtn.setAttribute('aria-pressed', String(hudState.visible));
+    this._hudBtn.setAttribute('aria-label', hudChromeAriaLabel(hudState));
+    const label = this._hudBtn.querySelector('.pp-label');
+    if (label) label.textContent = hudChromeLabel(hudState);
     if (this._hudLayoutRow) {
-      this._hudLayoutRow.classList.toggle('visible', this.hud.visible);
+      this._hudLayoutRow.classList.toggle('visible', hudState.visible);
     }
     this._scheduleAdaptivePanelLayout({ settle: true });
   }
