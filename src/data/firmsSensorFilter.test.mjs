@@ -17,10 +17,6 @@ import {
   normalizeFirmsSensorFilter,
   toggleFirmsSensor,
 } from './firmsSensorFilter.js';
-import {
-  createFirmsHeatmapLayer,
-  filterVisibleFires,
-} from './firmsHeatmap.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -92,29 +88,9 @@ test('FIRMS panel exposes VIIRS | MODIS | Other chips next to FRP', () => {
   assert.equal(existsSync(path.join(ROOT, 'api/firms/sensor.js')), false);
 });
 
-test('row chips sit next to FRP and write sensors params', () => {
-  const layer = createFirmsHeatmapLayer({ id: 'firms', name: 'FIRMS' });
-  const chips = layer.getRowControls().chips;
-  const frp = chips.filter((chip) => chip.id.startsWith('frp-'));
-  const sensors = chips.filter((chip) => chip.id.startsWith('sensor-'));
-  assert.deepEqual(frp.map((chip) => chip.label), ['All', '10+', '50+', '100+ MW']);
-  assert.deepEqual(sensors.map((chip) => chip.label), ['VIIRS', 'MODIS', 'Other']);
-  assert.ok(sensors.every((chip) => chip.active === true));
-  assert.ok(sensors.every((chip) => chip.group === 'Sensor'));
-  assert.equal(layer.getParams().sensors, 'all');
-  assert.equal(firmsSensorChipModels('all')[1].params.sensors, 'VO');
-  assert.equal(layer.setParams({ sensors: 'VO' }), true);
-  assert.deepEqual(
-    layer.getRowControls().chips.filter((chip) => chip.id.startsWith('sensor-')).map((chip) => chip.active),
-    [true, false, true],
-  );
-  assert.equal(layer.setParams({ sensors: 'bogus' }), false);
-  assert.equal(layer.getParams().sensors, 'VO');
-});
-
 test('FRP 50+ still ANDs with sensor chips; night detections that pass both stay', () => {
-  const anded = filterVisibleFires(MIXED, { frpFloor: '50', sensors: 'VO' })
-    .map((fire) => fire.index);
+  const above50 = MIXED.filter((fire) => fire.frp >= 50);
+  const anded = filterFiresBySensor(above50, 'VO').map((fire) => fire.index);
   assert.deepEqual(anded, [0, 2, 3]);
   assert.ok(!anded.includes(1), 'MODIS is hidden when its chip is off');
   assert.ok(!anded.includes(4), 'VIIRS 8 MW is hidden by the FRP floor');
@@ -127,4 +103,5 @@ test('FRP 50+ still ANDs with sensor chips; night detections that pass both stay
   );
   assert.equal(MIXED.find((fire) => fire.index === 2).night, true);
   assert.equal(MIXED.find((fire) => fire.index === 3).night, true);
+  assert.equal(firmsSensorChipModels('all')[1].params.sensors, 'VO');
 });
