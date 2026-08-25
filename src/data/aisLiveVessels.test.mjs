@@ -35,7 +35,7 @@ import { WORLD_FOCUS_REQUEST_EVENT } from '../worldFocus.js';
 import { ensureGeoidReady, geoidHeight } from './geoid.js';
 import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import { applyVesselOverlayPolicy } from './vesselLabels.js';
-import { layerFeedState } from './manager.js';
+import { DataLayerManager, layerFeedState } from './manager.js';
 
 test('open feed with vessels is healthy (null)', () => {
   assert.equal(deriveAisFeedError({ status: 'open', lastMessageAt: 1, error: null }, 42), null);
@@ -657,6 +657,38 @@ test('hosted platform 503 stops AIS fetch retries without hanging the layer', as
   });
 });
 
+/** Same Number() contract DataLayerManager._pollSpec / _armUpdateLoop uses. */
+function managerPollArm(module) {
+  const configuredRefreshInterval = Number(module.refreshInterval);
+  const updateInterval = Number(module.updateInterval);
+  const refreshInterval = configuredRefreshInterval > 0
+    ? configuredRefreshInterval
+    : (updateInterval > 0 ? updateInterval : 0);
+  return {
+    updateInterval,
+    refreshInterval,
+    armed: refreshInterval > 0 || updateInterval === 0,
+  };
+}
+
+function assertAisUpdateIntervalIsMilliseconds(value) {
+  assert.equal(typeof value, 'number');
+  assert.equal(Number.isFinite(value), true);
+  assert.notEqual(typeof aisLiveVesselsLayer.updateInterval, 'function');
+  assert.ok(
+    value === -1 || value >= 1000,
+    `updateInterval must be ms (or -1 unarmed), not seconds: ${value}`,
+  );
+}
+
+test('updateInterval is a number of milliseconds, never a function, never seconds', () => {
+  assertAisUpdateIntervalIsMilliseconds(aisLiveVesselsLayer.updateInterval);
+  const descriptor = Object.getOwnPropertyDescriptor(aisLiveVesselsLayer, 'updateInterval');
+  if (descriptor && 'value' in descriptor) {
+    assert.notEqual(typeof descriptor.value, 'function');
+  }
+});
+
 test('function 503 missing-key payload keeps existing language and stops retry-spin', async () => {
   let fetches = 0;
   await withAisFetchHarness(async () => {
@@ -675,7 +707,130 @@ test('function 503 missing-key payload keeps existing language and stops retry-s
     await _loadLivePositionsForTest(viewer);
     assert.equal(fetches, 1);
     assert.equal(layerFeedState(aisLiveVesselsLayer.getStats()), 'unavailable');
+    const arm = managerPollArm(aisLiveVesselsLayer);
+    assertAisUpdateIntervalIsMilliseconds(arm.updateInterval);
+    assert.equal(arm.armed, false, 'missing-key must leave the manager poll unarmed');
+    assert.equal(aisLiveVesselsLayer.getStats().retryInSec, 0);
+    const chip = new DataLayerManager({})._buildMetaText({
+      stats: { ...aisLiveVesselsLayer.getStats(), source: 'AISStream' },
+      source: 'AISStream',
+      enabled: true,
+      lifecycleState: 'enabled',
+    });
+    assert.match(chip, /AISSTREAM_API_KEY not set/);
+    assert.doesNotMatch(chip, /retry/i);
   });
+});
+
+test('missing-key and auth-failed snapshots leave the poll unarmed with no retry suffix', () => {
+  const clock = makeFakeAisRuntime(1_000_000);
+  _setAisRuntimeForTest(clock.runtime);
+  try {
+    _setVesselStateForTest({ viewer: {}, records: [] });
+    _beginAisSessionForTest();
+    _applyAisFeedSnapshotForTest({}, {
+      status: 'missing-key',
+      error: 'AISSTREAM_API_KEY is not set',
+      nextAttemptAt: null,
+      rows: [],
+    });
+    let arm = managerPollArm(aisLiveVesselsLayer);
+    assertAisUpdateIntervalIsMilliseconds(arm.updateInterval);
+    assert.equal(arm.armed, false);
+    assert.equal(_getVesselFeedStateForTest().error, 'AISSTREAM_API_KEY not set');
+    assert.equal(aisLiveVesselsLayer.getStats().retryInSec, 0);
+
+    _setVesselStateForTest({ viewer: {}, records: [] });
+    _beginAisSessionForTest();
+    _applyAisFeedSnapshotForTest({}, {
+      status: 'auth-failed',
+      nextAttemptAt: 1_000_000 + 3_600_000,
+      rows: [],
+    });
+    arm = managerPollArm(aisLiveVesselsLayer);
+    assertAisUpdateIntervalIsMilliseconds(arm.updateInterval);
+    assert.equal(arm.armed, false);
+    assert.equal(aisLiveVesselsLayer.getStats().retryInSec, 0);
+    const chip = new DataLayerManager({})._buildMetaText({
+      stats: { ...aisLiveVesselsLayer.getStats(), source: 'AISStream' },
+      source: 'AISStream',
+      enabled: true,
+      lifecycleState: 'enabled',
+    });
+    assert.match(chip, /API key rejected/);
+    assert.doesNotMatch(chip, /retry/i);
+  } finally {
+    _setVesselStateForTest({ enabled: false });
+    _setAisRuntimeForTest();
+  }
+});
+
+test('live AIS poll interval is 60000 ms', () => {
+  const clock = makeFakeAisRuntime(1_000_000);
+  const record = makeRecord();
+  _setAisRuntimeForTest(clock.runtime);
+  _setVesselOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  try {
+    _setVesselStateForTest({ viewer: {}, records: [record] });
+    _beginAisSessionForTest();
+    _applyAisFeedSnapshotForTest({}, {
+      status: 'live',
+      lastMessageAt: 1,
+      rows: [{
+        mmsi: record.mmsi,
+        name: record.name,
+        lat: 51.93,
+        lon: 4.05,
+      }],
+    });
+    const arm = managerPollArm(aisLiveVesselsLayer);
+    assertAisUpdateIntervalIsMilliseconds(arm.updateInterval);
+    assert.equal(arm.updateInterval, 60000);
+    assert.equal(arm.refreshInterval, 60000);
+    assert.equal(arm.armed, true);
+  } finally {
+    _setVesselStateForTest({ enabled: false });
+    _setVesselOverlayHostForTest();
+    _setAisRuntimeForTest();
+  }
+});
+
+test('reconnecting AIS poll interval is max(1000, nextAttemptAt-now) ms', () => {
+  const clock = makeFakeAisRuntime(1_000_000);
+  _setAisRuntimeForTest(clock.runtime);
+  try {
+    _setVesselStateForTest({ viewer: {}, records: [] });
+    _beginAisSessionForTest();
+    _applyAisFeedSnapshotForTest({}, {
+      status: 'reconnecting',
+      reconnectAttempt: 2,
+      nextAttemptAt: 1_002_500,
+      rows: [],
+    });
+    let arm = managerPollArm(aisLiveVesselsLayer);
+    assertAisUpdateIntervalIsMilliseconds(arm.updateInterval);
+    assert.equal(arm.updateInterval, 2500);
+    assert.equal(arm.refreshInterval, 2500);
+    assert.equal(arm.armed, true);
+
+    _applyAisFeedSnapshotForTest({}, {
+      status: 'reconnecting',
+      reconnectAttempt: 3,
+      nextAttemptAt: 1_000_200,
+      rows: [],
+    });
+    arm = managerPollArm(aisLiveVesselsLayer);
+    assertAisUpdateIntervalIsMilliseconds(arm.updateInterval);
+    assert.equal(arm.updateInterval, 1000, 'floor reconnect delay at 1s');
+    assert.equal(arm.armed, true);
+  } finally {
+    _setVesselStateForTest({ enabled: false });
+    _setAisRuntimeForTest();
+  }
 });
 
 test('preview live snapshot keeps polling and credits AISStream only after data lands', async () => {
