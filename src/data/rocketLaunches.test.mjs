@@ -103,6 +103,11 @@ import {
   resetLaunchWebcastOnlyForTest,
   setLaunchWebcastOnly,
 } from './launchWebcastFilter.js';
+import {
+  DEFAULT_LAUNCH_PROBABILITY_FILTER,
+  resetLaunchProbabilityFilterForTest,
+  setLaunchProbabilityFilter,
+} from './launchProbabilityFilter.js';
 
 const NOW = new Date('2026-07-27T00:00:00Z');
 
@@ -2026,9 +2031,21 @@ function createStatusFilterDocument() {
   webcastChip.dataset.missionWebcastChip = 'only';
   webcastChip.textContent = 'Webcast only';
   webcastChips.appendChild(webcastChip);
+  const probabilityChips = new FakeNode('div');
+  probabilityChips.className = 'space-mission-probability-chips';
+  probabilityChips.setAttribute('data-mission-probability-chips', '');
+  for (const id of ['all', '50', '80']) {
+    const chip = new FakeNode('button');
+    chip.setAttribute('data-mission-probability-chip', id);
+    chip.dataset.missionProbabilityChip = id;
+    chip.textContent = id === 'all' ? 'All' : `${id}+`;
+    if (id === 'all') chip.className = 'space-mission-probability-chip active';
+    probabilityChips.appendChild(chip);
+  }
   roster.appendChild(count);
   roster.appendChild(windowChips);
   roster.appendChild(webcastChips);
+  roster.appendChild(probabilityChips);
   roster.appendChild(chips);
   roster.appendChild(providerChips);
   roster.appendChild(rocketChips);
@@ -2051,6 +2068,7 @@ function createStatusFilterDocument() {
     orbitChips,
     windowChips,
     webcastChips,
+    probabilityChips,
     document: {
       body: new FakeNode('body'),
       createElement: (tagName) => new FakeNode(tagName),
@@ -2110,6 +2128,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2156,6 +2175,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2236,6 +2256,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2281,6 +2302,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2398,6 +2420,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2440,6 +2463,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2484,6 +2508,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2527,6 +2552,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2610,6 +2636,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2654,6 +2681,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2756,6 +2784,7 @@ test('Webcast only re-applies the cached roster without refetching /api/launches
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
   resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2799,6 +2828,7 @@ test('Webcast only re-applies the cached roster without refetching /api/launches
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
     resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2861,4 +2891,130 @@ test('Webcast only re-applies the cached roster without refetching /api/launches
 
   await rocketLaunchesLayer.disable();
   assert.equal(webcastChips.hidden, true, 'launches layer off hides the webcast toggle');
+});
+
+test('probability chips re-apply the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  resetLaunchProviderFilterForTest();
+  resetLaunchOrbitFilterForTest();
+  resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
+  resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
+  resetLaunchProbabilityFilterForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, probabilityChips, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  const payload = {
+    results: [
+      { ...statusFilterLaunch('high-go', 'Go', 0, 'SpaceX'), probability: 90 },
+      { ...statusFilterLaunch('mid-go', 'Go', 0.1, 'SpaceX'), probability: 50 },
+      { ...statusFilterLaunch('low-go', 'Go', 0.2, 'ULA'), probability: 20 },
+      { ...statusFilterLaunch('unknown-go', 'Go', 0.3, 'SpaceX'), probability: -1 },
+      { ...statusFilterLaunch('high-tbd', 'TBD', 0.4, 'SpaceX'), probability: 95 },
+    ],
+  };
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    resetLaunchProviderFilterForTest();
+    resetLaunchOrbitFilterForTest();
+    resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
+    resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
+    resetLaunchProbabilityFilterForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  assert.equal(DEFAULT_LAUNCH_PROBABILITY_FILTER, 'all');
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:high-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:mid-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:low-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, true);
+  assert.match(list.innerHTML, /HIGH-GO/);
+  assert.match(list.innerHTML, /MID-GO/);
+  assert.match(list.innerHTML, /LOW-GO/);
+  assert.match(list.innerHTML, /UNKNOWN-GO/);
+  assert.equal(probabilityChips.hidden, false);
+
+  setLaunchProbabilityFilter('50');
+  assert.equal(launchFetches, 1, 'chip change must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:high-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:mid-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:low-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, true);
+  assert.match(list.innerHTML, /HIGH-GO/);
+  assert.match(list.innerHTML, /MID-GO/);
+  assert.doesNotMatch(list.innerHTML, /LOW-GO/);
+
+  setLaunchProbabilityFilter('80');
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:high-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:mid-go').show, false, '80+ is stricter than 50+');
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, true);
+  assert.match(list.innerHTML, /HIGH-GO/);
+  assert.doesNotMatch(list.innerHTML, /MID-GO|LOW-GO/);
+
+  setLaunchProbabilityFilter(DEFAULT_LAUNCH_PROBABILITY_FILTER);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:low-go').show, true);
+  assert.match(list.innerHTML, /LOW-GO/);
+
+  _setSelectedRocketMissionForTest('low-go');
+  setLaunchProbabilityFilter('80');
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:low-go').show, true, 'selected low-prob stays');
+  assert.match(list.innerHTML, /LOW-GO/);
+
+  _setSelectedRocketMissionForTest(null);
+  setLaunchStatusFilter({ go: true });
+  setLaunchProbabilityFilter('80');
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:high-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:high-tbd').show, false, 'Go + 80+ still ANDs');
+  assert.equal(dataSource.entities.getById('rocket-launch:unknown-go').show, true);
+  assert.match(list.innerHTML, /HIGH-GO/);
+  assert.doesNotMatch(list.innerHTML, /HIGH-TBD|MID-GO|LOW-GO/);
+
+  await rocketLaunchesLayer.update();
+  assert.equal(launchFetches, 2, 'refresh still hits the same /api/launches window');
+  assert.equal(dataSource.entities.getById('rocket-launch:high-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:low-go').show, false);
+
+  await rocketLaunchesLayer.disable();
+  assert.equal(probabilityChips.hidden, true, 'launches layer off hides the probability chips');
 });
