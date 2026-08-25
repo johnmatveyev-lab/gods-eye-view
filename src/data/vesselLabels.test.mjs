@@ -7,6 +7,7 @@ import {
   normalizeVesselType,
   vesselOverlayCohortLimit,
   vesselTypeCss,
+  vesselTypeFamily,
 } from './vesselLabels.js';
 
 test('normalizeVesselType maps numeric AIS codes to type families', () => {
@@ -30,6 +31,17 @@ test('normalizeVesselType preserves text and degrades unknown codes', () => {
   assert.equal(normalizeVesselType('0'), '');
   assert.equal(normalizeVesselType('25'), 'OTHER');
   assert.equal(normalizeVesselType(undefined), '');
+});
+
+test('vesselTypeFamily follows TYPE_STYLES and maps missing/unknown to other', () => {
+  assert.equal(vesselTypeFamily('Crude Oil Tanker'), 'tanker');
+  assert.equal(vesselTypeFamily('Container Ship'), 'cargo');
+  assert.equal(vesselTypeFamily('Passenger/Ferry'), 'passenger');
+  assert.equal(vesselTypeFamily('Fishing'), 'fishing');
+  assert.equal(vesselTypeFamily('Tug'), 'service');
+  assert.equal(vesselTypeFamily(''), 'other');
+  assert.equal(vesselTypeFamily(undefined), 'other');
+  assert.equal(vesselTypeFamily('Military'), 'other');
 });
 
 test('vessel type CSS and card accents stay paired', () => {

@@ -19,13 +19,32 @@ export const VESSEL_CARD_FADE_DISTANCE_M = 5_000_000;
  * vessel type colors so billboard chevrons and host cards cannot drift apart.
  */
 const TYPE_STYLES = [
-  { pattern: /tanker/i, css: '#ffb347', accent: '255, 179, 71' },
-  { pattern: /cargo|container|bulk|carrier/i, css: '#39d5ff', accent: '57, 213, 255' },
-  { pattern: /passenger|ferry|cruise/i, css: '#ff7adf', accent: '255, 122, 223' },
-  { pattern: /fishing/i, css: '#7cff9b', accent: '124, 255, 155' },
-  { pattern: /tug|tow|pilot|supply|service/i, css: '#f7f0a3', accent: '247, 240, 163' },
+  { family: 'tanker', pattern: /tanker/i, css: '#ffb347', accent: '255, 179, 71' },
+  { family: 'cargo', pattern: /cargo|container|bulk|carrier/i, css: '#39d5ff', accent: '57, 213, 255' },
+  { family: 'passenger', pattern: /passenger|ferry|cruise/i, css: '#ff7adf', accent: '255, 122, 223' },
+  { family: 'fishing', pattern: /fishing/i, css: '#7cff9b', accent: '124, 255, 155' },
+  { family: 'service', pattern: /tug|tow|pilot|supply|service/i, css: '#f7f0a3', accent: '247, 240, 163' },
 ];
-const DEFAULT_STYLE = { css: '#39d5ff', accent: '57, 213, 255' };
+const DEFAULT_STYLE = { family: 'other', css: '#39d5ff', accent: '57, 213, 255' };
+
+/** Chip / color families from TYPE_STYLES, plus Other for missing/unknown. */
+export const VESSEL_TYPE_FAMILIES = Object.freeze([
+  'tanker',
+  'cargo',
+  'passenger',
+  'fishing',
+  'service',
+  'other',
+]);
+
+/**
+ * Map a raw AIS type onto a TYPE_STYLES family. Missing/unknown is Other.
+ * @param {unknown} type
+ * @returns {'tanker'|'cargo'|'passenger'|'fishing'|'service'|'other'}
+ */
+export function vesselTypeFamily(type) {
+  return styleForType(type).family || 'other';
+}
 
 const NUMERIC_TYPE_SPECIALS = {
   30: 'FISHING', 31: 'TOWING', 32: 'TOWING', 33: 'DREDGER', 34: 'DIVE OPS',
