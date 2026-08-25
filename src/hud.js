@@ -24,6 +24,13 @@ import {
   getClockMode,
   syncClockToggleButtons,
 } from './clockPreference.js';
+import {
+  WX_STATE_EVENT,
+  WX_TOGGLE_EVENT,
+  bindWxToggle,
+  getWxEnabled,
+  syncWxToggleButtons,
+} from './weatherChrome.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
 import { canPoll } from './pollPresence.js';
@@ -88,6 +95,7 @@ export class IntelHUD {
     this._recBlinkInterval = null;
     this._timestampInterval = null;
     this._unbindClockToggle = null;
+    this._unbindWxToggle = null;
     this._summaryInterval = null;
     this._summaryTypingInterval = null;
     this._latestMetrics = null;
@@ -158,8 +166,14 @@ export class IntelHUD {
     this._unbindClockToggle = bindClockToggle(this._el, {
       onChange: () => this._paintTimestamp(),
     });
+    this._onWxPreference = () => {
+      syncWxToggleButtons(this._el, getWxEnabled());
+    };
+    this._unbindWxToggle = bindWxToggle(this._el);
     if (typeof window !== 'undefined') {
       window.addEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+      window.addEventListener(WX_TOGGLE_EVENT, this._onWxPreference);
+      window.addEventListener(WX_STATE_EVENT, this._onWxPreference);
     }
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
@@ -202,6 +216,10 @@ export class IntelHUD {
             <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
               <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
               <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+            </span>
+            <span class="wx-mode-toggle" role="group" aria-label="Weather effects">
+              <button type="button" data-wx-mode="off" aria-pressed="true">WX OFF</button>
+              <button type="button" data-wx-mode="on" aria-pressed="false">WX ON</button>
             </span>
           </div>
           <div class="hud-orbital">ORB: ${this._orbitNum}  PASS: DESC-${this._passNum}</div>
@@ -980,8 +998,14 @@ export class IntelHUD {
     clearInterval(this._summaryTypingInterval);
     this._unbindClockToggle?.();
     this._unbindClockToggle = null;
+    this._unbindWxToggle?.();
+    this._unbindWxToggle = null;
     if (typeof window !== 'undefined' && this._onClockPreference) {
       window.removeEventListener(CLOCK_CHANGE_EVENT, this._onClockPreference);
+    }
+    if (typeof window !== 'undefined' && this._onWxPreference) {
+      window.removeEventListener(WX_TOGGLE_EVENT, this._onWxPreference);
+      window.removeEventListener(WX_STATE_EVENT, this._onWxPreference);
     }
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();

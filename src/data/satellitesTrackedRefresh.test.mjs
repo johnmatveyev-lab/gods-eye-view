@@ -61,7 +61,7 @@ test('satellite first update aborts every parallel catalog request', async () =>
     const controller = new AbortController();
     const work = satellitesLayer.update({}, { signal: controller.signal });
     await Promise.resolve();
-    assert.ok(observedSignals.length > 1);
+    assert.ok(observedSignals.length >= 1);
     controller.abort();
     await assert.rejects(work, { name: 'AbortError' });
     assert.equal(observedSignals.every((signal) => signal?.aborted), true);

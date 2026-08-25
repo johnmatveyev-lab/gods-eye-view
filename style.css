@@ -28,6 +28,10 @@
   --display-panel-expanded-width: 272px;
   --cockpit-radio-collapsed-width: 148px;
   --cockpit-radio-expanded-width: 232px;
+  /* Bottom-left keep-out for Cesium/Google credits + the MIT disclaimer.
+     The LOCATION dock starts after this strip so Data attribution stays clickable. */
+  --credit-lane-width: 24rem;
+  --credit-lane-gap: 0.75rem;
 }
 
 * {
@@ -156,6 +160,40 @@ html, body {
      overlay root (z6) stay above both. */
   z-index: 1;
   pointer-events: none;
+}
+
+/* Camera-center plus — same CSS-pixel center copy-coords / measure pick.
+   Not a Cesium layer. Clean view may keep it; credits stay on. */
+#camera-crosshair {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 8;
+  pointer-events: none;
+}
+#camera-crosshair[hidden] {
+  display: none;
+}
+#camera-crosshair::before,
+#camera-crosshair::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 0 1px rgba(10, 10, 15, 0.55);
+  pointer-events: none;
+}
+#camera-crosshair::before {
+  width: 16px;
+  height: 1px;
+  transform: translate(-50%, -50%);
+}
+#camera-crosshair::after {
+  width: 1px;
+  height: 16px;
+  transform: translate(-50%, -50%);
 }
 
 /* The detection surface is host-owned but parented into #cesiumContainer
@@ -297,7 +335,7 @@ body.cockpit-mode #cockpit-cloud-effects.active {
      /Cesium attribution ToS). */
   bottom: 36px;
   left: 36px;
-  z-index: 90;
+  z-index: 160;
   max-width: 90vw;
   /* Keep the Google logo + "Data attribution" link on ONE line — they were wrapping to a second
      row (looked like it was falling over). nowrap + a roomy max-width holds them inline. */
@@ -384,6 +422,60 @@ body.recording-mode #cesium-credits {
   opacity: 1 !important;
   visibility: visible !important;
   pointer-events: auto !important;
+}
+
+/* Local scale bar. Lives next to the required credit line and stays up in
+   clean-view / recording so operators can still eyeball 1 km vs 1 nmi. */
+.scale-bar {
+  position: fixed;
+  left: 36px;
+  bottom: 68px;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: rgba(232, 234, 237, 0.78);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+.scale-bar[hidden] {
+  display: none;
+}
+
+.scale-bar-track {
+  display: flex;
+  align-items: stretch;
+  height: 8px;
+}
+
+.scale-bar-tick {
+  width: 1px;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-shaft {
+  width: 96px;
+  height: 2px;
+  margin: auto 0 0;
+  background: rgba(232, 234, 237, 0.88);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
+}
+
+.scale-bar-label {
+  line-height: 1;
+  white-space: nowrap;
+}
+
+body.ui-clean-view #scale-bar,
+body.recording-mode #scale-bar {
+  opacity: 1 !important;
+  visibility: visible !important;
 }
 
 #gev-voice-control {
@@ -1131,6 +1223,11 @@ body.recording-mode #cesium-credits {
   display: flex;
 }
 
+.pp-toggle-group > .pp-slider-row.visible:first-child:last-child {
+  border-top: 1px solid var(--glass-border);
+  border-radius: 8px;
+}
+
 .pp-toggle-group .pp-toggle-btn {
   transition: all var(--transition-fast), border-radius var(--transition-fast);
 }
@@ -1138,6 +1235,12 @@ body.recording-mode #cesium-credits {
 .pp-toggle-group .pp-slider-row.visible ~ .pp-toggle-btn,
 .pp-toggle-group:has(.pp-slider-row.visible) .pp-toggle-btn {
   border-radius: 8px 8px 0 0;
+}
+
+/* Labels/declutter sits under Detection sliders as its own chip. */
+.pp-toggle-group .pp-slider-row.visible ~ .pp-toggle-btn {
+  border-radius: 8px;
+  margin-top: 6px;
 }
 
 .pp-slider {
@@ -1482,6 +1585,17 @@ body.recording-mode #cesium-credits {
 .pp-mode-btn + .pp-mode-btn { border-left: 1px solid rgba(255, 255, 255, 0.14); }
 .pp-mode-btn:hover { background: rgba(255, 255, 255, 0.08); color: var(--text-primary); }
 .pp-mode-btn.active { background: var(--accent); color: #000; }
+#alt-band-row { align-items: flex-start; }
+.alt-band-seg {
+  flex-wrap: wrap;
+  overflow: hidden;
+}
+.alt-band-seg .pp-mode-btn {
+  flex: 1 1 28%;
+  min-width: 0;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
 
 #clean-view-toggle {
   width: var(--pp-expanded-width);
@@ -1513,6 +1627,9 @@ body.ui-clean-view #title-bar,
 body.ui-clean-view #style-indicator,
 body.ui-clean-view #top-center-actions,
 body.ui-clean-view #watchlist-panel,
+body.ui-clean-view #installations-viewport-list,
+body.ui-clean-view #launches-panel,
+body.ui-clean-view #earthquake-list-panel,
 body.ui-clean-view #global-loading-status,
 body.ui-clean-view #traffic-sync-chip,
 body.ui-clean-view #cctv-sync-chip,
@@ -1521,6 +1638,7 @@ body.ui-clean-view #param-slider-panel,
 body.ui-clean-view #control-panel,
 body.ui-clean-view #location-bar,
 body.ui-clean-view #data-panel,
+body.ui-clean-view #fires-panel,
 body.ui-clean-view #cctv-panel,
 body.ui-clean-view #radio-panel,
 body.ui-clean-view #global-context-panel,
@@ -2031,7 +2149,8 @@ body.ui-clean-view #scene-runtime.active {
   font-size: 18px;
 }
 
-#contacts-roster-toggle {
+#contacts-roster-toggle,
+#launches-panel-toggle {
   width: auto;
   min-width: 36px;
   padding: 0 10px;
@@ -2043,20 +2162,40 @@ body.ui-clean-view #scene-runtime.active {
   letter-spacing: 0.08em;
 }
 
-#contacts-roster-toggle .contacts-roster-toggle-label {
+#contacts-roster-toggle .contacts-roster-toggle-label,
+#launches-panel-toggle .launches-panel-toggle-label {
+  line-height: 1;
+}
+
+#clear-selected-layers {
+  width: auto;
+  min-width: 36px;
+  padding: 0 10px;
+  border-radius: 18px;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+}
+
+#clear-selected-layers .all-off-layers-label {
   line-height: 1;
 }
 
 #contacts-roster-toggle.active,
 #contacts-roster-toggle[aria-pressed="true"],
 #watchlist-toggle.active,
-#watchlist-toggle[aria-pressed="true"] {
+#watchlist-toggle[aria-pressed="true"],
+#launches-panel-toggle.active,
+#launches-panel-toggle[aria-pressed="true"] {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
   background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
 }
 
-#watchlist-toggle {
+#watchlist-toggle,
+#installations-list-toggle {
   width: auto;
   min-width: 36px;
   padding: 0 10px;
@@ -2160,6 +2299,257 @@ body.ui-clean-view #scene-runtime.active {
   color: var(--text-secondary);
 }
 
+#installations-list-toggle .installations-list-toggle-label {
+  line-height: 1;
+}
+
+#installations-list-toggle.active,
+#installations-list-toggle[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
+}
+
+#installations-viewport-list {
+  position: fixed;
+  top: 74px;
+  left: 50%;
+  z-index: 103;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 120px));
+  padding: 10px 10px 8px;
+  transform: translateX(-50%);
+  border-radius: 10px;
+  border: 1px solid rgba(0, 212, 255, 0.22);
+  background: rgba(3, 10, 18, 0.86);
+  backdrop-filter: blur(16px);
+  color: #e8f4ff;
+}
+
+#installations-viewport-list[hidden] {
+  display: none;
+}
+
+#installations-viewport-list .installations-viewport-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+#installations-viewport-list .installations-viewport-list-header strong {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+#installations-viewport-list .installations-viewport-list-header span,
+#installations-viewport-list .installations-viewport-list-header output {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: rgba(232, 244, 255, 0.62);
+}
+
+#installations-viewport-list .installations-viewport-list-body {
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+#installations-viewport-list .installations-viewport-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#installations-viewport-list .installations-viewport-list-item:hover,
+#installations-viewport-list .installations-viewport-list-item:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 50%, rgba(255, 255, 255, 0.12));
+  background: color-mix(in srgb, var(--accent) 12%, rgba(255, 255, 255, 0.03));
+}
+
+#installations-viewport-list .installations-viewport-list-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+#installations-viewport-list .installations-viewport-list-copy strong,
+#installations-viewport-list .installations-viewport-list-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#installations-viewport-list .installations-viewport-list-copy strong {
+  font-size: 12px;
+}
+
+#installations-viewport-list .installations-viewport-list-copy small {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(232, 244, 255, 0.62);
+}
+
+#installations-viewport-list .installations-viewport-list-chevron {
+  color: var(--accent);
+}
+
+#installations-viewport-list .installations-viewport-list-empty {
+  padding: 16px 8px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: rgba(232, 244, 255, 0.62);
+}
+
+#launches-panel {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  z-index: 100;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(52vh, 480px);
+  transform: translateX(-50%);
+  pointer-events: auto;
+}
+
+#launches-panel[hidden] {
+  display: none;
+}
+
+#launches-panel .launches-panel-inner {
+  display: grid;
+  min-height: 0;
+  gap: 8px;
+  padding: 9px;
+  border: 1px solid rgba(98, 181, 255, .2);
+  border-radius: 7px;
+  background: rgba(4, 17, 31, .82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+#launches-panel .launches-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 1px 3px 7px;
+  border-bottom: 1px solid rgba(34, 230, 230, .14);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+#launches-panel .launches-panel-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+#launches-panel .launches-panel-header strong {
+  color: #8fcfff;
+  font-size: 9px;
+  letter-spacing: .16em;
+}
+
+#launches-panel .launches-panel-header span {
+  color: rgba(190, 230, 230, .46);
+  font-size: 7px;
+  letter-spacing: .1em;
+}
+
+#launches-panel .launches-panel-header output {
+  flex: 0 0 auto;
+  color: #22e6e6;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+
+#launches-panel .launches-panel-list {
+  display: grid;
+  max-height: min(43vh, 400px);
+  gap: 4px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 3px;
+  scrollbar-color: rgba(34, 230, 230, .38) transparent;
+  scrollbar-width: thin;
+}
+
+#launches-panel .launches-panel-item {
+  display: grid;
+  align-items: center;
+  width: 100%;
+  min-height: 42px;
+  padding: 7px 8px;
+  border: 1px solid rgba(98, 181, 255, .13);
+  border-radius: 4px;
+  color: #d8ffff;
+  background: rgba(42, 113, 171, .045);
+  font-family: 'JetBrains Mono', monospace;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color .15s ease, background .15s ease;
+}
+
+#launches-panel .launches-panel-item:hover,
+#launches-panel .launches-panel-item:focus-visible,
+#launches-panel .launches-panel-item.selected,
+#launches-panel .launches-panel-item[aria-pressed="true"] {
+  border-color: rgba(34, 230, 230, .58);
+  outline: none;
+  background: rgba(34, 230, 230, .09);
+}
+
+#launches-panel .launches-panel-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+#launches-panel .launches-panel-copy strong,
+#launches-panel .launches-panel-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#launches-panel .launches-panel-copy strong {
+  color: #d8ffff;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: .07em;
+}
+
+#launches-panel .launches-panel-copy small {
+  color: rgba(190, 230, 230, .48);
+  font-size: 7px;
+  letter-spacing: .035em;
+}
+
+#launches-panel .launches-panel-empty {
+  padding: 18px 10px;
+  color: rgba(190, 230, 230, .48);
+  font: 8px/1.5 'JetBrains Mono', monospace;
+  letter-spacing: .09em;
+  text-align: center;
+}
+
 #top-center-actions #stop-tracking {
   width: auto;
   min-width: 36px;
@@ -2173,6 +2563,162 @@ body.ui-clean-view #scene-runtime.active {
 
 #top-center-actions #stop-tracking[hidden] {
   display: none;
+}
+
+#north-up-compass .north-up-compass-rose {
+  display: block;
+  width: 18px;
+  height: 18px;
+  transform: rotate(var(--north-up-heading, 0deg));
+  transition: transform 80ms linear;
+}
+
+#north-up-compass .north-up-needle {
+  display: block;
+  color: #ff8a80;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Camera-center lat,lon readout. Coordinates only — no height, so no units toggle. */
+#camera-coords {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 36px;
+  padding: 0 6px 0 10px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 18px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+#top-center-actions #camera-coords-value,
+#top-center-actions #camera-coords-copy {
+  width: auto;
+  height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transform: none;
+}
+#top-center-actions #camera-coords-value {
+  padding: 0 4px;
+  font: 600 11px "JetBrains Mono", ui-monospace, monospace;
+  letter-spacing: 0.02em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+#top-center-actions #camera-coords-copy {
+  width: 28px;
+  flex: 0 0 28px;
+  color: var(--text-secondary);
+}
+#top-center-actions #camera-coords-value:hover,
+#top-center-actions #camera-coords-value:focus-visible,
+#top-center-actions #camera-coords-copy:hover,
+#top-center-actions #camera-coords-copy:focus-visible {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: transparent;
+  transform: none;
+  color: var(--text-primary, #e8f0f4);
+}
+#top-center-actions #camera-coords-copy .material-symbols-outlined {
+  font-size: 16px;
+}
+
+#earthquake-list-panel {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  width: min(360px, calc(100vw - 32px));
+  max-height: min(420px, calc(100vh - 120px));
+  padding: 10px 10px 8px;
+  transform: translateX(-50%);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 10px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-secondary);
+}
+#earthquake-list-panel[hidden] { display: none; }
+.earthquake-list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.earthquake-list-header strong {
+  display: block;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+}
+.earthquake-list-header span {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.earthquake-list-header output {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+}
+.earthquake-list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.earthquake-list-item {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.earthquake-list-item:hover,
+.earthquake-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+}
+.earthquake-list-item strong {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+.earthquake-list-item span {
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.35;
+}
+.earthquake-list-empty {
+  padding: 18px 8px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
 }
 
 #global-loading-status {
@@ -2505,6 +3051,69 @@ body.recording-mode #meridian-offline-chip {
   opacity: 1;
   visibility: visible;
   transform: translateX(-50%) translateY(0);
+}
+
+#keyboard-shortcuts-overlay[hidden] {
+  display: none;
+}
+
+#keyboard-shortcuts-overlay {
+  position: fixed;
+  right: 28px;
+  bottom: 88px;
+  z-index: 210;
+  min-width: 280px;
+  max-width: min(420px, calc(100vw - 40px));
+  max-height: min(70vh, 520px);
+  overflow: auto;
+  padding: 16px 18px 14px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--panel-radius);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 0 24px rgba(0, 212, 255, 0.12);
+}
+
+#keyboard-shortcuts-title {
+  margin: 0 0 12px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.keyboard-shortcuts-note {
+  margin: 0 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+#keyboard-shortcuts-list {
+  display: grid;
+  gap: 8px;
+}
+
+.keyboard-shortcut-row {
+  display: grid;
+  grid-template-columns: minmax(92px, auto) 1fr;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.keyboard-shortcut-row dt {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-primary);
+}
+
+.keyboard-shortcut-row dd {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 /* ── Aircraft Cockpit View ─────────────────── */
@@ -4123,12 +4732,12 @@ body.cockpit-mode #view-switcher button {
 }
 .cockpit-help span { color: var(--cockpit-accent); }
 body.cockpit-mode :is(
-  #title-bar, #style-indicator, #top-center-actions, #watchlist-panel, #traffic-sync-chip, #cctv-sync-chip,
+  #title-bar, #style-indicator, #top-center-actions, #watchlist-panel, #installations-viewport-list, #launches-panel, #earthquake-list-panel, #traffic-sync-chip, #cctv-sync-chip,
   #command-dock,
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -4547,7 +5156,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   letter-spacing: 2px;
 }
 
-.clock-mode-toggle {
+.clock-mode-toggle,
+.wx-mode-toggle {
   display: inline-flex;
   align-items: center;
   margin-left: 8px;
@@ -4558,7 +5168,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   pointer-events: auto;
 }
 
-.clock-mode-toggle button {
+.clock-mode-toggle button,
+.wx-mode-toggle button {
   appearance: none;
   border: 0;
   background: transparent;
@@ -4572,12 +5183,14 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   opacity: 0.55;
 }
 
-.clock-mode-toggle button[aria-pressed="true"] {
+.clock-mode-toggle button[aria-pressed="true"],
+.wx-mode-toggle button[aria-pressed="true"] {
   background: rgba(255, 255, 255, 0.12);
   opacity: 1;
 }
 
-.cockpit-clock-row .clock-mode-toggle {
+.cockpit-clock-row .clock-mode-toggle,
+.cockpit-clock-row .wx-mode-toggle {
   margin-left: 0;
 }
 
@@ -4729,6 +5342,107 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   transform: translateY(0);
 }
 
+#fires-panel {
+  --panel-expanded-width: 280px;
+  position: fixed;
+  top: calc(var(--left-stack-top) + var(--left-stack-gap));
+  left: var(--left-stack-x);
+  right: auto;
+  bottom: auto;
+  z-index: 100;
+  width: var(--panel-expanded-width);
+  max-height: calc(100vh - 24px);
+}
+
+#fires-panel .panel-glow {
+  position: absolute;
+  inset: -20px;
+  background: radial-gradient(ellipse at center, rgba(224, 82, 82, 0.16) 0%, transparent 60%);
+  filter: blur(20px);
+  opacity: 0.25;
+  pointer-events: none;
+}
+
+.fires-panel-inner {
+  position: relative;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--panel-radius);
+  padding: 14px 16px 12px;
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.03) inset,
+    0 1px 0 rgba(255, 255, 255, 0.06) inset;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+}
+
+.fires-list-meta {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.fires-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fires-list-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fires-list-item:hover,
+.fires-list-item:focus-visible {
+  border-color: rgba(224, 82, 82, 0.45);
+  background: rgba(224, 82, 82, 0.08);
+  outline: none;
+}
+
+.fires-list-item strong {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+.fires-list-item small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.fires-list-ack {
+  margin: 0;
+  font-size: 9px;
+  line-height: 1.45;
+  color: var(--text-dim);
+}
+
 #data-panel .panel-glow {
   position: absolute;
   inset: -20px;
@@ -4811,6 +5525,82 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .data-toggle-list::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, rgba(0, 212, 255, 0.65), rgba(0, 212, 255, 0.2));
   border-radius: 999px;
+}
+
+/* Existing OSM dams payload — in-view list + fly-to. Independent of datacenters. */
+#dams-in-view.in-view-site-list {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+#dams-in-view[hidden] {
+  display: none;
+}
+
+#dams-in-view .in-view-site-list-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+#dams-in-view .in-view-site-list-header strong {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 1.4px;
+  color: var(--text-dim);
+}
+
+#dams-in-view .in-view-site-list-header output {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+#dams-in-view .in-view-site-list-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+#dams-in-view .in-view-site-list-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 5px 7px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#dams-in-view .in-view-site-list-item:hover,
+#dams-in-view .in-view-site-list-item:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(0, 212, 255, 0.08);
+  color: var(--text-primary);
+}
+
+#dams-in-view .in-view-site-list-empty {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-dim);
+  padding: 4px 2px 6px;
+}
+
+#dams-in-view .in-view-site-list-credit {
+  margin: 8px 0 0;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.4px;
+  color: var(--text-dim);
 }
 
 .data-toggle-row {
@@ -6449,6 +7239,39 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   background: rgba(255, 60, 60, 0.08);
 }
 
+.data-toggle-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.data-toggle-select-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.data-toggle-select {
+  max-width: 118px;
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+}
+
+.data-toggle-select:hover,
+.data-toggle-select:focus-visible {
+  border-color: var(--glass-border-hover);
+  color: var(--text-primary);
+}
+
 .data-toggle-legend-item {
   display: inline-flex;
   align-items: center;
@@ -6468,6 +7291,51 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
      hairline ring so a near-black class still reads on the panel glass. */
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.18);
   flex: none;
+}
+
+/* Allowlisted-system picker (bikeshare). A compact select of known feeds —
+   not Radio search and not a layer-filter chip. */
+.data-toggle-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 168px;
+}
+
+.data-toggle-picker-label {
+  font-family: var(--font-mono);
+  font-size: 7px;
+  letter-spacing: 0.12em;
+  color: var(--text-dim);
+  flex: none;
+}
+
+.data-toggle-picker-select {
+  min-width: 0;
+  flex: 1;
+  max-width: 100%;
+  padding: 3px 18px 3px 6px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+}
+
+.data-toggle-picker-select:hover,
+.data-toggle-picker-select:focus-visible {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+.data-toggle-picker-select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 /* ── CCTV Panel ─────────────────────────────── */
@@ -6819,6 +7687,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 #left-panel-stack > #data-panel,
+#left-panel-stack > #fires-panel,
 #left-panel-stack > #cctv-panel,
 #left-panel-stack > #global-context-panel,
 #left-panel-stack > #scene-panel {
@@ -6838,8 +7707,12 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   order: 1;
 }
 
-#left-panel-stack > #cctv-panel {
+#left-panel-stack > #fires-panel {
   order: 2;
+}
+
+#left-panel-stack > #cctv-panel {
+  order: 3;
 }
 
 #left-panel-stack > #scene-panel { order: 4; }
@@ -6854,6 +7727,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 #left-panel-stack > #data-panel:not(.collapsed),
+#left-panel-stack > #fires-panel:not(.collapsed),
 #left-panel-stack > #cctv-panel:not(.collapsed),
 #left-panel-stack > #scene-panel:not(.collapsed) {
   box-sizing: border-box;
@@ -6866,7 +7740,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
  * When an expanded panel and its collapsed siblings fit together, preserve
  * the canonical control order and center their combined stack at 50vh.
  */
-#left-panel-stack.layout-tail > :is(#data-panel, #cctv-panel, #scene-panel):not(.collapsed) {
+#left-panel-stack.layout-tail > :is(#data-panel, #fires-panel, #cctv-panel, #scene-panel):not(.collapsed) {
   box-sizing: border-box;
   flex: 0 0 var(--left-panel-allocated-height);
   height: var(--left-panel-allocated-height);
@@ -6874,6 +7748,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 
 #left-panel-stack > #data-panel:not(.collapsed) .data-panel-inner,
+#left-panel-stack > #fires-panel:not(.collapsed) .fires-panel-inner,
 #left-panel-stack > #cctv-panel:not(.collapsed) .cctv-panel-inner,
 #left-panel-stack > #scene-panel:not(.collapsed) .scene-panel-inner {
   height: 100%;
@@ -6884,6 +7759,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   overflow: hidden;
 }
 
+#left-panel-stack > #fires-panel:not(.collapsed) .fires-panel-inner,
 #left-panel-stack > #cctv-panel:not(.collapsed) .cctv-panel-inner,
 #left-panel-stack > #scene-panel:not(.collapsed) .scene-panel-inner {
   overflow-y: auto;
@@ -7150,6 +8026,11 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #control-panel.collapsed .button-grid,
 #data-panel.collapsed .data-toggle-list,
 #data-panel.collapsed .data-layer-filter-wrap,
+#fires-panel.collapsed .fires-list,
+#fires-panel.collapsed .fires-list-meta,
+#fires-panel.collapsed .fires-list-ack,
+#data-panel.collapsed #datacenter-in-view,
+#data-panel.collapsed #dams-in-view,
 #global-context-panel.collapsed #radio-panel,
 #global-context-panel.collapsed #military-awareness-panel,
 #global-context-panel.collapsed .global-context-actions,
@@ -7216,6 +8097,9 @@ body.recording-mode #title-bar,
 body.recording-mode #style-indicator,
 body.recording-mode #top-center-actions,
 body.recording-mode #watchlist-panel,
+body.recording-mode #installations-viewport-list,
+body.recording-mode #launches-panel,
+body.recording-mode #earthquake-list-panel,
 body.recording-mode #global-loading-status,
 body.recording-mode #traffic-sync-chip,
 body.recording-mode #cctv-sync-chip,
@@ -7241,7 +8125,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #stop-tracking, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 
@@ -7439,10 +8323,12 @@ body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-v
   }
 
   #left-panel-stack > #data-panel,
+  #left-panel-stack > #fires-panel,
   #left-panel-stack > #cctv-panel,
   #left-panel-stack > #global-context-panel,
   #left-panel-stack > #scene-panel,
   #left-panel-stack > #data-panel.collapsed,
+  #left-panel-stack > #fires-panel.collapsed,
   #left-panel-stack > #cctv-panel.collapsed,
   #left-panel-stack > #global-context-panel.collapsed,
   #left-panel-stack > #scene-panel.collapsed {
@@ -8204,6 +9090,8 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   --dock-unified-width: calc(var(--dock-side-compact) * 2 + var(--dock-voice-width));
   --dock-location-open: max(34rem, calc(var(--dock-unified-width) + 0.75rem));
   --dock-presets-open: max(34rem, calc(var(--dock-unified-width) + 0.75rem));
+  /* Stay centered when there is room; otherwise start after the credit lane. */
+  left: max(50%, calc(var(--credit-lane-width) + var(--credit-lane-gap) + var(--dock-unified-width) / 2));
 }
 
 #command-dock .panel-title,
@@ -8595,14 +9483,15 @@ body:not(.ui-clean-view):not(.recording-mode) #cesium-credits {
   letter-spacing: 0.035rem;
 }
 
-/* The compact dock leaves both lower corners free for required attribution and telemetry. */
+/* Required credits occupy a reserved bottom-left lane above the LOCATION dock. */
 body:not(.ui-clean-view):not(.recording-mode) #cesium-credits,
 body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minimal'].active) #cesium-credits {
   right: auto;
   bottom: 0.75rem;
-  left: 1.5rem;
+  left: var(--credit-lane-gap);
+  z-index: 160;
   width: auto !important;
-  max-width: calc(50vw - 15rem);
+  max-width: calc(var(--credit-lane-width) - var(--credit-lane-gap));
   text-align: left;
 }
 
@@ -8630,8 +9519,8 @@ body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minim
   body:not(.ui-clean-view):not(.recording-mode) #cesium-credits,
   body:not(.ui-clean-view):not(.recording-mode):has(#intel-hud[data-variant='minimal'].active) #cesium-credits {
     bottom: calc(2vh + 5rem);
-    left: 0.75rem;
-    max-width: calc(100vw - 1.5rem);
+    left: var(--credit-lane-gap);
+    max-width: calc(var(--credit-lane-width) - var(--credit-lane-gap));
   }
 
   #command-dock .gev-voice-error-tray {
@@ -9859,10 +10748,10 @@ body.scene-playback-mode #responsible-use-notice {
 
 #meridian-terms {
   position: fixed;
-  bottom: 64px;
-  left: 36px;
-  z-index: 90;
-  max-width: min(42rem, calc(100vw - 72px));
+  bottom: calc(0.75rem + 2.25rem);
+  left: var(--credit-lane-gap);
+  z-index: 160;
+  max-width: var(--credit-lane-width);
   margin: 0;
   font-family: var(--font-mono);
   font-size: 9px;
@@ -9871,6 +10760,23 @@ body.scene-playback-mode #responsible-use-notice {
   color: rgba(232, 234, 237, 0.45);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  #meridian-terms {
+    bottom: calc(2vh + 7.25rem);
+    max-width: var(--credit-lane-width);
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --credit-lane-width: 11rem;
+  }
+
+  #command-dock {
+    left: 50%;
+  }
 }
 
 #billing-modal {

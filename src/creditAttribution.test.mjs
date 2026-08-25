@@ -640,6 +640,16 @@ test('clean-view and recording JS fade Meridian chrome, not #cesium-credits', ()
   assert.doesNotMatch(recording, /cesium-credits[\s\S]{0,80}(display\s*=\s*['"]none|opacity\s*=\s*['"]0)/);
 });
 
+test('clean-view + Low power still keeps the credit line on', () => {
+  const power = fs.readFileSync(path.join(ROOT, 'src', 'powerMode.js'), 'utf8');
+  const html = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  assert.match(html, /id="power-row"/);
+  assert.doesNotMatch(power, /cesium-credits|display:\s*none|visibility:\s*hidden/);
+  assert.match(css, /body\.ui-clean-view #cesium-credits,\s*\n\s*body\.recording-mode #cesium-credits \{[^}]*bottom: 36px;/);
+  assert.doesNotMatch(css, /#power-row[\s\S]{0,200}#cesium-credits/);
+  assert.doesNotMatch(css, /\[data-power=['"]low['"]\][\s\S]{0,200}#cesium-credits/);
+});
+
 test('clean-view still has the Google Maps text and Data attribution control', () => {
   const expand = {
     className: 'cesium-credit-expand-link',
