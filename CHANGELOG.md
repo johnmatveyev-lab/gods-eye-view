@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has a client-only **Hide unnamed** toggle next to Hide no dest.
+  Default off matches the current harbor view. On skips in-memory vessels
+  whose `name` is missing, whitespace-only, the generic `VESSEL` label,
+  the live-feed `MMSI n` fallback, or the MMSI string itself. Named
+  vessels stay. A selected vessel stays even if it would be filtered.
+  Chip changes re-filter already fetched AIS rows and AND with Tanker |
+  Cargo | Passenger | Fishing | Service | Other, Hide parked, min-speed,
+  destination, and Hide no dest — no extra AISStream fetch and no `/api`.
+  Preference persists as `ais-live-vessels.hideUnnamed` (`a.u.1`). Hidden
+  when the AIS layer is off. Feed refresh keeps the toggle. Existing AIS
+  layer only.
 - Earthquake **US | AK | CI | NC | Other** chips sit next to the event-type
   row. Default all on matches the current USGS all_day discs. Chips filter
   cached `properties.net`: `us`, `ak`, `ci`, and `nc` each have a chip;

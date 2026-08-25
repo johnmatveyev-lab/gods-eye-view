@@ -489,6 +489,9 @@ const OPTION_GROUPS = Object.freeze({
     // PLAN 175: hide no dest default OFF. Omitted `n` keeps the current
     // view — there was no prior blank-dest filter, so absent === default.
     booleanOption('hideNoDestination', 'n', false),
+    // PLAN 180: hide unnamed default OFF. Omitted `u` keeps the current
+    // view — there was no prior unnamed filter, so absent === default.
+    booleanOption('hideUnnamed', 'u', false),
   ]),
 });
 
