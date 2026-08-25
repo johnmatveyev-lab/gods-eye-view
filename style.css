@@ -6092,6 +6092,39 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   background: rgba(255, 60, 60, 0.08);
 }
 
+.data-toggle-select-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.data-toggle-select-label {
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.data-toggle-select {
+  max-width: 118px;
+  padding: 2px 4px;
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  outline: none;
+}
+
+.data-toggle-select:hover,
+.data-toggle-select:focus-visible {
+  border-color: var(--glass-border-hover);
+  color: var(--text-primary);
+}
+
 .data-toggle-legend-item {
   display: inline-flex;
   align-items: center;

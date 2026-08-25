@@ -32,6 +32,12 @@ import {
 } from './contextStore.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
 import { isExplicitLayerStateOrigin } from './layerState.js';
+import {
+  getSatGroup,
+  listSatGroups,
+  satGroupSpec,
+  setSatGroup,
+} from './satGroup.js';
 
 /**
  * Satellite Orbits — Real-time positions via CelesTrak TLE + SGP4 propagation.
@@ -158,6 +164,12 @@ const POINT_STYLES = {
   geo: {
     pixelSize: 5,
     color: _classColor('geo'),
+    outlineColor: POINT_OUTLINE,
+    outlineWidth: 0,
+  },
+  weather: {
+    pixelSize: 5,
+    color: _classColor('weather'),
     outlineColor: POINT_OUTLINE,
     outlineWidth: 0,
   },
@@ -1628,9 +1640,10 @@ const satellitesLayer = {
       : resourceController.signal;
     try {
       updateSignal.throwIfAborted();
-      // Load all core groups in parallel; a failed/empty group degrades
-      // gracefully (parseTLE of an upstream error body yields []).
-      const results = await Promise.all(CATALOG_GROUPS.map(async (groupDef) => {
+      // Load the persisted CelesTrak group (meridian.satGroup). The picker
+      // lists only proxy-safe groups the client already requests, plus weather.
+      const groupDef = satGroupSpec(getSatGroup());
+      const results = await Promise.all([groupDef].map(async (groupDef) => {
         try {
           const res = await fetch(`/api/celestrak/${groupDef.path}`, { signal: updateSignal });
           if (!res.ok) return { ...groupDef, entries: [], ok: false };
@@ -2058,12 +2071,18 @@ const satellitesLayer = {
    * Runtime params (DataLayerManager.setLayerParams path).
    * catalog: 'core' (default, ~840 sats) | 'dense' (adds the Starlink shell
    * as points-only extras on a relaxed propagation budget).
-   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null }} [params]
+   * @param {{ catalog?: 'core'|'dense', showPoints?: boolean, showOrbits?: boolean, selectedSatTrackingId?: number|null, satGroup?: string }} [params]
    */
-  setParams(params = {}, { origin = 'programmatic' } = {}) {
+  setParams(params = {}, { origin = 'programmatic', storage } = {}) {
     if (isExplicitLayerStateOrigin(origin)
         && !Object.hasOwn(params, 'selectedSatTrackingId')) {
       _cancelPendingTrackingRestore();
+    }
+    let satGroupChanged = false;
+    if (Object.hasOwn(params, 'satGroup')) {
+      const previous = getSatGroup(storage);
+      const next = setSatGroup(params.satGroup, storage);
+      satGroupChanged = next !== previous;
     }
     const catalog = params.catalog;
     if (catalog !== undefined && catalog !== 'core' && catalog !== 'dense') return false;
@@ -2092,6 +2111,13 @@ const satellitesLayer = {
       _denseError = null;
     }
     if (catalogChanged) console.log(`[Data:Satellites] Catalog mode: ${catalog}`);
+    if (satGroupChanged) {
+      console.log(`[Data:Satellites] CelesTrak group: ${getSatGroup(storage)}`);
+      _notifyRowControls();
+      if (_enabled && _viewer) {
+        void this.update(_viewer);
+      }
+    }
     if (Object.hasOwn(params, 'selectedSatTrackingId')) {
       const requested = _normalizeTrackedNorad(params.selectedSatTrackingId);
       if (requested === _trackedNorad) {
@@ -2109,10 +2135,11 @@ const satellitesLayer = {
     return true;
   },
 
-  /** @returns {{ catalog: string }} Current runtime params. */
+  /** @returns {{ catalog: string, satGroup: string }} Current runtime params. */
   getParams() {
     return {
       catalog: _params.catalog,
+      satGroup: getSatGroup(),
       showPoints: _params.showPoints,
       showOrbits: _params.showOrbits,
       selectedSatTrackingId: _trackedNorad,
@@ -2133,14 +2160,14 @@ const satellitesLayer = {
    * flips synchronously while the Starlink shell takes seconds to arrive and
    * frequently 502s, so ACTIVE means "dense points are on screen" and nothing
    * less. The legend tally is cached against the catalog revision.
-   * @returns {{ chips: Array<object>, legend: Array<object> }} Row controls.
+   * @returns {{ chips: Array<object>, legend: Array<object>, selects: Array<object> }} Row controls.
    */
   getRowControls() {
     // A dependency owner (Space Missions) borrows this layer for TLE lookup
     // with showPoints:false. Nothing is rendered, so a legend would describe an
     // empty sky and a chip write would be silently reverted by that owner's
     // restore. Surrender the row rather than lie about it.
-    if (!_params.showPoints) return { chips: [], legend: [] };
+    if (!_params.showPoints) return { chips: [], legend: [], selects: [] };
 
     const loading = _denseStatus === 'loading';
     const failed = _denseStatus === 'failed';
@@ -2159,6 +2186,14 @@ const satellitesLayer = {
         state: loading ? 'loading' : (failed ? 'error' : (active ? 'active' : 'idle')),
         title,
         params: { catalog: active ? 'core' : 'dense' },
+      }],
+      selects: [{
+        id: 'sat-group',
+        label: 'Sats',
+        title: 'CelesTrak TLE group',
+        param: 'satGroup',
+        value: getSatGroup(),
+        options: listSatGroups().map((group) => ({ value: group.id, label: group.label })),
       }],
       legend: satelliteClassLegend(_classTally()),
     };
