@@ -2,6 +2,17 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — launch recovery-attempted toggle (plan 191)** (`src/data/launchRecoveryFilter.js`,
+> `#space-mission-roster`). **Recovery-attempted** next to Hide unknown site,
+> default **off**. Filters already-normalized `recoveryStages` on the
+> in-memory 30-day roster. On keeps `some(stage => stage.attempted === true)`
+> from LL2 `landing.attempt`. Empty or missing stages hide. Selected
+> mission stays. AND with status, provider, orbit, site, 7d|30d, rocket,
+> webcast, probability, and hide-unknown-site. Re-applies from the cached
+> LL2 payload — no extra `/api/launches` fetch. Persists
+> `meridian.launchRecoveryOnly`. Hidden when the launches layer is off.
+> Client-only; no `/api`.
+
 > **2026-08-25 — AIS hide no IMO (plan 189)** (`src/data/aisHideNoImoFilter.js`).
 > **Hide no IMO** next to Hide unnamed, default **off**. Filters already-
 > fetched AISStream rows by `imo` (`String(row.imo || '')`). On hides

@@ -107,6 +107,14 @@ import {
   setLaunchHideUnknownSite,
   subscribeLaunchHideUnknownSite,
 } from './launchUnknownSiteFilter.js';
+import {
+  DEFAULT_LAUNCH_RECOVERY_ONLY,
+  getLaunchRecoveryOnly,
+  hydrateLaunchRecoveryOnly,
+  launchPassesRecoveryFilter,
+  setLaunchRecoveryOnly,
+  subscribeLaunchRecoveryOnly,
+} from './launchRecoveryFilter.js';
 
 export { compactLaunchSiteName, compactRocketName };
 
@@ -199,6 +207,7 @@ let _timeWindowUnsubscribe = null;
 let _webcastFilterUnsubscribe = null;
 let _probabilityFilterUnsubscribe = null;
 let _unknownSiteFilterUnsubscribe = null;
+let _recoveryFilterUnsubscribe = null;
 
 const REPLAY_ASCENT_FALLBACK_SEC = 12;
 const REPLAY_ASCENT_MIN_SEC = 8;
@@ -851,10 +860,10 @@ export function missionDataCompleteness(launch = {}) {
 
 /**
  * Status, provider, rocket, orbit, site, time-window, webcast-only,
- * probability-floor, and hide-unknown-site chips AND together. A selected
- * mission stays visible even when any of its chips is off. Pad-site
- * markers use this same predicate.
- * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, rocketName?: unknown, launchSite?: unknown, launchTime?: unknown, webcastLive?: unknown, probability?: unknown}|null|undefined} launch
+ * probability-floor, hide-unknown-site, and recovery-attempted chips AND
+ * together. A selected mission stays visible even when any of its chips is
+ * off. Pad-site markers use this same predicate.
+ * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, rocketName?: unknown, launchSite?: unknown, launchTime?: unknown, webcastLive?: unknown, probability?: unknown, recoveryStages?: unknown}|null|undefined} launch
  * @param {{
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
@@ -865,6 +874,7 @@ export function missionDataCompleteness(launch = {}) {
  *   webcastOnly?: unknown,
  *   probabilityFilter?: unknown,
  *   hideUnknownSite?: unknown,
+ *   recoveryOnly?: unknown,
  *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
@@ -882,6 +892,7 @@ export function launchPassesMissionFilters(launch, options = {}) {
   const webcastOnly = options.webcastOnly ?? DEFAULT_LAUNCH_WEBCAST_ONLY;
   const probabilityFilter = options.probabilityFilter ?? DEFAULT_LAUNCH_PROBABILITY_FILTER;
   const hideUnknownSite = options.hideUnknownSite ?? DEFAULT_LAUNCH_HIDE_UNKNOWN_SITE;
+  const recoveryOnly = options.recoveryOnly ?? DEFAULT_LAUNCH_RECOVERY_ONLY;
   const nowMs = options.nowMs ?? Date.now();
   return launchPassesStatusFilter(launch, statusFilter, null)
     && launchPassesProviderFilter(launch, providerFilter, null)
@@ -891,7 +902,8 @@ export function launchPassesMissionFilters(launch, options = {}) {
     && launchPassesTimeWindow(launch, timeWindow, null, nowMs)
     && launchPassesWebcastFilter(launch, webcastOnly, null)
     && launchPassesProbabilityFilter(launch, probabilityFilter, null)
-    && launchPassesUnknownSiteFilter(launch, hideUnknownSite, null);
+    && launchPassesUnknownSiteFilter(launch, hideUnknownSite, null)
+    && launchPassesRecoveryFilter(launch, recoveryOnly, null);
 }
 
 /**
@@ -908,6 +920,7 @@ export function launchPassesMissionFilters(launch, options = {}) {
  *   webcastOnly?: unknown,
  *   probabilityFilter?: unknown,
  *   hideUnknownSite?: unknown,
+ *   recoveryOnly?: unknown,
  *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
@@ -927,6 +940,7 @@ export function missionRosterEntries(launches, options = {}) {
       webcastOnly: options.webcastOnly,
       probabilityFilter: options.probabilityFilter,
       hideUnknownSite: options.hideUnknownSite,
+      recoveryOnly: options.recoveryOnly,
       nowMs: options.nowMs,
       selectedLaunchId,
     }))
@@ -943,8 +957,8 @@ export function missionRosterEntries(launches, options = {}) {
 /**
  * PREV/NEXT and the N/M index walk the chip-filtered roster (status AND
  * provider AND rocket AND orbit AND site AND time window AND webcast AND
- * probability AND hide-unknown-site). The selected-id visibility exception
- * is excluded so navigation cannot leave that AND set.
+ * probability AND hide-unknown-site AND recovery-attempted). The selected-id
+ * visibility exception is excluded so navigation cannot leave that AND set.
  * @param {Array<object>} launches Normalized launch records.
  * @param {string|null|undefined} selectedLaunchId
  * @param {{
@@ -957,6 +971,7 @@ export function missionRosterEntries(launches, options = {}) {
  *   webcastOnly?: unknown,
  *   probabilityFilter?: unknown,
  *   hideUnknownSite?: unknown,
+ *   recoveryOnly?: unknown,
  *   nowMs?: number,
  * }} [options]
  * @returns {{
@@ -978,6 +993,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
     webcastOnly: options.webcastOnly,
     probabilityFilter: options.probabilityFilter,
     hideUnknownSite: options.hideUnknownSite,
+    recoveryOnly: options.recoveryOnly,
     nowMs: options.nowMs,
     selectedLaunchId: null,
   });
@@ -1008,6 +1024,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
  *   webcastOnly?: unknown,
  *   probabilityFilter?: unknown,
  *   hideUnknownSite?: unknown,
+ *   recoveryOnly?: unknown,
  *   nowMs?: number,
  * }} [options]
  * @returns {{launch: object, index: number}|null}
@@ -2680,6 +2697,17 @@ function syncLaunchUnknownSiteChip() {
   }
 }
 
+function syncLaunchRecoveryChip() {
+  if (!_missionRoster) return;
+  const host = _missionRoster.querySelector('[data-mission-recovery-chips]');
+  if (host) host.hidden = !_enabled;
+  const active = getLaunchRecoveryOnly() === true;
+  for (const chip of _missionRoster.querySelectorAll('[data-mission-recovery-chip]')) {
+    chip.classList?.toggle?.('active', active);
+    chip.setAttribute?.('aria-pressed', String(active));
+  }
+}
+
 function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
   return {
     statusFilter: getLaunchStatusFilter(),
@@ -2691,6 +2719,7 @@ function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
     webcastOnly: getLaunchWebcastOnly(),
     probabilityFilter: getLaunchProbabilityFilter(),
     hideUnknownSite: getLaunchHideUnknownSite(),
+    recoveryOnly: getLaunchRecoveryOnly(),
     selectedLaunchId,
   };
 }
@@ -2731,6 +2760,7 @@ function applyLaunchFilterPresentation() {
   syncLaunchWebcastChip();
   syncLaunchProbabilityChips();
   syncLaunchUnknownSiteChip();
+  syncLaunchRecoveryChip();
   renderMissionPanel();
 }
 
@@ -2970,6 +3000,11 @@ function createMissionPanel() {
       const unknownSiteChip = target?.closest('[data-mission-unknown-site-chip]');
       if (unknownSiteChip) {
         setLaunchHideUnknownSite(!getLaunchHideUnknownSite());
+        return;
+      }
+      const recoveryChip = target?.closest('[data-mission-recovery-chip]');
+      if (recoveryChip) {
+        setLaunchRecoveryOnly(!getLaunchRecoveryOnly());
         return;
       }
       const statusChip = target?.closest('[data-mission-status-chip]');
@@ -3941,6 +3976,7 @@ const rocketLaunchesLayer = {
     hydrateLaunchWebcastOnly();
     hydrateLaunchProbabilityFilter();
     hydrateLaunchHideUnknownSite();
+    hydrateLaunchRecoveryOnly();
     if (!_statusFilterUnsubscribe) {
       _statusFilterUnsubscribe = subscribeLaunchStatusFilter(applyLaunchFilterPresentation);
     }
@@ -3967,6 +4003,9 @@ const rocketLaunchesLayer = {
     }
     if (!_unknownSiteFilterUnsubscribe) {
       _unknownSiteFilterUnsubscribe = subscribeLaunchHideUnknownSite(applyLaunchFilterPresentation);
+    }
+    if (!_recoveryFilterUnsubscribe) {
+      _recoveryFilterUnsubscribe = subscribeLaunchRecoveryOnly(applyLaunchFilterPresentation);
     }
     createMissionPanel();
     createReplayVehicleOverlay();
@@ -4136,6 +4175,8 @@ const rocketLaunchesLayer = {
     _probabilityFilterUnsubscribe = null;
     _unknownSiteFilterUnsubscribe?.();
     _unknownSiteFilterUnsubscribe = null;
+    _recoveryFilterUnsubscribe?.();
+    _recoveryFilterUnsubscribe = null;
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },
