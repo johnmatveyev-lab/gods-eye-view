@@ -144,10 +144,37 @@ test('the manager reads keyless as FALLBACK and an outage as DEGRADED', () => {
   );
 });
 
+test('a keyed host that chose Sim names built-in traffic and never claims LIVE', () => {
+  const idle = trafficFeedPresentation({ liveMode: false, hasKey: true });
+  assert.equal(idle.mode, 'sim');
+  assert.equal(idle.error, null);
+  assert.equal(idle.loadingLabel, 'SIMULATED — using built-in traffic');
+  assert.ok(!LIVE_CLAIM.test(idle.loadingLabel));
+});
+
+test('setParams can force Sim and does not enable Live without a key', () => {
+  trafficLayer.setParams({ trafficSource: 'sim' });
+  assert.equal(trafficLayer.getParams().trafficSource, 'sim');
+  const simControls = trafficLayer.getRowControls();
+  assert.equal(simControls.chips.find((chip) => chip.id === 'traffic-source-sim').active, true);
+  assert.equal(simControls.chips.find((chip) => chip.id === 'traffic-source-live').disabled, true);
+  trafficLayer.setParams({ trafficSource: 'live' });
+  const liveAttempt = trafficLayer.getRowControls();
+  assert.equal(liveAttempt.chips.find((chip) => chip.id === 'traffic-source-live').active, false);
+  assert.equal(trafficLayer.getStats().mode, 'sim');
+});
+
 test('the shipped layer boots keyless-honest before any status check', () => {
   const stats = trafficLayer.getStats();
   assert.equal(stats.mode, 'sim');
   assert.equal(stats.error, null);
   assert.ok(!LIVE_CLAIM.test(stats.loadingLabel), `boot label implies live data: ${stats.loadingLabel}`);
   assert.equal(layerFeedState(stats), 'fallback');
+  const controls = trafficLayer.getRowControls();
+  const live = controls.chips.find((chip) => chip.id === 'traffic-source-live');
+  const sim = controls.chips.find((chip) => chip.id === 'traffic-source-sim');
+  assert.equal(controls.heading, 'Traffic');
+  assert.equal(live.disabled, true);
+  assert.equal(sim.active, true);
+  assert.equal(sim.disabled, false);
 });

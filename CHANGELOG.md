@@ -20,6 +20,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Street Traffic has a Traffic: Live | Sim control. Live uses the existing
+  `/api/tomtom` tiles when `status.hasKey`; Sim is the built-in model and
+  does not request tiles. Without a key, Live stays disabled. A 429 budget
+  stop still leaves Sim available. "Traffic flow data © TomTom" is credited
+  only after Live actually painted a tile. No extra `/api` route.
 - Added a DISPLAY-rail Sun on/off control. On follows the existing Cesium
   clock so the terminator matches real time. Off keeps the well-lit globe
   already used when lighting is disabled. The choice persists as
