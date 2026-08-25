@@ -180,7 +180,7 @@ test('calibration chips AND with city, Hide no feed, feed type, Hide unhealthy, 
     headingConfidence: { high: true, medium: false, low: false },
     calSource: { calibrated: true, curated: true, 'raw-prior': true },
   });
-  assert.deepEqual(anded.map((source) => source.id), ['manual-1']);
+  assert.deepEqual(anded.map((source) => source.id), ['manual-1', 'raw-1']);
 
   const rawOff = filterVisibleCctvSources(CATALOG, {
     city: 'austin',
