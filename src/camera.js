@@ -130,3 +130,58 @@ export function flyToHomeView(viewer, options = {}) {
   });
   return { ...HOME_VIEW };
 }
+
+const RAD_TO_DEG = 180 / Math.PI;
+
+/**
+ * Fly to an operator-entered lat/lon using the same camera.flyTo helper
+ * Home and share restore already use. Keeps the current height, heading,
+ * and pitch unless the paste includes a height.
+ *
+ * @param {object} viewer
+ * @param {{lat: number, lon: number, alt?: number}} target
+ * @param {{duration?: number, onComplete?: Function, onCancel?: Function}} [options]
+ * @returns {{lat: number, lon: number, alt: number, heading: number, pitch: number}|null}
+ */
+export function flyToGoTo(viewer, target, options = {}) {
+  if (!viewer?.camera || !target) return null;
+  const lat = Number(target.lat);
+  const lon = Number(target.lon);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+
+  const carto = viewer.camera.positionCartographic;
+  const alt = Number.isFinite(target.alt)
+    ? Number(target.alt)
+    : (Number.isFinite(carto?.height) ? carto.height : HOME_VIEW.alt);
+  if (!Number.isFinite(alt)) return null;
+
+  const headingRad = Number.isFinite(viewer.camera.heading)
+    ? viewer.camera.heading
+    : Cesium.Math.toRadians(HOME_VIEW.heading);
+  const pitchRad = Number.isFinite(viewer.camera.pitch)
+    ? viewer.camera.pitch
+    : Cesium.Math.toRadians(HOME_VIEW.pitch);
+
+  viewer.camera.cancelFlight?.();
+  const duration = Number.isFinite(options.duration) ? options.duration : 2.4;
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(lon, lat, alt),
+    orientation: {
+      heading: headingRad,
+      pitch: pitchRad,
+      roll: 0.0,
+    },
+    duration,
+    easingFunction: Cesium.EasingFunction.CUBIC_IN_OUT,
+    complete: options.onComplete,
+    cancel: options.onCancel,
+  });
+  return {
+    lat,
+    lon,
+    alt,
+    heading: headingRad * RAD_TO_DEG,
+    pitch: pitchRad * RAD_TO_DEG,
+  };
+}

@@ -178,6 +178,11 @@
         <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
       </button>
     </div>
+    <form id="go-to" autocomplete="off">
+      <input id="go-to-input" type="text" name="goto" spellcheck="false" placeholder="MGRS or lat, lon" aria-label="Go to MGRS or lat, lon" title="Go to MGRS or lat, lon" aria-describedby="go-to-status">
+      <button type="submit" id="go-to-submit" aria-label="Go to coordinates" title="Go">Go</button>
+      <output id="go-to-status" class="go-to-status" for="go-to-input" aria-live="polite"></output>
+    </form>
     <button id="fullscreen-view" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
       <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
     </button>

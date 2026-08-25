@@ -22,7 +22,8 @@ import {
   shouldShowRestoreControl,
   snapshotEnabledLayerIds,
 } from './allOffLayers.js';
-import { flyToHomeView } from './camera.js';
+import { flyToGoTo, flyToHomeView } from './camera.js';
+import { GOTO_INVALID_STATUS, parseGoTo } from './coords/parseGoTo.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToLandmark, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
@@ -2774,6 +2775,9 @@ export class StyleManager {
     this._globalLoadingLabel = document.getElementById('global-loading-label');
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
     this._homeViewBtn = document.getElementById('home-view');
+    this._goToForm = document.getElementById('go-to');
+    this._goToInput = document.getElementById('go-to-input');
+    this._goToStatus = document.getElementById('go-to-status');
     this._launchesPanelToggle = document.getElementById('launches-panel-toggle');
     this._launchesPanel = document.getElementById('launches-panel');
     this._launchesPanelList = document.getElementById('launches-panel-list');
@@ -3123,6 +3127,7 @@ export class StyleManager {
     this._initClearSelectedLayersButton();
     this._initRestoreLiveLayersButton();
     this._initHomeViewButton();
+    this._initGoToField();
     this._initLaunchesPanel();
     this._initStopTrackingButton();
     this._initDamsInViewList();
@@ -10954,6 +10959,40 @@ export class StyleManager {
   /** Wire the Home control that flies to the settled first-load camera. */
   _initHomeViewButton() {
     this._homeViewBtn?.addEventListener('click', () => this.goHome());
+  }
+
+  /** Wire the Go-to field next to the camera-center readout. */
+  _initGoToField() {
+    this._goToForm?.addEventListener('submit', (event) => {
+      event.preventDefault();
+      this.goToCoords();
+    });
+  }
+
+  /**
+   * Fly to an operator-entered MGRS grid or decimal lat,lon. Invalid
+   * input leaves the camera put and shows a short status.
+   */
+  goToCoords() {
+    const parsed = parseGoTo(this._goToInput?.value);
+    if (!parsed.ok) {
+      this._setGoToStatus(GOTO_INVALID_STATUS);
+      this._showToast(GOTO_INVALID_STATUS);
+      return false;
+    }
+    this._setGoToStatus('');
+    this._stopOrbit();
+    if (this.viewer) {
+      this.viewer.trackedEntity = undefined;
+      this.viewer.camera?.cancelFlight?.();
+      this.viewer.camera?.lookAtTransform?.(Cesium.Matrix4.IDENTITY);
+    }
+    return !!flyToGoTo(this.viewer, parsed);
+  }
+
+  _setGoToStatus(message) {
+    if (!this._goToStatus) return;
+    this._goToStatus.textContent = message || '';
   }
 
   /** Wire the hosted Launches panel that lists the existing LL2 payload. */
