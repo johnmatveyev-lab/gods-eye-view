@@ -1,0 +1,41 @@
+name: Apply vite preview proxies
+on:
+  push:
+    branches: [cursor/production-deploy-3087]
+    paths:
+      - 'patches/vite-preview-proxies.patch'
+      - '.github/workflows/apply-vite-preview-proxies.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cursor/production-deploy-3087
+          fetch-depth: 0
+      - name: Restore base vite.config.js and apply patch
+        run: |
+          set -euo pipefail
+          git show 0886b87734dca4cb741d3482c0c7c9596c2aef3b:vite.config.js > vite.config.js
+          patch -p1 < patches/vite-preview-proxies.patch
+          EXPECTED=4a264cdff39eebef61a3c4e41e66a37cf8368d10
+          ACTUAL=$(git hash-object vite.config.js)
+          echo "vite.config.js hash: $ACTUAL"
+          test "$ACTUAL" = "$EXPECTED"
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add vite.config.js
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "Wire production preview API proxies in vite.config"
+          git push origin HEAD:cursor/production-deploy-3087
