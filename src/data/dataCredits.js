@@ -35,12 +35,6 @@ export const DATA_CREDITS = [
       '(ODbL 1.0)',
   },
   {
-    key: 'aisstream',
-    html:
-      'Live vessels (AIS): ' +
-      '<a href="https://aisstream.io" target="_blank" rel="noopener">AISStream.io</a>',
-  },
-  {
     key: 'celestrak',
     html:
       'Satellites (TLEs): CelesTrak ' +
@@ -168,10 +162,18 @@ export const DATA_CREDITS = [
  * Conditional credits — registered via `registerDynamicCredit` only when the
  * corresponding capability actually activates (deliberately NOT part of
  * DATA_CREDITS, which is always-on). TomTom terms require attribution when
- * their flow data is displayed; keyless installs never show it, so the
- * credit only appears once live traffic-flow mode activates.
+ * their flow data is displayed; AISStream is courtesy-credited only after a
+ * live snapshot actually lands. Keyless or hosted-empty installs never show
+ * either credit.
  * @type {{ key: string, html: string }}
  */
+export const AISSTREAM_CREDIT = {
+  key: 'aisstream',
+  html:
+    'Live vessels (AIS): ' +
+    '<a href="https://aisstream.io" target="_blank" rel="noopener">AISStream.io</a>',
+};
+
 export const TOMTOM_CREDIT = {
   key: 'tomtom',
   html:
@@ -208,6 +210,34 @@ export function registerDynamicCredit(viewer, credit) {
   if (_dynamicCreditKeys.has(credit.key)) return true;
   creditDisplay.addStaticCredit(new Cesium.Credit(credit.html, false));
   _dynamicCreditKeys.add(credit.key);
+  return true;
+}
+
+/**
+ * Required on-globe credit container. Google Maps Platform and Cesium both
+ * require this line to stay painted whenever their content is on screen.
+ * Clean-view and recording fade Meridian chrome only — never `#cesium-credits`.
+ *
+ * @param {Pick<Document, 'getElementById'>} [root]
+ * @returns {boolean} True when the credit node was found and pinned visible.
+ */
+export function pinRequiredCredits(root = globalThis.document) {
+  const credits = root?.getElementById?.('cesium-credits');
+  const style = credits?.style;
+  if (!credits || !style) return false;
+  if (typeof style.setProperty === 'function') {
+    style.setProperty('opacity', '1', 'important');
+    style.setProperty('visibility', 'visible', 'important');
+    style.setProperty('pointer-events', 'auto', 'important');
+  } else {
+    style.opacity = '1';
+    style.visibility = 'visible';
+    style.pointerEvents = 'auto';
+  }
+  if (style.display === 'none') {
+    if (typeof style.removeProperty === 'function') style.removeProperty('display');
+    else style.display = '';
+  }
   return true;
 }
 

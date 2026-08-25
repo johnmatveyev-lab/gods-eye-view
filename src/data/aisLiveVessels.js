@@ -45,6 +45,7 @@ import {
 } from './focusDeemphasis.js';
 import { requestWorldFocus } from '../worldFocus.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { AISSTREAM_CREDIT, registerDynamicCredit } from './dataCredits.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -686,6 +687,11 @@ const state = {
   acceptedRowCount: 0,
   /** Monotonic enable/reset owner for requests and first-connect timers. */
   sessionId: 0,
+  /**
+   * Hosted platforms without `/api/ais-live` (Vercel 404/503) cannot recover
+   * by polling. Once set, enable() must start a new session to try again.
+   */
+  liveEndpointUnavailable: false,
   /** @type {'idle'|'loading'|'ready'|'unavailable'} */
   firstConnectPhase: 'idle',
   firstConnectStartedAt: null,
@@ -785,12 +791,39 @@ function beginAisSession() {
   const sessionId = ++_aisSessionSequence;
   const startedAt = _aisRuntime.now();
   state.sessionId = sessionId;
+  state.liveEndpointUnavailable = false;
   state.firstConnectPhase = 'loading';
   state.firstConnectStartedAt = startedAt;
   state.firstConnectDeadline = startedAt + AIS_FIRST_CONNECT_GRACE_MS;
   state.error = null;
   state.loadingLabel = AIS_FIRST_CONNECT_LABEL;
   scheduleFirstConnectExpiry(sessionId, AIS_FIRST_CONNECT_GRACE_MS);
+}
+
+/** True when `/api/ais-live` is a platform/function miss, not a live snapshot. */
+export function isAisLivePlatformFailure(status) {
+  return status === 404 || status === 503;
+}
+
+/**
+ * Chip text for a failed `/api/ais-live` poll. Platform HTML 404/503 uses the
+ * existing empty-state language; a JSON body keeps its derived feed reason.
+ * @param {number} status
+ * @param {Object|null|undefined} payload
+ * @returns {string}
+ */
+export function describeAisLiveHttpFailure(status, payload) {
+  const derived = payload && typeof payload === 'object'
+    ? deriveAisFeedError(payload, 0)
+    : null;
+  if (derived) return derived;
+  // Platform/function 404/503 (HTML or a generic handler body) is an honest
+  // empty state, not a feed-status string like "Not found".
+  if (isAisLivePlatformFailure(status)) return 'feed unavailable';
+  if (typeof payload?.error === 'string' && payload.error.trim()) {
+    return payload.error.trim();
+  }
+  return `AIS live HTTP ${status}`;
 }
 
 function scheduleFirstConnectExpiry(sessionId, delayMs) {
@@ -836,7 +869,7 @@ function markAisUnavailable(reason) {
 }
 
 async function loadLivePositions(viewer) {
-  if (!viewer || state.loading) return;
+  if (!viewer || state.loading || state.liveEndpointUnavailable) return;
   state.loading = true;
   state.loadingLabel = state.loaded ? 'refreshing...' : 'loading...';
   const requestController = new AbortController();
@@ -856,16 +889,17 @@ async function loadLivePositions(viewer) {
     });
     if (!ownsAisRequest(requestController, requestSessionId)) return;
     if (!response.ok) {
-      // The 503 key-absent / 502 stream-error bodies still carry {status,error}.
-      // Prefer a clean surfaced reason over a cryptic "AIS live HTTP 503".
-      let reason = `AIS live HTTP ${response.status}`;
+      // Hosted Vercel has no `/api/ais-live` function: 404/503 HTML must stop
+      // the 60s poll. Vite still 503s JSON when AISSTREAM_API_KEY is unset.
+      let payload = null;
       try {
-        const errPayload = await response.json();
+        payload = await response.json();
         if (!ownsAisRequest(requestController, requestSessionId)) return;
-        reason = deriveAisFeedError(errPayload, 0)
-          || (typeof errPayload?.error === 'string' && errPayload.error.trim()) || reason;
-      } catch { /* non-JSON body — keep the HTTP status reason */ }
-      throw new Error(reason);
+      } catch { /* platform HTML/empty body — not a live snapshot */ }
+      if (isAisLivePlatformFailure(response.status)) {
+        state.liveEndpointUnavailable = true;
+      }
+      throw new Error(describeAisLiveHttpFailure(response.status, payload));
     }
 
     const payload = await response.json();
@@ -930,6 +964,7 @@ function applyAisFeedSnapshot(viewer, payload) {
   }
 
   settleFirstConnectPhase('ready');
+  registerDynamicCredit(viewer, AISSTREAM_CREDIT);
   reconcileVessels(viewer, snapshot.acceptedRows);
   state.count = state.vesselRecords.length;
   state.stale = Boolean(payload?.refreshing);
@@ -1947,6 +1982,7 @@ function resetState() {
   state.rawRowCount = 0;
   state.acceptedRowCount = 0;
   state.sessionId = ++_aisSessionSequence;
+  state.liveEndpointUnavailable = false;
   state.firstConnectPhase = 'idle';
   state.firstConnectStartedAt = null;
   state.firstConnectDeadline = null;

@@ -305,11 +305,15 @@ body.cockpit-mode #cockpit-cloud-effects.active {
    and launch videos, so hiding #cesium-credits here (as it was before) shipped
    non-compliant footage. The full credit line — Cesium/Ion logo, "Google Maps",
    and the "Data attribution" link that opens the per-layer license popover —
-   stays on screen; it's already styled small and unobtrusive above. The GEV
-   chrome (panels/HUD) still fades via its own rules; only the required notice
-   is exempt. (Note: Cesium re-applies inline styles on the credit elements each
-   frame, so the on-screen credit content is owned by Cesium's update loop, not
-   CSS overrides — we deliberately don't fight it here.) */
+   stays on screen (opacity 1, never display:none). Meridian chrome (panels/HUD)
+   still fades via its own rules; only the required notice is exempt. Cesium
+   owns the inner credit widgets each frame — this pin is on the container. */
+body.ui-clean-view #cesium-credits,
+body.recording-mode #cesium-credits {
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
+}
 
 #gev-voice-control {
   position: fixed;
@@ -2018,6 +2022,33 @@ body.ui-clean-view #scene-runtime.active {
 #cctv-sync-chip.visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+#offline-chip {
+  position: fixed;
+  top: 78px;
+  left: 50%;
+  z-index: 102;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255, 176, 80, 0.38);
+  background: rgba(18, 10, 4, 0.82);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  color: rgba(255, 214, 160, 0.94);
+  font-family: var(--font-mono);
+  font-size: 8px;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.34), 0 0 14px rgba(255, 160, 64, 0.08);
+}
+
+#offline-chip[hidden] {
+  display: none;
 }
 
 #traffic-sync-label,
@@ -3767,6 +3798,9 @@ body.cockpit-mode #view-switcher button {
   font: 600 7px/1.2 var(--font-mono);
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+.cockpit-weather-credit[hidden] {
+  display: none;
 }
 .cockpit-signal-footer {
   display: flex;
@@ -7208,6 +7242,9 @@ body.recording-mode #cesium-credits {
   right: auto;
   bottom: 36px;
   left: 36px;
+  opacity: 1 !important;
+  visibility: visible !important;
+  pointer-events: auto !important;
 }
 
 #intel-hud[data-variant='minimal'] .hud-bottom-left {

@@ -72,6 +72,7 @@
     <span id="cctv-sync-label">loading frames</span>
     <span id="cctv-sync-progress">0/0</span>
   </div>
+  <div id="offline-chip" hidden role="status" aria-live="polite" aria-hidden="true">Offline — showing last data</div>
 
   <!-- Toast notification -->
   <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -304,7 +305,7 @@
             <div><span>SKY</span><strong id="cockpit-local-condition">UNKNOWN</strong><small id="cockpit-local-cloud">—</small></div>
             <div><span>PRECIP</span><strong id="cockpit-local-precipitation">—</strong><small>MM</small></div>
           </div>
-          <a class="cockpit-weather-credit" href="https://open-meteo.com/" target="_blank" rel="noopener">Weather data by Open-Meteo.com</a>
+          <a class="cockpit-weather-credit" href="https://open-meteo.com/" target="_blank" rel="noopener" hidden>Weather data by Open-Meteo.com</a>
         </section>
       </div>
       <footer class="cockpit-signal-footer">

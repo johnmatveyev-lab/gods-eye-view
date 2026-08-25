@@ -29,10 +29,11 @@ import { tomtomProxy } from '../data/tomtom.js';
 import { firmsProxy } from '../data/firms.js';
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import {
-  normalizeRegionalArticles,
-  normalizeRegionalPlace,
-  normalizeRegionalWeather,
-} from '../data/regionalBrief.js';
+  handleRegionalBrief,
+  regionalBriefHasAnySource,
+  requiredFiniteQueryNumber,
+  validRegionalPoint,
+} from '../data/regionalBriefHandler.js';
 import { adsbLolMilPlugin } from '../data/adsblolMil.js';
 import { createAisStreamAdapter, isRecognizedAisEnvelope } from '../data/aisStreamAdapter.js';
 import {
@@ -53,6 +54,7 @@ import {
 import { gbfsProxy } from '../data/gbfs.js';
 import { handleOsrmRouteHttp } from '../data/osrmRoute.js';
 import { weatherEffectsProxy } from '../data/weatherEffects.js';
+import { celestrakProxy } from '../data/celestrak.js';
 import { VOICE_MODELS, isKnownVoiceTier, resolveVoiceModel } from '../voice/voiceCost.js';
 import { trackBackfillProxies } from '../data/trackBackfill.js';
 
@@ -65,6 +67,7 @@ const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // Civilian flights: adsb.lol only (OpenSky is disabled in this commercial fork)
 // ---------------------------------------------------------------------------
 export { COMMERCIAL_FLIGHT_SOURCE, OPENSKY_ENABLED, adsbLolFallbackAnchor };
+export { regionalBriefHasAnySource, requiredFiniteQueryNumber, validRegionalPoint };
 /** Hard off — cockpit headlines use GDELT only. */
 export const GOOGLE_NEWS_RSS_ENABLED = false;
 // ---------------------------------------------------------------------------
@@ -1252,125 +1255,6 @@ const _aisStreamStatic = new Map();
 const _aisStreamTracks = new Map();
 /** @type {Map<string,{lat:number,lon:number,epochSec:number}>} mmsi -> first fix awaiting second (lazy buffer allocation) */
 const _aisStreamTrackPending = new Map();
-
-/**
- * Vite plugin: CelesTrak TLE proxy.
- *
- * CelesTrak does not send CORS headers, so this middleware fetches
- * satellite TLE data server-side and forwards it to the browser.
- * Upstream URL: https://celestrak.org/NORAD/elements/gp.php
- *
- * @returns {import('vite').Plugin}
- */
-/**
- * CelesTrak GP/TLE proxy with a memory + disk cache.
- * Upstream: https://celestrak.org/NORAD/elements/gp.php?GROUP=<group>&FORMAT=tle
- * CelesTrak asks clients not to re-fetch GP data more than ~every 2 h and
- * throttles offenders; every dev reload used to refetch every group. Cache TTL
- * 6 h; on upstream failure the freshest stale copy is served (a stale TLE
- * beats an empty satellites layer). Pattern mirrors openSkyProxy's
- * cache+serve-stale. Adapted from skylight's TleStore (MIT).
- */
-function celestrakProxy() {
-  const TLE_TTL_MS = 6 * 3600_000;
-  const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
-  const mem = new Map(); // group -> { at: epochMs, body: string }
-  const inflight = new Map(); // group -> Promise<{at, body}|null>
-
-  const diskPath = (group) => path.join(CACHE_DIR, `celestrak-${group}.json`);
-
-  async function readDisk(group) {
-    try {
-      const parsed = JSON.parse(await fsp.readFile(diskPath(group), 'utf8'));
-      if (typeof parsed?.body === 'string' && Number.isFinite(parsed?.at)) return parsed;
-    } catch { /* no disk cache yet */ }
-    return null;
-  }
-
-  async function writeDisk(group, entry) {
-    try {
-      await fsp.mkdir(CACHE_DIR, { recursive: true });
-      await fsp.writeFile(diskPath(group), JSON.stringify(entry), 'utf8');
-    } catch (err) {
-      console.warn(`[celestrak-proxy] cache write failed for ${group}:`, err?.message || err);
-    }
-  }
-
-  async function fetchUpstream(group) {
-    const url = new URL('https://celestrak.org/NORAD/elements/gp.php');
-    url.searchParams.set('GROUP', group);
-    url.searchParams.set('FORMAT', 'tle');
-    const res = await fetch(url.toString(), {
-      signal: AbortSignal.timeout(20000),
-      // CelesTrak 403s bulk groups (e.g. `active`) unless the request carries a
-      // descriptive User-Agent with a contact point.
-      headers: { 'User-Agent': 'gods-eye-view-celestrak-proxy/1.0 (+https://github.com/bilawalsidhu/gods-eye-view)' },
-    });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const body = await res.text();
-    // An upstream error page parses to zero TLEs — treat as failure, keep cache.
-    if (!/^1 /m.test(body)) throw new Error('no TLE lines in response');
-    return { at: Date.now(), body };
-  }
-
-  return {
-    name: 'celestrak-proxy',
-    configureServer(server) {
-      server.middlewares.use('/api/celestrak', async (req, res) => {
-        const group = String(req.url || '').replace(/^\//, '').split('?')[0];
-        if (!/^[a-z0-9-]+$/i.test(group)) {
-          res.writeHead(400, { 'Content-Type': 'text/plain' });
-          res.end('invalid group');
-          return;
-        }
-        const send = (status, body, cacheStatus) => {
-          // Guard against a double-send (e.g. a throw AFTER a response already
-          // went out routing into the catch's send): writeHead after headersSent
-          // throws "Cannot set headers after they are sent".
-          if (res.headersSent) return;
-          res.writeHead(status, { 'Content-Type': 'text/plain', 'x-tle-cache': cacheStatus });
-          res.end(body);
-        };
-        try {
-          const now = Date.now();
-          let entry = mem.get(group);
-          if (!entry) {
-            entry = await readDisk(group);
-            if (entry) mem.set(group, entry);
-          }
-          if (entry && now - entry.at < TLE_TTL_MS) {
-            send(200, entry.body, 'HIT');
-            return;
-          }
-          // Stale or missing → refresh, single-flight per group.
-          if (!inflight.has(group)) {
-            inflight.set(group, fetchUpstream(group)
-              .then(async (fresh) => {
-                mem.set(group, fresh);
-                await writeDisk(group, fresh);
-                return fresh;
-              })
-              .catch((err) => {
-                console.warn(`[celestrak-proxy] ${group} refresh failed (${err?.message || err}) — serving cache if any`);
-                return null;
-              })
-              .finally(() => inflight.delete(group)));
-          }
-          const fresh = await inflight.get(group);
-          if (fresh) {
-            send(200, fresh.body, 'MISS');
-          } else if (entry) {
-            send(200, entry.body, 'STALE-ERROR'); // upstream down — stale beats empty
-          } else {
-            send(502, 'celestrak fetch failed and no cache available', 'NONE');
-          }
-        } catch (err) {
-          send(500, `celestrak proxy error: ${err?.message || err}`, 'ERROR');
-        }
-      });
-    },
-  };
-}
 
 export const LL2_CACHE_TTL_MS = 15 * 60_000;
 
@@ -4125,268 +4009,16 @@ function militaryInstallationsProxy() {
 }
 
 // ---------------------------------------------------------------------------
-// Regional cockpit briefing proxy
+// Regional cockpit briefing — Vite/Vercel catch-all forward to the shared handler
 // ---------------------------------------------------------------------------
-const REGIONAL_BRIEF_CACHE_MS = 5 * 60_000;
-const REGIONAL_BRIEF_STALE_MS = 60 * 60_000;
-const REGIONAL_BRIEF_MAX_CACHE = 120;
-const REGIONAL_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
-const _regionalBriefCache = new Map();
-const _regionalBriefInFlight = new Map();
-const _regionalBriefRateLimiter = makeRateLimiter({ windowMs: 60_000, max: 30, globalMax: 90 });
-const WEATHER_EFFECTS_MAX_RESPONSE_BYTES = 512 * 1024;
-let _nominatimQueue = Promise.resolve();
-let _nominatimLastRequestAt = 0;
-
-export function requiredFiniteQueryNumber(params, key) {
-  const value = params.get(key);
-  if (value === null || value.trim() === '') return null;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : null;
-}
-
-export function validRegionalPoint(params) {
-  const latitude = requiredFiniteQueryNumber(params, 'latitude');
-  const longitude = requiredFiniteQueryNumber(params, 'longitude');
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
-  return { latitude, longitude };
-}
-
-function trimRegionalBriefCache() {
-  while (_regionalBriefCache.size > REGIONAL_BRIEF_MAX_CACHE) {
-    const oldest = _regionalBriefCache.keys().next().value;
-    if (oldest === undefined) break;
-    _regionalBriefCache.delete(oldest);
-  }
-}
-
-async function fetchRegionalJson(url, {
-  headers = {},
-  timeoutMs = 9000,
-  maxBytes = REGIONAL_MAX_RESPONSE_BYTES,
-} = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers });
-    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
-    return readResponseJsonCapped(response, maxBytes);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function fetchRegionalText(url, {
-  headers = {},
-  timeoutMs = 9000,
-  maxBytes = REGIONAL_MAX_RESPONSE_BYTES,
-} = {}) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, { signal: controller.signal, headers });
-    if (!response.ok) throw new Error(`Upstream returned ${response.status}`);
-    return readResponseTextCapped(response, maxBytes);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function decodeRssText(value) {
-  return String(value || '')
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
-    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function rssTag(block, tag) {
-  return decodeRssText(new RegExp(`<${tag}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/${tag}>`, 'i').exec(block)?.[1] || '');
-}
-
-function normalizeRssArticles(xml, limit = 5) {
-  const seen = new Set();
-  const articles = [];
-  for (const match of String(xml || '').matchAll(/<item>([\s\S]*?)<\/item>/gi)) {
-    const item = match[1];
-    const title = rssTag(item, 'title').slice(0, 180);
-    const url = rssTag(item, 'link');
-    let parsedUrl;
-    try { parsedUrl = new URL(url); } catch { continue; }
-    if (!title || !['http:', 'https:'].includes(parsedUrl.protocol)) continue;
-    const source = rssTag(item, 'source');
-    const signature = `${title.toLowerCase()}|${source.toLowerCase() || parsedUrl.hostname}`;
-    if (seen.has(signature)) continue;
-    seen.add(signature);
-    const rawDate = rssTag(item, 'pubDate');
-    articles.push({
-      title,
-      url: parsedUrl.href,
-      domain: source || parsedUrl.hostname.replace(/^www\./, ''),
-      publishedAt: Number.isNaN(Date.parse(rawDate)) ? null : new Date(rawDate).toISOString(),
-      sourceCountry: null,
-    });
-    if (articles.length >= limit) break;
-  }
-  return articles;
-}
-
-function fetchRegionalPlace(point) {
-  const task = _nominatimQueue.then(async () => {
-    const waitMs = Math.max(0, 1100 - (Date.now() - _nominatimLastRequestAt));
-    if (waitMs) await new Promise((resolve) => setTimeout(resolve, waitMs));
-    _nominatimLastRequestAt = Date.now();
-    const params = new URLSearchParams({
-      format: 'jsonv2',
-      lat: point.latitude.toFixed(5),
-      lon: point.longitude.toFixed(5),
-      zoom: '10',
-      addressdetails: '1',
-      'accept-language': 'en',
-    });
-    const payload = await fetchRegionalJson(`https://nominatim.openstreetmap.org/reverse?${params}`, {
-      headers: {
-        'User-Agent': 'Meridian/0.1 (+https://github.com/johnmatveyev-lab/gods-eye-view)',
-        Referer: 'https://github.com/johnmatveyev-lab/gods-eye-view',
-      },
-    });
-    return normalizeRegionalPlace(payload);
-  });
-  _nominatimQueue = task.catch(() => null);
-  return task;
-}
-
-async function fetchRegionalNews(place) {
-  const query = place?.locality || place?.region || place?.country;
-  if (!query) return { status: 'unavailable', query: null, articles: [], source: null };
-  const params = new URLSearchParams({
-    query: `"${String(query).replace(/["\\]/g, ' ').trim()}"`,
-    mode: 'artlist',
-    format: 'json',
-    maxrecords: '5',
-    sort: 'datedesc',
-    timespan: '48h',
-  });
-  try {
-    const payload = await fetchRegionalJson(`https://api.gdeltproject.org/api/v2/doc/doc?${params}`, {
-      headers: { 'User-Agent': 'Meridian/0.1' },
-      timeoutMs: 12_000,
-    });
-    const articles = normalizeRegionalArticles(payload, 5);
-    return { status: articles.length ? 'ready' : 'empty', query, articles, source: 'GDELT Project' };
-  } catch {
-    return { status: 'unavailable', query, articles: [], source: null };
-  }
-}
-
-async function fetchRegionalWeather(point) {
-  const params = new URLSearchParams({
-    latitude: point.latitude.toFixed(5),
-    longitude: point.longitude.toFixed(5),
-    current: 'temperature_2m,apparent_temperature,precipitation,weather_code,cloud_cover,wind_speed_10m,wind_direction_10m,visibility',
-    timezone: 'UTC',
-  });
-  try {
-    const payload = await fetchRegionalJson(`https://api.open-meteo.com/v1/forecast?${params}`, {
-      maxBytes: WEATHER_EFFECTS_MAX_RESPONSE_BYTES,
-    });
-    return normalizeRegionalWeather(payload);
-  } catch {
-    return null;
-  }
-}
-
-/** True when at least one regional source produced usable data. */
-export function regionalBriefHasAnySource({ place, weather, news } = {}) {
-  return Boolean(place || weather || (news && news.status !== 'unavailable'));
-}
-
 function regionalBriefProxy() {
-  async function refresh(point, key) {
-    const [placeResult, weatherResult] = await Promise.allSettled([
-      fetchRegionalPlace(point),
-      fetchRegionalWeather(point),
-    ]);
-    const place = placeResult.status === 'fulfilled' ? placeResult.value : null;
-    const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
-    const news = await fetchRegionalNews(place);
-    if (!regionalBriefHasAnySource({ place, weather, news })) {
-      throw new Error('All regional briefing sources unavailable');
-    }
-    const payload = {
-      status: place && weather && news.status !== 'unavailable' ? 'ready' : 'partial',
-      retrievedAt: new Date().toISOString(),
-      coordinates: point,
-      place,
-      placeStatus: place ? 'ready' : 'unavailable',
-      weather,
-      weatherStatus: weather ? 'ready' : 'unavailable',
-      newsStatus: news.status,
-      newsQuery: news.query,
-      newsSource: news.source,
-      articles: news.articles,
-    };
-    _regionalBriefCache.set(key, { payload, cachedAt: Date.now() });
-    trimRegionalBriefCache();
-    return payload;
-  }
-
-  function install(middlewares) {
-    middlewares.use('/api/regional-brief', async (req, res) => {
-      if (req.method !== 'GET') {
-        res.writeHead(405, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Method Not Allowed' }));
-        return;
-      }
-      if (!_regionalBriefRateLimiter(clientKey(req))) {
-        res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '10' });
-        res.end(JSON.stringify({ error: 'Rate limit exceeded' }));
-        return;
-      }
-      const url = new URL(req.url || '', 'http://localhost');
-      const point = validRegionalPoint(url.searchParams);
-      if (!point) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: 'Valid latitude and longitude are required' }));
-        return;
-      }
-      const key = `${(Math.round(point.latitude * 10) / 10).toFixed(1)},${(Math.round(point.longitude * 10) / 10).toFixed(1)}`;
-      const now = Date.now();
-      const cached = _regionalBriefCache.get(key);
-      if (cached && now - cached.cachedAt <= REGIONAL_BRIEF_CACHE_MS) {
-        res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=60', 'X-Regional-Brief': 'HIT' });
-        res.end(JSON.stringify({ ...cached.payload, status: 'cached' }));
-        return;
-      }
-      const request = coalesceProxyRequest(_regionalBriefInFlight, key, () => refresh(point, key));
-      try {
-        const payload = await request.promise;
-        res.writeHead(200, {
-          'Content-Type': 'application/json',
-          'Cache-Control': 'public, max-age=60',
-          'X-Regional-Brief': request.shared ? 'INFLIGHT' : 'MISS',
-        });
-        res.end(JSON.stringify(payload));
-      } catch {
-        if (cached && now - cached.cachedAt <= REGIONAL_BRIEF_STALE_MS) {
-          res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Regional-Brief': 'STALE' });
-          res.end(JSON.stringify({ ...cached.payload, status: 'stale' }));
-          return;
-        }
-        res.writeHead(503, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-        res.end(JSON.stringify({ error: 'Regional briefing is temporarily unavailable' }));
-      }
-    });
-  }
-
   return {
     name: 'regional-brief-proxy',
     configureServer(server) {
-      install(server.middlewares);
+      server.middlewares.use('/api/regional-brief', handleRegionalBrief);
     },
     configurePreviewServer(server) {
-      install(server.middlewares);
+      server.middlewares.use('/api/regional-brief', handleRegionalBrief);
     },
   };
 }

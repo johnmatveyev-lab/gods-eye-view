@@ -16,6 +16,9 @@
       "maxDuration": 30,
       "includeFiles": "config/**"
     },
+    "api/celestrak/[...group].js": {
+      "maxDuration": 20
+    },
     "api/billing/[...path].js": {
       "maxDuration": 15
     },
@@ -44,6 +47,9 @@
       "maxDuration": 20
     },
     "api/weather-effects.js": {
+      "maxDuration": 15
+    },
+    "api/regional-brief.js": {
       "maxDuration": 15
     }
   },
