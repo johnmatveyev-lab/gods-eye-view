@@ -151,7 +151,10 @@ test('Recovery-attempted defaults off and treats attempted true as keep', () => 
 test('off matches the current 30-day roster', () => {
   const restored = filterLaunchesByRecovery(ROSTER, DEFAULT_LAUNCH_RECOVERY_ONLY);
   assert.deepEqual(restored.map((row) => row.id), ROSTER.map((row) => row.id));
-  const rosterEntries = missionRosterEntries(ROSTER, { recoveryOnly: false });
+  const rosterEntries = missionRosterEntries(ROSTER, {
+    recoveryOnly: false,
+    nowMs: NOW.getTime(),
+  });
   assert.deepEqual(
     rosterEntries.map((entry) => entry.launch.id).sort(),
     ROSTER.map((row) => row.id).sort(),

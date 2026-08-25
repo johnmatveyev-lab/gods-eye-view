@@ -4093,6 +4093,7 @@ const rocketLaunchesLayer = {
     syncLaunchWebcastChip();
     syncLaunchProbabilityChips();
     syncLaunchUnknownSiteChip();
+    syncLaunchRecoveryChip();
     renderMissionPanel();
   },
 

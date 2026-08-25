@@ -1165,6 +1165,17 @@ test('Recovery-attempted roster hides empty stages and ANDs status, provider, ro
       launchTime: '2026-07-16T00:00:00Z',
       recoveryStages: [{ attempted: true }],
     },
+    {
+      id: 'missing',
+      status: 'Go',
+      provider: 'SpaceX',
+      orbit: { name: 'LEO' },
+      launchSite: 'KSC',
+      rocketName: 'Falcon 9',
+      webcastLive: true,
+      probability: 87,
+      launchTime: '2026-07-15T00:00:00Z',
+    },
   ];
   const spaceXOnly = normalizeLaunchProviderFilter({
     SpaceX: true,
@@ -1175,7 +1186,7 @@ test('Recovery-attempted roster hides empty stages and ANDs status, provider, ro
     'Atlas V': false,
   }, ['Atlas V', 'Falcon 9']);
   const off = missionRosterEntries(rows, { recoveryOnly: false, nowMs: NOW.getTime() });
-  assert.deepEqual(off.map((entry) => entry.launch.id).sort(), ['empty', 'keep', 'no-stream', 'ula', 'unknown']);
+  assert.deepEqual(off.map((entry) => entry.launch.id).sort(), ['empty', 'keep', 'missing', 'no-stream', 'ula', 'unknown']);
   const entries = missionRosterEntries(rows, {
     statusFilter: { go: true },
     providerFilter: spaceXOnly,
@@ -1194,7 +1205,7 @@ test('Recovery-attempted roster hides empty stages and ANDs status, provider, ro
   });
   assert.ok(selected.some((entry) => entry.launch.id === 'empty'));
   assert.ok(selected.some((entry) => entry.launch.id === 'keep'));
-  assert.ok(!selected.some((entry) => entry.launch.id === 'no-stream'));
+  assert.ok(!selected.some((entry) => entry.launch.id === 'missing'));
 });
 
 test('keeps rocket.configuration.name (or rocket.name) on the in-memory roster', () => {
