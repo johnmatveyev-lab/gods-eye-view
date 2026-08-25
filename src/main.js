@@ -22,6 +22,7 @@ import { initGevVoiceCommands } from './voice/gevRealtime.js';
 import { MapStackController } from './mapStackController.js';
 import { initAnnotations } from './annotations/index.js';
 import { initLogoGaze } from './logoGaze.js';
+import { initReduceMotion } from './reduceMotion.js';
 import { initCockpitCloudEffects } from './cockpitCloudEffects.js';
 import {
   installRenderGovernor,
@@ -37,6 +38,7 @@ import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
 import { createLivePollScheduler } from './chrome/scheduler.js';
 import { installOfflineBanner } from './chrome/offlineBanner.js';
 
+initReduceMotion();
 initLogoGaze();
 initResponsibleUseNotice();
 const meridianAccountReady = initMeridianAccount();

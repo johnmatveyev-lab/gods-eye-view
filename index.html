@@ -59,6 +59,9 @@
     <button id="clear-selected-layers" type="button" aria-label="Clear selected data layers" title="Turn off all selected data layers">
       <span class="material-symbols-outlined" aria-hidden="true">layers_clear</span>
     </button>
+    <button id="clear-annotations" type="button" aria-label="Clear annotations" title="Erase whiteboard marks" disabled>
+      <span class="material-symbols-outlined" aria-hidden="true">ink_eraser</span>
+    </button>
     <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
     </button>
@@ -67,6 +70,9 @@
     </button>
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
+    </button>
+    <button id="fullscreen-view" type="button" aria-label="Enter fullscreen" title="Enter fullscreen" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">fullscreen</span>
     </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
@@ -362,6 +368,7 @@
             <button id="cockpit-radio-prev-btn" type="button" aria-label="Previous filtered radio station" disabled>◀◀</button>
             <button id="cockpit-radio-play-btn" type="button" aria-label="Play selected radio station" disabled>▶</button>
             <button id="cockpit-radio-next-btn" type="button" aria-label="Next filtered radio station" disabled>▶▶</button>
+            <button id="cockpit-radio-stop-btn" type="button" aria-label="Mute or stop radio playback" title="Mute / Stop" disabled>⏹</button>
           </div>
           <label class="cockpit-radio-volume" for="cockpit-radio-volume">
             <span>VOLUME</span>
@@ -425,8 +432,22 @@
       </button>
       <div class="pp-slider-row detection-slider-row" id="detection-slider-row">
         <label class="pp-slider-mini-label" for="detection-density-slider">Density</label>
-        <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" aria-label="Detection label density" />
-        <span class="pp-slider-value" id="detection-density-value">50%</span>
+        <div class="detection-density-control">
+          <input type="range" class="pp-slider" id="detection-density-slider" min="0" max="100" step="25" value="50" list="detection-density-stop-values" aria-label="Detection density" aria-valuetext="Balanced" />
+          <div class="detection-density-stops" aria-hidden="true">
+            <span>Sparse</span>
+            <span>Balanced</span>
+            <span>Dense</span>
+          </div>
+        </div>
+        <span class="pp-slider-value" id="detection-density-value">Balanced</span>
+        <datalist id="detection-density-stop-values">
+          <option value="0" label="Sparse"></option>
+          <option value="25" label="Sparse"></option>
+          <option value="50" label="Balanced"></option>
+          <option value="75" label="Dense"></option>
+          <option value="100" label="Dense"></option>
+        </datalist>
       </div>
       <div class="pp-slider-row detection-allocation-row" id="detection-allocation-row">
         <span class="pp-slider-mini-label">Allocation</span>
@@ -456,16 +477,17 @@
       <div id="param-sliders"></div>
     </div>
     <div class="pp-toggle-group">
-      <!-- 3D aircraft is DEFAULT-ON in Proximity (product invariant 2026-08-22), so the
-           button ships lit and the mode row ships open — the same markup-carries-the-default
-           convention as #scope-toggle. ui.js re-syncs both from durable layer state, which
-           is what flips them back for a share link or a stored session carrying 3D off. -->
-      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="3D aircraft — flat icons zoomed out, 3D models up close">
+      <!-- Hangar models are DEFAULT-ON in Proximity (product invariant 2026-08-22),
+           persisted as meridian.models = on|off. The button ships lit and the mode
+           row ships open — the same markup-carries-the-default convention as
+           #scope-toggle. ui.js re-syncs from meridian.models and durable layer
+           state, which flips them back for a share link or a stored Off session. -->
+      <button class="pp-toggle-btn active" id="models3d-toggle" aria-pressed="true" title="Hangar 3D models — on loads per-class GLBs up close; off keeps 2D billboards">
         <span class="pp-icon">&#x2708;</span>
-        <span class="pp-label">3D</span>
+        <span class="pp-label">Models</span>
       </button>
       <div class="pp-slider-row visible" id="models3d-mode-row">
-        <span class="pp-slider-mini-label">Models</span>
+        <span class="pp-slider-mini-label">Coverage</span>
         <div class="pp-mode-seg" role="radiogroup" aria-label="3D model coverage">
           <button class="pp-mode-btn active" id="models3d-mode-proximity" data-mode="proximity" role="radio" aria-checked="true">Proximity</button>
           <button class="pp-mode-btn" id="models3d-mode-all" data-mode="all" role="radio" aria-checked="false">All</button>
@@ -504,6 +526,12 @@
       <span class="pp-icon">&#x25A1;</span>
       <span class="pp-label">Clean UI</span>
     </button>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="reduce-motion-toggle" type="button" title="Reduce decorative motion" aria-pressed="false" aria-label="Reduce decorative motion">
+        <span class="pp-icon" aria-hidden="true">&#x23F8;</span>
+        <span class="pp-label">Still</span>
+      </button>
+    </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="bloom-toggle" title="Bloom / Glow">
         <span class="pp-icon">&#x2728;</span>
@@ -586,10 +614,10 @@
         <div id="map-stack-chips" class="map-stack-chip-row" role="group" aria-label="Map source"></div>
       </section>
       </div>
-      <div id="style-mini-status" class="panel-mini-status" aria-live="polite">
-        <span class="panel-mini-label">Style</span>
+      <button type="button" id="look-cycle-btn" class="look-cycle-btn panel-mini-status" aria-live="polite" aria-label="Look NORMAL. Cycle sensor look.">
+        <span class="panel-mini-label">Look</span>
         <span id="style-mini-value" class="panel-mini-value">NORMAL</span>
-      </div>
+      </button>
     </div>
   </div>
 
@@ -773,6 +801,7 @@
                 <button id="context-radio-mini-prev-btn" type="button" aria-label="Previous filtered radio station" title="Previous station" disabled>◀◀</button>
                 <button id="context-radio-mini-play-btn" type="button" aria-label="Play selected radio station" title="Play" disabled>▶</button>
                 <button id="context-radio-mini-next-btn" type="button" aria-label="Next filtered radio station" title="Next station" disabled>▶▶</button>
+                <button id="context-radio-mini-stop-btn" type="button" aria-label="Mute or stop radio playback" title="Mute / Stop" disabled>⏹</button>
               </div>
               <label class="context-radio-mini-volume" for="context-radio-mini-volume">
                 <span>VOLUME</span>
@@ -865,7 +894,7 @@
               <button id="radio-prev-btn" type="button" aria-label="Previous filtered station" disabled>PREV</button>
               <button id="radio-play-btn" type="button" aria-label="Play selected station" disabled>PLAY</button>
               <button id="radio-next-btn" type="button" aria-label="Next filtered station" disabled>NEXT</button>
-              <button id="radio-stop-btn" type="button" aria-label="Stop radio playback" disabled>STOP</button>
+              <button id="radio-stop-btn" type="button" aria-label="Mute or stop radio playback" disabled>MUTE/STOP</button>
             </div>
             <label class="radio-volume-row" for="radio-volume">
               <span>VOLUME</span>

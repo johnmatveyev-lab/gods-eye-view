@@ -5,6 +5,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Fixed
+
+- Radio Mute/Stop pauses the existing Radio Browser audio element. Disabling
+  the Radio layer also silences it. Starting a station unmutes. Compact
+  Context and Cockpit transports now expose the same control. No voice ducking
+  and no `/api/radio` changes.
+
 ### Changed
 
 - Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
@@ -18,6 +25,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `meridian.liveSun`. The existing UTC | Local HUD toggle only changes the
   clock display. WX FX and visual looks stay independent. No new imagery
   stack and no `/api`.
+- Added a Look control that cycles the existing sensor styles — CRT, NVG,
+  FLIR, Noir, Snow, then default — through the same setter the share URL and
+  voice already use. No new looks.
+- Hosted globe honors `prefers-reduced-motion` and a persistable DISPLAY
+  Still toggle (`meridian.reduceMotion`). Reduce-motion cuts idle orbit,
+  pulsing brackets, and trail flourish; fly-to Home and other functional
+  camera moves stay live. Data polls and `/api` are unchanged.
+- Added a Clear annotations control on the globe chrome. It calls the existing
+  whiteboard `clear()` action so hosted users can erase voice marks without a
+  spoken command. The control is disabled when the board is empty. Trails,
+  models, and tracking are unchanged.
 - Added a filter field at the top of the Data Layers list. It matches the
   visible layer name plus existing voice common-names (fires, ships, bikes,
   traffic, cameras, and the rest of that map). Empty query shows the full

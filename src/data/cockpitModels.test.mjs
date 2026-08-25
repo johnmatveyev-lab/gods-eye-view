@@ -53,8 +53,8 @@ for (const layer of LAYERS) {
     // suppression is now an explicit early return.
     const regime = /function _trackedModelRegimeActive\(\) \{[\s\S]*?\n\}/.exec(source)?.[0];
     assert.ok(regime, '_trackedModelRegimeActive is defined');
-    assert.match(regime, /if \(!_trackedIcao \|\| _cockpitContactMode \|\|[\s\S]*?return false;/,
-      '_trackedModelRegimeActive excludes cockpit');
+    assert.match(regime, /if \(!_models3dEnabled \|\| !_trackedIcao \|\| _cockpitContactMode \|\|[\s\S]*?return false;/,
+      '_trackedModelRegimeActive excludes cockpit and obeys Models off');
     const tracked = /function _updateTrackedModel\(\)[\s\S]*?\n  if \(!active\)/.exec(source)?.[0];
     assert.ok(tracked, '_updateTrackedModel is defined');
     assert.match(tracked, /_trackedModelRegimeActive\(\)/,

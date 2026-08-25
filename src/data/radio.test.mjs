@@ -1799,3 +1799,109 @@ test('voice playback confirmation accepts fallback buffering but times out safel
   assert.equal(confirmed, false);
   assert.ok(Date.now() - startedAt >= 8);
 });
+
+test('Mute/Stop pauses the existing Radio audio element and starting a station unmutes', async () => {
+  const originalAudio = globalThis.Audio;
+  const originalFetch = globalThis.fetch;
+  const audioInstances = [];
+  globalThis.Audio = class FakeAudio {
+    constructor() {
+      this.volume = 0.8;
+      this.muted = false;
+      this.src = '';
+      this.paused = true;
+      this.pauseCalls = 0;
+      this.playCalls = 0;
+      this.listeners = new Map();
+      audioInstances.push(this);
+    }
+
+    addEventListener(type, listener) { this.listeners.set(type, listener); }
+    pause() {
+      this.pauseCalls += 1;
+      this.paused = true;
+    }
+    play() {
+      this.playCalls += 1;
+      this.paused = false;
+      return Promise.resolve();
+    }
+    removeAttribute(name) { if (name === 'src') this.src = ''; }
+    load() {}
+  };
+  const station = {
+    id: '00000000-0000-4000-8000-000000000071',
+    name: 'Mute Stop Station',
+    lat: 30.2672,
+    lon: -97.7431,
+    streamUrl: 'https://radio.example.com/mute-stop.mp3',
+    homepage: null,
+    tags: ['news'],
+    languages: ['English'],
+    state: 'Texas',
+    country: 'United States',
+    countryCode: 'US',
+    metadataTrust: 'untrusted-community',
+    codec: 'MP3',
+    bitrate: 128,
+  };
+  globalThis.fetch = async (url) => String(url).startsWith('/api/radio/click/')
+    ? { ok: true }
+    : {
+      ok: true,
+      json: async () => ({
+        stations: [station],
+        updatedAt: new Date().toISOString(),
+        stale: false,
+        degraded: false,
+        acceptedGeneration: 1,
+        catalogInstance: 'qa-instance-mute-stop',
+      }),
+    };
+  const viewer = {
+    camera: { positionWC: { x: 7_000_000, y: 0, z: 0 } },
+    scene: { canvas: { disableRootEvents: true, onwheel: null, addEventListener() {}, removeEventListener() {} } },
+    dataSources: { add() {}, remove() {} },
+    entities: { add(entity) { return entity; }, remove() {} },
+  };
+
+  radioLayer.destroy();
+  try {
+    radioLayer.init(viewer);
+    radioLayer.enable();
+    await radioLayer.update();
+    radioLayer.setLifecyclePresentation({
+      lifecycleState: 'enabled', enabled: true, uncertain: false,
+    });
+    assert.equal(radioLayer.selectStation(station.id, { autoplay: false }), true);
+    assert.equal(await radioLayer.play({ origin: 'user' }), true);
+    const playingAudio = audioInstances.at(-1);
+    assert.equal(radioLayer.getUIState().audioState, 'playing');
+    assert.equal(playingAudio.muted, false);
+    assert.equal(playingAudio.paused, false);
+    assert.equal(playingAudio.src, station.streamUrl);
+
+    assert.equal(radioLayer.stopPlayback({ origin: 'user' }), true);
+    assert.equal(radioLayer.getUIState().audioState, 'stopped');
+    assert.equal(audioInstances.at(-1), playingAudio, 'Stop must pause the existing audio element');
+    assert.equal(playingAudio.paused, true);
+    assert.equal(playingAudio.muted, true);
+    assert.ok(playingAudio.pauseCalls >= 1);
+
+    assert.equal(await radioLayer.play({ origin: 'user' }), true);
+    const resumedAudio = audioInstances.at(-1);
+    assert.equal(radioLayer.getUIState().audioState, 'playing');
+    assert.equal(resumedAudio.muted, false, 'starting a station unmutes');
+    assert.equal(resumedAudio.paused, false);
+
+    radioLayer.disable();
+    assert.equal(radioLayer.getUIState().audioState, 'stopped');
+    assert.equal(resumedAudio.paused, true);
+    assert.equal(resumedAudio.muted, true, 'stopping the radio layer silences the existing element');
+  } finally {
+    radioLayer.destroy();
+    globalThis.fetch = originalFetch;
+    if (originalAudio === undefined) delete globalThis.Audio;
+    else globalThis.Audio = originalAudio;
+  }
+});
