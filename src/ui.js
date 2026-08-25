@@ -147,7 +147,14 @@ import {
   shareableDetectionState,
 } from './contactsDetectionPolicy.js';
 import { pinRequiredCredits } from './data/dataCredits.js';
-import { formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
+import { AWARENESS_RADIUS_M, formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
+import {
+  formatDistanceMeters,
+  getDistanceUnit,
+  initDistanceUnits,
+  setDistanceUnit,
+  subscribeDistanceUnit,
+} from './units.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -1549,8 +1556,14 @@ class CockpitViewController {
     }
   }
 
+  refreshDistanceUnits() {
+    if (this._lastContextInfo) this.updateContext(this._lastContextInfo, this._lastContextHeading);
+  }
+
   updateContext(info, heading) {
     if (!this.context) return;
+    this._lastContextInfo = info;
+    this._lastContextHeading = heading;
     const snapshot = militaryAwarenessLayer.getContextSnapshot?.() || null;
     const trackedId = info.icao24 || info.id;
     const readout = resolveCockpitContextReadout({ snapshot, info });
@@ -1630,7 +1643,7 @@ class CockpitViewController {
     if (this.contextDistance) {
       const distanceM = closest?.distanceM;
       this.contextDistance.textContent = Number.isFinite(distanceM)
-        ? `${distanceM < 10000 ? (distanceM / 1000).toFixed(1) : Math.round(distanceM / 1000)} KM` : '—';
+        ? formatDistanceMeters(distanceM, getDistanceUnit(), { style: 'compact' }) : '—';
       this.contextDistance.setAttribute(
         'aria-label',
         Number.isFinite(distanceM) ? this.contextDistance.textContent : 'Unavailable',
@@ -1969,7 +1982,7 @@ class CockpitViewController {
           title: formatAwarenessLabel(item),
           detail: `${cohort.id === 'military' ? 'MILITARY FLIGHT' : 'COMMERCIAL FLIGHT'} · ${
             Number.isFinite(item.distanceM)
-              ? `${item.distanceM < 10000 ? (item.distanceM / 1000).toFixed(1) : Math.round(item.distanceM / 1000)} KM`
+              ? formatDistanceMeters(item.distanceM, getDistanceUnit(), { style: 'compact' })
               : 'DISTANCE UNKNOWN'
           }`,
           target: { layerId: cohort.id, id: String(id) },
@@ -2270,6 +2283,19 @@ export class StyleManager {
     this._hudBtn = document.getElementById('hud-toggle');
     this._hudLayoutRow = document.getElementById('hud-layout-row');
     this._hudLayoutSelect = document.getElementById('hud-layout-select');
+    this._unitsBtns = [
+      document.getElementById('units-km'),
+      document.getElementById('units-nm'),
+      document.getElementById('units-mi'),
+    ].filter(Boolean);
+    initDistanceUnits();
+    this._syncUnitsUi();
+    this._unitsUnsubscribe = subscribeDistanceUnit(() => {
+      this._syncUnitsUi();
+      this.hud?.refreshDisplayUnits?.();
+      militaryAwarenessLayer.refreshDistanceLabels?.();
+      this.cockpitView?.refreshDistanceUnits?.();
+    });
     this._detectionSliderRow = document.getElementById('detection-slider-row');
     this._detectionDensitySlider = document.getElementById('detection-density-slider');
     this._detectionDensityValue = document.getElementById('detection-density-value');
@@ -3521,6 +3547,12 @@ export class StyleManager {
       });
     }
 
+    for (const button of this._unitsBtns) {
+      button.addEventListener('click', () => {
+        setDistanceUnit(button.dataset.units);
+      });
+    }
+
     for (const slider of [this._detectionFadeSlider, this._detectionOpacitySlider]) {
       slider?.addEventListener('input', () => {
         this.shareLinkManager?.claimRestoreLane?.('visual');
@@ -3630,6 +3662,28 @@ export class StyleManager {
       outsideOpacity: outsideOpacityPct / 100,
     });
     this.viewer.scene.requestRender?.();
+  }
+
+  _syncUnitsUi() {
+    const unit = getDistanceUnit();
+    for (const button of this._unitsBtns || []) {
+      const active = button.dataset.units === unit;
+      button.classList.toggle('active', active);
+      button.setAttribute('aria-checked', String(active));
+    }
+    const windowPhrase = `${formatDistanceMeters(AWARENESS_RADIUS_M, unit, { style: 'range' })} window`;
+    const previous = document.getElementById('cockpit-context-previous');
+    const next = document.getElementById('cockpit-context-next');
+    if (previous) {
+      const label = `Previous — prior visited contact in the ${windowPhrase}`;
+      previous.setAttribute('aria-label', label);
+      previous.title = label;
+    }
+    if (next) {
+      const label = `Next — nearest unvisited contact in the ${windowPhrase}`;
+      next.setAttribute('aria-label', label);
+      next.title = label;
+    }
   }
 
   _setDetectionAllocation(strategy, { syncShare = true, persist = true } = {}) {
@@ -10274,6 +10328,8 @@ export class StyleManager {
     this._globalStatusNotice = null;
     if (this._globalLoadingStatus) this._globalLoadingStatus.hidden = true;
     this._disposed = true;
+    this._unitsUnsubscribe?.();
+    this._unitsUnsubscribe = null;
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
     this._layerStateCoordinator = null;

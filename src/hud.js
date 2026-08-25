@@ -26,6 +26,7 @@ import {
 } from './clockPreference.js';
 import { ellipsoidalToMslDisplayM, ensureGeoidReady, geoidHeight } from './data/geoid.js';
 import { getBasemapLabelContext } from './voice/gevActions.js';
+import { formatHudAltitude, subscribeDistanceUnit } from './units.js';
 
 /** Color palettes keyed by shader mode; applied as CSS custom properties. */
 const HUD_COLORS = {
@@ -160,6 +161,7 @@ export class IntelHUD {
     this.viewer.camera.moveEnd.addEventListener(this._onCameraMoveEnd);
     this._startTimers();
     this._paintTimestamp();
+    this._unitsUnsubscribe = subscribeDistanceUnit(() => this.refreshDisplayUnits());
   }
 
   /**
@@ -426,7 +428,7 @@ export class IntelHUD {
     const geoidN = this._geoidUndulationM(latDeg, lonDeg);
     const altMslM = ellipsoidalToMslDisplayM(altM, geoidN);
     const sunEl = this._estimateSunElevation(latDeg, lonDeg);
-    if (altEl) altEl.textContent = `ALT: ${Math.round(altMslM)}m   SUN: ${sunEl.toFixed(1)}° EL`;
+    if (altEl) altEl.textContent = `ALT: ${formatHudAltitude(altMslM)}   SUN: ${sunEl.toFixed(1)}° EL`;
 
     // Collection timestamp
     const collEl = document.getElementById('hud-coll');
@@ -665,9 +667,7 @@ export class IntelHUD {
     // together, so they must never disagree. The view band above deliberately
     // keeps the ellipsoidal height: its thresholds were tuned against it.
     const altDisplayM = Number.isFinite(m.altMslM) ? m.altMslM : m.altM;
-    const altTag = altDisplayM >= 1000
-      ? `${(altDisplayM / 1000).toFixed(1)}KM`
-      : `${Math.round(altDisplayM)}M`;
+    const altTag = formatHudAltitude(altDisplayM, { compact: true });
     const winTag = window
       ? `${Math.max(1, Math.round(window.widthKm))}x${Math.max(1, Math.round(window.heightKm))}KM`
       : 'N/A';
@@ -843,6 +843,21 @@ export class IntelHUD {
     }
   }
 
+  /**
+   * Re-print altitude labels after a display-unit change. Uses the last
+   * telemetry sample so the toggle does not invent a new measurement.
+   */
+  refreshDisplayUnits() {
+    const m = this._latestMetrics;
+    if (!m) return;
+    const altEl = document.getElementById('hud-alt');
+    const altDisplayM = Number.isFinite(m.altMslM) ? m.altMslM : m.altM;
+    if (altEl) {
+      altEl.textContent = `ALT: ${formatHudAltitude(altDisplayM)}   SUN: ${m.sunEl.toFixed(1)}° EL`;
+    }
+    if (this._firstMetricsShown) this._setSummaryText(this._composeSummary(), false);
+  }
+
   /** Make the HUD visible and immediately refresh all readouts. */
   show() {
     this._visible = true;
@@ -949,6 +964,8 @@ export class IntelHUD {
     }
     this.viewer.camera.moveEnd.removeEventListener(this._onCameraMoveEnd);
     this._dataManagerUnsubscribe?.();
+    this._unitsUnsubscribe?.();
+    this._unitsUnsubscribe = null;
     this._summaryRequest?.abort();
   }
 }
