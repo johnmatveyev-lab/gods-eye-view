@@ -85,6 +85,12 @@ import {
   resetLaunchSiteFilterForTest,
   setLaunchSiteFilter,
 } from './launchSiteFilter.js';
+import {
+  DEFAULT_LAUNCH_TIME_WINDOW,
+  getLaunchTimeWindow,
+  resetLaunchTimeWindowForTest,
+  setLaunchTimeWindow,
+} from './launchTimeWindow.js';
 
 const NOW = new Date('2026-07-27T00:00:00Z');
 
@@ -495,7 +501,7 @@ test('orders mission roster newest-first without losing navigation indices', () 
     { id: 'oldest', launchTime: '2026-07-01T00:00:00Z' },
     { id: 'newest', launchTime: '2026-07-20T00:00:00Z' },
     { id: 'middle', launchTime: '2026-07-10T00:00:00Z' },
-  ]);
+  ], { nowMs: NOW.getTime() });
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['newest', 'middle', 'oldest']);
   assert.deepEqual(entries.map((entry) => entry.index), [1, 2, 0]);
 });
@@ -505,7 +511,7 @@ test('Go-only roster entries hide TBD/Hold and keep source indices', () => {
     { id: 'tbd', status: 'TBD', launchTime: '2026-07-20T00:00:00Z' },
     { id: 'go', status: 'Go', launchTime: '2026-07-10T00:00:00Z' },
     { id: 'hold', status: 'Hold', launchTime: '2026-07-15T00:00:00Z' },
-  ], { statusFilter: 'g' });
+  ], { statusFilter: 'g', nowMs: NOW.getTime() });
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['go']);
   assert.deepEqual(entries.map((entry) => entry.index), [1]);
 });
@@ -522,10 +528,10 @@ test('provider-off roster entries hide that operator and keep others', () => {
     ULA: true,
     [LAUNCH_PROVIDER_OTHER_CHIP_ID]: true,
   }, chipIds);
-  const entries = missionRosterEntries(roster, { providerFilter: withoutSpaceX });
+  const entries = missionRosterEntries(roster, { providerFilter: withoutSpaceX, nowMs: NOW.getTime() });
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['ula', 'blank']);
   assert.deepEqual(entries.map((entry) => entry.index), [1, 2]);
-  const allOn = missionRosterEntries(roster);
+  const allOn = missionRosterEntries(roster, { nowMs: NOW.getTime() });
   assert.deepEqual(allOn.map((entry) => entry.launch.id).sort(), ['blank', 'sx', 'ula']);
 });
 
@@ -542,12 +548,14 @@ test('status Go AND one provider keeps only matching missions', () => {
   const entries = missionRosterEntries(roster, {
     statusFilter: 'g',
     providerFilter: spaceXOnly,
+    nowMs: NOW.getTime(),
   });
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['sx-go']);
   const selected = missionRosterEntries(roster, {
     statusFilter: 'g',
     providerFilter: spaceXOnly,
     selectedLaunchId: 'ula-go',
+    nowMs: NOW.getTime(),
   });
   assert.deepEqual(selected.map((entry) => entry.launch.id).sort(), ['sx-go', 'ula-go']);
 });
@@ -595,26 +603,27 @@ function rocketLabOnlyFilter() {
 test('Rocket Lab-only PREV/NEXT walks the filtered roster, not the full launch list', () => {
   const launches = rocketLabNavLaunches();
   const providerFilter = rocketLabOnlyFilter();
-  const grain = missionRosterNavState(launches, 'grain-goddess', { providerFilter });
+  const navOptions = { providerFilter, nowMs: NOW.getTime() };
+  const grain = missionRosterNavState(launches, 'grain-goddess', navOptions);
   assert.equal(grain.indexLabel, '1 / 2');
   assert.equal(grain.prevDisabled, true);
   assert.equal(grain.nextDisabled, false);
 
-  const nextFromGrain = selectAdjacentMission(launches, 'grain-goddess', 1, { providerFilter });
+  const nextFromGrain = selectAdjacentMission(launches, 'grain-goddess', 1, navOptions);
   assert.equal(nextFromGrain?.launch.id, 'lightning-god');
   assert.notEqual(nextFromGrain?.launch.id, 'starlink-17-38');
   assert.equal(nextFromGrain?.launch.name, 'Electron | Lightning God');
 
-  const lightning = missionRosterNavState(launches, 'lightning-god', { providerFilter });
+  const lightning = missionRosterNavState(launches, 'lightning-god', navOptions);
   assert.equal(lightning.indexLabel, '2 / 2');
   assert.equal(lightning.prevDisabled, false);
   assert.equal(lightning.nextDisabled, true);
   assert.equal(
-    selectAdjacentMission(launches, 'lightning-god', 1, { providerFilter }),
+    selectAdjacentMission(launches, 'lightning-god', 1, navOptions),
     null,
   );
   assert.equal(
-    selectAdjacentMission(launches, 'lightning-god', -1, { providerFilter })?.launch.id,
+    selectAdjacentMission(launches, 'lightning-god', -1, navOptions)?.launch.id,
     'grain-goddess',
   );
 });
@@ -622,7 +631,7 @@ test('Rocket Lab-only PREV/NEXT walks the filtered roster, not the full launch l
 test('filtered PREV/NEXT stays inside the status AND provider set', () => {
   const launches = rocketLabNavLaunches(true);
   const providerFilter = rocketLabOnlyFilter();
-  const andOptions = { statusFilter: 'g', providerFilter };
+  const andOptions = { statusFilter: 'g', providerFilter, nowMs: NOW.getTime() };
   const grain = missionRosterNavState(launches, 'grain-goddess', andOptions);
   assert.equal(grain.indexLabel, '1 / 2');
   assert.deepEqual(grain.entries.map((entry) => entry.launch.id), [
@@ -662,17 +671,23 @@ test('GEO-off roster hides GTO and keeps LEO while ANDing status and provider', 
     statusFilter: { go: true },
     orbitFilter: { leo: true, meo: true, polar: true, other: true },
     providerFilter: spaceXOnly,
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
   });
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['leo-go']);
   assert.equal(launchPassesMissionFilters(rows[0], {
     statusFilter: { go: true },
     orbitFilter: { leo: true },
     providerFilter: spaceXOnly,
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
   }), true);
   assert.equal(launchPassesMissionFilters(rows[1], {
     statusFilter: { go: true },
     orbitFilter: { leo: true },
     providerFilter: spaceXOnly,
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
   }), false);
 });
 
@@ -693,6 +708,8 @@ test('site-off roster hides that pad and ANDs status, provider, and LEO', () => 
     siteFilter: { '4E': true },
     providerFilter: spaceXOnly,
     orbitFilter: { leo: true },
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
   });
   assert.deepEqual(entries.map((entry) => entry.launch.id), ['keep']);
   assert.equal(launchPassesMissionFilters(rows[0], {
@@ -700,12 +717,16 @@ test('site-off roster hides that pad and ANDs status, provider, and LEO', () => 
     siteFilter: { '4E': true },
     providerFilter: spaceXOnly,
     orbitFilter: { leo: true },
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
   }), true);
   assert.equal(launchPassesMissionFilters(rows[1], {
     statusFilter: { go: true },
     siteFilter: { '4E': true },
     providerFilter: spaceXOnly,
     orbitFilter: { leo: true },
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
   }), false);
 });
 
@@ -723,6 +744,8 @@ test('site-off PREV/NEXT stays inside the status AND provider AND LEO AND site s
     siteFilter: { '4E': true },
     providerFilter: spaceXOnly,
     orbitFilter: { leo: true },
+    timeWindow: '30d',
+    nowMs: NOW.getTime(),
   };
   const keep = missionRosterNavState(rows, 'keep', andOptions);
   assert.equal(keep.indexLabel, '1 / 2');
@@ -734,11 +757,59 @@ test('site-off PREV/NEXT stays inside the status AND provider AND LEO AND site s
   assert.equal(selectAdjacentMission(rows, 'cape', 1, andOptions), null);
 });
 
+test('30d roster matches the current window and 7d hides later missions', () => {
+  const roster = [
+    { id: 'near', status: 'Go', provider: 'SpaceX', launchSite: 'KSC', launchTime: '2026-07-25T00:00:00Z' },
+    { id: 'far', status: 'Go', provider: 'SpaceX', launchSite: 'KSC', launchTime: '2026-07-01T00:00:00Z' },
+    { id: 'missing', status: 'Go', provider: 'ULA', launchSite: 'VAFB', launchTime: null },
+  ];
+  const thirty = missionRosterEntries(roster, { timeWindow: '30d', nowMs: NOW.getTime() });
+  assert.deepEqual(thirty.map((entry) => entry.launch.id).sort(), ['far', 'missing', 'near']);
+  const seven = missionRosterEntries(roster, { timeWindow: '7d', nowMs: NOW.getTime() });
+  assert.deepEqual(seven.map((entry) => entry.launch.id).sort(), ['missing', 'near']);
+  const selected = missionRosterEntries(roster, {
+    timeWindow: '7d',
+    selectedLaunchId: 'far',
+    nowMs: NOW.getTime(),
+  });
+  assert.deepEqual(selected.map((entry) => entry.launch.id).sort(), ['far', 'missing', 'near']);
+});
+
+test('Status Go + one site still ANDs with the 7d roster window', () => {
+  const roster = [
+    { id: 'near-go-ksc', status: 'Go', provider: 'SpaceX', launchSite: 'KSC', launchTime: '2026-07-25T00:00:00Z' },
+    { id: 'far-go-ksc', status: 'Go', provider: 'SpaceX', launchSite: 'KSC', launchTime: '2026-07-01T00:00:00Z' },
+    { id: 'near-go-vafb', status: 'Go', provider: 'ULA', launchSite: 'VAFB', launchTime: '2026-07-24T00:00:00Z' },
+    { id: 'near-tbd-ksc', status: 'TBD', provider: 'SpaceX', launchSite: 'KSC', launchTime: '2026-07-26T00:00:00Z' },
+  ];
+  const entries = missionRosterEntries(roster, {
+    statusFilter: 'g',
+    timeWindow: '7d',
+    nowMs: NOW.getTime(),
+  }).filter((entry) => entry.launch.launchSite === 'KSC');
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['near-go-ksc']);
+});
+
+test('7d PREV/NEXT walks the time-window roster and skips later missions', () => {
+  const launches = [
+    { id: 'near', status: 'Go', provider: 'SpaceX', launchTime: '2026-07-25T00:00:00Z' },
+    { id: 'far', status: 'Go', provider: 'SpaceX', launchTime: '2026-07-01T00:00:00Z' },
+    { id: 'near-2', status: 'Go', provider: 'SpaceX', launchTime: '2026-07-24T00:00:00Z' },
+  ];
+  const options = { timeWindow: '7d', nowMs: NOW.getTime() };
+  const nav = missionRosterNavState(launches, 'near', options);
+  assert.equal(nav.indexLabel, '1 / 2');
+  assert.deepEqual(nav.entries.map((entry) => entry.launch.id), ['near', 'near-2']);
+  assert.equal(selectAdjacentMission(launches, 'near', 1, options)?.launch.id, 'near-2');
+  assert.equal(selectAdjacentMission(launches, 'near-2', 1, options), null);
+  assert.equal(missionRosterNavState(launches, 'far', options).current, -1);
+});
+
 test('prioritizes data-rich missions before newer sparse records', () => {
   const entries = missionRosterEntries([
     { id: 'rich', launchTime: '2026-07-01T00:00:00Z', provider: 'Agency', mission: 'Detailed mission', orbit: { name: 'LEO' }, payloads: [{ name: 'Payload' }], timeline: [{ name: 'Liftoff' }] },
     { id: 'sparse-new', launchTime: '2026-07-20T00:00:00Z' },
-  ]);
+  ], { nowMs: NOW.getTime() });
   assert.ok(missionDataCompleteness(entries[0].launch) > missionDataCompleteness(entries[1].launch));
   assert.equal(entries[0].launch.id, 'rich');
 });
@@ -1513,11 +1584,11 @@ test('disable reports a semantic failure while restoring the satellites dependen
   );
 });
 
-function statusFilterLaunch(id, status, latOffset = 0, provider = null) {
+function statusFilterLaunch(id, status, latOffset = 0, provider = null, daysAgo = 1) {
   return {
     id,
     name: `${id} | Status Filter`,
-    net: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
+    net: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
     status: { name: status },
     pad: {
       latitude: String(28.608 + latOffset),
@@ -1710,7 +1781,18 @@ function createStatusFilterDocument() {
     chip.textContent = id;
     orbitChips.appendChild(chip);
   }
+  const windowChips = new FakeNode('div');
+  windowChips.className = 'space-mission-window-chips';
+  for (const id of ['7d', '30d']) {
+    const chip = new FakeNode('button');
+    chip.setAttribute('data-mission-window-chip', id);
+    chip.dataset.missionWindowChip = id;
+    chip.textContent = id;
+    if (id === '30d') chip.className = 'space-mission-window-chip active';
+    windowChips.appendChild(chip);
+  }
   roster.appendChild(count);
+  roster.appendChild(windowChips);
   roster.appendChild(chips);
   roster.appendChild(providerChips);
   roster.appendChild(siteChips);
@@ -1728,6 +1810,8 @@ function createStatusFilterDocument() {
     list,
     count,
     providerChips,
+    orbitChips,
+    windowChips,
     document: {
       body: new FakeNode('body'),
       createElement: (tagName) => new FakeNode(tagName),
@@ -1784,6 +1868,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
   resetLaunchProviderFilterForTest();
   resetLaunchOrbitFilterForTest();
   resetLaunchSiteFilterForTest();
+  resetLaunchTimeWindowForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -1827,6 +1912,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
     resetLaunchProviderFilterForTest();
     resetLaunchOrbitFilterForTest();
     resetLaunchSiteFilterForTest();
+    resetLaunchTimeWindowForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -1904,6 +1990,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
   resetLaunchProviderFilterForTest();
   resetLaunchOrbitFilterForTest();
   resetLaunchSiteFilterForTest();
+  resetLaunchTimeWindowForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -1946,6 +2033,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
     resetLaunchProviderFilterForTest();
     resetLaunchOrbitFilterForTest();
     resetLaunchSiteFilterForTest();
+    resetLaunchTimeWindowForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2060,6 +2148,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
   resetLaunchProviderFilterForTest();
   resetLaunchOrbitFilterForTest();
   resetLaunchSiteFilterForTest();
+  resetLaunchTimeWindowForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2099,6 +2188,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
     resetLaunchProviderFilterForTest();
     resetLaunchOrbitFilterForTest();
     resetLaunchSiteFilterForTest();
+    resetLaunchTimeWindowForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2133,4 +2223,105 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
   assert.equal(launchFetches, 1);
   assert.equal(dataSource.entities.getById('rocket-launch:vandy').show, true);
   assert.match(list.innerHTML, /VANDY/);
+});
+
+test('7d | 30d chips re-apply the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  resetLaunchProviderFilterForTest();
+  resetLaunchOrbitFilterForTest();
+  resetLaunchSiteFilterForTest();
+  resetLaunchTimeWindowForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  const payload = {
+    results: [
+      statusFilterLaunch('near-go', 'Go', 0, 'SpaceX', 2),
+      statusFilterLaunch('far-go', 'Go', 0.1, 'SpaceX', 20),
+      statusFilterLaunch('near-tbd', 'TBD', 0.2, 'ULA', 1),
+      statusFilterLaunch('far-tbd', 'TBD', 0.3, 'ULA', 18),
+    ],
+  };
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    resetLaunchProviderFilterForTest();
+    resetLaunchOrbitFilterForTest();
+    resetLaunchSiteFilterForTest();
+    resetLaunchTimeWindowForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  assert.equal(getLaunchTimeWindow(), DEFAULT_LAUNCH_TIME_WINDOW);
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:near-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:far-go').show, true);
+  assert.match(list.innerHTML, /NEAR-GO/);
+  assert.match(list.innerHTML, /FAR-GO/);
+  assert.match(list.innerHTML, /NEAR-TBD/);
+  assert.match(list.innerHTML, /FAR-TBD/);
+
+  setLaunchTimeWindow('7d');
+  assert.equal(launchFetches, 1, 'chip change must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:near-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:near-tbd').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:far-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:far-tbd').show, false);
+  assert.match(list.innerHTML, /NEAR-GO/);
+  assert.match(list.innerHTML, /NEAR-TBD/);
+  assert.doesNotMatch(list.innerHTML, /FAR-GO|FAR-TBD/);
+
+  setLaunchTimeWindow(DEFAULT_LAUNCH_TIME_WINDOW);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:far-go').show, true);
+  assert.match(list.innerHTML, /FAR-GO/);
+
+  _setSelectedRocketMissionForTest('far-go');
+  setLaunchTimeWindow('7d');
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:far-go').show, true, 'selected far mission stays');
+  assert.match(list.innerHTML, /FAR-GO/);
+  assert.doesNotMatch(list.innerHTML, /FAR-TBD/);
+
+  _setSelectedRocketMissionForTest(null);
+  setLaunchStatusFilter({ go: true });
+  setLaunchTimeWindow('7d');
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:near-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:near-tbd').show, false, 'Go + 7d still ANDs');
+  assert.equal(dataSource.entities.getById('rocket-launch:far-go').show, false);
+  assert.match(list.innerHTML, /NEAR-GO/);
+  assert.doesNotMatch(list.innerHTML, /NEAR-TBD|FAR-GO|FAR-TBD/);
 });

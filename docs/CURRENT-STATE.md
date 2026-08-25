@@ -12,6 +12,14 @@ Updated: August 25, 2026
 > the row). Not an alert service. Client-only; no `/api`, and voice / HUD
 > token paths are unchanged.
 
+> **2026-08-25 — launch 7d | 30d window (plan 149)** (`src/data/launchTimeWindow.js`,
+> `#space-mission-roster`). Exclusive chips next to status, default **30d**.
+> Filters already-fetched `launchTime` values within now ± the selected
+> window. Missing or non-finite times stay visible. Selected mission stays.
+> AND with status, provider, orbit, and site. Re-applies from the cached 30-day LL2
+> payload — no extra `/api/launches` fetch. Persists `meridian.launchTimeWindow`.
+> Client-only; no `/api`.
+
 > **2026-08-25 — go to MGRS or lat/lon (plan 124)** (`src/coords/parseGoTo.js`,
 > `#go-to`). A Go-to field next to the camera-center readout accepts an
 > operator-entered MGRS grid (`mgrs.toPoint`) or decimal `lat, lon`. Submit

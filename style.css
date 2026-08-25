@@ -6153,6 +6153,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   font-size: 9px;
   letter-spacing: .08em;
 }
+#space-mission-panel-host .space-mission-window-chips,
 #space-mission-panel-host .space-mission-status-chips,
 #space-mission-panel-host .space-mission-provider-chips,
 #space-mission-panel-host .space-mission-site-chips,
@@ -6162,6 +6163,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   gap: 4px;
   padding: 0 3px 2px;
 }
+#space-mission-panel-host .space-mission-window-chip,
 #space-mission-panel-host .space-mission-status-chip,
 #space-mission-panel-host .space-mission-provider-chip,
 #space-mission-panel-host .space-mission-site-chip,
@@ -6176,6 +6178,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   border-radius: 3px;
   cursor: pointer;
 }
+#space-mission-panel-host .space-mission-window-chip:hover,
+#space-mission-panel-host .space-mission-window-chip:focus-visible,
 #space-mission-panel-host .space-mission-status-chip:hover,
 #space-mission-panel-host .space-mission-status-chip:focus-visible,
 #space-mission-panel-host .space-mission-provider-chip:hover,
@@ -6187,6 +6191,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   color: #d7f7f7;
   border-color: rgba(34, 230, 230, .42);
 }
+#space-mission-panel-host .space-mission-window-chip.active,
 #space-mission-panel-host .space-mission-status-chip.active,
 #space-mission-panel-host .space-mission-provider-chip.active,
 #space-mission-panel-host .space-mission-site-chip.active,

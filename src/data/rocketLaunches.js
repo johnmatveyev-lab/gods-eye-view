@@ -58,6 +58,15 @@ import {
   subscribeLaunchSiteFilter,
   toggleLaunchSiteFilter,
 } from './launchSiteFilter.js';
+import {
+  DEFAULT_LAUNCH_TIME_WINDOW,
+  getLaunchTimeWindow,
+  hydrateLaunchTimeWindow,
+  launchPassesTimeWindow,
+  LAUNCH_TIME_WINDOW_CHIP_IDS,
+  setLaunchTimeWindow,
+  subscribeLaunchTimeWindow,
+} from './launchTimeWindow.js';
 
 export { compactLaunchSiteName };
 
@@ -145,6 +154,7 @@ let _statusFilterUnsubscribe = null;
 let _providerFilterUnsubscribe = null;
 let _orbitFilterUnsubscribe = null;
 let _siteFilterUnsubscribe = null;
+let _timeWindowUnsubscribe = null;
 
 const REPLAY_ASCENT_FALLBACK_SEC = 12;
 const REPLAY_ASCENT_MIN_SEC = 8;
@@ -796,15 +806,17 @@ export function missionDataCompleteness(launch = {}) {
 }
 
 /**
- * Status, provider, orbit, and site chips AND together. A selected mission
- * stays visible even when any of its chips is off. Pad-site markers use this
- * same predicate.
- * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, launchSite?: unknown}|null|undefined} launch
+ * Status, provider, orbit, site, and time-window chips AND together. A
+ * selected mission stays visible even when any of its chips is off.
+ * Pad-site markers use this same predicate.
+ * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, launchSite?: unknown, launchTime?: unknown}|null|undefined} launch
  * @param {{
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
  *   siteFilter?: unknown,
+ *   timeWindow?: unknown,
+ *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
  * @returns {boolean}
@@ -816,10 +828,13 @@ export function launchPassesMissionFilters(launch, options = {}) {
   const providerFilter = options.providerFilter ?? DEFAULT_LAUNCH_PROVIDER_FILTER;
   const orbitFilter = options.orbitFilter ?? DEFAULT_LAUNCH_ORBIT_FILTER;
   const siteFilter = options.siteFilter ?? DEFAULT_LAUNCH_SITE_FILTER;
+  const timeWindow = options.timeWindow ?? DEFAULT_LAUNCH_TIME_WINDOW;
+  const nowMs = options.nowMs ?? Date.now();
   return launchPassesStatusFilter(launch, statusFilter, null)
     && launchPassesProviderFilter(launch, providerFilter, null)
     && launchPassesOrbitFilter(launch, orbitFilter, null)
-    && launchPassesSiteFilter(launch, siteFilter, null);
+    && launchPassesSiteFilter(launch, siteFilter, null)
+    && launchPassesTimeWindow(launch, timeWindow, null, nowMs);
 }
 
 /**
@@ -831,6 +846,8 @@ export function launchPassesMissionFilters(launch, options = {}) {
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
  *   siteFilter?: unknown,
+ *   timeWindow?: unknown,
+ *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
  * @returns {Array<{launch: object, index: number}>}
@@ -844,6 +861,8 @@ export function missionRosterEntries(launches, options = {}) {
       orbitFilter: options.orbitFilter,
       providerFilter: options.providerFilter,
       siteFilter: options.siteFilter,
+      timeWindow: options.timeWindow,
+      nowMs: options.nowMs,
       selectedLaunchId,
     }))
     .sort((a, b) => {
@@ -858,8 +877,8 @@ export function missionRosterEntries(launches, options = {}) {
 
 /**
  * PREV/NEXT and the N/M index walk the chip-filtered roster (status AND
- * provider AND orbit AND site). The selected-id visibility exception is
- * excluded so navigation cannot leave that AND set.
+ * provider AND orbit AND site AND time window). The selected-id visibility
+ * exception is excluded so navigation cannot leave that AND set.
  * @param {Array<object>} launches Normalized launch records.
  * @param {string|null|undefined} selectedLaunchId
  * @param {{
@@ -867,6 +886,8 @@ export function missionRosterEntries(launches, options = {}) {
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
  *   siteFilter?: unknown,
+ *   timeWindow?: unknown,
+ *   nowMs?: number,
  * }} [options]
  * @returns {{
  *   entries: Array<{launch: object, index: number}>,
@@ -882,6 +903,8 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
     orbitFilter: options.orbitFilter,
     providerFilter: options.providerFilter,
     siteFilter: options.siteFilter,
+    timeWindow: options.timeWindow,
+    nowMs: options.nowMs,
     selectedLaunchId: null,
   });
   const current = selectedLaunchId
@@ -906,6 +929,8 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
  *   orbitFilter?: unknown,
  *   providerFilter?: unknown,
  *   siteFilter?: unknown,
+ *   timeWindow?: unknown,
+ *   nowMs?: number,
  * }} [options]
  * @returns {{launch: object, index: number}|null}
  */
@@ -2516,12 +2541,24 @@ function syncLaunchSiteChips() {
   renderLaunchSiteChips();
 }
 
+function syncLaunchTimeWindowChips() {
+  if (!_missionRoster) return;
+  const selected = getLaunchTimeWindow();
+  for (const chip of _missionRoster.querySelectorAll('[data-mission-window-chip]')) {
+    const id = chip.dataset?.missionWindowChip || chip.getAttribute?.('data-mission-window-chip');
+    const active = id === selected;
+    chip.classList?.toggle?.('active', active);
+    chip.setAttribute?.('aria-pressed', String(active));
+  }
+}
+
 function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
   return {
     statusFilter: getLaunchStatusFilter(),
     providerFilter: getLaunchProviderFilter(),
     orbitFilter: getLaunchOrbitFilter(),
     siteFilter: getLaunchSiteFilter(),
+    timeWindow: getLaunchTimeWindow(),
     selectedLaunchId,
   };
 }
@@ -2557,6 +2594,7 @@ function applyLaunchFilterPresentation() {
   syncLaunchProviderChips();
   syncLaunchSiteChips();
   syncLaunchOrbitChips();
+  syncLaunchTimeWindowChips();
   renderMissionPanel();
 }
 
@@ -2564,8 +2602,9 @@ function renderMissionRoster() {
   if (!_missionRoster) return;
   const list = _missionRoster.querySelector('[data-mission-roster-list]');
   const count = _missionRoster.querySelector('[data-mission-roster-count]');
+  const timeWindow = getLaunchTimeWindow();
   const entries = missionRosterEntries(_launches, currentMissionFilterOptions(_selectedLaunchId));
-  if (count) count.textContent = `${entries.length} / 30D`;
+  if (count) count.textContent = `${entries.length} / ${String(timeWindow).toUpperCase()}`;
   if (!list) return;
   if (!entries.length) {
     list.innerHTML = _launches.length
@@ -2773,6 +2812,13 @@ function createMissionPanel() {
   if (_missionRoster) {
     _missionRoster.onclick = (event) => {
       const target = event.target instanceof Element ? event.target : null;
+      const windowChip = target?.closest('[data-mission-window-chip]');
+      if (windowChip) {
+        const id = windowChip.dataset.missionWindowChip
+          || windowChip.getAttribute('data-mission-window-chip');
+        if (LAUNCH_TIME_WINDOW_CHIP_IDS.includes(id)) setLaunchTimeWindow(id);
+        return;
+      }
       const statusChip = target?.closest('[data-mission-status-chip]');
       if (statusChip) {
         setLaunchStatusFilter(toggleLaunchStatusFilter(
@@ -3724,6 +3770,7 @@ const rocketLaunchesLayer = {
     hydrateLaunchProviderFilter();
     hydrateLaunchOrbitFilter();
     hydrateLaunchSiteFilter();
+    hydrateLaunchTimeWindow();
     if (!_statusFilterUnsubscribe) {
       _statusFilterUnsubscribe = subscribeLaunchStatusFilter(applyLaunchFilterPresentation);
     }
@@ -3735,6 +3782,9 @@ const rocketLaunchesLayer = {
     }
     if (!_siteFilterUnsubscribe) {
       _siteFilterUnsubscribe = subscribeLaunchSiteFilter(applyLaunchFilterPresentation);
+    }
+    if (!_timeWindowUnsubscribe) {
+      _timeWindowUnsubscribe = subscribeLaunchTimeWindow(applyLaunchFilterPresentation);
     }
     createMissionPanel();
     createReplayVehicleOverlay();
@@ -3890,6 +3940,8 @@ const rocketLaunchesLayer = {
     _orbitFilterUnsubscribe = null;
     _siteFilterUnsubscribe?.();
     _siteFilterUnsubscribe = null;
+    _timeWindowUnsubscribe?.();
+    _timeWindowUnsubscribe = null;
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },
