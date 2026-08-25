@@ -18,8 +18,18 @@ process.env.CCTV_SOURCES_JSON = JSON.stringify([
     name: 'Congress Avenue',
     provider: 'Austin Transportation & Public Works',
     sourceKind: 'austin-open-data',
+    url: 'https://cctv.austinmobility.io/image/354.jpg',
   },
 ]);
+
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (input, init) => {
+  const href = String(input?.url || input);
+  if (/austinmobility\.io/i.test(href)) {
+    return new Response('', { status: 404, headers: { 'Content-Type': 'text/plain' } });
+  }
+  return originalFetch(input, init);
+};
 
 function mockReq({ method = 'GET', url = '/' } = {}) {
   const req = new EventEmitter();
@@ -110,6 +120,19 @@ test('CCTV upstream frame fetch returns a valid image response', async () => {
   assert.equal(result?.ok, true);
   assert.equal(result?.contentType, 'image/jpeg');
   assert.deepEqual(result?.body, Buffer.from([1, 2, 3]));
+});
+
+test('GET /api/cctv/sources publishes feedConfigured for 354 without url', async () => {
+  const handler = mountCctvMiddleware();
+  const sources = await dispatch(handler, '/sources');
+  assert.equal(sources.status, 200);
+  assert.ok(Array.isArray(sources.json?.sources));
+  assert.ok(sources.json.sources.length > 0, '/sources must list the served catalog');
+  const first = sources.json.sources[0];
+  assert.equal(first.id, '354');
+  assert.equal(first.feedConfigured, true);
+  assert.equal(Object.hasOwn(first, 'url'), false);
+  assert.equal(first.url, undefined);
 });
 
 test('GET /api/cctv/health on a cold isolate lists catalog cameras including 354', async () => {

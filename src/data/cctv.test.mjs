@@ -64,9 +64,11 @@ import cctvLayer, {
   setCctvCardPresentationOptions,
   setActiveCamera,
   applyCctvCatalogVisibility,
+  buildCatalogFromSources,
   setCctvFeedTypes,
   cctvRecordMatchesFeedType,
 } from './cctv.js';
+import { sourceMatchesHideNoFeed } from './cctvCityFilter.js';
 import { DEFAULT_CCTV_FEED_TYPE_FILTER } from './cctvFeedTypeFilter.js';
 import {
   CCTV_ACTIVATION_RESULT,
@@ -1389,6 +1391,49 @@ test('hide-no-feed catalog visibility skips unconfigured icons and coverage but 
     applyCctvCatalogVisibility();
     assert.equal(seed.billboard.show, true, 'selected unconfigured camera stays');
     assert.equal(live.billboard.show, true);
+  } finally {
+    _setCctvCoverageStateForTest({ enabled: false, hideNoFeed: false });
+  }
+});
+
+test('catalog from a public /sources row without url stays visible under hide-no-feed', () => {
+  const publicRow = {
+    id: '354',
+    name: 'AUSTIN 354 5TH ST / CONGRESS AVE',
+    city: 'Austin',
+    cityId: 'austin',
+    provider: 'Austin Transportation & Public Works',
+    lat: 30.2672,
+    lon: -97.7431,
+    headingDeg: 180,
+    feedType: 'image',
+    sourceKind: 'austin-open-data',
+    feedConfigured: true,
+  };
+  assert.equal(Object.hasOwn(publicRow, 'url'), false);
+
+  const [camera] = buildCatalogFromSources([publicRow]);
+  assert.ok(camera, 'catalog must include the public open-data row');
+  assert.equal(camera.id, '354');
+  assert.equal(camera.feedConfigured, true);
+  assert.equal(sourceMatchesHideNoFeed(camera, true), true);
+
+  const record = {
+    camera,
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  try {
+    _setCctvCoverageStateForTest({
+      records: [record],
+      activeCameraId: null,
+      hideNoFeed: true,
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(record.billboard.show, true, 'live open-data camera stays on the globe');
   } finally {
     _setCctvCoverageStateForTest({ enabled: false, hideNoFeed: false });
   }

@@ -1142,7 +1142,7 @@ async function loadCameraSources() {
  * @param {Object[]} rawSources - Raw source objects from the backend.
  * @returns {Object[]} Array of fully-initialized camera objects.
  */
-function buildCatalogFromSources(rawSources) {
+export function buildCatalogFromSources(rawSources) {
   const sources = Array.isArray(rawSources) ? rawSources : [];
   if (!sources.length) return [];
 
@@ -1188,7 +1188,9 @@ function buildCatalogFromSources(rawSources) {
       provider: String(source.provider || seed?.provider || 'Configured CCTV Source'),
       sourceKind: String(source.sourceKind || source.kind || (source.url ? 'configured' : 'seed')).toLowerCase(),
       feedType,
-      feedConfigured: typeof source.url === 'string' && !!source.url.trim(),
+      feedConfigured: typeof source.feedConfigured === 'boolean'
+        ? source.feedConfigured
+        : (typeof source.url === 'string' && source.url.trim() ? true : undefined),
       lat,
       lon,
       headingDeg,
