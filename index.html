@@ -90,6 +90,10 @@
     <button id="home-view" type="button" aria-label="Home view" title="Home view (Home)" aria-keyshortcuts="Home">
       <span class="material-symbols-outlined" aria-hidden="true">home</span>
     </button>
+    <button id="stop-tracking" type="button" hidden aria-label="Stop tracking" title="Stop tracking and leave the camera where it is">
+      <span class="material-symbols-outlined" aria-hidden="true">location_disabled</span>
+      Stop tracking
+    </button>
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
@@ -715,6 +719,14 @@
         />
       </div>
       <div id="data-toggles" class="data-toggle-list"></div>
+      <div id="datacenter-in-view" class="in-view-site-list" hidden>
+        <div class="in-view-site-list-header">
+          <strong>DATACENTERS IN VIEW</strong>
+          <output id="datacenter-in-view-count" aria-live="polite">0</output>
+        </div>
+        <div id="datacenter-in-view-items" class="in-view-site-list-items" role="list"></div>
+        <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
+      </div>
     </div>
   </div>
 
@@ -735,6 +747,11 @@
       <div class="cctv-controls">
         <button id="cctv-enable-btn" class="scene-btn">CCTV OFF</button>
         <button id="cctv-nearest-btn" class="scene-btn">NEAREST</button>
+      </div>
+      <div class="cctv-controls">
+        <select id="cctv-city-filter" aria-label="CCTV city or source">
+          <option value="">All sources</option>
+        </select>
       </div>
       <div class="cctv-controls">
         <button id="cctv-prev-btn" class="scene-btn">PREV</button>

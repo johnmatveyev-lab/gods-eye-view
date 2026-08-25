@@ -2,6 +2,16 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — stop-tracking control (plan 54)** (`src/chrome/stopTracking.js`,
+> `#stop-tracking` in `#top-center-actions`). While a contact owns the follow
+> camera, camera chrome shows **Stop tracking**. The click calls the existing
+> untrack/clear-target path (`_releaseFollowCamera` / layer `stopTracking`) and
+> leaves the camera pose where it is. Hidden when nothing is tracked. Home
+> (`#home-view` / `goHome` / `flyToHomeView`) still flies the full default
+> pose reset. Roster click
+> still tracks. Not on the roster and not on cockpit enter. Camera/target
+> chrome only — no person-search, no `/api`.
+
 > **2026-08-25 — chrome live-poll pause (plans 37 + 38)** (`src/chrome/scheduler.js`).
 > `document.visibilityState === 'hidden'` or `window` offline pauses manager-owned
 > flight/layer poll timers and the HUD summary interval. No new OpenAI HUD or
@@ -2290,7 +2300,7 @@ silently demoting every later lookup for the session.
 - `/api/google/nearby-places` keeps the Google key out of Places requests issued for voice scene context.
 - `/api/google/text-search` keeps the Google key server-side for view-biased Places recovery used by annotation resolution.
 - `/api/overpass` is bounded by body/response caps, per-client/global rate limits, concurrency limits, mirror fallback, in-flight dedupe, cache bounds, and static validation that every selector is spatially bounded.
-- `/api/military-installations` uses an independent limiter with the same 90-per-client/300-global one-minute bounds, so viewport installation refreshes never consume `/api/overpass` annotation/traffic capacity.
+- `/api/military-installations` uses an independent limiter with the same 90-per-client/300-global one-minute bounds, so viewport installation refreshes never consume `/api/overpass` annotation/traffic capacity. Hosted production serves the same handler from the live catch-all `api/[...path].js` (`src/data/militaryInstallationsHttp.js`); Vite forwards. A dedicated `api/military-installations.js` is not added.
 - `/api/route` proxies bounded OSRM route requests for annotation routes, with profile allowlisting, distance caps, response caps, caching, and sanitized "no route found" errors.
 - Track endpoints: `/api/ais-live/track?mmsi=` (server-accumulated ring buffers; sub-route handled before the rows snapshot), `/api/opensky-track?icao24=` (HTTP 410 via `api/opensky-track.js`; OpenSky disabled), `/api/adsblol/trace?hex=` (hosted `api/adsblol/trace.js`, 60s cache, 5MB cap, ODbL attribution required in UI).
 - Realtime debug logs redact API keys, bearer tokens, client secrets, and image data URLs before writing to disk; request bodies are size-capped.
