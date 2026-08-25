@@ -94,11 +94,13 @@ function makeStation(overrides) {
   return {
     homepage: null,
     languages: ['English'],
+    tags: ['news'],
     state: 'Texas',
     country: 'United States',
     countryCode: 'US',
     metadataTrust: 'untrusted-community',
     codec: 'MP3',
+    bitrate: 128,
     lat: 30,
     lon: -97,
     streamUrl: `https://radio.example.com/${overrides.id}.mp3`,
