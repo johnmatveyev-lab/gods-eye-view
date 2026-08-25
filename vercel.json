@@ -23,6 +23,12 @@
     },
     "api/firms/status.js": {
       "maxDuration": 15
+    },
+    "api/adsblol/trace.js": {
+      "maxDuration": 15
+    },
+    "api/opensky-track.js": {
+      "maxDuration": 10
     }
   }
 }
