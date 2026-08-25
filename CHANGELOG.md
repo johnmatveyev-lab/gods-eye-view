@@ -45,6 +45,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster now has LEO | MEO | GEO | Polar | Other chips next
+  to the existing status and provider chips. Classification uses the
+  already-fetched Launch Library 2 `orbit.name` (GEO includes GTO /
+  geostationary / transfer; Polar includes polar / sun-sync). Default all
+  on. Filters the roster, pad-site markers, and ambient overlay from cache
+  and ANDs with status and provider. Selected mission stays visible when
+  its orbit chip is off. No extra `/api/launches` fetch and no new endpoint.
 - Earthquake time-window chips — 1h | 6h | 24h — sit next to the magnitude
   floor and depth chips. Default 24h matches the current all_day discs.
   1h and 6h keep `properties.time >= now − window`; missing/non-finite time
