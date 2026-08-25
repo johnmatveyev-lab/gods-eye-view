@@ -60,6 +60,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Earthquake **Green | Yellow | Orange | Red | None** PAGER chips sit next to
+  the tsunami toggle. Default all on matches the current USGS all_day discs.
+  Chips filter cached `properties.alert`; missing/null is None and stays
+  visible while None is on. A selected event stays. Chip changes re-filter
+  in memory and AND with mag / depth / time / tsunami — no extra USGS fetch
+  and no `/api`. Preference travels with the existing earthquake params.
+  Hidden when the Earthquakes layer is off.
 - Mapped Installations has client-only **Airfield | Naval | Range | Land |
   Places** chips on the Sites list. Default all on matches the current
   OSM/Places viewport. Naval off hides `naval_base` markers and keeps the

@@ -8,11 +8,13 @@ import * as Cesium from 'cesium';
 import {
   DEFAULT_EARTHQUAKE_DEPTH_BANDS,
   DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
+  DEFAULT_EARTHQUAKE_PAGER_ALERTS,
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
   EARTHQUAKE_DEPTH_BANDS,
   EARTHQUAKE_MAGNITUDE_FLOORS,
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
+  EARTHQUAKE_PAGER_ALERTS,
   EARTHQUAKE_TIME_WINDOWS_HOURS,
   USGS_ALL_DAY_URL,
   createEarthquakeOverlayEntry,
@@ -21,14 +23,17 @@ import {
   filterEarthquakeFeatures,
   filterEarthquakeFeaturesByDepthBands,
   filterEarthquakeFeaturesByMagnitudeFloor,
+  filterEarthquakeFeaturesByPagerAlert,
   filterEarthquakeFeaturesByTimeWindow,
   filterEarthquakeFeaturesByTsunamiFlag,
   isSignificantEarthquake,
   mapAnalystRecord,
+  normalizeEarthquakePagerAlerts,
   normalizeEarthquakeTimeWindowHours,
   normalizeEarthquakeTsunamiOnly,
   selectEarthquakeOverlayCohort,
   toggleEarthquakeDepthBand,
+  toggleEarthquakePagerAlert,
 } from './earthquakes.js';
 import { DataLayerManager } from './manager.js';
 import {
@@ -1350,6 +1355,285 @@ test('Tsunami only chip sits next to mag/depth/time, persists, and hides with th
     assert.equal(layer.getParams().tsunamiOnly, true);
     assert.equal(layer.getParams().magnitudeFloor, 2.5);
     assert.equal(layer.getParams().timeWindowHours, 24);
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 152: PAGER alert chips (client-side, same USGS all_day) ──────────────
+
+function pagerFeature(id, mag, alert, {
+  depthKm = 8.2,
+  tsunami,
+  time = 1_753_600_000_000,
+} = {}) {
+  const properties = { mag, place: String(id), time, alert };
+  if (tsunami !== undefined) properties.tsunami = tsunami;
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties,
+  };
+}
+
+const MIXED_PAGER_DAY = Object.freeze({
+  features: Object.freeze([
+    pagerFeature('green-lo', 3.1, 'green'),
+    pagerFeature('green-sig', 5.4, 'green', { depthKm: 80 }),
+    pagerFeature('yellow-lo', 4.2, 'yellow'),
+    pagerFeature('orange-deep', 4.8, 'orange', { depthKm: 410 }),
+    pagerFeature('red-hi', 6.2, 'red'),
+    pagerFeature('none-null', 3.6, null),
+    pagerFeature('none-missing', 4.1),
+    pagerFeature('none-empty', 3.3, ''),
+    pagerFeature('green-micro', 2.4, 'green'),
+    pagerFeature('green-tsunami', 4.4, 'green', {
+      tsunami: 1,
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+    pagerFeature('yellow-plain', 4.0, 'yellow', { tsunami: 0 }),
+    pagerFeature('green-old', 4.6, 'green', { time: 1_800_000_000_000 - 20 * HOUR_MS }),
+    pagerFeature('green-fresh', 4.7, 'green', { time: 1_800_000_000_000 - 0.5 * HOUR_MS }),
+  ]),
+});
+
+test('PAGER chips default all on and match the current mag/depth/time/tsunami view', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_PAGER_ALERTS, 'GYORN');
+  assert.deepEqual([...EARTHQUAKE_PAGER_ALERTS], ['green', 'yellow', 'orange', 'red', 'none']);
+  assert.equal(normalizeEarthquakePagerAlerts(undefined), 'GYORN');
+  assert.equal(normalizeEarthquakePagerAlerts('G'), 'G');
+  assert.equal(normalizeEarthquakePagerAlerts('bogus'), null);
+  assert.equal(toggleEarthquakePagerAlert('GYORN', 'none'), 'GYOR');
+  assert.equal(toggleEarthquakePagerAlert('GYOR', 'none'), 'GYORN');
+  assert.equal(toggleEarthquakePagerAlert('N', 'none'), '0');
+
+  const current = filterEarthquakeFeatures(MIXED_PAGER_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    timeWindowHours: 24,
+    tsunamiOnly: false,
+  }).map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesByPagerAlert(MIXED_PAGER_DAY.features, DEFAULT_EARTHQUAKE_PAGER_ALERTS)
+      .map((feature) => feature.id),
+    MIXED_PAGER_DAY.features.map((feature) => feature.id),
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_PAGER_DAY.features, {
+      magnitudeFloor: 2.5,
+      pagerAlerts: DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_PAGER_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().pagerAlerts, 'GYORN');
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('None off hides unalerted discs; missing/null stay only while None is on', async () => {
+  const withoutNone = filterEarthquakeFeaturesByPagerAlert(MIXED_PAGER_DAY.features, 'GYOR')
+    .map((feature) => feature.id);
+  assert.ok(withoutNone.includes('green-lo'));
+  assert.ok(withoutNone.includes('yellow-lo'));
+  assert.ok(withoutNone.includes('orange-deep'));
+  assert.ok(withoutNone.includes('red-hi'));
+  assert.ok(!withoutNone.includes('none-null'));
+  assert.ok(!withoutNone.includes('none-missing'));
+  assert.ok(!withoutNone.includes('none-empty'));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_PAGER_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ pagerAlerts: 'GYOR' }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('green-lo'));
+    assert.ok(ids.includes('red-hi'));
+    assert.ok(!ids.includes('none-null'));
+    assert.ok(!ids.includes('none-missing'));
+    assert.ok(!ids.includes('none-empty'));
+    assert.ok(!layer.getListRecords().some((row) => row.id.startsWith('none-')));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('Green-only shows green plus the selected event', async () => {
+  assert.deepEqual(
+    filterEarthquakeFeaturesByPagerAlert(MIXED_PAGER_DAY.features, 'G', {
+      selectedId: 'none-null',
+    }).map((feature) => feature.id),
+    ['green-lo', 'green-sig', 'none-null', 'green-micro', 'green-tsunami', 'green-old', 'green-fresh'],
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_PAGER_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ pagerAlerts: 'G', selectedId: 'none-null' }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.deepEqual(ids.filter((id) => id.startsWith('green-') || id === 'none-null').sort(), [
+      'green-fresh',
+      'green-lo',
+      'green-old',
+      'green-sig',
+      'green-tsunami',
+      'none-null',
+    ]);
+    assert.ok(!ids.includes('yellow-lo'));
+    assert.ok(!ids.includes('red-hi'));
+    assert.ok(layer.getListRecords().some((row) => row.id === 'none-null'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('PAGER chips AND with mag/depth/time/tsunami and redraw from cached geojson', async () => {
+  const now = 1_800_000_000_000;
+  const anded = filterEarthquakeFeatures(MIXED_PAGER_DAY.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 1,
+    tsunamiOnly: true,
+    pagerAlerts: 'G',
+    now,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['green-tsunami']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(MIXED_PAGER_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({
+      magnitudeFloor: 4.0,
+      depthBands: 'S',
+      timeWindowHours: 1,
+      tsunamiOnly: true,
+      pagerAlerts: 'G',
+    }), true);
+    assert.equal(feed.fetches, 1, 'PAGER chips must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['green-tsunami']);
+    assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+    assert.equal(layer.getParams().timeWindowHours, 1);
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('USGS refresh keeps the PAGER chip set applied to the new payload', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const first = stubUsgs(MIXED_PAGER_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ pagerAlerts: 'G' }), true);
+    assert.ok(entityIds(viewer._dataSources[0]).every((id) => id.startsWith('green-')));
+    first.restore();
+    const second = stubUsgs({
+      features: [
+        pagerFeature('fresh-green', 3.3, 'green'),
+        pagerFeature('fresh-none', 4.4, null),
+        pagerFeature('green-lo', 3.1, 'green'),
+      ],
+    });
+    try {
+      assert.equal(await layer.update(viewer), true);
+      assert.equal(layer.getParams().pagerAlerts, 'G');
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['fresh-green', 'green-lo']);
+      assert.ok(!entityIds(viewer._dataSources[0]).includes('fresh-none'));
+    } finally {
+      second.restore();
+    }
+  } finally {
+    first.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('PAGER chips sit next to mag/depth/time/tsunami, persist, and hide with the layer', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('./earthquakePagerAlert.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /data-earthquake-pager="green"/);
+  assert.match(html, /data-earthquake-pager="yellow"/);
+  assert.match(html, /data-earthquake-pager="orange"/);
+  assert.match(html, /data-earthquake-pager="red"/);
+  assert.match(html, /data-earthquake-pager="none"/);
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(ui, /earthquake-pager-chips|data-earthquake-pager/);
+  assert.match(ui, /_earthquakePagerChips\.hidden = !enabled/);
+  assert.match(css, /earthquake-pager-chip/);
+  assert.match(helper, /properties\.alert/);
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+  assert.doesNotMatch(helper, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const pager = chips.filter((chip) => chip.id.startsWith('pager-'));
+    assert.deepEqual(pager.map((chip) => chip.label), ['Green', 'Yellow', 'Orange', 'Red', 'None']);
+    assert.ok(pager.every((chip) => chip.active === true));
+    assert.ok(pager.every((chip) => chip.group === 'PAGER'));
+    assert.equal(layer.getParams().pagerAlerts, 'GYORN');
+    assert.equal(layer.setParams({ pagerAlerts: 'G' }), true);
+    assert.deepEqual(
+      layer.getRowControls().chips.filter((chip) => chip.id.startsWith('pager-')).map((chip) => chip.active),
+      [true, false, false, false, false],
+    );
+    assert.equal(layer.setParams({ pagerAlerts: 'bogus' }), false);
+    assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(layer.getParams().tsunamiOnly, false);
   } finally {
     layer.destroy(viewer);
   }
