@@ -2512,6 +2512,12 @@ easier to meet (detection is now on more often), but does not create it.
 - Annotation resolver behavior is pinned by `src/annotations/annotationResolver.test.mjs`; re-run that suite before changing place-resolution scoring.
 - Layer input handlers (click + keydown) are detached on disable for flights/military/satellites/AIS vessels.
 - Traffic tile cache is capped and traffic layer supports explicit destroy cleanup.
+- Street traffic paints viewport-visible roads before off-center extras in the
+  same tile (`src/data/trafficViewport.js`). After a jump-to-city (or first
+  arrival from high altitude) it prefetches one neighbor ring of major-road
+  tiles into that cache so a fast pan does not need a second zoom. The fair
+  `MAX_DOTS` allocator and 0.35 km center-shift gate are unchanged; prefetch
+  does not add an API route or a traffic vendor.
 - Traffic feed state is honest about simulation. `getStats().mode` is the
   CONFIGURED source ('live' = a TomTom key is present, 'sim' = keyless), NOT
   this instant's health — health rides on `error`. Keyless reads FALLBACK with
