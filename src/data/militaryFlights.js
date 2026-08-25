@@ -31,6 +31,13 @@ import {
   cameraPoseSignature,
 } from './iconOrientation.js';
 import { stickyText, stickyNumber } from './aircraftMeta.js';
+import {
+  callsignMatchesPrefixes,
+  callsignPrefixRowField,
+  getCallsignPrefixField,
+  getCallsignPrefixes,
+  setCallsignPrefixField,
+} from './flightLayerFilters.js';
 import { classifyAircraft, CLASS_SCALE_2D, CLASS_SCALE_3D, CLASS_MODEL_REAL } from './aircraftClass.js';
 import {
   AIRCRAFT_CLASS_FILTER_ALL,
@@ -821,6 +828,26 @@ function _toFiniteNumber(value) {
  */
 function _toCleanText(value) {
   return String(value || '').trim();
+}
+
+function _prefixAndMatcher(contact) {
+  return callsignMatchesPrefixes(contact?.callsign, getCallsignPrefixes());
+}
+
+function _applyCallsignPrefixFilter() {
+  _lastFleetTickMs = 0;
+  if (!_billboards) return;
+  for (const [icao24, bb] of _billboards) {
+    if (icao24 === _trackedIcao) continue;
+    const visible = _passesInFlightFilters(icao24, _flightData.get(icao24));
+    if (!visible) {
+      if (bb.show) bb.show = false;
+      const model = _models.get(icao24);
+      if (model?.show) model.show = false;
+      continue;
+    }
+    if (!_modelOwnsVisual(icao24)) bb.show = true;
+  }
 }
 
 /**
@@ -2837,7 +2864,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher],
+    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher],
   });
 }
 
@@ -2847,7 +2874,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher],
+    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher],
   });
 }
 
@@ -2862,6 +2889,7 @@ function _applySpeedBandParams(params) {
   _speedMaxKt = band.maxKt;
   _lastFleetTickMs = 0;
   _lastCamPoseSig = '';
+  _applyInFlightFilterVisibility();
 }
 
 const militaryFlightsLayer = {
@@ -3635,6 +3663,10 @@ const militaryFlightsLayer = {
       inFlightFilters.setHideStaleEnabled(params.hideStale);
       _applyInFlightFilterVisibility();
     }
+    if (Object.hasOwn(params, 'callsignPrefixes')) {
+      setCallsignPrefixField(params.callsignPrefixes);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedMilitaryTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedMilitaryTrackingId);
       if (requested === _trackedIcao) {
@@ -3670,6 +3702,7 @@ const militaryFlightsLayer = {
       speedMinKt: _speedMinKt,
       speedMaxKt: _speedMaxKt,
       aircraftClassFilter: _aircraftClassFilter,
+      callsignPrefixes: getCallsignPrefixField(),
     };
   },
   getRowControls() {
@@ -3678,6 +3711,7 @@ const militaryFlightsLayer = {
         ...headingSectorChipModels(getHeadingSectors()),
         ..._hideStaleRowControls().chips,
       ],
+      field: callsignPrefixRowField(),
     };
   },
 

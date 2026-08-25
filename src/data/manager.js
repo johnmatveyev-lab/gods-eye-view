@@ -2300,6 +2300,11 @@ export class DataLayerManager {
           this._refreshTogglePanel();
         }
       });
+      controls.addEventListener('input', (event) => {
+        const input = event.target?.closest?.('.data-toggle-field-input');
+        if (!input || input.disabled) return;
+        this.setLayerParams(layer.id, { callsignPrefixes: input.value }, { origin: 'user' });
+      });
       row.appendChild(controls);
       this._syncRowControls(controls, layer);
 
@@ -2362,9 +2367,11 @@ export class DataLayerManager {
     const selects = layer.enabled ? (declared?.selects || []) : [];
     const headingText = typeof declared?.heading === 'string' ? declared.heading.trim() : '';
     const picker = declared?.picker || null;
+    const field = layer.enabled ? (declared?.field || null) : null;
     container.hidden = chips.length === 0 && legend.length === 0 && selects.length === 0
-      && !headingText && !picker;
+      && !headingText && !picker && !field;
     this._syncRowPicker(container, picker);
+    this._syncRowField(container, field);
 
     let heading = [...(container.children || [])].find((node) => (
       String(node.className).split(/\s+/).includes('data-toggle-heading')
@@ -2546,6 +2553,52 @@ export class DataLayerManager {
       select.dataset.optionIds = nextIds;
     }
     if (select.value !== picker.value) select.value = picker.value || '';
+  }
+
+  /**
+   * Reconcile a compact text field in place so panel refresh does not steal
+   * focus mid-keystroke. Writes go through setLayerParams (flight options).
+   * @param {HTMLElement} container
+   * @param {object|null} field
+   */
+  _syncRowField(container, field) {
+    let wrap = null;
+    for (const node of container.children) {
+      if (String(node.className).split(/\s+/).includes('data-toggle-field')) {
+        wrap = node;
+        break;
+      }
+    }
+    if (!field) {
+      wrap?.remove();
+      return;
+    }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.className = 'data-toggle-field';
+      const label = document.createElement('label');
+      label.className = 'data-toggle-field-label';
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'data-toggle-field-input';
+      input.autocomplete = 'off';
+      input.spellcheck = false;
+      wrap.append(label, input);
+      container.appendChild(wrap);
+    }
+    const label = wrap.children[0];
+    const input = wrap.children[1];
+    const inputId = `data-toggle-field-${field.id || 'filter'}`;
+    input.id = inputId;
+    label.setAttribute('for', inputId);
+    if (label.textContent !== (field.label || 'FILTER')) {
+      label.textContent = field.label || 'FILTER';
+    }
+    input.setAttribute('aria-label', field.ariaLabel || field.label || 'Filter');
+    input.placeholder = field.placeholder || '';
+    input.disabled = Boolean(field.disabled);
+    const focused = typeof document !== 'undefined' && document.activeElement === input;
+    if (!focused && input.value !== (field.value || '')) input.value = field.value || '';
   }
 
   _refreshTogglePanel() {

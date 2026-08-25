@@ -3640,3 +3640,64 @@ test('Retry is not a filter and adds no endpoints', () => {
   assert.doesNotMatch(readme, /God's Eye View rebrand|quantum-earth/i);
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
 });
+
+test('a PREFIX field writes callsignPrefixes through existing flight layer options', async () => {
+  const originalDocument = globalThis.document;
+  globalThis.document = { createElement: makeControlElement };
+  const mgr = new DataLayerManager({});
+  const paramsCalls = [];
+  let prefixes = '';
+  mgr.register({
+    id: 'flights',
+    name: 'Flights',
+    icon: '',
+    source: 'adsb.lol',
+    updateInterval: -1,
+    async init() {},
+    enable() {},
+    disable() {},
+    async update() {},
+    getStats() { return { count: 0, lastUpdate: null }; },
+    setParams(params) {
+      if (Object.hasOwn(params, 'callsignPrefixes')) prefixes = params.callsignPrefixes;
+      paramsCalls.push({ ...params });
+      return true;
+    },
+    getParams() { return { callsignPrefixes: prefixes }; },
+    getRowControls() {
+      return {
+        field: {
+          id: 'callsign-prefixes',
+          label: 'PREFIX',
+          value: prefixes,
+          placeholder: 'UAL AAL BAW',
+          ariaLabel: 'Airline callsign prefixes',
+        },
+      };
+    },
+  });
+  const container = makeControlElement();
+
+  try {
+    mgr.buildTogglePanel(container);
+    const controls = container
+      .querySelector('[data-layer-id="flights"]')
+      .querySelector('.data-toggle-controls');
+    assert.equal(controls.hidden, true, 'prefix field stays quiet while the layer is off');
+
+    assert.equal(await mgr.setEnabled('flights', true), true);
+    mgr._refreshTogglePanel();
+    assert.equal(controls.hidden, false);
+    const input = collectByClass(controls, 'data-toggle-field-input')[0];
+    assert.ok(input, 'the flights row gained a PREFIX field');
+    assert.equal(collectByClass(controls, 'data-toggle-field-label')[0].textContent, 'PREFIX');
+
+    input.value = 'UAL BAW';
+    controls.listeners.input({ target: input });
+    assert.deepEqual(paramsCalls.at(-1), { callsignPrefixes: 'UAL BAW' });
+  } finally {
+    await mgr.destroyAll();
+    if (originalDocument === undefined) delete globalThis.document;
+    else globalThis.document = originalDocument;
+  }
+});

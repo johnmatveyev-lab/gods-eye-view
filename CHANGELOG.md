@@ -111,6 +111,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   current stem-click camera. Empty or off yields an empty list. The
   datacenter roster stays independent. No new Overpass fetch. © OpenStreetMap
   credit is unchanged.
+- Flights and military flight rows share a PREFIX field for 3-letter
+  callsign tokens (UAL AAL BAW). Empty shows all. Matching is the already
+  ingested callsign prefix only — not the exact-ident watchlist and not
+  airline-name or IATA↔ICAO lookup. A selected/tracked contact stays
+  visible if its callsign misses. Composes as AND with the flights
+  altitude band, ground-speed band, heading-sector chips, Hide stale, and
+  class chips. Persists with existing flight layer options (`f.c.*`; speed
+  already owns `f.p`). No `/api`.
 - Flights layer has a client-side altitude band (All / Surface / &lt;10k /
   10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
   the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
