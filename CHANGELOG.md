@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Bikeshare has client-only **All | 10+ | 20+** capacity chips next to
+  Hide empty / Hide full / Hide closed / E-bikes only / min-bikes /
+  min-docks / last-reported. Default **All** matches the current dots.
+  **10+** keeps stations whose cached GBFS `station_information` capacity
+  is at least 10. **20+** is stricter. Missing or non-finite `capacity`
+  stays visible. The 15-dock render-size fallback is not treated as real
+  capacity. A selected station stays. Chip changes re-filter in memory
+  and AND with hide empty, hide full, hide closed, min-available,
+  min-docks, E-bikes only, and last-reported — no extra `/api/gbfs`
+  fetch and no new endpoint. Preference persists as
+  `meridian.bikeshareCapacity`. Hidden when the bike layer is off.
+  Refresh keeps the chip set.
 - AIS has a client-only **Hide no IMO** toggle next to Hide unnamed.
   Default off matches the current harbor view. On skips in-memory vessels
   whose `imo` is missing, empty, or whitespace-only (trim first). Vessels
