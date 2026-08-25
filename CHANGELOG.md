@@ -25,6 +25,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `/api/opensky`; the handler is the extracted 250 nm adsb.lol snapshot
   (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).
   `/api/opensky-track` stays 410. No `OPENSKY_*` env.
+- Added hosted aircraft-trace functions `api/adsblol/trace.js` (real
+  adsb.lol tar1090 proxy) and `api/opensky-track.js` (hard 410, no OpenSky
+  fetch). Vite forwards to `src/data/trackBackfill.js`.
 
 ### Fixed
 
