@@ -6,16 +6,23 @@ import path from 'node:path';
 import * as Cesium from 'cesium';
 
 import {
+  EMERGENCIES_ONLY_CHIP_ID,
+  EMERGENCIES_ONLY_CHIP_LABEL,
+  EMERGENCIES_ONLY_DEFAULT,
   EMERGENCY_HIGHLIGHT_CSS,
   EMERGENCY_HIGHLIGHT_DEFAULT,
   EMERGENCY_HIGHLIGHT_STORAGE_KEY,
   EMERGENCY_SQUAWKS,
+  emergenciesOnlyChipModel,
   emergencyHighlightPaint,
   getEmergencyHighlightEnabled,
   hydrateEmergencyHighlightEnabled,
   isEmergencySquawk,
+  normalizeEmergenciesOnly,
   normalizeEmergencyHighlightEnabled,
   normalizeSquawk,
+  passesEmergenciesOnlyFilter,
+  passesEmergencySquawkFilter,
   readEmergencyHighlightEnabled,
   resetEmergencyHighlightForTest,
   setEmergencyHighlightEnabled,
@@ -25,6 +32,7 @@ import {
 } from './emergencySquawk.js';
 import flightsLayer, {
   _addFlightTrackingCandidateForTest,
+  _applyOperatorContactVisibilityForTest,
   _contactIconColorForTest,
   _setTrackedFlightRefreshStateForTest,
 } from './flights.js';
@@ -34,7 +42,13 @@ import militaryFlightsLayer, {
   _setTrackedMilitaryRefreshStateForTest,
 } from './militaryFlights.js';
 import { normalizeAdsbLolAircraftState } from './adsbLolFallback.js';
-import { aircraftMatchesAltitudeBand } from './flightAltitudeBand.js';
+import { aircraftMatchesAltitudeBand, setAltitudeBand } from './flightAltitudeBand.js';
+import {
+  createDefaultLayerState,
+  decodeLayerStateParams,
+  encodeLayerStateParams,
+  normalizeLayerState,
+} from './layerState.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const src = (name) => readFileSync(path.join(ROOT, 'src', name), 'utf8');
@@ -321,6 +335,326 @@ test('client-side only: no \/api, OpenSky, Google News, or invented incidents', 
     uiInit.indexOf('_initEmergencyHighlightToggle() {'),
     uiInit.indexOf('_initKeepAboveToggle() {'),
   ), /opensky-network|news\.google|\/api\//i);
+});
+
+test('Emergencies only defaults off and reuses isEmergencySquawk', () => {
+  assert.equal(EMERGENCIES_ONLY_DEFAULT, false);
+  assert.equal(normalizeEmergenciesOnly(undefined), false);
+  assert.equal(normalizeEmergenciesOnly(null), false);
+  assert.equal(normalizeEmergenciesOnly('nope'), false);
+  assert.equal(normalizeEmergenciesOnly(false), false);
+  assert.equal(normalizeEmergenciesOnly(true), true);
+  assert.equal(normalizeEmergenciesOnly('1'), true);
+
+  const mixed = [
+    { icao24: 'e7500', squawk: '7500' },
+    { icao24: 'e7600', squawk: 7600 },
+    { icao24: 'e7700', squawk: '7700' },
+    { icao24: 'vfr', squawk: '1200' },
+    { icao24: 'missing', squawk: null },
+    { icao24: 'blank', squawk: '' },
+    { icao24: 'other', squawk: '1234' },
+  ];
+  for (const contact of mixed) {
+    assert.equal(passesEmergenciesOnlyFilter({ squawk: contact.squawk, emergenciesOnly: false }), true);
+    assert.equal(passesEmergencySquawkFilter(contact, { emergenciesOnly: false }), true);
+  }
+  assert.equal(passesEmergenciesOnlyFilter({ squawk: '7500', emergenciesOnly: true }), true);
+  assert.equal(passesEmergenciesOnlyFilter({ squawk: 7600, emergenciesOnly: true }), true);
+  assert.equal(passesEmergenciesOnlyFilter({ squawk: '7700', emergenciesOnly: true }), true);
+  assert.equal(passesEmergenciesOnlyFilter({ squawk: '1200', emergenciesOnly: true }), false);
+  assert.equal(passesEmergenciesOnlyFilter({ squawk: null, emergenciesOnly: true }), false);
+  assert.equal(passesEmergenciesOnlyFilter({ squawk: '', emergenciesOnly: true }), false);
+  assert.equal(passesEmergenciesOnlyFilter({ squawk: '1234', emergenciesOnly: true }), false);
+  assert.equal(passesEmergencySquawkFilter({ squawk: '7700' }, { emergenciesOnly: true }), true);
+  assert.equal(passesEmergencySquawkFilter({ squawk: '1200' }, { emergenciesOnly: true }), false);
+
+  const helper = data('emergencySquawk.js');
+  assert.match(helper, /return isEmergencySquawk\(squawk\)/);
+  assert.doesNotMatch(helper, /['"]7500['"].*['"]7600['"].*['"]7700['"].*['"]7500['"]/);
+  assert.equal(emergenciesOnlyChipModel(false).label, EMERGENCIES_ONLY_CHIP_LABEL);
+  assert.equal(emergenciesOnlyChipModel(false).id, EMERGENCIES_ONLY_CHIP_ID);
+  assert.equal(emergenciesOnlyChipModel(false).active, false);
+  assert.deepEqual(emergenciesOnlyChipModel(false).params, { emergenciesOnly: true });
+  assert.deepEqual(emergenciesOnlyChipModel(true).params, { emergenciesOnly: false });
+});
+
+test('layer off shows all; on keeps 7500/7600/7700 and hides missing/other', () => {
+  const hijack = emptyBillboard();
+  const radio = emptyBillboard();
+  const general = emptyBillboard();
+  const vfr = emptyBillboard();
+  const missing = emptyBillboard();
+  _setTrackedFlightRefreshStateForTest({
+    icao24: 'aa7500',
+    meta: { squawk: '7500', klass: 'airliner', onGround: false },
+    billboard: hijack,
+    billboardCollection: {},
+    viewer: emptyViewer(),
+    entity: {},
+    tracked: false,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'aa7600',
+    meta: { squawk: '7600', klass: 'airliner', onGround: false },
+    billboard: radio,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'aa7700',
+    meta: { squawk: '7700', klass: 'airliner', onGround: false },
+    billboard: general,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'aa1200',
+    meta: { squawk: '1200', klass: 'airliner', onGround: false },
+    billboard: vfr,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'aanone',
+    meta: { klass: 'airliner', onGround: false },
+    billboard: missing,
+  });
+  try {
+    assert.equal(flightsLayer.getParams().emergenciesOnly, false);
+    assert.equal(hijack.show, true);
+    assert.equal(radio.show, true);
+    assert.equal(general.show, true);
+    assert.equal(vfr.show, true);
+    assert.equal(missing.show, true);
+
+    assert.equal(flightsLayer.setParams({ emergenciesOnly: true }), true);
+    assert.equal(flightsLayer.getParams().emergenciesOnly, true);
+    assert.equal(hijack.show, true);
+    assert.equal(radio.show, true);
+    assert.equal(general.show, true);
+    assert.equal(vfr.show, false, 'other squawk hides');
+    assert.equal(missing.show, false, 'missing squawk hides');
+
+    const extra = emptyBillboard();
+    _addFlightTrackingCandidateForTest({
+      icao24: 'aa1234',
+      meta: { squawk: '1234', klass: 'airliner', onGround: false },
+      billboard: extra,
+    });
+    _applyOperatorContactVisibilityForTest();
+    assert.equal(flightsLayer.getParams().emergenciesOnly, true, 'refresh keeps the toggle');
+    assert.equal(extra.show, false);
+    assert.equal(general.show, true);
+
+    flightsLayer.setParams({ emergenciesOnly: false });
+    assert.equal(vfr.show, true);
+    assert.equal(missing.show, true);
+    assert.equal(extra.show, true);
+  } finally {
+    flightsLayer.setParams({ emergenciesOnly: false, selectedFlightsTrackingId: null });
+  }
+});
+
+test('selected non-emergency stays visible when Emergencies only is on', () => {
+  const selected = emptyBillboard();
+  const vfr = emptyBillboard();
+  const emergency = emptyBillboard();
+  _setTrackedFlightRefreshStateForTest({
+    icao24: 'sel1200',
+    meta: { squawk: '1200', klass: 'airliner', onGround: false },
+    billboard: selected,
+    billboardCollection: {},
+    viewer: emptyViewer(),
+    entity: {},
+    tracked: true,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'aa1201',
+    meta: { squawk: '1200', klass: 'airliner', onGround: false },
+    billboard: vfr,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'aa7701',
+    meta: { squawk: '7700', klass: 'airliner', onGround: false },
+    billboard: emergency,
+  });
+  try {
+    flightsLayer.setParams({ emergenciesOnly: true });
+    assert.equal(selected.show, true, 'selected VFR contact stays');
+    assert.equal(vfr.show, false);
+    assert.equal(emergency.show, true);
+
+    flightsLayer.setParams({ selectedFlightsTrackingId: null });
+    _applyOperatorContactVisibilityForTest();
+    assert.equal(selected.show, false, 'untracked non-emergency hides');
+    assert.equal(emergency.show, true);
+  } finally {
+    flightsLayer.setParams({ emergenciesOnly: false, selectedFlightsTrackingId: null });
+  }
+});
+
+test('Emergencies only ANDs with existing flights filters', () => {
+  setAltitudeBand('all', { persist: false });
+  const lowEmergency = emptyBillboard();
+  const highEmergency = emptyBillboard();
+  const highVfr = emptyBillboard();
+  const parkedEmergency = emptyBillboard();
+  _setTrackedFlightRefreshStateForTest({
+    icao24: 'and7700',
+    meta: {
+      squawk: '7700',
+      klass: 'airliner',
+      onGround: false,
+      altitude: 12_000,
+      callsign: 'UAL100',
+    },
+    billboard: highEmergency,
+    billboardCollection: {},
+    viewer: emptyViewer(),
+    entity: {},
+    tracked: false,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'and7500',
+    meta: {
+      squawk: '7500',
+      klass: 'airliner',
+      onGround: false,
+      altitude: 2000,
+      callsign: 'UAL200',
+    },
+    billboard: lowEmergency,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'and1200',
+    meta: {
+      squawk: '1200',
+      klass: 'airliner',
+      onGround: false,
+      altitude: 12_000,
+      callsign: 'UAL300',
+    },
+    billboard: highVfr,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: 'andpark',
+    meta: {
+      squawk: '7700',
+      klass: 'helicopter',
+      onGround: true,
+      altitude: 0,
+      callsign: 'N123AB',
+    },
+    billboard: parkedEmergency,
+  });
+  try {
+    flightsLayer.setParams({
+      emergenciesOnly: true,
+      airborneOnly: false,
+      callsignPrefixes: '',
+      aircraftClassFilter: 'all',
+    });
+    assert.equal(highEmergency.show, true);
+    assert.equal(lowEmergency.show, true);
+    assert.equal(highVfr.show, false);
+    assert.equal(parkedEmergency.show, true);
+
+    flightsLayer.setParams({ airborneOnly: true });
+    assert.equal(highEmergency.show, true);
+    assert.equal(parkedEmergency.show, false, 'AND: grounded emergency hides under airborne-only');
+
+    setAltitudeBand('gt30k', { persist: false });
+    assert.equal(highEmergency.show, true, 'AND: in-band emergency remains');
+    assert.equal(lowEmergency.show, false, 'AND: in-emergency but out-of-band hides');
+
+    setAltitudeBand('all', { persist: false });
+    flightsLayer.setParams({ airborneOnly: false, callsignPrefixes: 'UAL' });
+    assert.equal(highEmergency.show, true, 'AND: matching emergency remains');
+    assert.equal(parkedEmergency.show, false, 'AND: prefix still hides a non-UAL emergency');
+
+    flightsLayer.setParams({ callsignPrefixes: '', aircraftClassFilter: 'airliner' });
+    assert.equal(highEmergency.show, true);
+    assert.equal(parkedEmergency.show, false, 'AND: class chip still hides a helo emergency');
+  } finally {
+    setAltitudeBand('all', { persist: false });
+    flightsLayer.setParams({
+      emergenciesOnly: false,
+      airborneOnly: false,
+      callsignPrefixes: '',
+      aircraftClassFilter: 'all',
+      selectedFlightsTrackingId: null,
+    });
+  }
+});
+
+test('Emergencies only persists on flights.emergenciesOnly and paints as a chip', () => {
+  const defaults = createDefaultLayerState().options.flights;
+  assert.equal(defaults.emergenciesOnly, false);
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=f'));
+  assert.equal(omitted.options.flights.emergenciesOnly, false, 'absent token stays OFF');
+
+  const encodedOn = encodeLayerStateParams(new URLSearchParams('v=2'), normalizeLayerState({
+    enabledLayerIds: ['flights'],
+    options: { flights: { emergenciesOnly: true } },
+  }));
+  assert.match(String(encodedOn.get('lo')), /f\.q\.1/);
+  const decoded = decodeLayerStateParams(encodedOn);
+  assert.equal(decoded.options.flights.emergenciesOnly, true);
+
+  flightsLayer.setParams({ emergenciesOnly: false });
+  assert.equal(flightsLayer.getParams().emergenciesOnly, false);
+  flightsLayer.setParams({ emergenciesOnly: true });
+  assert.equal(flightsLayer.getParams().emergenciesOnly, true);
+  const chip = flightsLayer.getRowControls().chips.find((entry) => entry.id === EMERGENCIES_ONLY_CHIP_ID);
+  assert.equal(chip.label, EMERGENCIES_ONLY_CHIP_LABEL);
+  assert.equal(chip.active, true);
+  assert.deepEqual(chip.params, { emergenciesOnly: false });
+  flightsLayer.setParams({ emergenciesOnly: false });
+  assert.equal(flightsLayer.getRowControls().chips.find((entry) => entry.id === EMERGENCIES_ONLY_CHIP_ID).active, false);
+});
+
+test('Emergencies only does not change emergency paint', () => {
+  resetEmergencyHighlightForTest();
+  setEmergencyHighlightEnabled(true, { persist: false });
+  try {
+    _setTrackedFlightRefreshStateForTest({
+      icao24: 'paint70',
+      meta: { squawk: '7700', klass: 'large', onGround: false },
+      billboard: emptyBillboard(),
+      billboardCollection: {},
+      viewer: emptyViewer(),
+      entity: {},
+      tracked: false,
+    });
+    _addFlightTrackingCandidateForTest({
+      icao24: 'paint12',
+      meta: { squawk: '1200', klass: 'small', onGround: false },
+      billboard: emptyBillboard(),
+    });
+    const beforeEmergency = _contactIconColorForTest('paint70');
+    const beforeVfr = _contactIconColorForTest('paint12');
+    flightsLayer.setParams({ emergenciesOnly: true });
+    assert.ok(beforeEmergency.equals(_contactIconColorForTest('paint70')));
+    assert.ok(beforeVfr.equals(_contactIconColorForTest('paint12')));
+    assert.ok(_contactIconColorForTest('paint70').equals(Cesium.Color.fromCssColorString(EMERGENCY_HIGHLIGHT_CSS)));
+    assert.ok(_contactIconColorForTest('paint12').equals(Cesium.Color.WHITE));
+  } finally {
+    resetEmergencyHighlightForTest();
+    flightsLayer.setParams({ emergenciesOnly: false, selectedFlightsTrackingId: null });
+  }
+});
+
+test('Emergencies only is a flights-row chip: no DISPLAY rail, no new /api', () => {
+  const html = root('index.html');
+  const ui = src('ui.js');
+  const flights = data('flights.js');
+  const helper = data('emergencySquawk.js');
+  const military = data('militaryFlights.js');
+  assert.doesNotMatch(html, /emergencies-only|Emergencies only/);
+  assert.doesNotMatch(ui, /emergenciesOnly|_initEmergenciesOnly/);
+  assert.match(flights, /emergenciesOnlyChipModel\(_emergenciesOnly\)/);
+  assert.match(flights, /passesEmergenciesOnlyFilter/);
+  assert.match(flights, /_emergenciesOnlyMatcher/);
+  assert.doesNotMatch(flights, /opensky-network|news\.google|telegeography|quantum-earth/i);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(helper, /fetch\(|XMLHttpRequest|EventSource/);
+  assert.doesNotMatch(military, /_emergenciesOnlyMatcher|emergenciesOnlyChipModel/);
+  assert.match(flights, /shouldPaintEmergencyHighlight/);
 });
 
 test('legal: public squawk only, Meridian title, MIT credit unchanged', () => {

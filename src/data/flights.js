@@ -42,8 +42,10 @@ import {
 import { isWatchHighlighted, subscribeWatchlist } from './watchlist.js';
 import {
   EMERGENCY_HIGHLIGHT_CSS,
+  emergenciesOnlyChipModel,
   getEmergencyHighlightEnabled,
   normalizeSquawk,
+  passesEmergenciesOnlyFilter,
   shouldPaintEmergencyHighlight,
   subscribeEmergencyHighlightEnabled,
 } from './emergencySquawk.js';
@@ -357,6 +359,9 @@ let _aircraftClassFilter = AIRCRAFT_CLASS_FILTER_ALL;
 // the operator arms Airborne only. Must stay in lockstep with layerState.js,
 // militaryFlights.js, ui.js, and the unpressed #airborne-only-toggle markup.
 let _airborneOnly = false;
+// PLAN 166: hide non-emergency civil contacts. Default OFF — current draw stays
+// until the operator arms Emergencies only. Persist key: flights.emergenciesOnly.
+let _emergenciesOnly = false;
 let _showClimb = true;
 let _showLevel = true;
 let _showDescent = true;
@@ -365,6 +370,14 @@ function _airborneOnlyMatcher(contact) {
   return passesAirborneOnlyFilter({
     onGround: contact?.onGround === true,
     airborneOnly: _airborneOnly,
+  });
+}
+
+/** PLAN 166 — reuses isEmergencySquawk via passesEmergenciesOnlyFilter. */
+function _emergenciesOnlyMatcher(contact) {
+  return passesEmergenciesOnlyFilter({
+    squawk: contact?.squawk,
+    emergenciesOnly: _emergenciesOnly,
   });
 }
 
@@ -791,7 +804,7 @@ function _verticalRateAndMatcher(contact) {
 }
 
 /**
- * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate).
+ * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only).
  * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
  * not here — counts stay honest.
  */
@@ -800,7 +813,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher],
   });
 }
 
@@ -3689,6 +3702,7 @@ export function _setTrackedFlightRefreshStateForTest({
   _backoff = false;
   _retryAt = 0;
   _airborneOnly = false;
+  _emergenciesOnly = false;
   _speedMinKt = null;
   _speedMaxKt = null;
   _showClimb = true;
@@ -4232,7 +4246,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher],
   });
 }
 
@@ -5098,7 +5112,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5163,6 +5177,10 @@ const flightsLayer = {
       _airborneOnly = params.airborneOnly;
       _applyOperatorContactVisibility();
     }
+    if (typeof params.emergenciesOnly === 'boolean' && params.emergenciesOnly !== _emergenciesOnly) {
+      _emergenciesOnly = params.emergenciesOnly;
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -5192,6 +5210,7 @@ const flightsLayer = {
       models3d: _models3dEnabled,
       models3dMode: _models3dMode,
       airborneOnly: _airborneOnly,
+      emergenciesOnly: _emergenciesOnly,
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),
@@ -5210,6 +5229,7 @@ const flightsLayer = {
       chips: [
         ...headingSectorChipModels(getHeadingSectors()),
         ..._hideStaleRowControls().chips,
+        emergenciesOnlyChipModel(_emergenciesOnly),
       ],
       field: callsignPrefixRowField(),
     };
