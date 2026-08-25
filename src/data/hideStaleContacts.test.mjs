@@ -17,6 +17,7 @@ import {
   resetHideStaleEnabledForTest,
   setHideStaleEnabled,
 } from './inFlightFilters.js';
+import { resetAltitudeBandForTest, setAltitudeBand } from './flightAltitudeBand.js';
 import flightsLayer, {
   _addFlightTrackingCandidateForTest,
   _setFlightFeedHealthForTest,
@@ -64,12 +65,24 @@ function seedCommercial({ trackedIcao = null, contacts }) {
     viewer: { camera: { positionCartographic: null }, scene: { requestRender() {} }, entities: { remove() {} } },
     tracked: trackedIcao === first.icao24,
     models: first.model ? [[first.icao24, first.model]] : [],
-    meta: { callsign: first.callsign || first.icao24, altitude: 10_668, klass: 'airliner', onGround: false },
+    meta: {
+      callsign: first.callsign || first.icao24,
+      altitude: 10_668,
+      klass: 'airliner',
+      onGround: false,
+      velocity: first.velocity ?? 128.6,
+    },
   });
   for (const contact of contacts.slice(1)) {
     _addFlightTrackingCandidateForTest({
       icao24: contact.icao24,
-      meta: { callsign: contact.callsign || contact.icao24, altitude: 11_000, klass: 'airliner', onGround: false },
+      meta: {
+        callsign: contact.callsign || contact.icao24,
+        altitude: 11_000,
+        klass: 'airliner',
+        onGround: false,
+        velocity: contact.velocity ?? 128.6,
+      },
       billboard: contact.billboard,
     });
     if (contact.model) {
@@ -92,12 +105,24 @@ function seedMilitary({ trackedIcao = null, contacts }) {
     viewer: { camera: { positionCartographic: null }, scene: { requestRender() {} }, entities: { remove() {} } },
     tracked: trackedIcao === first.icao24,
     models: first.model ? [[first.icao24, first.model]] : [],
-    meta: { callsign: first.callsign || first.icao24, altitudeFt: 28_000, klass: 'fighter', onGround: false },
+    meta: {
+      callsign: first.callsign || first.icao24,
+      altitudeFt: 28_000,
+      klass: 'fighter',
+      onGround: false,
+      speedMps: first.speedMps ?? 128.6,
+    },
   });
   for (const contact of contacts.slice(1)) {
     _addMilitaryTrackingCandidateForTest({
       icao24: contact.icao24,
-      meta: { callsign: contact.callsign || contact.icao24, altitudeFt: 30_000, klass: 'fighter', onGround: false },
+      meta: {
+        callsign: contact.callsign || contact.icao24,
+        altitudeFt: 30_000,
+        klass: 'fighter',
+        onGround: false,
+        speedMps: contact.speedMps ?? 128.6,
+      },
       billboard: contact.billboard,
     });
   }
@@ -113,6 +138,9 @@ function detectedIds(layer) {
 
 afterEach(() => {
   resetHideStaleEnabledForTest();
+  resetAltitudeBandForTest();
+  flightsLayer.setParams({ speedMinKt: null, speedMaxKt: null });
+  militaryFlightsLayer.setParams({ speedMinKt: null, speedMaxKt: null });
 });
 
 test('hide stale defaults off and is not missing-polls-or-backoff', () => {
@@ -258,6 +286,46 @@ test('military layer honors the same Hide stale toggle', () => {
   assert.deepEqual(nearbyIds(militaryFlightsLayer, live), ['ae0001']);
   militaryFlightsLayer.setParams({ hideStale: false });
   assert.equal(stale.show, true);
+});
+
+test('Hide stale ANDs with the landed altitude band (PLAN 93)', () => {
+  resetHideStaleEnabledForTest();
+  resetAltitudeBandForTest();
+  const highLive = billboard();
+  const highStale = billboard();
+  seedCommercial({
+    contacts: [
+      { icao24: 'high01', billboard: highLive, callsign: 'HIGH01' },
+      { icao24: 'high02', billboard: highStale, callsign: 'HIGH02' },
+    ],
+  });
+  _setFlightFeedHealthForTest({ missingPolls: new Map([['high02', 1]]) });
+  setAltitudeBand('gt30k', { persist: false });
+  flightsLayer.setParams({ hideStale: true });
+  assert.equal(highLive.show, true, 'in-band live contact remains');
+  assert.equal(highStale.show, false, 'in-band stale ghost is still hidden');
+  setAltitudeBand('surface', { persist: false });
+  assert.equal(highLive.show, false, 'altitude band still hides airborne contacts');
+  assert.equal(highStale.show, false, 'stale ghost stays hidden under AND');
+});
+
+test('Hide stale ANDs with the landed ground-speed band (PLAN 96)', () => {
+  resetHideStaleEnabledForTest();
+  const cruiseLive = billboard();
+  const cruiseStale = billboard();
+  seedCommercial({
+    contacts: [
+      { icao24: 'spd001', billboard: cruiseLive, callsign: 'SPD001' },
+      { icao24: 'spd002', billboard: cruiseStale, callsign: 'SPD002' },
+    ],
+  });
+  _setFlightFeedHealthForTest({ missingPolls: new Map([['spd002', 1]]) });
+  flightsLayer.setParams({ hideStale: true });
+  assert.equal(cruiseLive.show, true, 'in-band live contact remains');
+  assert.equal(cruiseStale.show, false, 'in-band stale ghost is still hidden');
+  flightsLayer.setParams({ speedMinKt: 400, speedMaxKt: null });
+  assert.equal(cruiseLive.show, false, 'speed band still hides slower live contacts');
+  assert.equal(cruiseStale.show, false, 'stale ghost stays hidden under AND');
 });
 
 test('Hide stale persists on existing flight layer options and paints as a chip', () => {

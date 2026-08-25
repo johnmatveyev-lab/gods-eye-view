@@ -754,6 +754,7 @@ function _revealUntrackedBillboard(icao24, bb) {
  * unless a 3D model already owns the visual; the next fleet tick re-applies
  * the horizon cull. Empty band → zero visible, no hang.
  * Emergency squawk does not punch through this hide.
+ * Hide stale ANDs here so a band change cannot resurrect a coasting ghost.
  */
 function _applyAltitudeBandVisibility() {
   _applyInFlightFilterVisibility();
