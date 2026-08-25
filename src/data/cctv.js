@@ -116,6 +116,13 @@ import {
   sourceMatchesHeadingConfidence,
   writeCctvHeadingConfidenceFilter,
 } from './cctvHeadingConfidenceFilter.js';
+import {
+  DEFAULT_CCTV_FEED_TYPE_FILTER,
+  normalizeCctvFeedTypeFilter,
+  readCctvFeedTypeFilter,
+  sourceMatchesFeedTypeFilter,
+  writeCctvFeedTypeFilter,
+} from './cctvFeedTypeFilter.js';
 
 // ---------------------------------------------------------------------------
 // API endpoints
@@ -345,6 +352,8 @@ let _tilesReadyReenqueued = false;
 // camera renders the direct-manipulation gizmo. Reset on layer disable.
 let _calibrationMode = false;
 let _gizmo = null;
+/** Image | MJPEG | Video chips. Default all on matches the current catalog. */
+let _feedTypeFilter = { ...DEFAULT_CCTV_FEED_TYPE_FILTER };
 let _lastTransientNotifyAt = 0;
 // Cached handle on the active Google Photorealistic 3D Tileset, discovered
 // lazily from scene.primitives. Shared mesh-floor sampling is gated on its
@@ -2640,6 +2649,70 @@ function getActiveRecord() {
   return fallback;
 }
 
+function applyPersistedCctvFeedTypes(storage) {
+  _feedTypeFilter = readCctvFeedTypeFilter(storage);
+}
+
+/**
+ * Whether a runtime record clears the feed-type chips.
+ * The selected camera stays visible when its chip is off.
+ * @param {object|null|undefined} record
+ * @param {{keepActive?: boolean}} [options]
+ * @returns {boolean}
+ */
+export function cctvRecordMatchesFeedType(record, { keepActive = true } = {}) {
+  return sourceMatchesFeedTypeFilter(record?.camera, _feedTypeFilter, {
+    keepCameraId: keepActive ? _activeCameraId : null,
+  });
+}
+
+function visibleCatalogRecords({ keepActive = true } = {}) {
+  return _records.filter((record) => catalogRecordVisible(record, { keepActive }));
+}
+
+/**
+ * Hide billboards for feed types whose chips are off. Selected stays.
+ * When a viewer is present, horizon culling ANDs with this catalog filter.
+ * @returns {void}
+ */
+function applyFeedTypeVisibility() {
+  if (_viewer && !_viewer.isDestroyed?.()) {
+    refreshHorizonCulling();
+    return;
+  }
+  for (const record of _records) {
+    if (!record?.billboard) continue;
+    record.billboard.show = cctvRecordMatchesFeedType(record);
+  }
+}
+
+/**
+ * Apply Image | MJPEG | Video chips to the in-memory catalog.
+ * Does not refetch /api/cctv/sources or /frame.
+ * @param {unknown} filter
+ * @param {{setItem?: Function}|null|undefined} [storage]
+ * @returns {{image: boolean, mjpeg: boolean, video: boolean}}
+ */
+export function setCctvFeedTypes(filter, storage, { notify = true } = {}) {
+  const next = writeCctvFeedTypeFilter(
+    normalizeCctvFeedTypeFilter({ ..._feedTypeFilter, ...filter }),
+    storage,
+  );
+  const changed = next.image !== _feedTypeFilter.image
+    || next.mjpeg !== _feedTypeFilter.mjpeg
+    || next.video !== _feedTypeFilter.video;
+  _feedTypeFilter = next;
+  if (changed) {
+    applyFeedTypeVisibility();
+    if (_viewer && !_viewer.isDestroyed?.()) {
+      refreshCoverageStyles();
+      refreshAmbientCards();
+    }
+    if (notify) notifyListeners();
+  }
+  return next;
+}
+
 /**
  * Pauses video playback on all non-active camera projections and resumes
  * the active one (if projection is enabled).
@@ -2727,12 +2800,11 @@ function rebuildViewshedVolume(record, isActive) {
   record.viewshedActiveTint = !!isActive;
 }
 
-function catalogRecordVisible(record) {
-  return sourceMatchesHideNoFeed(record?.camera, _hideNoFeed, {
-    selectedId: _activeCameraId,
-  }) && sourceMatchesHeadingConfidence(record?.camera, _headingConfidence, {
-    selectedId: _activeCameraId,
-  });
+function catalogRecordVisible(record, { keepActive = true } = {}) {
+  const selectedId = keepActive ? _activeCameraId : null;
+  return sourceMatchesHideNoFeed(record?.camera, _hideNoFeed, { selectedId })
+    && sourceMatchesHeadingConfidence(record?.camera, _headingConfidence, { selectedId })
+    && cctvRecordMatchesFeedType(record, { keepActive });
 }
 
 /**
@@ -3376,7 +3448,7 @@ function nearestCameraIdToViewer() {
   const lon = Cesium.Math.toDegrees(carto.longitude);
 
   let best = null;
-  for (const record of _records) {
+  for (const record of visibleCatalogRecords({ keepActive: false })) {
     const distKm = haversineKm(lat, lon, record.camera.lat, record.camera.lon);
     if (!best || distKm < best.distKm) {
       best = { id: record.camera.id, distKm };
@@ -3555,6 +3627,7 @@ function uiState() {
     activeCameraId: activeId,
     activeCamera: active ? getPublicCameraState(active, activeId) : null,
     cameras: _records.map((record) => getPublicCameraState(record, activeId)),
+    feedTypes: { ..._feedTypeFilter },
     summary: buildSummaryText(),
   };
   return payload;
@@ -4062,6 +4135,7 @@ function clearRuntimeState() {
   // Task 5: the applied-regime tracker is record-set-scoped — a fresh init
   // recomputes it against the then-current scene.
   _lastAppliedRegime = null;
+  _feedTypeFilter = { ...DEFAULT_CCTV_FEED_TYPE_FILTER };
 }
 
 /**
@@ -4074,6 +4148,7 @@ function clearRuntimeState() {
  * @param {boolean} [options.enabled=true] Layer enabled state.
  * @param {'off'|'on'|'viewshed'} [options.coverageMode='on'] Coverage mode.
  * @param {boolean} [options.showProjection=false] Projection visibility.
+ * @param {object} [options.feedTypes] Image | MJPEG | Video chip map.
  * @returns {void}
  */
 export function _setCctvCoverageStateForTest({
@@ -4085,6 +4160,7 @@ export function _setCctvCoverageStateForTest({
   showProjection = false,
   hideNoFeed = false,
   headingConfidence = undefined,
+  feedTypes,
 } = {}) {
   _viewer = viewer;
   _records = Array.isArray(records) ? records : [];
@@ -4104,6 +4180,9 @@ export function _setCctvCoverageStateForTest({
   if (typeof hideNoFeed === 'boolean') _hideNoFeed = hideNoFeed;
   if (headingConfidence != null) {
     _headingConfidence = normalizeCctvHeadingConfidenceFilter(headingConfidence);
+  }
+  if (feedTypes !== undefined) {
+    _feedTypeFilter = normalizeCctvFeedTypeFilter(feedTypes);
   }
 }
 
@@ -4154,7 +4233,8 @@ function focusCamera(cameraId, duration = 2.2) {
  * @param {number} nowMs - Current timestamp in milliseconds.
  */
 export function maybeAutoHop(nowMs) {
-  if (!_autoHop || _autoHopSuspended || !_enabled || _records.length < 2) return;
+  const walkable = visibleCatalogRecords({ keepActive: false });
+  if (!_autoHop || _autoHopSuspended || !_enabled || walkable.length < 2) return;
   if (nowMs - _lastHopAt < _autoHopSec * 1000) return;
 
   const viewKey = currentViewContext();
@@ -4174,11 +4254,12 @@ export function maybeAutoHop(nowMs) {
   }
 
   const nextIdx = cctvCycleIndex(
-    _records.findIndex((record) => record.camera.id === _activeCameraId),
+    walkable.findIndex((record) => record.camera.id === _activeCameraId),
     1,
-    _records.length,
+    walkable.length,
   );
-  setActiveCamera(_records[nextIdx].camera.id);
+  if (nextIdx < 0) return;
+  setActiveCamera(walkable[nextIdx].camera.id);
   _lastHopAt = nowMs;
 }
 
@@ -4290,6 +4371,7 @@ const cctvLayer = {
     } catch {
       _headingConfidence = { high: true, medium: true, low: true };
     }
+    applyPersistedCctvFeedTypes();
 
     _billboards = new Cesium.BillboardCollection();
     _viewer.scene.primitives.add(_billboards);
@@ -4520,7 +4602,8 @@ const cctvLayer = {
       return Boolean(coverage && _recordById.has(coverage[1]));
     });
     if (!_activeCameraId && _records.length) {
-      _activeCameraId = _records[0].camera.id;
+      const firstVisible = visibleCatalogRecords({ keepActive: false })[0] || _records[0];
+      _activeCameraId = firstVisible.camera.id;
       _autoHopSuspended = false;
     }
     const activeRecord = getActiveRecord();
@@ -4777,6 +4860,9 @@ const cctvLayer = {
         applyCatalogVisibility();
       }
     }
+    if (params.feedTypes != null || params.feedTypeFilter != null) {
+      setCctvFeedTypes(params.feedTypes ?? params.feedTypeFilter, undefined, { notify: false });
+    }
     if (params.focusSelected && _activeCameraId) {
       focusCamera(_activeCameraId, Number(params.focusDurationSec) || 1.8);
     }
@@ -4810,6 +4896,7 @@ const cctvLayer = {
       autoHopSec: _autoHopSec,
       hideUnhealthy: _hideUnhealthy,
       selectedCameraId: active?.camera.id || null,
+      feedTypes: { ..._feedTypeFilter },
       calibration: active?.camera ? {
         cameraId: active.camera.id,
         values: { ...normalizeCalibration(active.camera.calibration) },
@@ -4825,19 +4912,20 @@ const cctvLayer = {
    * @returns {{ position: Cesium.Cartesian3, id: string, type: string }[]}
    */
   getDetectableObjects(options = {}) {
-    if (!_enabled || _records.length === 0) return [];
+    const visible = visibleCatalogRecords();
+    if (!_enabled || visible.length === 0) return [];
     const maxCount = Number.isFinite(options.maxCount)
       ? Math.max(1, Math.floor(options.maxCount))
-      : _records.length;
+      : visible.length;
     const seed = Number.isFinite(options.seed) ? Math.floor(options.seed) : 0;
-    const stride = Math.max(1, Math.ceil(_records.length / maxCount));
+    const stride = Math.max(1, Math.ceil(visible.length / maxCount));
     const start = seed % stride;
 
     const objects = [];
-    for (let i = start; i < _records.length; i += stride) {
-      const camera = _records[i].camera;
+    for (let i = start; i < visible.length; i += stride) {
+      const camera = visible[i].camera;
       objects.push({
-        position: _records[i].position,
+        position: visible[i].position,
         sourceId: camera.id,
         id: `CAM-${camera.id}`,
         type: 'CAM',
@@ -4899,6 +4987,16 @@ const cctvLayer = {
   },
 
   /**
+   * Hide stills or motion streams without refetching the catalog.
+   * The selected camera stays even when its chip is off.
+   * @param {unknown} filter
+   * @returns {{image: boolean, mjpeg: boolean, video: boolean}}
+   */
+  setFeedTypes(filter) {
+    return setCctvFeedTypes(filter);
+  },
+
+  /**
    * Selects a camera by ID and optionally flies to it.
    * @param {string} cameraId - Camera ID to select.
    * @param {Object} [options={}]
@@ -4934,14 +5032,16 @@ const cctvLayer = {
    * @returns {string|null} The newly active camera ID, or null if catalog is empty.
    */
   cycleCamera(step = 1, options = {}) {
-    if (!_records.length) return null;
+    const walkable = visibleCatalogRecords({ keepActive: false });
+    if (!walkable.length) return null;
     const current = getActiveRecord();
     const nextIdx = cctvCycleIndex(
-      _records.findIndex((record) => record === current),
+      walkable.findIndex((record) => record === current),
       step,
-      _records.length,
+      walkable.length,
     );
-    const nextId = _records[nextIdx].camera.id;
+    if (nextIdx < 0) return null;
+    const nextId = walkable[nextIdx].camera.id;
     setActiveCamera(nextId);
     if (options.focus) {
       focusCamera(nextId, options.durationSec || 1.8);

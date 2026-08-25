@@ -31,6 +31,7 @@ import {
   readCctvHeadingConfidenceFilter,
   writeCctvHeadingConfidenceFilter,
 } from './cctvHeadingConfidenceFilter.js';
+import { filterVisibleCctvCatalog } from './cctvFeedTypeFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -43,6 +44,8 @@ const CATALOG = Object.freeze([
     cityId: 'austin',
     provider: 'Austin Transportation & Public Works',
     frameUrl: '/api/cctv/frame/atx-1?label=Congress&city=Austin',
+    feedType: 'image',
+    feedConfigured: true,
   },
   {
     id: 'atx-2',
@@ -51,6 +54,8 @@ const CATALOG = Object.freeze([
     cityId: 'austin',
     provider: 'Austin Transportation & Public Works',
     frameUrl: '/api/cctv/frame/atx-2?label=Lamar&city=Austin',
+    feedType: 'mjpeg',
+    feedConfigured: true,
   },
   {
     id: 'ca-d4-tv102',
@@ -59,6 +64,8 @@ const CATALOG = Object.freeze([
     cityId: 'ca-d4',
     provider: 'Caltrans',
     frameUrl: '/api/cctv/frame/ca-d4-tv102?label=I-580&city=Oakland',
+    feedType: 'hls',
+    feedConfigured: true,
   },
   {
     id: 'ca-d7-tv9',
@@ -67,6 +74,9 @@ const CATALOG = Object.freeze([
     cityId: 'ca-d7',
     provider: 'Caltrans',
     frameUrl: '/api/cctv/frame/ca-d7-tv9?label=US-101&city=Los%20Angeles',
+    feedType: 'mp4',
+    feedConfigured: false,
+    sourceStatus: 'no-feed',
   },
   {
     id: 'tfl-00002.00865',
@@ -75,6 +85,8 @@ const CATALOG = Object.freeze([
     cityId: 'london',
     provider: 'Transport for London',
     frameUrl: '/api/cctv/frame/tfl-00002.00865?label=Oxford%20Circus&city=London',
+    feedType: 'webm',
+    feedConfigured: true,
   },
 ]);
 
@@ -205,6 +217,15 @@ test('CCTV panel markup has a city/source filter above the camera list', () => {
     'city filter must sit above the camera list',
   );
   assert.match(panel[0], /aria-label="CCTV city or source"/);
+  assert.match(panel[0], /id="cctv-feed-type-filter"/);
+  assert.ok(
+    panel[0].indexOf('id="cctv-city-filter"') < panel[0].indexOf('id="cctv-feed-type-filter"'),
+    'feed-type chips sit next to the city filter',
+  );
+  assert.ok(
+    panel[0].indexOf('id="cctv-feed-type-filter"') < panel[0].indexOf('id="cctv-camera-select"'),
+    'feed-type chips stay with city / Hide no feed, above the camera list',
+  );
   assert.doesNotMatch(panel[0], /OpenSky/i);
   assert.doesNotMatch(panel[0], /Google News/i);
   assert.doesNotMatch(panel[0], /TeleGeography/i);
@@ -222,6 +243,7 @@ test('panel render filters the camera list and still uses the existing frame URL
   assert.ok(renderer, '_renderCctvState is missing');
   assert.match(renderer[0], /filterVisibleCctvSources/);
   assert.match(renderer[0], /_cctvCityFilter/);
+  assert.match(renderer[0], /feedTypes/);
   assert.match(renderer[0], /activeCamera\?\.frameUrl/);
   assert.match(renderer[0], /_syncCctvPanelViewport|_clampToViewport/);
   assert.doesNotMatch(ui, /\/api\/cctv\/cities/);
@@ -643,4 +665,35 @@ test('panel render ANDs heading confidence with city/source and keeps the select
   assert.match(renderer[0], /_cctvCityFilterValue/);
   assert.doesNotMatch(ui, /\/api\/cctv\/heading/);
   assert.doesNotMatch(ui, /\/api\/cctv\/filter/);
+});
+
+test('Hide no feed + one city + Video still AND on the in-memory catalog', () => {
+  const visible = filterVisibleCctvCatalog(CATALOG, {
+    city: 'austin',
+    feedTypes: { image: false, mjpeg: false, video: true },
+    hideNoFeed: true,
+  });
+  assert.deepEqual(visible.map((source) => source.id), []);
+
+  const austinMjpeg = filterVisibleCctvCatalog(CATALOG, {
+    city: 'austin',
+    feedTypes: { image: false, mjpeg: true, video: false },
+    hideNoFeed: true,
+  });
+  assert.deepEqual(austinMjpeg.map((source) => source.id), ['atx-2']);
+
+  const caltransVideo = filterVisibleCctvCatalog(CATALOG, {
+    city: 'Caltrans',
+    feedTypes: { image: false, mjpeg: false, video: true },
+    hideNoFeed: true,
+  });
+  assert.deepEqual(caltransVideo.map((source) => source.id), ['ca-d4-tv102']);
+  assert.equal(caltransVideo.some((source) => source.id === 'ca-d7-tv9'), false);
+
+  const allOn = filterVisibleCctvCatalog(CATALOG, {
+    city: '',
+    feedTypes: { image: true, mjpeg: true, video: true },
+    hideNoFeed: false,
+  });
+  assert.deepEqual(allOn.map((source) => source.id), CATALOG.map((source) => source.id));
 });

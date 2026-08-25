@@ -64,7 +64,10 @@ import cctvLayer, {
   setCctvCardPresentationOptions,
   setActiveCamera,
   applyCctvCatalogVisibility,
+  setCctvFeedTypes,
+  cctvRecordMatchesFeedType,
 } from './cctv.js';
+import { DEFAULT_CCTV_FEED_TYPE_FILTER } from './cctvFeedTypeFilter.js';
 import {
   CCTV_ACTIVATION_RESULT,
   CCTV_FOCUS_REQUEST_EVENT,
@@ -1486,4 +1489,53 @@ test('heading-confidence visibility re-applies from memory and does not refetch 
   assert.match(source, /params\.headingConfidence != null/);
   assert.match(source, /applyCatalogVisibility\(\)/);
   assert.doesNotMatch(source, /\/api\/cctv\/heading/);
+});
+
+test('Image off hides still billboards and keeps the selected image camera', () => {
+  const still = makeDeselectRecord('still-cam', 0);
+  still.camera.feedType = 'image';
+  still.billboard = { show: true, position: { x: 1, y: 2, z: 3 } };
+  const motion = makeDeselectRecord('mjpeg-cam', 1);
+  motion.camera.feedType = 'mjpeg';
+  motion.billboard = { show: true, position: { x: 4, y: 5, z: 6 } };
+  const video = makeDeselectRecord('mp4-cam', 2);
+  video.camera.feedType = 'mp4';
+  video.billboard = { show: true, position: { x: 7, y: 8, z: 9 } };
+  _setCctvOverlayHostForTest({ setEntries() {}, setVisible() {}, clearSource() {} });
+  try {
+    _setCctvCoverageStateForTest({
+      records: [still, motion, video],
+      activeCameraId: 'still-cam',
+      enabled: true,
+      feedTypes: { image: false, mjpeg: true, video: true },
+    });
+    assert.equal(cctvRecordMatchesFeedType(still), true, 'selected image camera stays');
+    assert.equal(cctvRecordMatchesFeedType(motion), true);
+    assert.equal(cctvRecordMatchesFeedType(video), true);
+    assert.equal(cctvLayer.getUIState().activeCameraId, 'still-cam');
+    assert.deepEqual(cctvLayer.getUIState().feedTypes, { image: false, mjpeg: true, video: true });
+
+    _setCctvCoverageStateForTest({
+      records: [still, motion, video],
+      activeCameraId: 'mjpeg-cam',
+      enabled: true,
+      feedTypes: DEFAULT_CCTV_FEED_TYPE_FILTER,
+    });
+    assert.equal(cctvRecordMatchesFeedType(still), true);
+    setCctvFeedTypes({ image: false, mjpeg: true, video: true }, undefined, { notify: false });
+    assert.equal(cctvRecordMatchesFeedType(still), false);
+    assert.equal(cctvRecordMatchesFeedType(motion), true);
+    assert.equal(cctvRecordMatchesFeedType(video), true);
+    assert.equal(still.billboard.show, false);
+    assert.equal(motion.billboard.show, true);
+    assert.equal(video.billboard.show, true);
+    assert.equal(cctvLayer.getUIState().activeCameraId, 'mjpeg-cam');
+  } finally {
+    setCctvFeedTypes(DEFAULT_CCTV_FEED_TYPE_FILTER, undefined, { notify: false });
+    _setCctvOverlayHostForTest();
+    _setCctvCoverageStateForTest({
+      enabled: false,
+      feedTypes: DEFAULT_CCTV_FEED_TYPE_FILTER,
+    });
+  }
 });
