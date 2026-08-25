@@ -18,7 +18,7 @@ The golden rule: **secret-bearing API keys stay on the server side.** Vite middl
 | Key | Where it lives | How the browser uses it |
 |-----|----------------|--------------------------|
 | `OPENAI_API_KEY` | Server only | Browser fetches a short-lived **ephemeral** Realtime session token from `/api/realtime/token`; the real key never ships. Hosted Pro is required when Clerk is configured. |
-| `AISSTREAM_API_KEY` | Server only | Server holds the AISStream websocket; browser polls the same-origin `/api/ais-live` cache. That path is Vite-only — do not add a Vercel wrapper. |
+| `AISSTREAM_API_KEY` | Server only | Vite holds the AISStream websocket; the browser polls the same-origin `/api/ais-live` cache. Hosted answers that path with an unsupported empty stub and does not open a websocket. |
 | `TOMTOM_API_KEY` | Server only | Browser fetches same-origin `/api/tomtom/*` (Vite plugin locally; Vercel `api/tomtom/[...path].js` in production). Status and error JSON never echo the key or upstream URL. |
 | `CLERK_SECRET_KEY` | Server only | Verifies session JWTs for `/api/billing/*` and hosted voice |
 | `STRIPE_SECRET_KEY` / `STRIPE_WEBHOOK_SECRET` | Server only | Creates Checkout sessions and verifies `/api/stripe/webhook` (Vite middleware locally; Vercel `/api` functions in production) |

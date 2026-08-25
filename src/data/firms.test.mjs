@@ -102,7 +102,7 @@ test('Vercel Node entrypoints forward to handleFirmsHttp', () => {
     assert.doesNotMatch(source, /opensky-network\.org|news\.google\.com|telegeography|quantum-earth/i);
   }
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
-  assert.equal(existsSync(path.join(ROOT, 'api/ais-live')), false);
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live/[...path].js')), true);
   assert.equal(existsSync(path.join(ROOT, 'api/tomtom.js')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/tomtom/[...path].js')), true);
 

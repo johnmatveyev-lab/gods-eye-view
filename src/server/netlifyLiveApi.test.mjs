@@ -116,6 +116,7 @@ test('Netlify adapter is a thin Vercel-handler map; Vercel files stay untouched'
   assert.doesNotMatch(adapter, /quantum-earth/i);
   assert.match(adapter, /api\/\[\.\.\.path\]\.js/);
   assert.match(adapter, /api\/billing\/\[\.\.\.path\]\.js/);
+  assert.match(adapter, /api\/ais-live\/\[\.\.\.path\]\.js/);
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
@@ -125,6 +126,11 @@ test('Netlify adapter is a thin Vercel-handler map; Vercel files stay untouched'
 
   assert.equal(existsSync(path.join(ROOT, 'api/google/text-search.js')), true);
   assert.equal(existsSync(path.join(ROOT, 'api/ais-live.js')), false);
+  assert.equal(existsSync(path.join(ROOT, 'api/ais-live/[...path].js')), true);
+
+  const stub = readFileSync(path.join(ROOT, 'src/data/aisLiveHosted.js'), 'utf8');
+  assert.doesNotMatch(stub, /WebSocket|wss:\/\/|aisstream\.io|AISSTREAM_API_KEY\s*=/i);
+  assert.doesNotMatch(stub, /opensky-network|news\.google|telegeography|quantum-earth/i);
 });
 
 test('restoreNetlifyApiPath and TomTom rewrite do not invent a SPA path', () => {
@@ -147,6 +153,8 @@ test('adapter routes known /api paths onto the existing Vercel handler files', (
   assert.equal(resolveVercelApiFile('/api/opensky'), 'api/opensky.js');
   assert.equal(resolveVercelApiFile('/api/opensky-track'), 'api/opensky-track.js');
   assert.equal(resolveVercelApiFile('/api/radio/stations'), 'api/radio/[...path].js');
+  assert.equal(resolveVercelApiFile('/api/ais-live'), 'api/ais-live/[...path].js');
+  assert.equal(resolveVercelApiFile('/api/ais-live/track'), 'api/ais-live/[...path].js');
 });
 
 test('GET /api/google/text-search reaches the existing handler, not index.html', async () => {
@@ -221,4 +229,34 @@ test('GET /api/opensky never contacts OpenSky', async () => {
   assert.equal(status, 400);
   assert.match(json.error, /adsb\.lol/i);
   assert.doesNotMatch(JSON.stringify(json), /opensky-network/);
+});
+
+test('GET /api/ais-live is an unsupported or missing-key snapshot, not a generic 404', async () => {
+  const previous = process.env.AISSTREAM_API_KEY;
+  process.env.AISSTREAM_API_KEY = 'must-not-open-a-hosted-socket';
+  try {
+    const { status, json, text, contentType } = await dispatch('/api/ais-live?maxRows=12000');
+    assert.notEqual(status, 404);
+    assert.notEqual(json?.error, 'Not found');
+    assert.ok(json.status === 'unsupported' || json.status === 'missing-key');
+    assert.deepEqual(json.rows, []);
+    assert.match(contentType, /json/);
+    assert.doesNotMatch(text, /<!doctype html/i);
+    assert.doesNotMatch(JSON.stringify(json), /opensky-network|news\.google|telegeography|quantum-earth/i);
+
+    const leftover = await dispatch('/.netlify/functions/api/ais-live');
+    assert.ok(leftover.json.status === 'unsupported' || leftover.json.status === 'missing-key');
+    assert.deepEqual(leftover.json.rows, []);
+  } finally {
+    if (previous === undefined) delete process.env.AISSTREAM_API_KEY;
+    else process.env.AISSTREAM_API_KEY = previous;
+  }
+});
+
+test('GET /api/ais-live/track is an empty samples stub', async () => {
+  const { status, json, text } = await dispatch('/api/ais-live/track?mmsi=123456789');
+  assert.notEqual(status, 404);
+  assert.deepEqual(json.samples, []);
+  assert.doesNotMatch(text, /<!doctype html/i);
+  assert.doesNotMatch(JSON.stringify(json), /opensky-network|news\.google|telegeography|quantum-earth/i);
 });
