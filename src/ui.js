@@ -73,6 +73,10 @@ import {
   installWheelZoomSign,
 } from './invertScroll.js';
 import {
+  attachGridOverlay,
+  createCesiumGridHost,
+} from './gridOverlay.js';
+import {
   CelestialRing,
   getKeyholeFadeTuning,
   isCelestialRingStyleSupported,
@@ -2466,6 +2470,7 @@ export class StyleManager {
     this._celestialBtn = document.getElementById('celestial-toggle');
     this._liveSunBtn = document.getElementById('live-sun-toggle');
     this._liveSunEnabled = false;
+    this._gridBtn = document.getElementById('grid-toggle');
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2716,6 +2721,16 @@ export class StyleManager {
         focus: false,
       }),
     });
+
+    // Local lat/lon graticule. Persist meridian.grid; default off. This is
+    // chrome + ellipsoid polylines, not a data layer or share-link field.
+    let gridStorage = null;
+    try { gridStorage = globalThis.localStorage ?? null; } catch { gridStorage = null; }
+    this._gridOverlay = attachGridOverlay(
+      createCesiumGridHost(viewer, Cesium, () => governorRequestRender('grid')),
+      { storage: gridStorage },
+    );
+    this._syncGridButton();
 
     // Share Link Manager
     this.shareLinkManager = new ShareLinkManager(viewer, {
@@ -3741,6 +3756,11 @@ export class StyleManager {
     });
     this._zoomToPointerBtn?.addEventListener('click', () => {
       this._toggleZoomToPointer();
+    });
+    this._gridBtn?.addEventListener('click', () => {
+      const next = this._gridOverlay?.isEnabled() !== true;
+      this._gridOverlay?.setEnabled(next);
+      this._syncGridButton();
     });
     if (this._cleanViewExitBtn) {
       this._cleanViewExitBtn.addEventListener('click', () => this.toggleCleanView(false));
@@ -10329,6 +10349,16 @@ export class StyleManager {
   }
 
   /**
+   * Mirror the persisted lat/lon graticule on the DISPLAY Grid toggle.
+   * @returns {void}
+   */
+  _syncGridButton() {
+    const enabled = this._gridOverlay?.isEnabled() === true;
+    this._gridBtn?.classList.toggle('active', enabled);
+    this._gridBtn?.setAttribute('aria-pressed', String(enabled));
+  }
+
+  /**
    * Toggles idle orbit around the current POI. Decorative spin is refused
    * while reduced motion is on; fly-to Home is unaffected.
    * @returns {void}
@@ -11354,6 +11384,8 @@ export class StyleManager {
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();
+    this._gridOverlay?.destroy();
+    this._gridOverlay = null;
     // Clear transitions
     this.transitions.clear();
   }
