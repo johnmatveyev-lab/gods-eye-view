@@ -115,6 +115,7 @@ test('input focus does not pan (layer filter and radio search)', () => {
   assert.match(html, /id="data-layer-filter"/);
   assert.match(html, /id="radio-station-search"/);
   assert.match(html, /id="radio-country"/);
+  assert.match(html, /id="radio-state"/);
   assert.match(ui, /handleKeyboardPanKeyDown\(e, this\.viewer\)/);
 });
 

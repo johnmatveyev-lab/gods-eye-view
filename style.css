@@ -7171,9 +7171,12 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 }
 .radio-directory-query-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 7.5rem);
+  grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 7.5rem) minmax(5.5rem, 7.5rem);
   gap: 8px;
   align-items: end;
+}
+.radio-directory-query-row:has(.radio-state-wrap[hidden]) {
+  grid-template-columns: minmax(0, 1fr) minmax(5.5rem, 7.5rem);
 }
 .radio-station-search-wrap {
   display: grid;
@@ -7224,6 +7227,31 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 #radio-country::placeholder { color: var(--text-dim); }
 #radio-country:focus { border-color: rgba(101, 247, 255, .55); }
 #radio-country:disabled { opacity: .42; cursor: not-allowed; }
+.radio-state-wrap {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.radio-state-wrap[hidden] { display: none; }
+.radio-state-wrap .radio-filter-label {
+  grid-column: auto;
+}
+#radio-state {
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 8px;
+  border: 1px solid rgba(65, 220, 231, .28);
+  border-radius: 5px;
+  color: #c5faff;
+  background: rgba(5, 24, 31, .88);
+  font: 9px/1.2 var(--font-mono);
+  caret-color: #65f7ff;
+  outline: none;
+}
+#radio-state::placeholder { color: var(--text-dim); }
+#radio-state:focus { border-color: rgba(101, 247, 255, .55); }
+#radio-state:disabled { opacity: .42; cursor: not-allowed; }
 .radio-station-search-count {
   color: var(--text-dim);
   font: 8px/1 var(--font-mono);

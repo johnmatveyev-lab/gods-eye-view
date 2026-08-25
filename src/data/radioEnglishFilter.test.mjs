@@ -370,7 +370,7 @@ test('playing a non-English station then enabling English-only does not cut audi
   }
 });
 
-test('category, search, bitrate, codec, and favorites still AND with English-only', async () => {
+test('category, search, bitrate, codec, favorites, and state still AND with English-only', async () => {
   const rows = DIRECTORY.map((station, index) => makeStation({
     ...station,
     id: `00000000-0000-4000-8000-00000000003${index + 1}`,
@@ -386,6 +386,7 @@ test('category, search, bitrate, codec, and favorites still AND with English-onl
     assert.equal(radioLayer.setBitrateFloor('128'), true);
     assert.equal(radioLayer.setFavoritesOnly(true), true);
     assert.equal(radioLayer.setCodecs({ mp3: false, aac: true }), true);
+    assert.equal(radioLayer.setState('Texas'), true);
     assert.equal(radioLayer.setEnglishOnly(true), true);
     assert.deepEqual(
       radioLayer.getTunerStations().map((station) => station.id),
