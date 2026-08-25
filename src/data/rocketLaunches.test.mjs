@@ -98,6 +98,11 @@ import {
   resetLaunchTimeWindowForTest,
   setLaunchTimeWindow,
 } from './launchTimeWindow.js';
+import {
+  DEFAULT_LAUNCH_WEBCAST_ONLY,
+  resetLaunchWebcastOnlyForTest,
+  setLaunchWebcastOnly,
+} from './launchWebcastFilter.js';
 
 const NOW = new Date('2026-07-27T00:00:00Z');
 
@@ -899,6 +904,87 @@ test('normalizes recent launches and preserves supplied trajectory/orbit data', 
   assert.equal(launches[0].rocketName, null);
   assert.equal(launches[0].trajectory.length, 1);
   assert.equal(launches[0].timeline[0].offsetSeconds, 520);
+});
+
+test('keeps webcastLive from webcast_live or a non-empty vid_urls list', () => {
+  const live = normalizeRocketLaunches({ results: [{
+    id: 'live',
+    name: 'Webcast Flight',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+    webcast_live: true,
+  }] }, NOW);
+  assert.equal(live[0].webcastLive, true);
+
+  const fromUrls = normalizeRocketLaunches({ results: [{
+    id: 'urls',
+    name: 'URL Flight',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+    webcast_live: false,
+    vid_urls: [{ url: 'https://example.com/watch' }],
+  }] }, NOW);
+  assert.equal(fromUrls[0].webcastLive, true);
+
+  const fromLegacy = normalizeRocketLaunches({ results: [{
+    id: 'legacy',
+    name: 'Legacy Flight',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+    vidURLs: [{ url: 'https://example.com/legacy' }],
+  }] }, NOW);
+  assert.equal(fromLegacy[0].webcastLive, true);
+
+  const missing = normalizeRocketLaunches({ results: [{
+    id: 'missing',
+    name: 'Silent Flight',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+  }] }, NOW);
+  assert.equal(missing[0].webcastLive, false);
+
+  const empty = normalizeRocketLaunches({ results: [{
+    id: 'empty',
+    name: 'Empty URLs',
+    net: '2026-07-20T10:00:00Z',
+    pad: { latitude: '28.608', longitude: '-80.604', name: 'LC-39A' },
+    webcast_live: false,
+    vid_urls: [],
+  }] }, NOW);
+  assert.equal(empty[0].webcastLive, false);
+});
+
+test('Webcast only roster hides no-stream missions and ANDs status, provider, and rocket', () => {
+  const rows = [
+    { id: 'keep', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: true, launchTime: '2026-07-20T00:00:00Z' },
+    { id: 'no-stream', status: 'Go', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: false, launchTime: '2026-07-19T00:00:00Z' },
+    { id: 'ula', status: 'Go', provider: 'ULA', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Atlas V', webcastLive: true, launchTime: '2026-07-18T00:00:00Z' },
+    { id: 'tbd', status: 'TBD', provider: 'SpaceX', orbit: { name: 'LEO' }, launchSite: 'KSC', rocketName: 'Falcon 9', webcastLive: true, launchTime: '2026-07-17T00:00:00Z' },
+  ];
+  const spaceXOnly = normalizeLaunchProviderFilter({
+    SpaceX: true,
+    ULA: false,
+  }, ['SpaceX', 'ULA']);
+  const falconOnly = normalizeLaunchRocketFilter({
+    'Falcon 9': true,
+    'Atlas V': false,
+  }, ['Atlas V', 'Falcon 9']);
+  const off = missionRosterEntries(rows, { webcastOnly: false, nowMs: NOW.getTime() });
+  assert.deepEqual(off.map((entry) => entry.launch.id).sort(), ['keep', 'no-stream', 'tbd', 'ula']);
+  const entries = missionRosterEntries(rows, {
+    statusFilter: { go: true },
+    providerFilter: spaceXOnly,
+    rocketFilter: falconOnly,
+    webcastOnly: true,
+    nowMs: NOW.getTime(),
+  });
+  assert.deepEqual(entries.map((entry) => entry.launch.id), ['keep']);
+  const selected = missionRosterEntries(rows, {
+    webcastOnly: true,
+    selectedLaunchId: 'no-stream',
+    nowMs: NOW.getTime(),
+  });
+  assert.ok(selected.some((entry) => entry.launch.id === 'no-stream'));
 });
 
 test('keeps rocket.configuration.name (or rocket.name) on the in-memory roster', () => {
@@ -1869,8 +1955,17 @@ function createStatusFilterDocument() {
     if (id === '30d') chip.className = 'space-mission-window-chip active';
     windowChips.appendChild(chip);
   }
+  const webcastChips = new FakeNode('div');
+  webcastChips.className = 'space-mission-webcast-chips';
+  webcastChips.setAttribute('data-mission-webcast-chips', '');
+  const webcastChip = new FakeNode('button');
+  webcastChip.setAttribute('data-mission-webcast-chip', 'only');
+  webcastChip.dataset.missionWebcastChip = 'only';
+  webcastChip.textContent = 'Webcast only';
+  webcastChips.appendChild(webcastChip);
   roster.appendChild(count);
   roster.appendChild(windowChips);
+  roster.appendChild(webcastChips);
   roster.appendChild(chips);
   roster.appendChild(providerChips);
   roster.appendChild(rocketChips);
@@ -1892,6 +1987,7 @@ function createStatusFilterDocument() {
     rocketChips,
     orbitChips,
     windowChips,
+    webcastChips,
     document: {
       body: new FakeNode('body'),
       createElement: (tagName) => new FakeNode(tagName),
@@ -1950,6 +2046,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
   resetLaunchSiteFilterForTest();
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -1995,6 +2092,7 @@ test('status chips re-apply the cached roster without refetching /api/launches',
     resetLaunchSiteFilterForTest();
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2074,6 +2172,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
   resetLaunchSiteFilterForTest();
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2118,6 +2217,7 @@ test('provider chips re-apply the cached roster without refetching /api/launches
     resetLaunchSiteFilterForTest();
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2234,6 +2334,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
   resetLaunchSiteFilterForTest();
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2275,6 +2376,7 @@ test('site chips re-apply the cached roster without refetching /api/launches', a
     resetLaunchSiteFilterForTest();
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2318,6 +2420,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
   resetLaunchSiteFilterForTest();
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2360,6 +2463,7 @@ test('7d | 30d chips re-apply the cached roster without refetching /api/launches
     resetLaunchSiteFilterForTest();
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2442,6 +2546,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
   resetLaunchSiteFilterForTest();
   resetLaunchRocketFilterForTest();
   resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
   const realFetch = globalThis.fetch;
   const realDocument = globalThis.document;
   const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
@@ -2485,6 +2590,7 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
     resetLaunchSiteFilterForTest();
     resetLaunchRocketFilterForTest();
     resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
     globalThis.fetch = realFetch;
     globalThis.document = realDocument;
     globalThis.HTMLCanvasElement = realHtmlCanvasElement;
@@ -2577,4 +2683,119 @@ test('rocket chips re-apply the cached roster without refetching /api/launches',
 
   await rocketLaunchesLayer.disable();
   assert.equal(rocketChips.hidden, true, 'launches layer off hides the rocket chips');
+});
+
+test('Webcast only re-applies the cached roster without refetching /api/launches', async (t) => {
+  resetLaunchStatusFilterForTest();
+  resetLaunchProviderFilterForTest();
+  resetLaunchOrbitFilterForTest();
+  resetLaunchSiteFilterForTest();
+  resetLaunchRocketFilterForTest();
+  resetLaunchTimeWindowForTest();
+  resetLaunchWebcastOnlyForTest();
+  const realFetch = globalThis.fetch;
+  const realDocument = globalThis.document;
+  const realHtmlCanvasElement = globalThis.HTMLCanvasElement;
+  const realHtmlImageElement = globalThis.HTMLImageElement;
+  const realImageBitmap = globalThis.ImageBitmap;
+  const realOffscreenCanvas = globalThis.OffscreenCanvas;
+  const { document, list, webcastChips, FakeNode } = createStatusFilterDocument();
+  const viewer = createStatusFilterViewer(FakeNode);
+  let launchFetches = 0;
+  const payload = {
+    results: [
+      { ...statusFilterLaunch('live-go', 'Go', 0, 'SpaceX'), webcast_live: true },
+      { ...statusFilterLaunch('urls-go', 'Go', 0.1, 'ULA'), vid_urls: [{ url: 'https://example.com/watch' }] },
+      statusFilterLaunch('silent-go', 'Go', 0.2, 'SpaceX'),
+      { ...statusFilterLaunch('live-tbd', 'TBD', 0.3, 'SpaceX'), webcast_live: true },
+    ],
+  };
+  globalThis.document = document;
+  globalThis.HTMLCanvasElement = FakeNode;
+  globalThis.HTMLImageElement = class {};
+  globalThis.ImageBitmap = class {};
+  globalThis.OffscreenCanvas = class {};
+  globalThis.fetch = async (url) => {
+    if (url === '/api/celestrak/active') return { ok: true, text: async () => '' };
+    assert.equal(url, '/api/launches');
+    launchFetches += 1;
+    return { ok: true, json: async () => payload };
+  };
+  _setRocketMissionOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  t.after(async () => {
+    try { await rocketLaunchesLayer.destroy(viewer); } catch { /* test cleanup */ }
+    _setRocketMissionOverlayHostForTest();
+    resetLaunchStatusFilterForTest();
+    resetLaunchProviderFilterForTest();
+    resetLaunchOrbitFilterForTest();
+    resetLaunchSiteFilterForTest();
+    resetLaunchRocketFilterForTest();
+    resetLaunchTimeWindowForTest();
+    resetLaunchWebcastOnlyForTest();
+    globalThis.fetch = realFetch;
+    globalThis.document = realDocument;
+    globalThis.HTMLCanvasElement = realHtmlCanvasElement;
+    globalThis.HTMLImageElement = realHtmlImageElement;
+    globalThis.ImageBitmap = realImageBitmap;
+    globalThis.OffscreenCanvas = realOffscreenCanvas;
+  });
+
+  rocketLaunchesLayer.init(viewer);
+  await rocketLaunchesLayer.enable();
+  await rocketLaunchesLayer.update();
+  assert.equal(DEFAULT_LAUNCH_WEBCAST_ONLY, false);
+  assert.equal(launchFetches, 1);
+  const dataSource = viewer._dataSources[0];
+  assert.equal(dataSource.entities.getById('rocket-launch:live-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:urls-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:silent-go').show, true);
+  assert.match(list.innerHTML, /LIVE-GO/);
+  assert.match(list.innerHTML, /URLS-GO/);
+  assert.match(list.innerHTML, /SILENT-GO/);
+  assert.match(list.innerHTML, /LIVE-TBD/);
+  assert.equal(webcastChips.hidden, false);
+
+  setLaunchWebcastOnly(true);
+  assert.equal(launchFetches, 1, 'toggle must reuse the cached /api/launches payload');
+  assert.equal(dataSource.entities.getById('rocket-launch:live-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:urls-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:silent-go').show, false);
+  assert.equal(dataSource.entities.getById('rocket-launch:live-tbd').show, true);
+  assert.match(list.innerHTML, /LIVE-GO/);
+  assert.match(list.innerHTML, /URLS-GO/);
+  assert.doesNotMatch(list.innerHTML, /SILENT-GO/);
+
+  setLaunchWebcastOnly(DEFAULT_LAUNCH_WEBCAST_ONLY);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:silent-go').show, true);
+  assert.match(list.innerHTML, /SILENT-GO/);
+
+  _setSelectedRocketMissionForTest('silent-go');
+  setLaunchWebcastOnly(true);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:silent-go').show, true, 'selected no-stream stays');
+  assert.match(list.innerHTML, /SILENT-GO/);
+
+  _setSelectedRocketMissionForTest(null);
+  setLaunchStatusFilter({ go: true });
+  setLaunchWebcastOnly(true);
+  assert.equal(launchFetches, 1);
+  assert.equal(dataSource.entities.getById('rocket-launch:live-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:urls-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:live-tbd').show, false, 'Go + Webcast only still ANDs');
+  assert.equal(dataSource.entities.getById('rocket-launch:silent-go').show, false);
+  assert.match(list.innerHTML, /LIVE-GO/);
+  assert.doesNotMatch(list.innerHTML, /LIVE-TBD|SILENT-GO/);
+
+  await rocketLaunchesLayer.update();
+  assert.equal(launchFetches, 2, 'refresh still hits the same /api/launches window');
+  assert.equal(dataSource.entities.getById('rocket-launch:live-go').show, true);
+  assert.equal(dataSource.entities.getById('rocket-launch:silent-go').show, false);
+
+  await rocketLaunchesLayer.disable();
+  assert.equal(webcastChips.hidden, true, 'launches layer off hides the webcast toggle');
 });

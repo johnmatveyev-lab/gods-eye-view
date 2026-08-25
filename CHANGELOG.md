@@ -7,6 +7,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster has a client-only **Webcast only** toggle next to
+  the 7d | 30d chips. Default off matches the current 30-day roster. On
+  keeps missions whose normalized `webcastLive` is true — `webcast_live
+  === true` or a non-empty Launch Library 2 `vid_urls` list (2.3.0 name;
+  legacy `vidURLs` still counts). Missing or false hide. Selected mission
+  stays. Toggle changes re-filter the already-fetched window and AND with
+  status, provider, orbit, site, 7d|30d, and rocket. No extra
+  `/api/launches` fetch and no new endpoint. Preference persists as
+  `meridian.launchWebcastOnly`. Hidden when the launches layer is off.
 - Satellites row has client-only **Eq | Mid | Polar** inclination chips
   next to period chips. Default all on matches the current catalog. The
   chips filter already-fetched CelesTrak satrecs by `satrec.inclo`

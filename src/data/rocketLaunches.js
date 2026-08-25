@@ -80,6 +80,15 @@ import {
   setLaunchTimeWindow,
   subscribeLaunchTimeWindow,
 } from './launchTimeWindow.js';
+import {
+  DEFAULT_LAUNCH_WEBCAST_ONLY,
+  getLaunchWebcastOnly,
+  hydrateLaunchWebcastOnly,
+  launchPassesWebcastFilter,
+  launchWebcastLiveFromPayload,
+  setLaunchWebcastOnly,
+  subscribeLaunchWebcastOnly,
+} from './launchWebcastFilter.js';
 
 export { compactLaunchSiteName, compactRocketName };
 
@@ -169,6 +178,7 @@ let _orbitFilterUnsubscribe = null;
 let _siteFilterUnsubscribe = null;
 let _rocketFilterUnsubscribe = null;
 let _timeWindowUnsubscribe = null;
+let _webcastFilterUnsubscribe = null;
 
 const REPLAY_ASCENT_FALLBACK_SEC = 12;
 const REPLAY_ASCENT_MIN_SEC = 8;
@@ -820,10 +830,10 @@ export function missionDataCompleteness(launch = {}) {
 }
 
 /**
- * Status, provider, rocket, orbit, site, and time-window chips AND together. A
- * selected mission stays visible even when any of its chips is off.
- * Pad-site markers use this same predicate.
- * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, rocketName?: unknown, launchSite?: unknown, launchTime?: unknown}|null|undefined} launch
+ * Status, provider, rocket, orbit, site, time-window, and webcast-only
+ * chips AND together. A selected mission stays visible even when any of
+ * its chips is off. Pad-site markers use this same predicate.
+ * @param {{id?: string, status?: unknown, orbit?: unknown, provider?: string, rocketName?: unknown, launchSite?: unknown, launchTime?: unknown, webcastLive?: unknown}|null|undefined} launch
  * @param {{
  *   statusFilter?: unknown,
  *   orbitFilter?: unknown,
@@ -831,6 +841,7 @@ export function missionDataCompleteness(launch = {}) {
  *   rocketFilter?: unknown,
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
+ *   webcastOnly?: unknown,
  *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
@@ -845,13 +856,15 @@ export function launchPassesMissionFilters(launch, options = {}) {
   const orbitFilter = options.orbitFilter ?? DEFAULT_LAUNCH_ORBIT_FILTER;
   const siteFilter = options.siteFilter ?? DEFAULT_LAUNCH_SITE_FILTER;
   const timeWindow = options.timeWindow ?? DEFAULT_LAUNCH_TIME_WINDOW;
+  const webcastOnly = options.webcastOnly ?? DEFAULT_LAUNCH_WEBCAST_ONLY;
   const nowMs = options.nowMs ?? Date.now();
   return launchPassesStatusFilter(launch, statusFilter, null)
     && launchPassesProviderFilter(launch, providerFilter, null)
     && launchPassesRocketFilter(launch, rocketFilter, null)
     && launchPassesOrbitFilter(launch, orbitFilter, null)
     && launchPassesSiteFilter(launch, siteFilter, null)
-    && launchPassesTimeWindow(launch, timeWindow, null, nowMs);
+    && launchPassesTimeWindow(launch, timeWindow, null, nowMs)
+    && launchPassesWebcastFilter(launch, webcastOnly, null);
 }
 
 /**
@@ -865,6 +878,7 @@ export function launchPassesMissionFilters(launch, options = {}) {
  *   rocketFilter?: unknown,
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
+ *   webcastOnly?: unknown,
  *   nowMs?: number,
  *   selectedLaunchId?: string|null,
  * }} [options]
@@ -881,6 +895,7 @@ export function missionRosterEntries(launches, options = {}) {
       rocketFilter: options.rocketFilter,
       siteFilter: options.siteFilter,
       timeWindow: options.timeWindow,
+      webcastOnly: options.webcastOnly,
       nowMs: options.nowMs,
       selectedLaunchId,
     }))
@@ -896,8 +911,9 @@ export function missionRosterEntries(launches, options = {}) {
 
 /**
  * PREV/NEXT and the N/M index walk the chip-filtered roster (status AND
- * provider AND rocket AND orbit AND site AND time window). The selected-id
- * visibility exception is excluded so navigation cannot leave that AND set.
+ * provider AND rocket AND orbit AND site AND time window AND webcast).
+ * The selected-id visibility exception is excluded so navigation cannot
+ * leave that AND set.
  * @param {Array<object>} launches Normalized launch records.
  * @param {string|null|undefined} selectedLaunchId
  * @param {{
@@ -907,6 +923,7 @@ export function missionRosterEntries(launches, options = {}) {
  *   rocketFilter?: unknown,
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
+ *   webcastOnly?: unknown,
  *   nowMs?: number,
  * }} [options]
  * @returns {{
@@ -925,6 +942,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
     rocketFilter: options.rocketFilter,
     siteFilter: options.siteFilter,
     timeWindow: options.timeWindow,
+    webcastOnly: options.webcastOnly,
     nowMs: options.nowMs,
     selectedLaunchId: null,
   });
@@ -952,6 +970,7 @@ export function missionRosterNavState(launches, selectedLaunchId, options = {}) 
  *   rocketFilter?: unknown,
  *   siteFilter?: unknown,
  *   timeWindow?: unknown,
+ *   webcastOnly?: unknown,
  *   nowMs?: number,
  * }} [options]
  * @returns {{launch: object, index: number}|null}
@@ -2588,6 +2607,17 @@ function syncLaunchTimeWindowChips() {
   }
 }
 
+function syncLaunchWebcastChip() {
+  if (!_missionRoster) return;
+  const host = _missionRoster.querySelector('[data-mission-webcast-chips]');
+  if (host) host.hidden = !_enabled;
+  const active = getLaunchWebcastOnly() === true;
+  for (const chip of _missionRoster.querySelectorAll('[data-mission-webcast-chip]')) {
+    chip.classList?.toggle?.('active', active);
+    chip.setAttribute?.('aria-pressed', String(active));
+  }
+}
+
 function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
   return {
     statusFilter: getLaunchStatusFilter(),
@@ -2596,6 +2626,7 @@ function currentMissionFilterOptions(selectedLaunchId = _selectedLaunchId) {
     orbitFilter: getLaunchOrbitFilter(),
     siteFilter: getLaunchSiteFilter(),
     timeWindow: getLaunchTimeWindow(),
+    webcastOnly: getLaunchWebcastOnly(),
     selectedLaunchId,
   };
 }
@@ -2633,6 +2664,7 @@ function applyLaunchFilterPresentation() {
   syncLaunchSiteChips();
   syncLaunchOrbitChips();
   syncLaunchTimeWindowChips();
+  syncLaunchWebcastChip();
   renderMissionPanel();
 }
 
@@ -2855,6 +2887,11 @@ function createMissionPanel() {
         const id = windowChip.dataset.missionWindowChip
           || windowChip.getAttribute('data-mission-window-chip');
         if (LAUNCH_TIME_WINDOW_CHIP_IDS.includes(id)) setLaunchTimeWindow(id);
+        return;
+      }
+      const webcastChip = target?.closest('[data-mission-webcast-chip]');
+      if (webcastChip) {
+        setLaunchWebcastOnly(!getLaunchWebcastOnly());
         return;
       }
       const statusChip = target?.closest('[data-mission-status-chip]');
@@ -3217,6 +3254,7 @@ export function normalizeRocketLaunches(payload, now = new Date()) {
         }))
         : [],
       orbit: launch.mission?.orbit || launch.orbit || null,
+      webcastLive: launchWebcastLiveFromPayload(launch),
       source: 'Launch Library 2',
       inWindow: Number.isFinite(date) && date >= cutoff && date <= now.getTime(),
     };
@@ -3821,6 +3859,7 @@ const rocketLaunchesLayer = {
     hydrateLaunchOrbitFilter();
     hydrateLaunchSiteFilter();
     hydrateLaunchTimeWindow();
+    hydrateLaunchWebcastOnly();
     if (!_statusFilterUnsubscribe) {
       _statusFilterUnsubscribe = subscribeLaunchStatusFilter(applyLaunchFilterPresentation);
     }
@@ -3838,6 +3877,9 @@ const rocketLaunchesLayer = {
     }
     if (!_timeWindowUnsubscribe) {
       _timeWindowUnsubscribe = subscribeLaunchTimeWindow(applyLaunchFilterPresentation);
+    }
+    if (!_webcastFilterUnsubscribe) {
+      _webcastFilterUnsubscribe = subscribeLaunchWebcastOnly(applyLaunchFilterPresentation);
     }
     createMissionPanel();
     createReplayVehicleOverlay();
@@ -3922,6 +3964,7 @@ const rocketLaunchesLayer = {
     clearMissionOverlaySources();
     await restoreSatelliteDependency();
     syncLaunchRocketChips();
+    syncLaunchWebcastChip();
     renderMissionPanel();
   },
 
@@ -3998,6 +4041,8 @@ const rocketLaunchesLayer = {
     _siteFilterUnsubscribe = null;
     _timeWindowUnsubscribe?.();
     _timeWindowUnsubscribe = null;
+    _webcastFilterUnsubscribe?.();
+    _webcastFilterUnsubscribe = null;
   },
 
   getStats() { return { count: _count, orbitMatches: _orbitMatches, lastUpdate: _lastUpdate, error: _lastError }; },
