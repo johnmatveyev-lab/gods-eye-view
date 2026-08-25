@@ -14,6 +14,12 @@ import {
   sourceMatchesCityFilter,
   writeCctvCityFilter,
 } from './cctvCityFilter.js';
+import {
+  CCTV_HIDE_UNHEALTHY_STORAGE_KEY,
+  filterVisibleCctvSources,
+  readCctvHideUnhealthy,
+  writeCctvHideUnhealthy,
+} from './cctvHealthFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -161,13 +167,13 @@ test('CCTV panel markup has a city/source filter above the camera list', () => {
 test('panel render filters the camera list and still uses the existing frame URL', () => {
   const ui = readFileSync(path.join(ROOT, 'src/ui.js'), 'utf8');
   assert.match(ui, /from '\.\/data\/cctvCityFilter\.js'/);
-  assert.match(ui, /filterCctvSources/);
+  assert.match(ui, /filterVisibleCctvSources/);
   assert.match(ui, /listCctvCityFilterOptions/);
   assert.match(ui, /writeCctvCityFilter/);
   assert.match(ui, /readCctvCityFilter/);
   const renderer = ui.match(/_renderCctvState\(state\) \{[\s\S]*?\n  \}\n/);
   assert.ok(renderer, '_renderCctvState is missing');
-  assert.match(renderer[0], /filterCctvSources/);
+  assert.match(renderer[0], /filterVisibleCctvSources/);
   assert.match(renderer[0], /_cctvCityFilter/);
   assert.match(renderer[0], /activeCamera\?\.frameUrl/);
   assert.match(renderer[0], /_syncCctvPanelViewport|_clampToViewport/);
@@ -182,5 +188,111 @@ test('public camera state exposes cityId for the panel filter', () => {
   assert.match(publicState[0], /cityId:\s*camera\.cityId/);
   assert.match(publicState[0], /city:\s*camera\.city/);
   assert.match(publicState[0], /provider:\s*camera\.provider/);
+  assert.match(publicState[0], /sourceStatus:\s*health\?\.status/);
+  assert.match(publicState[0], /feedConfigured:\s*camera\.feedConfigured/);
   assert.match(publicState[0], /frameUrl:\s*frameUrlFor\(camera/);
+});
+
+const HEALTH_CATALOG = Object.freeze([
+  { ...CATALOG[0], feedType: 'mp4', feedConfigured: true, sourceStatus: 'ok' },
+  { ...CATALOG[1], feedType: 'image', feedConfigured: true, sourceStatus: 'error' },
+  { ...CATALOG[2], feedType: 'hls', feedConfigured: true, sourceStatus: 'unknown' },
+  { ...CATALOG[3], feedType: 'webm', feedConfigured: false, sourceStatus: 'ok' },
+  { ...CATALOG[4], feedType: 'mp4', feedConfigured: true, sourceStatus: 'offline' },
+]);
+
+test('Hide unhealthy off matches the current city-filtered catalog', () => {
+  const off = filterVisibleCctvSources(HEALTH_CATALOG, { hideUnhealthy: false });
+  assert.deepEqual(off.map((source) => source.id), HEALTH_CATALOG.map((source) => source.id));
+  assert.deepEqual(
+    filterVisibleCctvSources(HEALTH_CATALOG, { city: 'austin', hideUnhealthy: false })
+      .map((source) => source.id),
+    filterCctvSources(HEALTH_CATALOG, 'austin').map((source) => source.id),
+  );
+});
+
+test('Hide unhealthy on hides known-unhealthy tokens and keeps ok/unknown', () => {
+  const visible = filterVisibleCctvSources(HEALTH_CATALOG, { hideUnhealthy: true });
+  assert.deepEqual(visible.map((source) => source.id), ['atx-1', 'ca-d4-tv102', 'ca-d7-tv9']);
+  assert.equal(visible.some((source) => source.id === 'atx-2'), false);
+  assert.equal(visible.some((source) => source.id === 'tfl-00002.00865'), false);
+});
+
+test('selected unhealthy camera stays visible', () => {
+  const visible = filterVisibleCctvSources(HEALTH_CATALOG, {
+    hideUnhealthy: true,
+    selectedId: 'atx-2',
+  });
+  assert.deepEqual(visible.map((source) => source.id), ['atx-1', 'atx-2', 'ca-d4-tv102', 'ca-d7-tv9']);
+});
+
+test('city + Hide no feed + Video still AND', () => {
+  const visible = filterVisibleCctvSources(HEALTH_CATALOG, {
+    city: 'Caltrans',
+    hideUnhealthy: true,
+    hideNoFeed: true,
+    feedType: 'video',
+  });
+  assert.deepEqual(visible.map((source) => source.id), ['ca-d4-tv102']);
+  assert.ok(visible.every((source) => source.provider === 'Caltrans'));
+  assert.ok(visible.every((source) => source.feedConfigured === true));
+  assert.ok(visible.every((source) => ['mp4', 'hls', 'webm'].includes(source.feedType)));
+  assert.ok(visible.every((source) => source.sourceStatus !== 'error'));
+});
+
+test('Hide unhealthy persists with existing CCTV prefs', () => {
+  const storage = memoryStorage();
+  assert.equal(readCctvHideUnhealthy(storage), false);
+  writeCctvHideUnhealthy(storage, true);
+  assert.equal(storage.getItem(CCTV_HIDE_UNHEALTHY_STORAGE_KEY), '1');
+  assert.equal(readCctvHideUnhealthy(storage), true);
+  writeCctvCityFilter(storage, 'austin');
+  assert.equal(storage.getItem(CCTV_CITY_FILTER_STORAGE_KEY), 'austin');
+  writeCctvHideUnhealthy(storage, false);
+  assert.equal(readCctvHideUnhealthy(storage), false);
+  assert.equal(readCctvCityFilter(storage), 'austin');
+});
+
+test('CCTV panel markup has Hide unhealthy next to the city filter', () => {
+  const html = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+  const panel = html.match(/<div id="cctv-panel"[\s\S]*?<div id="scene-panel"/);
+  assert.ok(panel, 'cctv-panel markup is missing');
+  assert.match(panel[0], /id="cctv-hide-unhealthy-btn"/);
+  assert.match(panel[0], /HIDE UNHEALTHY/);
+  assert.ok(
+    panel[0].indexOf('id="cctv-city-filter"') < panel[0].indexOf('id="cctv-hide-unhealthy-btn"'),
+    'Hide unhealthy must sit with the catalog filters, next to Hide no feed',
+  );
+  assert.ok(
+    panel[0].indexOf('id="cctv-hide-unhealthy-btn"') < panel[0].indexOf('id="cctv-camera-select"'),
+    'Hide unhealthy must sit above the camera list',
+  );
+  assert.match(html, /<title>Meridian<\/title>/);
+  assert.doesNotMatch(panel[0], /OpenSky/i);
+  assert.doesNotMatch(panel[0], /Google News/i);
+  assert.doesNotMatch(panel[0], /TeleGeography/i);
+  assert.doesNotMatch(panel[0], /quantum-earth/i);
+});
+
+test('Hide unhealthy wiring re-applies the in-memory catalog without a new health fetch', () => {
+  const ui = readFileSync(path.join(ROOT, 'src/ui.js'), 'utf8');
+  const layer = readFileSync(path.join(ROOT, 'src/data/cctv.js'), 'utf8');
+  assert.match(ui, /from '\.\/data\/cctvHealthFilter\.js'/);
+  assert.match(ui, /readCctvHideUnhealthy/);
+  assert.match(ui, /writeCctvHideUnhealthy/);
+  assert.match(ui, /hideUnhealthy:\s*this\._cctvHideUnhealthy/);
+  const click = ui.match(/_cctvHideUnhealthyBtn\?\.addEventListener\('click'[\s\S]*?\n    \}\);/);
+  assert.ok(click, 'Hide unhealthy click handler is missing');
+  assert.doesNotMatch(click[0], /\/api\/cctv\/health/);
+  assert.doesNotMatch(click[0], /\/api\/cctv\/sources/);
+  assert.match(click[0], /setParams\(\{\s*hideUnhealthy:/);
+  assert.match(click[0], /_renderCctvState\(this\._cctvState\)/);
+  const setParams = layer.match(/if \(typeof params\.hideUnhealthy === 'boolean'\) \{[\s\S]*?\n    \}/);
+  assert.ok(setParams, 'setParams hideUnhealthy branch is missing');
+  assert.doesNotMatch(setParams[0], /syncHealthState/);
+  assert.doesNotMatch(setParams[0], /\/api\/cctv\/health/);
+  assert.doesNotMatch(setParams[0], /\/api\/cctv\/sources/);
+  assert.match(setParams[0], /applyCctvHealthVisibility/);
+  const license = readFileSync(path.join(ROOT, 'LICENSE'), 'utf8');
+  assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
 });

@@ -211,6 +211,7 @@ import {
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   earthquakeDepthBandFlags,
+  normalizeEarthquakeTimeWindowHours,
   toggleEarthquakeDepthBand,
 } from './data/earthquakes.js';
 import {
@@ -314,6 +315,7 @@ import {
 import { AWARENESS_RADIUS_M, formatAwarenessLabel } from './data/militaryAwarenessEngine.js';
 import {
   formatDistanceMeters,
+  formatWeatherVisibility,
   getDistanceUnit,
   initDistanceUnits,
   setDistanceUnit,
@@ -366,11 +368,15 @@ import {
 } from './cctvFocusRequest.js';
 import {
   cycleFilteredCctvCamera,
-  filterCctvSources,
   listCctvCityFilterOptions,
   readCctvCityFilter,
   writeCctvCityFilter,
 } from './data/cctvCityFilter.js';
+import {
+  filterVisibleCctvSources,
+  readCctvHideUnhealthy,
+  writeCctvHideUnhealthy,
+} from './data/cctvHealthFilter.js';
 import {
   flyToWorldTarget,
   registerWorldFocusRequestListener,
@@ -1069,6 +1075,8 @@ class CockpitViewController {
     this.localCondition = document.getElementById('cockpit-local-condition');
     this.localCloud = document.getElementById('cockpit-local-cloud');
     this.localPrecipitation = document.getElementById('cockpit-local-precipitation');
+    this.localVisibility = document.getElementById('cockpit-local-visibility');
+    this.localVisibilityCell = document.getElementById('cockpit-local-visibility-cell');
     this.weatherCredit = document.querySelector('.cockpit-weather-credit');
     this.signalCollapsed = false;
     this.signalUserCollapsed = false;
@@ -1881,6 +1889,18 @@ class CockpitViewController {
 
   refreshDistanceUnits() {
     if (this._lastContextInfo) this.updateContext(this._lastContextInfo, this._lastContextHeading);
+    this.paintWeatherVisibility(this.regionalBrief?.weather);
+  }
+
+  /**
+   * Re-print stored visibilityM with the current km/nm/mi toggle.
+   * Uses the in-memory regional observation — no weather-effects refetch.
+   * @param {{visibilityM?: unknown}|null|undefined} weather
+   */
+  paintWeatherVisibility(weather) {
+    const text = formatWeatherVisibility(weather?.visibilityM);
+    if (this.localVisibility) this.localVisibility.textContent = text;
+    if (this.localVisibilityCell) this.localVisibilityCell.hidden = text === 'UNAVAILABLE';
   }
 
   updateContext(info, heading) {
@@ -2159,6 +2179,7 @@ class CockpitViewController {
     if (this.localPlace && status === 'unavailable') this.localPlace.textContent = 'REGION UNAVAILABLE';
     this.updateWeatherCredit(null);
     this.updateLocalPosition(info);
+    this.paintWeatherVisibility(null);
   }
 
   renderRegionalBrief(payload, info) {
@@ -2206,6 +2227,7 @@ class CockpitViewController {
       this.localPrecipitation.textContent = Number.isFinite(weather?.precipitationMm)
         ? weather.precipitationMm.toFixed(1) : '—';
     }
+    this.paintWeatherVisibility(weather);
     if (this.signalStream) this.signalStream.dataset.regionalStatus = payload?.status || 'partial';
     if (this.briefPageIndex === 1 && this.briefSource) {
       this.briefSource.textContent = `${String(payload?.newsSource || 'REGIONAL NEWS').toUpperCase()} · LOCATION QUERY`;
@@ -2560,6 +2582,7 @@ export class StyleManager {
     this._cctvState = null;
     this._cctvCityFilterValue = readCctvCityFilter(globalThis.localStorage);
     this._cctvCityFilterSignature = '';
+    this._cctvHideUnhealthy = readCctvHideUnhealthy(globalThis.localStorage);
     this._cctvSummaryTypingTimer = null;
     this._lastCctvSummaryText = '';
     // Auto-expand guard: last active camera id seen while the layer was
@@ -2791,6 +2814,7 @@ export class StyleManager {
     this._cctvNextBtn = document.getElementById('cctv-next-btn');
     this._cctvSelect = document.getElementById('cctv-camera-select');
     this._cctvCityFilter = document.getElementById('cctv-city-filter');
+    this._cctvHideUnhealthyBtn = document.getElementById('cctv-hide-unhealthy-btn');
     this._cctvFocusBtn = document.getElementById('cctv-focus-btn');
     this._cctvCoverageBtn = document.getElementById('cctv-coverage-btn');
     this._cctvAutoHopBtn = document.getElementById('cctv-auto-hop-btn');
@@ -2843,6 +2867,7 @@ export class StyleManager {
     this._earthquakeList = document.getElementById('earthquake-list');
     this._earthquakeListCount = document.getElementById('earthquake-list-count');
     this._earthquakeDepthChips = document.getElementById('earthquake-depth-chips');
+    this._earthquakeTimeChips = document.getElementById('earthquake-time-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -5286,6 +5311,7 @@ export class StyleManager {
         if (change?.layerId === 'earthquakes') {
           this._earthquakeListControl?.refresh();
           this._syncEarthquakeDepthChips();
+          this._syncEarthquakeTimeChips();
         }
         this._loadingFeedbackEvent = change;
         this._updateGlobalLoadingFeedback(performance.now());
@@ -7323,6 +7349,15 @@ export class StyleManager {
       this._renderCctvState(this._cctvState);
     });
 
+    this._cctvHideUnhealthyBtn?.addEventListener('click', () => {
+      this._cctvHideUnhealthy = writeCctvHideUnhealthy(
+        globalThis.localStorage,
+        !this._cctvHideUnhealthy,
+      );
+      cctvLayer.setParams({ hideUnhealthy: this._cctvHideUnhealthy });
+      this._renderCctvState(this._cctvState);
+    });
+
     this._cctvPrevBtn?.addEventListener('click', async () => {
       if (!await this._toggleCctvEnabled(true)) return;
       this._runExplicitCctvFocus(
@@ -7422,11 +7457,18 @@ export class StyleManager {
   }
 
   /**
-   * Camera rows visible in the panel list for the persisted city/provider filter.
+   * Camera rows visible in the panel list after city/source, Hide no feed,
+   * feed type, and Hide unhealthy (AND). Re-applied from the in-memory catalog.
    * @returns {Array<object>}
    */
   _visibleCctvCameras() {
-    return filterCctvSources(this._cctvState?.cameras || [], this._cctvCityFilterValue);
+    return filterVisibleCctvSources(this._cctvState?.cameras || [], {
+      city: this._cctvCityFilterValue,
+      hideUnhealthy: this._cctvHideUnhealthy,
+      hideNoFeed: this._cctvHideNoFeed === true,
+      feedType: this._cctvFeedTypeFilter || '',
+      selectedId: this._activeCctvCameraId(),
+    });
   }
 
   /**
@@ -7746,7 +7788,18 @@ export class StyleManager {
       && !cityOptions.some((option) => option.key === this._cctvCityFilterValue)) {
       this._cctvCityFilterValue = '';
     }
-    const visibleCameras = filterCctvSources(cameras, this._cctvCityFilterValue);
+    const visibleCameras = filterVisibleCctvSources(cameras, {
+      city: this._cctvCityFilterValue,
+      hideUnhealthy: this._cctvHideUnhealthy,
+      hideNoFeed: this._cctvHideNoFeed === true,
+      feedType: this._cctvFeedTypeFilter || '',
+      selectedId: activeId,
+    });
+    if (this._cctvHideUnhealthyBtn) {
+      this._cctvHideUnhealthyBtn.classList.toggle('active', this._cctvHideUnhealthy);
+      this._cctvHideUnhealthyBtn.setAttribute('aria-pressed', this._cctvHideUnhealthy ? 'true' : 'false');
+      this._cctvHideUnhealthyBtn.disabled = cameras.length === 0;
+    }
     if (this._cctvCityFilter) {
       const citySignature = cityOptions.map((option) => `${option.key}:${option.count}`).join('|');
       if (citySignature !== this._cctvCityFilterSignature) {
@@ -11308,7 +11361,33 @@ export class StyleManager {
     this._syncEarthquakeDepthChips();
   }
 
+  _syncEarthquakeTimeChips() {
+    const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+    const hours = normalizeEarthquakeTimeWindowHours(layer?.getParams?.()?.timeWindowHours) ?? 24;
+    const chips = this._earthquakeTimeChips?.querySelectorAll?.('[data-earthquake-time]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = Number(chip.dataset.earthquakeTime) === hours;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initEarthquakeTimeChips() {
+    if (!this._earthquakeTimeChips) return;
+    this._earthquakeTimeChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-time]');
+      if (!chip || !this._earthquakeTimeChips.contains(chip)) return;
+      const next = normalizeEarthquakeTimeWindowHours(chip.dataset.earthquakeTime);
+      if (next == null) return;
+      this._dataManager?.setLayerParams?.('earthquakes', { timeWindowHours: next }, { origin: 'user' });
+      this._syncEarthquakeTimeChips();
+    });
+    this._syncEarthquakeTimeChips();
+  }
+
   _initEarthquakeListControl() {
+    this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,

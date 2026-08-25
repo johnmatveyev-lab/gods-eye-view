@@ -233,6 +233,11 @@
       <div>
         <strong>QUAKES</strong>
         <span>USGS · 24H · M2.5+</span>
+        <div class="earthquake-time-chips" id="earthquake-time-chips" role="group" aria-label="Earthquake time window">
+          <button type="button" class="earthquake-time-chip" data-earthquake-time="1" aria-pressed="false" title="Show earthquakes from the last 1 hour">1h</button>
+          <button type="button" class="earthquake-time-chip" data-earthquake-time="6" aria-pressed="false" title="Show earthquakes from the last 6 hours">6h</button>
+          <button type="button" class="earthquake-time-chip active" data-earthquake-time="24" aria-pressed="true" title="Show earthquakes from the last 24 hours">24h</button>
+        </div>
         <div class="earthquake-depth-chips" id="earthquake-depth-chips" role="group" aria-label="Earthquake depth">
           <button type="button" class="earthquake-depth-chip active" data-earthquake-depth="shallow" aria-pressed="true" title="Show shallow earthquakes (shallower than 70 km)">Shallow</button>
           <button type="button" class="earthquake-depth-chip active" data-earthquake-depth="intermediate" aria-pressed="true" title="Show intermediate earthquakes (70–300 km)">Intermediate</button>
@@ -525,6 +530,11 @@
             </div>
             <div><span>SKY</span><strong id="cockpit-local-condition">UNKNOWN</strong><small id="cockpit-local-cloud">—</small></div>
             <div><span>PRECIP</span><strong id="cockpit-local-precipitation">—</strong><small>MM</small></div>
+            <div id="cockpit-local-visibility-cell" hidden>
+              <span>VIS</span>
+              <strong id="cockpit-local-visibility">UNAVAILABLE</strong>
+              <small>OPEN-METEO</small>
+            </div>
           </div>
           <a class="cockpit-weather-credit" href="https://open-meteo.com/" target="_blank" rel="noopener" hidden>Weather data by Open-Meteo.com</a>
         </section>
@@ -1044,6 +1054,9 @@
           <option value="">All sources</option>
         </select>
       </div>
+      <div class="cctv-controls" id="cctv-visibility-filters">
+        <button id="cctv-hide-unhealthy-btn" class="scene-btn" type="button" aria-pressed="false" title="Hide cameras the health map marks down">HIDE UNHEALTHY</button>
+      </div>
       <div class="cctv-controls">
         <button id="cctv-prev-btn" class="scene-btn">PREV</button>
         <select id="cctv-camera-select" aria-label="CCTV camera"></select>
@@ -1206,6 +1219,13 @@
                 <button type="button" class="space-mission-status-chip active" data-mission-status-chip="other" aria-pressed="true">Other</button>
               </div>
               <div class="space-mission-provider-chips" role="group" aria-label="Launch provider filters" data-mission-provider-chips></div>
+              <div class="space-mission-orbit-chips" role="group" aria-label="Launch orbit filters">
+                <button type="button" class="space-mission-orbit-chip active" data-mission-orbit-chip="leo" aria-pressed="true">LEO</button>
+                <button type="button" class="space-mission-orbit-chip active" data-mission-orbit-chip="meo" aria-pressed="true">MEO</button>
+                <button type="button" class="space-mission-orbit-chip active" data-mission-orbit-chip="geo" aria-pressed="true">GEO</button>
+                <button type="button" class="space-mission-orbit-chip active" data-mission-orbit-chip="polar" aria-pressed="true">Polar</button>
+                <button type="button" class="space-mission-orbit-chip active" data-mission-orbit-chip="other" aria-pressed="true">Other</button>
+              </div>
               <div class="space-mission-roster-list" data-mission-roster-list>
                 <div class="space-mission-roster-empty">LOADING 30-DAY MISSION INDEX</div>
               </div>

@@ -186,6 +186,24 @@ export function formatDistanceMeters(meters, unit = getDistanceUnit(), options =
 }
 
 /**
+ * Format stored Open-Meteo visibility (metres) with the Plan 44 distance
+ * toggle. Missing or non-finite values stay UNAVAILABLE — this helper does
+ * not invent a range or fetch weather.
+ *
+ * @param {unknown} visibilityM
+ * @param {unknown} [unit]
+ * @returns {string}
+ */
+export function formatWeatherVisibility(visibilityM, unit = getDistanceUnit()) {
+  if (visibilityM === null || visibilityM === undefined || visibilityM === '') {
+    return 'UNAVAILABLE';
+  }
+  const meters = Number(visibilityM);
+  if (!Number.isFinite(meters) || meters < 0) return 'UNAVAILABLE';
+  return formatDistanceMeters(meters, unit);
+}
+
+/**
  * Format an existing MSL altitude that is already held in metres.
  * Default `km` output matches the current HUD corner / summary strings.
  *

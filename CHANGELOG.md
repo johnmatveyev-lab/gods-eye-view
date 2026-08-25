@@ -45,6 +45,27 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster now has LEO | MEO | GEO | Polar | Other chips next
+  to the existing status and provider chips. Classification uses the
+  already-fetched Launch Library 2 `orbit.name` (GEO includes GTO /
+  geostationary / transfer; Polar includes polar / sun-sync). Default all
+  on. Filters the roster, pad-site markers, and ambient overlay from cache
+  and ANDs with status and provider. Selected mission stays visible when
+  its orbit chip is off. No extra `/api/launches` fetch and no new endpoint.
+- Earthquake time-window chips — 1h | 6h | 24h — sit next to the magnitude
+  floor and depth chips. Default 24h matches the current all_day discs.
+  1h and 6h keep `properties.time >= now − window`; missing/non-finite time
+  stays visible. Chip changes re-filter the cached USGS GeoJSON; no new
+  fetch and no `/api`. AND with the magnitude floor and depth chips.
+- Satellite class chips on the Satellites row, next to Core | Dense, in
+  `SATELLITE_CLASS_ORDER` (STATION, NAV, GEO, VISUAL, COMMS). Default all
+  on, so the current catalog is unchanged until a chip is unchecked. The
+  chips filter already-fetched CelesTrak groups through `satelliteClassOf`
+  (ISS stays STATION) and re-apply from in-memory points — no extra
+  `/api/celestrak` fetch. Tracked satellites stay visible. AND with Core |
+  Dense and ORBITS. COMMS is a no-op in Core (dense-only) and hides the
+  Starlink shell in Dense. Persists on the existing satellites layerState
+  option (`s.k.*`). Not an alert service. No new `/api`.
 - FIRMS row chips filter already-fetched detections by confidence floor
   (`All` | `0.5+` | `0.8+`, default All). Cells, sprites, overlay cards,
   and the Plan 70 FIRES list hide below the floor without a new NASA

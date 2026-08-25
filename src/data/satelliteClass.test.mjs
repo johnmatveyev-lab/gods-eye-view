@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { readFileSync, readdirSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import {
   SATELLITE_CLASSES,
   SATELLITE_CLASS_ORDER,
@@ -9,12 +12,72 @@ import {
   satelliteClassOf,
   tallySatelliteClasses,
 } from './satelliteClass.js';
+import {
+  DEFAULT_SATELLITE_CLASS_FILTER,
+  SATELLITE_CLASS_CHIP_CODES,
+  SATELLITE_CLASS_CHIP_IDS,
+  SATELLITE_CLASS_CHIP_LABELS,
+  filterSatellitesByClass,
+  normalizeSatelliteClassFilter,
+  satelliteClassFilterFlags,
+  satellitePassesClassFilter,
+  toggleSatelliteClassFilter,
+} from './satelliteClassFilter.js';
 import satellitesLayer, {
   _catalogGroupForTest,
   _clearDenseCatalogStateForTest,
+  _satelliteVisualStateForTest,
   _setDenseCatalogStateForTest,
+  _setSatellitePresentationForTest,
 } from './satellites.js';
+import {
+  encodeLayerStateParams,
+  normalizeLayerState,
+} from './layerState.js';
 import { resetSatGroupCache, setSatGroup } from './satGroup.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const ISS_NORAD = 25544;
+
+const CATALOG = Object.freeze([
+  { noradId: ISS_NORAD, name: 'ISS (ZARYA)', group: 'stations' },
+  { noradId: 32222, name: 'GPS BIIR-2', group: 'gps-ops' },
+  { noradId: 32223, name: 'COSMOS-GLONASS', group: 'glonass' },
+  { noradId: 32224, name: 'GALILEO-1', group: 'galileo' },
+  { noradId: 40000, name: 'GEO-1', group: 'geo' },
+  { noradId: 40001, name: 'VISUAL-1', group: 'visual' },
+  { noradId: 44444, name: 'STARLINK-TEST', group: 'dense' },
+]);
+
+function seedCatalog({
+  catalog = 'core',
+  showOrbits = true,
+  trackedNorad = null,
+  sats = CATALOG.filter((sat) => catalog === 'dense' || sat.group !== 'dense'),
+} = {}) {
+  _setDenseCatalogStateForTest({
+    catalog,
+    showPoints: true,
+    showOrbits,
+    trackedNorad,
+    coreSats: sats.map((sat) => ({
+      ...sat,
+      point: { id: sat.noradId, show: true },
+    })),
+  });
+}
+
+function visibleIds() {
+  const shows = _satelliteVisualStateForTest().pointShows || {};
+  return Object.entries(shows)
+    .filter(([, show]) => show !== false)
+    .map(([id]) => Number(id))
+    .sort((a, b) => a - b);
+}
+
+function classChip(klass) {
+  return satellitesLayer.getRowControls().chips.find((entry) => entry.id === `class-${klass}`);
+}
 
 /**
  * A real, parseable TLE under an arbitrary 5-digit catalog number, so the dense
@@ -474,7 +537,7 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
 test('a dependency owner hiding the points surrenders the whole row', async () => {
   try {
     _setDenseCatalogStateForTest({});
-    assert.equal(satellitesLayer.getRowControls().chips.length, 3);
+    assert.equal(satellitesLayer.getRowControls().chips.length, 8);
 
     // Space Missions borrows this layer for TLE lookup with showPoints:false.
     satellitesLayer.setParams({ showPoints: false });
@@ -483,8 +546,243 @@ test('a dependency owner hiding the points surrenders the whole row', async () =
     assert.deepEqual(owned.legend, [], 'no legend describing an empty sky');
 
     satellitesLayer.setParams({ showPoints: true });
-    assert.equal(satellitesLayer.getRowControls().chips.length, 3, 'released on restore');
+    assert.equal(satellitesLayer.getRowControls().chips.length, 8, 'released on restore');
   } finally {
     _clearDenseCatalogStateForTest();
   }
+});
+
+test('class chips follow SATELLITE_CLASS_ORDER and default all on', () => {
+  assert.deepEqual(SATELLITE_CLASS_CHIP_IDS, SATELLITE_CLASS_ORDER);
+  assert.deepEqual(SATELLITE_CLASS_CHIP_LABELS, {
+    station: 'STATION',
+    nav: 'NAV',
+    geo: 'GEO',
+    visual: 'VISUAL',
+    comms: 'COMMS',
+  });
+  assert.equal(DEFAULT_SATELLITE_CLASS_FILTER, 'sngvc');
+  assert.deepEqual(SATELLITE_CLASS_CHIP_CODES, {
+    station: 's',
+    nav: 'n',
+    geo: 'g',
+    visual: 'v',
+    comms: 'c',
+  });
+  assert.equal(normalizeSatelliteClassFilter(null), DEFAULT_SATELLITE_CLASS_FILTER);
+  assert.equal(toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'nav'), 'sgvc');
+  assert.equal(toggleSatelliteClassFilter('sgvc', 'nav'), DEFAULT_SATELLITE_CLASS_FILTER);
+  assert.equal(toggleSatelliteClassFilter('s', 'station'), '0');
+});
+
+test('all-on class chips match the current catalog', () => {
+  try {
+    seedCatalog();
+    const ids = CATALOG.filter((sat) => sat.group !== 'dense').map((sat) => sat.noradId);
+    assert.equal(satellitesLayer.getParams().satelliteClassFilter, DEFAULT_SATELLITE_CLASS_FILTER);
+    assert.deepEqual(visibleIds(), ids.sort((a, b) => a - b));
+    assert.deepEqual(
+      filterSatellitesByClass(CATALOG.filter((sat) => sat.group !== 'dense'), DEFAULT_SATELLITE_CLASS_FILTER)
+        .map((sat) => sat.noradId)
+        .sort((a, b) => a - b),
+      ids.sort((a, b) => a - b),
+    );
+    for (const klass of SATELLITE_CLASS_ORDER) {
+      const chip = classChip(klass);
+      assert.ok(chip, `${klass} chip sits on the satellite row`);
+      assert.equal(chip.label, SATELLITE_CLASSES[klass].label);
+      assert.equal(chip.active, true);
+    }
+    const chips = satellitesLayer.getRowControls().chips.map((chip) => chip.id);
+    assert.deepEqual(
+      chips.slice(0, 2),
+      ['catalog-core', 'catalog-dense'],
+      'class chips sit next to Core | Dense',
+    );
+    assert.deepEqual(
+      SATELLITE_CLASS_ORDER.map((klass) => `class-${klass}`),
+      chips.slice(2, 7),
+    );
+    assert.equal(chips[7], 'orbits');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('NAV off hides GPS/GLONASS/Galileo and keeps STATION/GEO', () => {
+  const navOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'nav');
+  assert.equal(satelliteClassFilterFlags(navOff).nav, false);
+  assert.equal(satellitePassesClassFilter({ group: 'gps-ops', noradId: 32222 }, navOff), false);
+  assert.equal(satellitePassesClassFilter({ group: 'glonass', noradId: 32223 }, navOff), false);
+  assert.equal(satellitePassesClassFilter({ group: 'galileo', noradId: 32224 }, navOff), false);
+  assert.equal(satellitePassesClassFilter({ group: 'stations', noradId: ISS_NORAD }, navOff, {
+    isIss: true,
+  }), true);
+  assert.equal(satellitePassesClassFilter({ group: 'geo', noradId: 40000 }, navOff), true);
+
+  try {
+    seedCatalog();
+    satellitesLayer.setParams({ satelliteClassFilter: navOff });
+    const visible = visibleIds();
+    assert.equal(visible.includes(32222), false);
+    assert.equal(visible.includes(32223), false);
+    assert.equal(visible.includes(32224), false);
+    assert.equal(visible.includes(ISS_NORAD), true);
+    assert.equal(visible.includes(40000), true);
+    assert.equal(classChip('nav').active, false);
+    assert.equal(classChip('station').active, true);
+    assert.equal(classChip('geo').active, true);
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('a class chip change re-applies in-memory points and does not refetch CelesTrak', () => {
+  const fetches = [];
+  const originalFetch = globalThis.fetch;
+  try {
+    globalThis.fetch = async (url) => {
+      fetches.push(String(url));
+      return { ok: true, text: async () => '' };
+    };
+    seedCatalog();
+    const before = _satelliteVisualStateForTest().pointIds.slice().sort((a, b) => a - b);
+    satellitesLayer.setParams({ satelliteClassFilter: toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'nav') });
+    assert.deepEqual(fetches, []);
+    assert.deepEqual(
+      _satelliteVisualStateForTest().pointIds.slice().sort((a, b) => a - b),
+      before,
+      'the cached catalog stays in memory',
+    );
+    assert.equal(_catalogGroupForTest(ISS_NORAD), 'stations');
+    assert.equal(_catalogGroupForTest(32222), 'gps-ops');
+  } finally {
+    globalThis.fetch = originalFetch;
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('tracked ISS stays when STATION is off', () => {
+  const stationOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'station');
+  assert.equal(satellitePassesClassFilter({ group: 'stations', noradId: ISS_NORAD }, stationOff, {
+    isIss: true,
+  }), false);
+  assert.equal(satellitePassesClassFilter({ group: 'stations', noradId: ISS_NORAD }, stationOff, {
+    isIss: true,
+    trackedNorad: ISS_NORAD,
+  }), true);
+
+  try {
+    seedCatalog({ trackedNorad: ISS_NORAD });
+    assert.equal(satellitesLayer.getParams().selectedSatTrackingId, ISS_NORAD);
+    satellitesLayer.setParams({ satelliteClassFilter: stationOff });
+    assert.equal(satellitesLayer.getParams().selectedSatTrackingId, ISS_NORAD,
+      'class chips never drop the tracked satellite');
+    assert.equal(_catalogGroupForTest(ISS_NORAD), 'stations');
+    assert.equal(_satelliteVisualStateForTest().pointShows[ISS_NORAD], false,
+      'the tracked primitive stays hidden because the entity owns the dot');
+    assert.equal(visibleIds().includes(40000), true, 'untracked GEO stays');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('COMMS is a no-op in Core and hides the Starlink shell in Dense', () => {
+  const commsOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'comms');
+  try {
+    seedCatalog({ catalog: 'core' });
+    const coreBefore = visibleIds();
+    satellitesLayer.setParams({ satelliteClassFilter: commsOff });
+    assert.deepEqual(visibleIds(), coreBefore, 'Core has no COMMS class to hide');
+    assert.equal(classChip('comms').active, false);
+    assert.equal(_catalogGroupForTest(44444), undefined);
+
+    seedCatalog({ catalog: 'dense' });
+    satellitesLayer.setParams({ satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER });
+    assert.equal(visibleIds().includes(44444), true);
+    satellitesLayer.setParams({ satelliteClassFilter: commsOff });
+    assert.equal(visibleIds().includes(44444), false, 'Dense + COMMS off hides Starlink');
+    assert.equal(visibleIds().includes(ISS_NORAD), true);
+    assert.equal(_catalogGroupForTest(44444), 'dense', 'the shell stays cached');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('orbits on/off stay independent of class chips', () => {
+  const navOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'nav');
+  try {
+    _setSatellitePresentationForTest({
+      catalog: 'core',
+      showPoints: true,
+      showOrbits: true,
+      points: [ISS_NORAD, 32222],
+      orbits: [ISS_NORAD],
+      groups: { [32222]: 'gps-ops' },
+    });
+    satellitesLayer.setParams({ satelliteClassFilter: navOff });
+    let state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, true);
+    assert.equal(state.orbitShows[ISS_NORAD], true);
+    assert.equal(state.pointShows[32222], false);
+    assert.equal(state.pointShows[ISS_NORAD], true);
+
+    satellitesLayer.setParams({ showOrbits: false });
+    state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, false);
+    assert.equal(state.orbitShows[ISS_NORAD], false);
+    assert.equal(state.pointShows[32222], false);
+    assert.equal(state.pointShows[ISS_NORAD], true);
+    assert.equal(state.satelliteClassFilter, navOff);
+
+    satellitesLayer.setParams({ showOrbits: true });
+    state = _satelliteVisualStateForTest();
+    assert.equal(state.showOrbits, true);
+    assert.equal(state.orbitShows[ISS_NORAD], true);
+    assert.equal(state.pointShows[32222], false);
+    assert.equal(satellitesLayer.getParams().catalog, 'core');
+  } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('class chips persist through the existing satellites layerState option', () => {
+  assert.equal(
+    normalizeLayerState({}).options.satellites.satelliteClassFilter,
+    DEFAULT_SATELLITE_CLASS_FILTER,
+  );
+  const hiddenNav = normalizeLayerState({
+    enabledLayerIds: ['satellites'],
+    options: { satellites: { satelliteClassFilter: 'sgvc' } },
+  });
+  assert.equal(hiddenNav.options.satellites.satelliteClassFilter, 'sgvc');
+  const params = encodeLayerStateParams(new URLSearchParams('v=2'), hiddenNav);
+  assert.match(params.get('lo') || '', /s\.k\.sgvc/);
+
+  const allOn = normalizeLayerState({
+    enabledLayerIds: ['satellites'],
+    options: { satellites: { satelliteClassFilter: DEFAULT_SATELLITE_CLASS_FILTER } },
+  });
+  const omitted = encodeLayerStateParams(new URLSearchParams('v=2'), allOn);
+  assert.doesNotMatch(omitted.get('lo') || '', /s\.k\./, 'all-on is the omitted default');
+});
+
+test('class chips do not add an endpoint and keep Meridian / MIT credit', () => {
+  const satellites = readFileSync(path.join(ROOT, 'src/data/satellites.js'), 'utf8');
+  const filter = readFileSync(path.join(ROOT, 'src/data/satelliteClassFilter.js'), 'utf8');
+  const layerState = readFileSync(path.join(ROOT, 'src/data/layerState.js'), 'utf8');
+  const license = readFileSync(path.join(ROOT, 'LICENSE'), 'utf8');
+  const readme = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
+  const packageJson = JSON.parse(readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+  assert.match(satellites, /satelliteClassFilter/);
+  assert.match(layerState, /satelliteClassFilter/);
+  assert.doesNotMatch(satellites, /\/api\/(?!celestrak)/);
+  assert.doesNotMatch(filter, /\/api\//);
+  assert.doesNotMatch(filter, /opensky|google news|telegeography|quantum-earth|gev rename/i);
+  assert.doesNotMatch(satellites, /opensky-network\.org|google\.com\/news|telegeography|quantum-earth/i);
+  assert.ok(readdirSync(path.join(ROOT, 'api')).includes('celestrak'));
+  assert.equal(readdirSync(path.join(ROOT, 'api')).includes('satellites'), false);
+  assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
+  assert.match(readme, /# Meridian/);
+  assert.equal(packageJson.name, 'meridian');
 });
