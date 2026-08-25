@@ -283,15 +283,6 @@ function _hideFleetPrimitives(icao24) {
   if (model) model.show = false;
 }
 
-function _revealFleetBillboard(icao24, bb) {
-  if (!bb || icao24 === _trackedIcao) return;
-  if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) {
-    _hideFleetPrimitives(icao24);
-    return;
-  }
-  bb.show = true;
-}
-
 function _applyOperatorContactVisibility() {
   _applyInFlightFilterVisibility();
 }
