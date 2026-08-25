@@ -7,6 +7,7 @@ import {
   installationResponseSaturated,
   installationSurfaceHeightM,
   installationWithinViewport,
+  installationsSearchToastMessage,
 } from './militaryInstallations.js';
 import militaryInstallationsLayer from './militaryInstallations.js';
 import {
@@ -197,6 +198,7 @@ async function runInstallationLoad({
   exactSaturated = false,
   legacyPayload = false,
   failWith = null,
+  placesResponse = null,
 }) {
   const originalDocument = globalThis.document;
   const originalWindow = globalThis.window;
@@ -215,6 +217,24 @@ async function runInstallationLoad({
     const href = String(url);
     if (href.includes('/api/terrain/heights')) {
       return { ok: true, status: 200, json: async () => ({ results: [] }) };
+    }
+    if (href.includes('/api/google/text-search')) {
+      requests.push(href);
+      if (placesResponse?.ok === false) {
+        return {
+          ok: false,
+          status: placesResponse.status || 404,
+          json: async () => ({
+            error: placesResponse.error || 'NOT_FOUND',
+            places: [],
+          }),
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ places: placesResponse?.places || [] }),
+      };
     }
     requests.push(href);
     if (failWith) {
@@ -742,4 +762,56 @@ test('the retry is wired to every lifecycle edge, not just declared', () => {
   assert.match(installationsSource,
     /state\.enabled && !state\.loading\) loadInstallations\(\)/,
     'the fired retry re-checks enablement and never races an in-flight load');
+});
+
+test('SEARCH NEARBY SITES toast reads getStats().error instead of always succeeding', () => {
+  assert.equal(
+    installationsSearchToastMessage({ status: 'zoom-in' }),
+    'Zoom in to search mapped installations',
+  );
+  assert.equal(
+    installationsSearchToastMessage({
+      status: 'ready',
+      error: 'Google Places search unavailable; showing mapped sites',
+    }),
+    'Google Places search unavailable; showing mapped sites',
+  );
+  assert.equal(
+    installationsSearchToastMessage({ status: 'ready', error: null }),
+    'Nearby installations refreshed',
+  );
+
+  const uiSource = fs.readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  assert.match(uiSource, /installationsSearchToastMessage\(/);
+  assert.match(uiSource, /error:\s*stats\?\.error/);
+  assert.doesNotMatch(
+    uiSource,
+    /stats\?\.status === 'zoom-in'\s*\n\s*\? 'Zoom in to search mapped installations'\s*\n\s*: 'Nearby installations refreshed'/,
+  );
+});
+
+test('Places search failure keeps mapped OSM sites and surfaces getStats().error', async () => {
+  const run = await runInstallationLoad({
+    elements: [{
+      type: 'node',
+      id: 42,
+      lat: 30.2,
+      lon: -97.7,
+      tags: { military: 'base', name: 'Camp Mabry' },
+    }],
+    placesResponse: { ok: false, status: 404, error: 'NOT_FOUND' },
+  });
+  try {
+    assert.equal(run.stats().count, 1);
+    assert.equal(run.stats().error, null);
+    await militaryInstallationsLayer.searchNearby();
+    assert.ok(run.requests.some((url) => String(url).includes('/api/google/text-search')));
+    assert.ok(run.requests.some((url) => String(url).includes('/api/military-installations')));
+    assert.equal(run.stats().count, 1, 'mapped OSM sites stay on the layer');
+    assert.ok(run.entities().length > 0);
+    assert.match(run.stats().error, /Google Places search unavailable; showing mapped sites/);
+    assert.notEqual(run.stats().status, 'unavailable');
+  } finally {
+    run.restore();
+  }
 });
