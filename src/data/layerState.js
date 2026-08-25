@@ -1,4 +1,10 @@
 import {
+  AIRCRAFT_CLASS_FILTER_ALL,
+  decodeAircraftClassFilter,
+  encodeAircraftClassFilter,
+  normalizeAircraftClassFilter,
+} from './aircraftClassFilter.js';
+import {
   DEFAULT_HEADING_SECTORS,
   decodeHeadingSectors,
   encodeHeadingSectors,
@@ -255,6 +261,16 @@ const OPTION_GROUPS = Object.freeze({
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
     nullableIntegerOption('speedMinKt', 's', null),
     nullableIntegerOption('speedMaxKt', 'p', null),
+    // PLAN 98: class chips default ALL ON. Omitted `k` means the current mixed
+    // fleet — there was no prior class filter, so absent === default.
+    Object.freeze({
+      key: 'aircraftClassFilter',
+      token: 'k',
+      defaultValue: AIRCRAFT_CLASS_FILTER_ALL,
+      normalize: normalizeAircraftClassFilter,
+      encode: encodeAircraftClassFilter,
+      decode: decodeAircraftClassFilter,
+    }),
   ]),
   satellites: Object.freeze([
     enumOption('catalog', 'c', 'core', ['core', 'dense'], { core: 'c', dense: 'd' }),

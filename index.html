@@ -669,6 +669,21 @@
         <span class="pp-slider-value" id="speed-band-unit">km/h</span>
         <button type="button" class="pp-mode-btn" id="speed-band-clear" title="Clear ground-speed band">Clear</button>
       </div>
+      <div class="pp-slider-row visible aircraft-class-filter-row" id="aircraft-class-filter-row">
+        <span class="pp-slider-mini-label">Class</span>
+        <div class="aircraft-class-chips" id="aircraft-class-chips" role="group" aria-label="Aircraft class filter">
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="light" aria-pressed="true" title="Light / general aviation">GA</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="glider" aria-pressed="true" title="Glider">GLDR</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="turboprop" aria-pressed="true" title="Turboprop">TPROP</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="airliner" aria-pressed="true" title="Airliner">JET</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="widebody" aria-pressed="true" title="Widebody / heavy">HEAVY</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="quadjet" aria-pressed="true" title="Quadjet">QUAD</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="helicopter" aria-pressed="true" title="Helicopter">HELO</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="fastjet" aria-pressed="true" title="Fast jet">FAST</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="bizjet" aria-pressed="true" title="Business jet">BIZ</button>
+          <button type="button" class="pp-mode-btn active" data-aircraft-class="uav" aria-pressed="true" title="UAV">UAV</button>
+        </div>
+      </div>
     </div>
     <div class="pp-toggle-group">
       <button class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true" title="Tracked-target trail — hide the fading path without stopping track">

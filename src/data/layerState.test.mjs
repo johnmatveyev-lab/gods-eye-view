@@ -14,6 +14,7 @@ import {
   decodeLayerStateParams,
   encodeLayerStateParams,
   isLayerSelectable,
+  layerOptionsForRestore,
   normalizeLayerState,
   parseStoredLayerState,
   serializeStoredLayerState,
@@ -262,6 +263,7 @@ test('unknown and forbidden option fields are ignored while missing options use 
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
     speedMaxKt: null,
+    aircraftClassFilter: 'all',
   });
   assert.deepEqual(decoded.options.radio, { filter: 'news', volume: 0.35, minBitrate: 'all' });
 
@@ -479,6 +481,23 @@ test('saved local layer prefs win over the first-visit default', async () => {
   coordinator.destroy();
 });
 
+test('aircraft class chips persist on the flights option owner and default all-on', () => {
+  assert.equal(createDefaultLayerState().options.flights.aircraftClassFilter, 'all');
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=f&lo=f.e.1'));
+  assert.equal(omitted.options.flights.aircraftClassFilter, 'all',
+    'a pre-PLAN-98 link has no class filter, so every class stays visible');
+
+  const state = createDefaultLayerState();
+  state.enabledLayerIds = ['flights', 'military'];
+  state.options.flights = { ...state.options.flights, aircraftClassFilter: '40' };
+  const encoded = encode(state);
+  assert.match(encoded, /f\.k\.40/);
+  const decoded = decodeLayerStateParams(new URLSearchParams(encoded));
+  assert.equal(decoded.options.flights.aircraftClassFilter, '40');
+  assert.equal(layerOptionsForRestore(decoded, 'flights').aircraftClassFilter, '40');
+  assert.equal(layerOptionsForRestore(decoded, 'military').aircraftClassFilter, '40');
+});
+
 test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, and the rail agree', async () => {
   // Product invariant 2026-08-22: the DISPLAY-rail 3D toggle defaults ON with mode
   // `proximity`, because proximity is itself the budget — models materialize only
@@ -620,6 +639,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
+    aircraftClassFilter: 'all',
   }]);
   assert.deepEqual(calls.military, [{
     models3d: false,
@@ -628,6 +648,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
+    aircraftClassFilter: 'all',
   }]);
   assert.equal(coordinator.getDurableState().options.flights.models3d, false);
   coordinator.destroy();
@@ -1062,6 +1083,7 @@ test('later explicit params during init replace options without cancelling visib
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
     speedMaxKt: null,
+    aircraftClassFilter: 'all',
   });
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   assert.equal(storage.writes.length, 1);
@@ -1109,6 +1131,7 @@ test('explicit navigation preserves unrelated visibility and option restoration'
     hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
+    aircraftClassFilter: 'all',
   }]);
   assert.equal(results.find((result) => result.layerId === 'flights').succeeded, true);
   coordinator.destroy();
@@ -1172,6 +1195,7 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     selectedFlightsTrackingId: null,
     speedMinKt: null,
     speedMaxKt: null,
+    aircraftClassFilter: 'all',
   });
   assert.deepEqual(manager.getLayerParams('radio'), {
     filter: 'genre:r&b',
@@ -1237,6 +1261,7 @@ test('shared flight selection is deferred until destination refresh and then fol
     hideStale: false,
     speedMinKt: null,
     speedMaxKt: null,
+    aircraftClassFilter: 'all',
   }]);
 
   const result = await coordinator.restoreShareTrackingSelection();
