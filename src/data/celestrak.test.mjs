@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import createViteConfig from '../../vite.config.js';
@@ -166,6 +166,14 @@ test('optional /tmp disk is used on Vercel; write failures still serve from memo
     path.join('/tmp', 'meridian-celestrak'),
   );
   assert.equal(
+    defaultCelestrakCacheDir({ env: { NETLIFY: '1' } }),
+    path.join('/tmp', 'meridian-celestrak'),
+  );
+  assert.equal(
+    defaultCelestrakCacheDir({ env: { AWS_LAMBDA_FUNCTION_NAME: 'api' } }),
+    path.join('/tmp', 'meridian-celestrak'),
+  );
+  assert.equal(
     defaultCelestrakCacheDir({ env: {}, cwd: '/app' }),
     path.join('/app', '.gev-cache'),
   );
@@ -185,6 +193,33 @@ test('optional /tmp disk is used on Vercel; write failures still serve from memo
   assert.equal(first.cache, 'MISS');
   const second = await store.resolve('stations');
   assert.equal(second.cache, 'HIT');
+});
+
+test('seeded /tmp + failing upstream is 200 STALE-ERROR, never 502 NONE', async () => {
+  const cacheDir = defaultCelestrakCacheDir({ env: { NETLIFY: '1' } });
+  assert.equal(cacheDir, path.join('/tmp', 'meridian-celestrak'));
+  mkdirSync(cacheDir, { recursive: true });
+  const nowMs = 10_000_000;
+  writeFileSync(
+    path.join(cacheDir, 'celestrak-starlink.json'),
+    JSON.stringify({ at: nowMs - CELESTRAK_TTL_MS - 1, body: STATIONS_TLE }),
+    'utf8',
+  );
+
+  const store = createCelestrakStore({
+    cacheDir,
+    mem: new Map(),
+    now: () => nowMs,
+    fetchImpl: async () => new Response('upstream down', { status: 503 }),
+  });
+  const handler = createVercelCelestrakHandler(() => store);
+  const res = await dispatch(handler, { url: '/api/celestrak/starlink' });
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body, STATIONS_TLE);
+  assert.equal(res.headers['x-tle-cache'], 'STALE-ERROR');
+  assert.notEqual(res.statusCode, 502);
+  assert.notEqual(res.headers['x-tle-cache'], 'NONE');
+  assert.doesNotMatch(String(res.body), /celestrak fetch failed and no cache available/);
 });
 
 test('Vite forwards to the extracted plugin; no ais-live/google/voice wrap', () => {
