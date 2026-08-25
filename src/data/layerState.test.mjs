@@ -259,6 +259,7 @@ test('unknown and forbidden option fields are ignored while missing options use 
     models3dMode: 'all',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
@@ -512,6 +513,7 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
   const defaults = createDefaultLayerState().options.flights;
   assert.equal(defaults.models3d, true, 'the durable default is 3D ON');
   assert.equal(defaults.models3dMode, 'proximity', 'and proximity, never all');
+  assert.equal(defaults.airborneOnly, false, 'Airborne only stays off so current draw remains');
 
   const paramsCalls = [];
   const manager = productionManager({
@@ -538,6 +540,8 @@ test('a fresh boot starts 3D aircraft ON in proximity — codec, both layers, an
       `${name}: the fleet starts armed, matching the codec default`);
     assert.match(source, /^let _models3dMode = 'proximity';/m,
       `${name}: and starts in proximity, matching the codec default`);
+    assert.match(source, /^let _airborneOnly = false;$/m,
+      `${name}: Airborne only starts off, matching the codec default`);
   }
   const ui = await readFile(new URL('../ui.js', import.meta.url), 'utf8');
   assert.match(ui, /^\s*this\._models3dEnabled = true;$/m,
@@ -638,6 +642,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     models3dMode: 'proximity',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
@@ -648,6 +653,7 @@ test('a share link that carries 3D OFF still restores OFF at both aircraft layer
     models3dMode: 'proximity',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
@@ -1082,6 +1088,7 @@ test('later explicit params during init replace options without cancelling visib
     models3dMode: 'proximity',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     selectedFlightsTrackingId: null,
     selectedMilitaryTrackingId: null,
     speedMinKt: null,
@@ -1133,6 +1140,7 @@ test('explicit navigation preserves unrelated visibility and option restoration'
     models3dMode: 'all',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',
@@ -1197,6 +1205,7 @@ test('startup gesture clears passive Follow but preserves slow layer and display
     hideStale: false,
     irBoost: true,
     headingSectors: 'NESW',
+    airborneOnly: false,
     selectedFlightsTrackingId: null,
     speedMinKt: null,
     speedMaxKt: null,
@@ -1265,6 +1274,7 @@ test('shared flight selection is deferred until destination refresh and then fol
     models3dMode: 'proximity',
     headingSectors: 'NESW',
     hideStale: false,
+    airborneOnly: false,
     speedMinKt: null,
     speedMaxKt: null,
     aircraftClassFilter: 'all',

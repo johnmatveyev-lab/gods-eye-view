@@ -256,8 +256,10 @@ const OPTION_GROUPS = Object.freeze({
     headingSectorsOption(),
     // Feed-health hide for contacts in `_missingPolls`. Default OFF keeps the
     // existing 45% fade. Token `g` is omitted while false. `h` is PLAN 101
-    // heading sectors; `s` is PLAN 96 min speed.
+    // heading sectors; `s` is PLAN 96 min speed; `a` is PLAN 95 airborne-only.
     booleanOption('hideStale', 'g', false),
+    // PLAN 95: hide parked/taxi contacts. Default OFF so current draw stays.
+    booleanOption('airborneOnly', 'a', false),
     trackingIdOption('selectedFlightsTrackingId', 't', null),
     trackingIdOption('selectedMilitaryTrackingId', 'u', null),
     nullableIntegerOption('speedMinKt', 's', null),
