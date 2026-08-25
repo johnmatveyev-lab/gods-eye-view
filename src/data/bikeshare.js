@@ -600,13 +600,23 @@ export function shouldShowBikeshareStation(record, { hideEmpty = false, selected
   return record.bikesAvailable !== 0;
 }
 
+function isSelectedStationRecord(record) {
+  if (!_selectedKey || !record) return false;
+  if (record.key === _selectedKey) return true;
+  return _stationRenderMap.get(_selectedKey) === record;
+}
+
 function applyStationVisibility(record) {
   if (!record?.point) return;
-  const shouldDraw = shouldShowBikeshareStation(record, {
+  const isSelected = isSelectedStationRecord(record);
+  const shouldDraw = shouldShowBikeshareStation({
+    ...record,
+    key: record.key || (isSelected ? _selectedKey : record.key),
+  }, {
     hideEmpty: _hideEmpty,
     selectedKey: _selectedKey,
   });
-  if (record.key === _selectedKey) {
+  if (isSelected) {
     record.point.show = false;
     if (_selectedEntity) _selectedEntity.show = shouldDraw;
     return;
