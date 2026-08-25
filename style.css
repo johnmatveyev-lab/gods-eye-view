@@ -5824,7 +5824,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 .ais-type-chips,
 .ais-parked-chips,
-.ais-min-speed-chips {
+.ais-min-speed-chips,
+.ais-hide-no-dest-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -5833,7 +5834,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 .ais-type-chips[hidden],
 .ais-parked-chips[hidden],
-.ais-min-speed-chips[hidden] {
+.ais-min-speed-chips[hidden],
+.ais-hide-no-dest-chips[hidden] {
   display: none;
 }
 
@@ -5873,7 +5875,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 .ais-type-chip,
 .ais-parked-chip,
-.ais-min-speed-chip {
+.ais-min-speed-chip,
+.ais-hide-no-dest-chip {
   padding: 3px 7px;
   border: 1px solid var(--glass-border);
   border-radius: 999px;
@@ -5888,7 +5891,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 .ais-type-chip.active,
 .ais-parked-chip.active,
-.ais-min-speed-chip.active {
+.ais-min-speed-chip.active,
+.ais-hide-no-dest-chip.active {
   border-color: var(--glass-border-hover);
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
@@ -5899,14 +5903,17 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .ais-parked-chip:hover,
 .ais-parked-chip:focus-visible,
 .ais-min-speed-chip:hover,
-.ais-min-speed-chip:focus-visible {
+.ais-min-speed-chip:focus-visible,
+.ais-hide-no-dest-chip:hover,
+.ais-hide-no-dest-chip:focus-visible {
   border-color: var(--glass-border-hover);
 }
 
 #data-panel.collapsed .ais-type-chips,
 #data-panel.collapsed .ais-parked-chips,
 #data-panel.collapsed .ais-min-speed-chips,
-#data-panel.collapsed .ais-destination-wrap {
+#data-panel.collapsed .ais-destination-wrap,
+#data-panel.collapsed .ais-hide-no-dest-chips {
   display: none;
 }
 
