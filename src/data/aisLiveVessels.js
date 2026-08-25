@@ -9,6 +9,7 @@ import { screenProjectedRotation, cameraPoseSignature } from './iconOrientation.
 import { formatKnots } from './detectionDraw.js';
 import {
   isOwnedByOtherLayer,
+  isSceneClickCaptured,
   registerPickOwner,
   unregisterPickOwner,
   resolvePickId,
@@ -1534,7 +1535,7 @@ function installInteraction(viewer) {
 function bindVesselInteraction(viewer, handler, keyTarget) {
   state.clickHandler = handler;
   handler.setInputAction((click) => {
-    if (!state.enabled) return;
+    if (!state.enabled || isSceneClickCaptured()) return;
     const picked = viewer.scene.pick(click.position);
     const pickedId = resolvePickId(picked);
     let record = pickedId ? state.vesselMap.get(pickedId) : null;

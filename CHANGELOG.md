@@ -12,6 +12,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a two-click Measure mode on the globe: two terrain picks draw a
+  geodesic line and show the distance in the current `km | nm | mi` units.
+  Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
+  points only — no person-search, OpenSky, Google News, or TeleGeography.
 - Added a filter field at the top of the Data Layers list. It matches the
   visible layer name plus existing voice common-names (fires, ships, bikes,
   traffic, cameras, and the rest of that map). Empty query shows the full

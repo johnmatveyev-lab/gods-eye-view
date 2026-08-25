@@ -1473,6 +1473,7 @@ body.ui-clean-view #clean-view-exit {
 body.ui-clean-view #title-bar,
 body.ui-clean-view #style-indicator,
 body.ui-clean-view #top-center-actions,
+body.ui-clean-view #measure-readout,
 body.ui-clean-view #global-loading-status,
 body.ui-clean-view #traffic-sync-chip,
 body.ui-clean-view #cctv-sync-chip,
@@ -1984,6 +1985,50 @@ body.ui-clean-view #scene-runtime.active {
 
 #top-center-actions .material-symbols-outlined {
   font-size: 18px;
+}
+
+#top-center-actions #measure-toggle[aria-pressed="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+#measure-readout {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  z-index: 101;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  transform: translateX(-50%);
+  padding: 6px 10px 6px 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+#measure-readout:not([hidden]) {
+  display: inline-flex;
+}
+
+#measure-clear {
+  padding: 2px 8px;
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+#measure-clear:hover,
+#measure-clear:focus-visible {
+  border-color: var(--glass-border-hover);
+  color: var(--text-primary);
 }
 
 #global-loading-status {
@@ -3910,7 +3955,10 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #measure-toggle, #reset-globe-view) {
+  display: none !important;
+}
+body.cockpit-mode #measure-readout {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -6840,6 +6888,7 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 body.recording-mode #title-bar,
 body.recording-mode #style-indicator,
 body.recording-mode #top-center-actions,
+body.recording-mode #measure-readout,
 body.recording-mode #global-loading-status,
 body.recording-mode #traffic-sync-chip,
 body.recording-mode #cctv-sync-chip,
@@ -6865,7 +6914,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #home-view, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #home-view, #measure-toggle, #reset-globe-view) {
   display: none !important;
 }
 

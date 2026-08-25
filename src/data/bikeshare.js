@@ -13,7 +13,7 @@
 import * as Cesium from 'cesium';
 import { governorRequestRender } from '../renderGovernor.js';
 import { registerSpriteCollection, restoreSpriteOrder } from './spriteOrder.js';
-import { registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
+import { isSceneClickCaptured, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 import {
   clearOverlaySource,
   setOverlayEntries,
@@ -1083,6 +1083,7 @@ function _installClickHandler(viewer) {
 
   _clickHandler = new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
+    if (isSceneClickCaptured()) return;
     const picked = viewer.scene.pick(click.position);
 
     if (picked) {

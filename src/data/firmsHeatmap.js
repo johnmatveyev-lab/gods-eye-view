@@ -13,6 +13,7 @@ import {
 } from './contextStore.js';
 import {
   isOwnedByOtherLayer,
+  isSceneClickCaptured,
   registerPickOwner,
   resolvePickId,
   unregisterPickOwner,
@@ -824,6 +825,7 @@ export function createFirmsHeatmapLayer({
     if (_clickHandler || !_viewer) return;
     _clickHandler = screenSpaceEventHandlerFactory(_viewer);
     _clickHandler.setInputAction((click) => {
+      if (isSceneClickCaptured()) return;
       const picked = _viewer.scene.pick(click.position);
       const fire = pickedFire(picked);
       if (fire) {

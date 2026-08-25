@@ -15,6 +15,7 @@ import { normalizeRadioFilter } from './layerState.js';
 import { horizonOccluder } from './iconOrientation.js';
 import {
   isOwnedByOtherLayer,
+  isSceneClickCaptured,
   registerPickOwner,
   resolvePickId,
   unregisterPickOwner,
@@ -2568,7 +2569,7 @@ function installInteraction() {
   registerPickOwner('radio', (id) => id.startsWith(RADIO_PREFIX));
   _clickHandler = new Cesium.ScreenSpaceEventHandler(_viewer.scene.canvas);
   _clickHandler.setInputAction((click) => {
-    if (!radioPresentationAllowed()) return;
+    if (!radioPresentationAllowed() || isSceneClickCaptured()) return;
     const stationId = pickedRadioStationAt(click.position);
     if (!stationId) return;
     _playFallbackId = null;

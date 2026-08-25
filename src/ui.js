@@ -167,6 +167,13 @@ import {
   setDistanceUnit,
   subscribeDistanceUnit,
 } from './units.js';
+import {
+  clearMeasure,
+  destroyMeasure,
+  initMeasure,
+  isMeasureActive,
+  setMeasureActive,
+} from './measure.js';
 import { runCctvLayerEnableTransition } from './cctvFocusPolicy.js';
 import {
   registerCctvFocusRequestListener,
@@ -321,6 +328,7 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -372,6 +380,7 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -2454,6 +2463,10 @@ export class StyleManager {
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._measureToggleBtn = document.getElementById('measure-toggle');
+    this._measureReadout = document.getElementById('measure-readout');
+    this._measureReadoutLabel = document.getElementById('measure-readout-label');
+    this._measureClearBtn = document.getElementById('measure-clear');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
@@ -2720,6 +2733,9 @@ export class StyleManager {
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
     });
+    initMeasure(viewer, {
+      onChange: (state) => this._syncMeasureUi(state),
+    });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
 
@@ -2737,6 +2753,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initMeasureButton();
     this._initClearSelectedLayersButton();
     this._initHomeViewButton();
     this._initResetGlobeButton();
@@ -10064,6 +10081,37 @@ export class StyleManager {
     });
   }
 
+  /** Wire two-click geodesic Measure. Does not call /api/route. */
+  _initMeasureButton() {
+    this._measureToggleBtn?.addEventListener('click', () => {
+      setMeasureActive(!isMeasureActive());
+    });
+    this._measureClearBtn?.addEventListener('click', () => {
+      clearMeasure();
+    });
+    this._syncMeasureUi();
+  }
+
+  /**
+   * Keep the Measure button and readout in sync with the current pair.
+   * @param {{active?: boolean, prompt?: string}|null} [state]
+   * @returns {void}
+   */
+  _syncMeasureUi(state = null) {
+    const active = state?.active ?? isMeasureActive();
+    const prompt = state?.prompt || 'Click two globe points';
+    if (this._measureToggleBtn) {
+      this._measureToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      this._measureToggleBtn.classList.toggle('active', active);
+    }
+    if (this._measureReadout) {
+      this._measureReadout.hidden = !active;
+    }
+    if (this._measureReadoutLabel) {
+      this._measureReadoutLabel.textContent = prompt;
+    }
+  }
+
   /**
    * Displays a temporary toast notification for 2 seconds.
    * @param {string} message - Text to show in the toast.
@@ -10421,6 +10469,7 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    destroyMeasure();
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
     this._layerStateCoordinator = null;
