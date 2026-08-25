@@ -25,6 +25,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Clean view control on the globe chrome that toggles the existing
+  `ui-clean-view` hide-chrome path. Esc or a second click restores panels.
+  Google Maps and Data attribution stay on. No new hide system and no `/api`.
 - Contact Labels on/off (declutter) hides ambient callsign billboards on
   busy FIRs. Dots, models, and trails stay. Selected/tracked ident cards stay.
   Density still only changes detections. Persists `meridian.contactLabels`
