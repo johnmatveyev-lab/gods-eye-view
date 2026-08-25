@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Space Missions roster has client-only **All | 50+ | 80+** probability
+  chips next to Webcast only. Default **All** matches the current 30-day
+  roster. **50+** hides missions whose normalized Launch Library 2
+  `probability` is a finite value under 50. **80+** is stricter (finite
+  under 80 hide). Missing, null, non-finite, or the historical `-1`
+  unknown flag stay visible. Selected mission stays. Chip changes
+  re-filter the already-fetched window and AND with status, provider,
+  orbit, site, 7d|30d, rocket, and webcast. No extra `/api/launches`
+  fetch and no new endpoint. Preference persists as
+  `meridian.launchProbability`. Hidden when the launches layer is off.
 - Satellites row has client-only **All | <0.01 | <0.05** eccentricity chips
   next to inclination chips. Default All matches the current catalog. The
   chips filter already-fetched CelesTrak satrecs by `satrec.ecco` (unitless
