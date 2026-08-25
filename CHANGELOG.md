@@ -14,6 +14,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Pro accounts can save, restore, and delete up to 10 camera/style/layer
+  views in `localStorage` (`meridian.savedViews.<clerkUserId>`). Share-link
+  encode/decode is reused. Free and anonymous stay hidden and write nothing.
 - Added Vercel Node functions `api/billing/[...path].js` and
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
@@ -22,11 +25,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
   adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
   terrain, Google Places, and the rest). No Next rewrite and no new vendors.
+- Added `api/opensky.js` for hosted civilian flights. The path stays
+  `/api/opensky`; the handler is the extracted 250 nm adsb.lol snapshot
+  (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).
+  `/api/opensky-track` stays 410. No `OPENSKY_*` env.
+- Added hosted aircraft-trace functions `api/adsblol/trace.js` (real
+  adsb.lol tar1090 proxy) and `api/opensky-track.js` (hard 410, no OpenSky
+  fetch). Vite forwards to `src/data/trackBackfill.js`.
 
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).
-  `GET /api/billing/me` and checkout `ALREADY_PRO` read
+  `createBillingRuntime` defaults `getUserRecord` to Clerk `users.getUser`
+  when `CLERK_SECRET_KEY` is set, so `/me` reads `publicMetadata.meridianPlan`
+  in production. Webhook still awaits that Clerk write and returns non-2xx
+  if it fails. `GET /api/billing/me` and checkout `ALREADY_PRO` read
   `publicMetadata.meridianPlan` from Clerk (`users.getUser`) so Pro survives
   an empty isolate. Webhook `checkout.session.completed` awaits that Clerk
   write (including `stripeCustomerId` / `stripeSubscriptionId`) and returns
