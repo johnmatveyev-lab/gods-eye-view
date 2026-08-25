@@ -60,6 +60,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Earthquake **Tsunami only** toggle sits next to the magnitude, time, and
+  depth chips. Default off matches the current USGS all_day discs. On keeps
+  events whose `properties.tsunami === 1`; missing or `0` hide. A selected
+  event stays visible. Chip changes re-filter the cached GeoJSON and AND
+  with mag / depth / time — no extra USGS fetch and no `/api`. Preference
+  travels with the existing earthquake params. Hidden when the Earthquakes
+  layer is off.
 - Space Missions roster has exclusive **7d | 30d** chips next to status.
   Default **30d** matches the current Launch Library 2 roster. **7d** hides
   missions whose `launchTime` is more than seven days from now and keeps

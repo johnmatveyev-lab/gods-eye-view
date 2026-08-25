@@ -252,6 +252,7 @@ export function initEarthquakeListControl({
   getOrigin,
   flyTo,
   ensureLayer,
+  onSelect,
 } = {}) {
   if (!button || !panel || !list) return null;
   let open = false;
@@ -268,7 +269,10 @@ export function initEarthquakeListControl({
         : '—';
     }
     renderEarthquakeList(list, presentation, {
-      onSelect: (row) => handleEarthquakeListClick({ row, flyTo }),
+      onSelect: (row) => {
+        onSelect?.(row);
+        handleEarthquakeListClick({ row, flyTo });
+      },
     });
     return presentation;
   };

@@ -229,6 +229,26 @@ test('hosted chrome click flies there and a failed snapshot stays empty', () => 
   control.destroy();
 });
 
+test('list click reports the selected event before flying', () => {
+  const list = makeNode('div');
+  const selected = [];
+  const flights = [];
+  const control = initEarthquakeListControl({
+    button: makeNode('button'),
+    panel: makeNode('aside'),
+    list,
+    count: makeNode('output'),
+    getRecords: () => [ANCHORAGE],
+    flyTo: (options) => { flights.push(options); },
+    onSelect: (row) => selected.push(row.id),
+  });
+  control.setOpen(true);
+  list.children[0].click();
+  assert.deepEqual(selected, ['us7000abcd']);
+  assert.equal(flights[0].lat, 61.02);
+  control.destroy();
+});
+
 test('FIRMS list and launches stay independent of the quake list', () => {
   const quakeList = SRC('data/earthquakeList.js');
   const quakeLayer = SRC('data/earthquakes.js');
@@ -273,6 +293,8 @@ test('legal: USGS credit, Meridian title, MIT notice, no banned sources', () => 
   assert.match(html, /data-earthquake-depth="shallow"/);
   assert.match(html, /id="earthquake-time-chips"/);
   assert.match(html, /data-earthquake-time="1"/);
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /data-earthquake-tsunami="only"/);
   assert.doesNotMatch(html, /quantum-earth/i);
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
   assert.match(credits, /Data courtesy of the U\.S\. Geological Survey/);

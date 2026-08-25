@@ -12,6 +12,13 @@ import {
   filterEarthquakeFeaturesByTimeWindow,
   normalizeEarthquakeTimeWindowHours,
 } from './earthquakeTimeWindow.js';
+import {
+  DEFAULT_EARTHQUAKE_TSUNAMI_ONLY,
+  EARTHQUAKE_TSUNAMI_CHIP_LABEL,
+  EARTHQUAKE_TSUNAMI_CHIP_TITLE,
+  filterEarthquakeFeaturesByTsunamiFlag,
+  normalizeEarthquakeTsunamiOnly,
+} from './earthquakeTsunamiFlag.js';
 
 export {
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
@@ -22,12 +29,21 @@ export {
   normalizeEarthquakeTimeWindowHours,
 } from './earthquakeTimeWindow.js';
 
+export {
+  DEFAULT_EARTHQUAKE_TSUNAMI_ONLY,
+  EARTHQUAKE_TSUNAMI_CHIP_LABEL,
+  EARTHQUAKE_TSUNAMI_CHIP_TITLE,
+  filterEarthquakeFeaturesByTsunamiFlag,
+  normalizeEarthquakeTsunamiOnly,
+} from './earthquakeTsunamiFlag.js';
+
 /**
  * USGS earthquake discs — last 24 hours, operator floor 2.5+ / 4.0+ / 5.0+ / 6.0+
  * (default 2.5+, the historic hard-skip), Shallow | Intermediate | Deep chips
- * (default all on, same buckets as depthColor), and 1h | 6h | 24h chips
- * (default 24h). Floor, depth, and time chips re-filter the last all_day
- * GeoJSON in memory; they do not change the USGS product.
+ * (default all on, same buckets as depthColor), 1h | 6h | 24h chips
+ * (default 24h), and a Tsunami only toggle (default off). Floor, depth,
+ * time, and tsunami chips re-filter the last all_day GeoJSON in memory;
+ * they do not change the USGS product.
  *
  * Ellipse axes are STATIC (plain numbers), redefined only when a poll brings
  * new data. They must never become a `CallbackProperty` again: every entity
@@ -235,24 +251,31 @@ export function filterEarthquakeFeaturesByDepthBands(
 }
 
 /**
- * AND the operator magnitude floor, depth chips, and time window.
+ * AND the operator magnitude floor, depth chips, time window, and tsunami flag.
+ * A selected event stays visible through the tsunami gate.
  * @param {Array<object>|null|undefined} features
- * @param {{magnitudeFloor?: number, depthBands?: unknown, timeWindowHours?: unknown, now?: number}} [options]
+ * @param {{magnitudeFloor?: number, depthBands?: unknown, timeWindowHours?: unknown, tsunamiOnly?: unknown, selectedId?: string|null, now?: number}} [options]
  * @returns {Array<object>}
  */
 export function filterEarthquakeFeatures(features, {
   magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR,
   depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS,
   timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
+  tsunamiOnly = DEFAULT_EARTHQUAKE_TSUNAMI_ONLY,
+  selectedId = null,
   now = Date.now(),
 } = {}) {
-  return filterEarthquakeFeaturesByTimeWindow(
-    filterEarthquakeFeaturesByDepthBands(
-      filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
-      depthBands,
+  return filterEarthquakeFeaturesByTsunamiFlag(
+    filterEarthquakeFeaturesByTimeWindow(
+      filterEarthquakeFeaturesByDepthBands(
+        filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
+        depthBands,
+      ),
+      timeWindowHours,
+      now,
     ),
-    timeWindowHours,
-    now,
+    tsunamiOnly,
+    { selectedId },
   );
 }
 
@@ -360,6 +383,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
   let _depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS;
   let _timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS;
+  let _tsunamiOnly = DEFAULT_EARTHQUAKE_TSUNAMI_ONLY;
+  let _selectedId = null;
   let _lastGeojson = null;
 
   function applyCachedGeojson() {
@@ -368,6 +393,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       magnitudeFloor: _magnitudeFloor,
       depthBands: _depthBands,
       timeWindowHours: _timeWindowHours,
+      tsunamiOnly: _tsunamiOnly,
+      selectedId: _selectedId,
     });
     _dataSource.entities.removeAll();
     let count = 0;
@@ -445,7 +472,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
     _count = count;
     _listRecords = listRecords;
-    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands} · ${_timeWindowHours}h)`);
+    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands} · ${_timeWindowHours}h${_tsunamiOnly ? ' · tsunami' : ''})`);
   }
 
   const layer = {
@@ -530,6 +557,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _magnitudeFloor = DEFAULT_EARTHQUAKE_MAGNITUDE_FLOOR;
     _depthBands = DEFAULT_EARTHQUAKE_DEPTH_BANDS;
     _timeWindowHours = DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS;
+    _tsunamiOnly = DEFAULT_EARTHQUAKE_TSUNAMI_ONLY;
+    _selectedId = null;
   },
 
   getParams() {
@@ -537,6 +566,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       magnitudeFloor: _magnitudeFloor,
       depthBands: _depthBands,
       timeWindowHours: _timeWindowHours,
+      tsunamiOnly: _tsunamiOnly,
+      selectedId: _selectedId,
     };
   },
 
@@ -545,7 +576,9 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     const hasFloor = Object.hasOwn(params, 'magnitudeFloor');
     const hasDepth = Object.hasOwn(params, 'depthBands');
     const hasTime = Object.hasOwn(params, 'timeWindowHours');
-    if (!hasFloor && !hasDepth && !hasTime) return true;
+    const hasTsunami = Object.hasOwn(params, 'tsunamiOnly');
+    const hasSelected = Object.hasOwn(params, 'selectedId');
+    if (!hasFloor && !hasDepth && !hasTime && !hasTsunami && !hasSelected) return true;
 
     let nextFloor = _magnitudeFloor;
     if (hasFloor) {
@@ -568,14 +601,32 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       nextTime = hours;
     }
 
+    let nextTsunami = _tsunamiOnly;
+    if (hasTsunami) {
+      const only = normalizeEarthquakeTsunamiOnly(params.tsunamiOnly);
+      if (only == null) return false;
+      nextTsunami = only;
+    }
+
+    let nextSelected = _selectedId;
+    if (hasSelected) {
+      nextSelected = params.selectedId == null || params.selectedId === ''
+        ? null
+        : String(params.selectedId);
+    }
+
     if (
       nextFloor === _magnitudeFloor
       && nextDepth === _depthBands
       && nextTime === _timeWindowHours
+      && nextTsunami === _tsunamiOnly
+      && nextSelected === _selectedId
     ) return true;
     _magnitudeFloor = nextFloor;
     _depthBands = nextDepth;
     _timeWindowHours = nextTime;
+    _tsunamiOnly = nextTsunami;
+    _selectedId = nextSelected;
     applyCachedGeojson();
     return true;
   },
@@ -606,6 +657,14 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
           title: EARTHQUAKE_DEPTH_BAND_TITLES[band],
           params: { depthBands: toggleEarthquakeDepthBand(_depthBands, band) },
         })),
+        {
+          id: 'tsunami-only',
+          label: EARTHQUAKE_TSUNAMI_CHIP_LABEL,
+          active: _tsunamiOnly === true,
+          group: 'Tsunami',
+          title: EARTHQUAKE_TSUNAMI_CHIP_TITLE,
+          params: { tsunamiOnly: !_tsunamiOnly },
+        },
       ],
       legend: [],
     };
@@ -647,7 +706,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   /**
    * Snapshot for the hosted Quakes list. Same USGS features the discs
    * already parsed — no second fetch — and already clipped to the operator
-   * magnitude floor, depth chips, AND time window. A failed feed returns []
+   * magnitude floor, depth chips, time window, AND tsunami flag. A failed feed returns []
    * so the list can show UNAVAILABLE instead of stale rows or a hang.
    * @returns {Array<Object>}
    */

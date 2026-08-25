@@ -2916,14 +2916,17 @@ body.ui-clean-view #scene-runtime.active {
   color: var(--accent);
 }
 .earthquake-depth-chips,
-.earthquake-time-chips {
+.earthquake-time-chips,
+.earthquake-tsunami-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   margin-top: 8px;
 }
+.earthquake-tsunami-chips[hidden] { display: none; }
 .earthquake-depth-chip,
-.earthquake-time-chip {
+.earthquake-time-chip,
+.earthquake-tsunami-chip {
   padding: 3px 7px;
   border: 1px solid var(--glass-border);
   border-radius: 999px;
@@ -2936,7 +2939,8 @@ body.ui-clean-view #scene-runtime.active {
   cursor: pointer;
 }
 .earthquake-depth-chip.active,
-.earthquake-time-chip.active {
+.earthquake-time-chip.active,
+.earthquake-tsunami-chip.active {
   border-color: var(--glass-border-hover);
   background: rgba(255, 255, 255, 0.12);
   color: var(--text-primary);
@@ -2944,7 +2948,9 @@ body.ui-clean-view #scene-runtime.active {
 .earthquake-depth-chip:hover,
 .earthquake-depth-chip:focus-visible,
 .earthquake-time-chip:hover,
-.earthquake-time-chip:focus-visible {
+.earthquake-time-chip:focus-visible,
+.earthquake-tsunami-chip:hover,
+.earthquake-tsunami-chip:focus-visible {
   border-color: var(--glass-border-hover);
 }
 .earthquake-list {
