@@ -1,0 +1,31 @@
+# Optional Render Blueprint (alternative to Fly.io)
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: gods-eye-view
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: HOST
+        value: "0.0.0.0"
+      - key: PORT
+        value: "4173"
+      - key: OPENSKY_AUTH_MODE
+        value: anon
+      - key: NODE_ENV
+        value: production
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: CESIUM_ION_TOKEN
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: AISSTREAM_API_KEY
+        sync: false
+      - key: FIRMS_MAP_KEY
+        sync: false
+      - key: TOMTOM_API_KEY
+        sync: false
