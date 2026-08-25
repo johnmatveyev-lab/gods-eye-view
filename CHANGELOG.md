@@ -20,6 +20,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a DISPLAY-rail Sun on/off control. On follows the existing Cesium
+  clock so the terminator matches real time. Off keeps the well-lit globe
+  already used when lighting is disabled. The choice persists as
+  `meridian.liveSun`. The existing UTC | Local HUD toggle only changes the
+  clock display. WX FX and visual looks stay independent. No new imagery
+  stack and no `/api`.
 - Added a Contacts control that shows or hides the existing 250 km nearby
   aircraft roster. Selecting a row still uses the current track action. Copy
   ident stays on the tracked card. Cockpit enter still requires a selected
