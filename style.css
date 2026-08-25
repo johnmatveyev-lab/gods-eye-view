@@ -2234,6 +2234,41 @@ body.ui-clean-view #scene-runtime.active {
   color: var(--accent);
 }
 
+#share-view-qr-wrap {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 auto;
+}
+
+#share-view-qr-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 50%;
+  z-index: 120;
+  transform: translateX(-50%);
+  padding: 10px;
+  background: #fff;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+#share-view-qr-popover[hidden] {
+  display: none;
+}
+
+#share-view-qr-svg {
+  display: block;
+  width: 168px;
+  height: 168px;
+}
+
+#top-center-actions #share-view-qr[aria-expanded="true"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 #measure-readout {
   position: fixed;
   top: 76px;
@@ -4867,7 +4902,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #import-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
+body.cockpit-mode :is(#clear-selected-layers, #restore-live-layers, #clear-annotations, #undo-annotations, #export-annotations, #import-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #share-view-qr, #share-view-qr-popover, #copy-view-snapshot, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel) {
   display: none !important;
 }
 body.cockpit-mode :is(#measure-toggle, #measure-readout) {
