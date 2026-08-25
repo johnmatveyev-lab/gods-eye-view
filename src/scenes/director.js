@@ -20,11 +20,12 @@ import {
   BLOOM_SCALE_VERSION,
   decodeBloomIntensity,
 } from '../bloom.js';
+import { prefKey, readPrefKey, writePrefKey } from '../prefStorage.js';
 
 /** @constant {string} Key code used to abort a running scene */
 const ESCAPE_KEY = 'Escape';
 /** @constant {string} localStorage key for the serialized project */
-const STORAGE_KEY = 'godsEyeView.sceneProject.v2';
+const STORAGE_KEY = prefKey('sceneProject.v2');
 /** @constant {number} Current schema version for project migration */
 const PROJECT_VERSION = 3;
 /** @constant {number} Fallback camera flight duration per shot (seconds) */
@@ -353,7 +354,7 @@ export class SceneDirector {
    */
   _loadProject() {
     try {
-      const raw = localStorage.getItem(STORAGE_KEY);
+      const raw = readPrefKey(localStorage, STORAGE_KEY);
       if (!raw) return createDefaultProject();
       return normalizeProject(JSON.parse(raw));
     } catch {
@@ -365,7 +366,7 @@ export class SceneDirector {
   _saveProject() {
     this._project.updatedAt = new Date().toISOString();
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this._project));
+      writePrefKey(localStorage, STORAGE_KEY, JSON.stringify(this._project));
     } catch (e) {
       // Private browsing / block-all-cookies / quota-exceeded throws here. The
       // in-memory project stays usable this session, but persistence failed —

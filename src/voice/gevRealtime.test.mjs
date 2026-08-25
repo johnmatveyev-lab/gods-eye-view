@@ -2594,11 +2594,11 @@ test('voice tier round-trips through storage', () => {
 test('an unset or hand-edited tier reads back as standard', () => {
   assert.equal(readStoredVoiceTier(fakeVoiceStorage()), 'standard');
   assert.equal(
-    readStoredVoiceTier(fakeVoiceStorage({ 'godsEyeView.voiceCost.tier': 'gpt-4o' })),
+    readStoredVoiceTier(fakeVoiceStorage({ 'meridian.voiceCost.tier': 'gpt-4o' })),
     'standard'
   );
   assert.equal(
-    readStoredVoiceTier(fakeVoiceStorage({ 'godsEyeView.voiceCost.tier': '__proto__' })),
+    readStoredVoiceTier(fakeVoiceStorage({ 'meridian.voiceCost.tier': '__proto__' })),
     'standard'
   );
 });
@@ -2606,7 +2606,7 @@ test('an unset or hand-edited tier reads back as standard', () => {
 test('writing a bogus tier persists the safe fallback, not the bogus value', () => {
   const storage = fakeVoiceStorage();
   assert.equal(writeStoredVoiceTier('turbo', storage), 'standard');
-  assert.equal(storage.dump()['godsEyeView.voiceCost.tier'], 'standard');
+  assert.equal(storage.dump()['meridian.voiceCost.tier'], 'standard');
 });
 
 test('a storage that throws never breaks the mic', () => {
@@ -2633,14 +2633,14 @@ test('corrupt stored limits fall back to defaults rather than disarming the cap'
   // A disarmed cap is the dangerous failure — assert we land on the default,
   // not on Infinity.
   const limits = readStoredVoiceLimits(
-    fakeVoiceStorage({ 'godsEyeView.voiceCost.limits': '{oops' })
+    fakeVoiceStorage({ 'meridian.voiceCost.limits': '{oops' })
   );
   assert.deepEqual(limits, { warnUsd: 2, capUsd: 5 });
 });
 
 test('partially stored limits keep the default for the missing threshold', () => {
   const limits = readStoredVoiceLimits(
-    fakeVoiceStorage({ 'godsEyeView.voiceCost.limits': '{"warnUsd":0.5}' })
+    fakeVoiceStorage({ 'meridian.voiceCost.limits': '{"warnUsd":0.5}' })
   );
   assert.deepEqual(limits, { warnUsd: 0.5, capUsd: 5 });
 });
@@ -2651,7 +2651,7 @@ test('a disabled threshold survives the storage round-trip', () => {
   // sentinel is what makes disabling persist.
   const storage = fakeVoiceStorage();
   writeStoredVoiceLimits({ warnUsd: 0, capUsd: 0 }, storage);
-  const raw = storage.dump()['godsEyeView.voiceCost.limits'];
+  const raw = storage.dump()['meridian.voiceCost.limits'];
   assert.ok(!raw.includes('null'), `must not persist null: ${raw}`);
   const restored = readStoredVoiceLimits(storage);
   assert.equal(restored.warnUsd, Infinity);
@@ -2664,6 +2664,17 @@ test('one disabled and one live threshold both round-trip', () => {
   const restored = readStoredVoiceLimits(storage);
   assert.equal(restored.warnUsd, Infinity);
   assert.equal(restored.capUsd, 7);
+});
+
+test('legacy voice cost keys copy onto meridian.* and still apply', () => {
+  const storage = fakeVoiceStorage({
+    'godsEyeView.voiceCost.tier': 'mini',
+    'godsEyeView.voiceCost.limits': '{"warnUsd":1,"capUsd":4}',
+  });
+  assert.equal(readStoredVoiceTier(storage), 'mini');
+  assert.deepEqual(readStoredVoiceLimits(storage), { warnUsd: 1, capUsd: 4 });
+  assert.equal(storage.dump()['meridian.voiceCost.tier'], 'mini');
+  assert.equal(storage.dump()['godsEyeView.voiceCost.tier'], 'mini');
 });
 
 // ---------------------------------------------------------------------------

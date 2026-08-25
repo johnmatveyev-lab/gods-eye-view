@@ -99,6 +99,7 @@ import {
   onFocusTargetAppear,
 } from './focusDeemphasis.js';
 import { holdContinuousRender, releaseContinuousRender } from '../renderGovernor.js';
+import { prefKey, readPrefKey, writePrefKey } from '../prefStorage.js';
 
 // ---------------------------------------------------------------------------
 // API endpoints
@@ -146,7 +147,7 @@ const PLACEHOLDER_REPAINT_MS = 750;
 // assertion; there is NO read path for this key anywhere in the module.
 export const CCTV_CALIBRATION_STORAGE_KEY_V1 = 'godsEyeView.cctv.calibration.v1';
 /** v2 store key. Entries: { values: <7-field calibration offsets>, source: 'manual', savedAt: <epoch ms> }. */
-export const CCTV_CALIBRATION_STORAGE_KEY_V2 = 'godsEyeView.cctv.calibration.v2';
+export const CCTV_CALIBRATION_STORAGE_KEY_V2 = prefKey('cctv.calibration.v2');
 // H5: throttle for double-buffered canvas texture swaps (<=1Hz; each swap is a
 // full 1080p texture re-upload because Cesium re-uploads only on a NEW image
 // object reference).
@@ -703,7 +704,7 @@ export function readCalibrationStoreV2(storage = safeWindowLocalStorage()) {
   const map = new Map();
   if (!storage) return map;
   try {
-    const raw = storage.getItem(CCTV_CALIBRATION_STORAGE_KEY_V2);
+    const raw = readPrefKey(storage, CCTV_CALIBRATION_STORAGE_KEY_V2);
     if (!raw) return map;
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return map;
@@ -742,7 +743,7 @@ export function writeCalibrationStoreV2(map, storage = safeWindowLocalStorage())
         savedAt: safeNumber(entry.savedAt, Date.now()),
       };
     }
-    storage.setItem(CCTV_CALIBRATION_STORAGE_KEY_V2, JSON.stringify(payload));
+    writePrefKey(storage, CCTV_CALIBRATION_STORAGE_KEY_V2, JSON.stringify(payload));
   } catch {
     // storage unavailable
   }

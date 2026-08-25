@@ -634,7 +634,7 @@ test('the DISPLAY rail starts collapsed on a first run, and a stored choice wins
   );
   // The first-run default may only apply when NOTHING is stored: a visitor who
   // opened the rail keeps it open, and one who closed it keeps it closed.
-  const block = ui.slice(ui.indexOf('stored = localStorage.getItem(this._panelCollapseStorageKey(panelId))'));
+  const block = ui.slice(ui.indexOf('stored = readPrefKey(localStorage, this._panelCollapseStorageKey(panelId))'));
   const guard = block.slice(0, block.indexOf('panelEl.classList.toggle'));
   assert.match(guard, /if \(stored === '1'\) collapsed = true;/);
   assert.match(guard, /if \(stored === '0'\) collapsed = false;/);

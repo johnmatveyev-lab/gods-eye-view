@@ -2663,7 +2663,7 @@ async function getBasemapContext(viewer, viewTarget = null) {
     );
     return {
       source: 'Google Photorealistic 3D Tiles / Cesium basemap',
-      hasGoogle3DTiles: Boolean(window.__godsEyeView?.tileset),
+      hasGoogle3DTiles: Boolean(window.__meridian?.tileset),
       viewScale,
       viewportSamples: samples,
       viewportPlaces,
@@ -2699,7 +2699,7 @@ async function getBasemapContext(viewer, viewTarget = null) {
   const nearbyPlaces = resolvedNearbyPlaces || [];
   return {
     source: 'Google Photorealistic 3D Tiles / Cesium basemap',
-    hasGoogle3DTiles: Boolean(window.__godsEyeView?.tileset),
+    hasGoogle3DTiles: Boolean(window.__meridian?.tileset),
     viewScale,
     viewportSamples: samples,
     viewportPlaces,

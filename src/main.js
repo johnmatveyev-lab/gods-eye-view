@@ -325,7 +325,7 @@ async function init() {
     // loop burning behind a hidden tab. (perf wave 2 fix)
     syncVisibilitySuspension();
 
-    window.__godsEyeView = {
+    window.__meridian = {
       viewer,
       styleManager,
       tileset,
@@ -339,8 +339,9 @@ async function init() {
       getRenderGovernorDiagnostics,
       requestRender: governorRequestRender,
     };
-    window.__godsEyeView.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
-    void meridianAccountReady.then((account) => attachVoiceGate(window.__godsEyeView.voiceCommands, account));
+    window.__godsEyeView = window.__meridian;
+    window.__meridian.voiceCommands = initGevVoiceCommands({ viewer, styleManager, dataManager, sceneDirector, annotations });
+    void meridianAccountReady.then((account) => attachVoiceGate(window.__meridian.voiceCommands, account));
 
   } catch (error) {
     console.error('Meridian initialization failed:', error);

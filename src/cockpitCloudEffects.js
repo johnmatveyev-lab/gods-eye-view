@@ -1,12 +1,13 @@
 import * as Cesium from 'cesium';
 import { deriveWeatherEffectProfile, weatherAltitudeFactors } from './weatherEffectsMath.js';
+import { prefKey, readPrefKey, writePrefKey } from './prefStorage.js';
 
 const WEATHER_REFRESH_MS = 5 * 60_000;
 const CLOUD_FRAME_MS = 1000 / 12;
 const MAX_RENDER_WIDTH = 520;
 const MAX_RENDER_HEIGHT = 320;
 const WEATHER_MOVE_REFRESH_M = 25_000;
-const WEATHER_ENABLED_STORAGE_KEY = 'godsEyeView.cockpitWeatherEffects.enabled';
+const WEATHER_ENABLED_STORAGE_KEY = prefKey('cockpitWeatherEffects.enabled');
 
 const VERTEX_SHADER = `
   attribute vec2 position;
@@ -212,7 +213,7 @@ export class CockpitCloudEffectsController {
   readEnabledPreference() {
     try {
       return cockpitWeatherEnabledFromStoredValue(
-        localStorage.getItem(WEATHER_ENABLED_STORAGE_KEY),
+        readPrefKey(localStorage, WEATHER_ENABLED_STORAGE_KEY),
       );
     } catch {
       return false;
@@ -229,7 +230,7 @@ export class CockpitCloudEffectsController {
     const next = !!enabled;
     this.enabled = next;
     try {
-      localStorage.setItem(WEATHER_ENABLED_STORAGE_KEY, next ? '1' : '0');
+      writePrefKey(localStorage, WEATHER_ENABLED_STORAGE_KEY, next ? '1' : '0');
     } catch { /* best effort */ }
     if (!next) {
       this.stop();

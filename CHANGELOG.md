@@ -79,6 +79,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
   compatibility path and never contacts opensky-network.org.
 
+### Changed
+
+- Remaining runtime preference keys now write `meridian.*`. A first read of a
+  known `godsEyeView.*` layout or settings key copies it once and leaves the
+  older key in place. Proxy User-Agents identify as Meridian; the window
+  handle is `window.__meridian`. LICENSE credit and the UI title are unchanged.
+
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).

@@ -195,6 +195,13 @@ import {
   slewHeading,
   speedRulerTicks,
 } from './cockpitMath.js';
+import {
+  hasPanelPrefix,
+  layoutResetNotifiedSuffix,
+  prefKey,
+  readPrefKey,
+  writePrefKey,
+} from './prefStorage.js';
 
 /** Duration (ms) for shader intensity crossfade between style presets. */
 const TRANSITION_DURATION_MS = 500;
@@ -4073,11 +4080,10 @@ export class StyleManager {
    */
   _maybeNotifyLayoutReset() {
     try {
-      const marker = `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.layoutResetNotified`;
-      if (localStorage.getItem(marker)) return;
-      localStorage.setItem(marker, '1');
-      const hadOldPositions = Object.keys(localStorage)
-        .some((key) => key.startsWith('godsEyeView.v6.panelPos.'));
+      const marker = prefKey(layoutResetNotifiedSuffix(PANEL_POSITION_STORAGE_VERSION));
+      if (readPrefKey(localStorage, marker)) return;
+      writePrefKey(localStorage, marker, '1');
+      const hadOldPositions = hasPanelPrefix(localStorage, 'v6.panelPos.');
       if (hadOldPositions) {
         this._showToast('Panel layout updated — positions reset to new defaults');
       }
@@ -6686,7 +6692,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelStorageKey(panelId) {
-    return `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`;
+    return prefKey(`${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`);
   }
 
   /**
@@ -6695,7 +6701,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelCollapseStorageKey(panelId) {
-    return `godsEyeView.${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`;
+    return prefKey(`${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`);
   }
 
   /**
@@ -6711,7 +6717,7 @@ export class StyleManager {
     let stored = null;
     if (allowStored) {
       try {
-        stored = localStorage.getItem(this._panelCollapseStorageKey(panelId));
+        stored = readPrefKey(localStorage, this._panelCollapseStorageKey(panelId));
         if (stored === '1') collapsed = true;
         if (stored === '0') collapsed = false;
       } catch {
@@ -6739,7 +6745,7 @@ export class StyleManager {
    */
   _savePanelCollapsedState(panelId, collapsed) {
     try {
-      localStorage.setItem(this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
+      writePrefKey(localStorage, this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
     } catch {
       // storage unavailable
     }
@@ -7468,7 +7474,7 @@ export class StyleManager {
    */
   _restorePanelPosition(panelId, panelEl) {
     try {
-      const raw = localStorage.getItem(this._panelStorageKey(panelId));
+      const raw = readPrefKey(localStorage, this._panelStorageKey(panelId));
       if (!raw) return;
       const pos = JSON.parse(raw);
       if (!pos || typeof pos.left !== 'number' || typeof pos.top !== 'number') return;
@@ -7514,7 +7520,7 @@ export class StyleManager {
   _savePanelPosition(panelId, panelEl) {
     const rect = panelEl.getBoundingClientRect();
     try {
-      localStorage.setItem(this._panelStorageKey(panelId), JSON.stringify({
+      writePrefKey(localStorage, this._panelStorageKey(panelId), JSON.stringify({
         left: Math.round(rect.left),
         top: Math.round(rect.top),
       }));
