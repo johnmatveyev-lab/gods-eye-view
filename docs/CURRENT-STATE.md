@@ -2,6 +2,16 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — launch webcast-only toggle (plan 171)** (`src/data/launchWebcastFilter.js`,
+> `#space-mission-roster`). **Webcast only** next to 7d | 30d, default
+> **off**. Filters already-normalized `webcastLive` on the in-memory 30-day
+> roster: true when LL2 `webcast_live === true` or `vid_urls` (2.3.0; also
+> `vidURLs`) is a non-empty array. Missing or false hide. Selected mission
+> stays. AND with status, provider, orbit, site, 7d|30d, and rocket.
+> Re-applies from the cached LL2 payload — no extra `/api/launches` fetch.
+> Persists `meridian.launchWebcastOnly`. Hidden when the launches layer is
+> off. Client-only; no `/api`.
+
 > **2026-08-25 — satellite inclination chips (plan 169)** (`src/data/satelliteInclinationFilter.js`).
 > Independent **Eq | Mid | Polar** chips on the Satellites DATA LAYERS row,
 > next to period chips. Default **all on** is the current catalog. Filters
