@@ -38,6 +38,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Bikeshare has a Hide full chip next to Hide empty. When on, stations
+  whose last-good `docksAvailable` is exactly 0 are not drawn. Unknown
+  dock counts stay visible. A selected station stays until deselected.
+  Hide empty still ANDs independently. Both default off and filter
+  already-fetched GBFS status only — no extra `/api/gbfs` fetch. The
+  Plan 68 system picker is unchanged.
 - Radio can pin stations on the selected card. Ids persist as
   `meridian.radioFavorites` (cap 20). A Favorites-only chip ANDs with
   genre, search, and min-bitrate on the already-fetched Radio Browser

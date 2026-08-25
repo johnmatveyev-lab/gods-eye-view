@@ -25,10 +25,13 @@ import {
   buildGbfsProxyUrl,
   listPickerSystems,
   normalizeBikeshareHideEmpty,
+  normalizeBikeshareHideFull,
   normalizeBikeshareSystemId,
   readPersistedBikeshareHideEmpty,
+  readPersistedBikeshareHideFull,
   readPersistedBikeshareSystem,
   writePersistedBikeshareHideEmpty,
+  writePersistedBikeshareHideFull,
   writePersistedBikeshareSystem,
 } from './bikeshareSystems.js';
 
@@ -551,11 +554,13 @@ let _limitWarned = false;
 let _selectedSystemId = DEFAULT_BIKESHARE_SYSTEM_ID;
 /** Hide stations whose last-good bikesAvailable is exactly 0. Default OFF. */
 let _hideEmpty = false;
+/** Hide stations whose last-good docksAvailable is exactly 0. Default OFF. */
+let _hideFull = false;
 /** Optional storage override for picker persistence tests. */
 let _storageOverride = null;
 /** Manager callback when picker state changes. */
 let _rowControlsListener = null;
-/** Count of `/api/gbfs` fetches — hide-empty must not increment this. */
+/** Count of `/api/gbfs` fetches — hide-empty / hide-full must not increment this. */
 let _gbfsFetchCount = 0;
 
 /**
@@ -586,18 +591,26 @@ function notifyRowControlsChanged() {
 }
 
 /**
- * Whether a station should stay on the globe under the Hide empty filter.
- * Unknown / non-finite bike counts stay visible. A selected station stays
- * visible even after it goes empty, until the operator deselects it.
+ * Whether a station should stay on the globe under Hide empty / Hide full.
+ * Unknown / non-finite counts stay visible for that filter. A selected
+ * station stays visible even after it goes empty or full, until deselected.
  * @param {Object|null|undefined} record
- * @param {{ hideEmpty?: boolean, selectedKey?: string|null }} [options]
+ * @param {{ hideEmpty?: boolean, hideFull?: boolean, selectedKey?: string|null }} [options]
  * @returns {boolean}
  */
-export function shouldShowBikeshareStation(record, { hideEmpty = false, selectedKey = null } = {}) {
-  if (!hideEmpty) return true;
+export function shouldShowBikeshareStation(record, {
+  hideEmpty = false,
+  hideFull = false,
+  selectedKey = null,
+} = {}) {
   if (record?.key && record.key === selectedKey) return true;
-  if (!Number.isFinite(record?.bikesAvailable)) return true;
-  return record.bikesAvailable !== 0;
+  if (hideEmpty && Number.isFinite(record?.bikesAvailable) && record.bikesAvailable === 0) {
+    return false;
+  }
+  if (hideFull && Number.isFinite(record?.docksAvailable) && record.docksAvailable === 0) {
+    return false;
+  }
+  return true;
 }
 
 function isSelectedStationRecord(record) {
@@ -614,6 +627,7 @@ function applyStationVisibility(record) {
     key: record.key || (isSelected ? _selectedKey : record.key),
   }, {
     hideEmpty: _hideEmpty,
+    hideFull: _hideFull,
     selectedKey: _selectedKey,
   });
   if (isSelected) {
@@ -625,7 +639,7 @@ function applyStationVisibility(record) {
 }
 
 function applyAllStationVisibility() {
-  governorRequestRender('bikeshare-hide-empty');
+  governorRequestRender('bikeshare-visibility');
   for (const record of _stationRenderMap.values()) {
     applyStationVisibility(record);
   }
@@ -636,6 +650,16 @@ function setHideEmpty(nextValue) {
   if (next === _hideEmpty) return false;
   _hideEmpty = next;
   writePersistedBikeshareHideEmpty(next, safeBikeshareStorage());
+  applyAllStationVisibility();
+  notifyRowControlsChanged();
+  return true;
+}
+
+function setHideFull(nextValue) {
+  const next = nextValue === true;
+  if (next === _hideFull) return false;
+  _hideFull = next;
+  writePersistedBikeshareHideFull(next, safeBikeshareStorage());
   applyAllStationVisibility();
   notifyRowControlsChanged();
   return true;
@@ -1725,6 +1749,7 @@ const bikeshareLayer = {
       || DEFAULT_BIKESHARE_SYSTEM_ID;
     writePersistedBikeshareSystem(_selectedSystemId, safeBikeshareStorage(), systems);
     _hideEmpty = readPersistedBikeshareHideEmpty(safeBikeshareStorage()) === true;
+    _hideFull = readPersistedBikeshareHideFull(safeBikeshareStorage()) === true;
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -1857,9 +1882,9 @@ const bikeshareLayer = {
   },
 
   /**
-   * Picker of allowlisted systems plus the Hide empty chip.
+   * Picker of allowlisted systems plus Hide empty / Hide full chips.
    * The picker stays Plan 68: it still switches allowlisted systems.
-   * Hide empty is a draw filter on already-fetched status, not a new feed.
+   * Both chips are draw filters on already-fetched status, not a new feed.
    * @returns {{ picker: object, chips: Array<object> }}
    */
   getRowControls() {
@@ -1883,17 +1908,25 @@ const bikeshareLayer = {
           ? 'Hiding zero-bike stations — click to show empty docks too'
           : 'Hide stations with zero bikes available',
         params: { hideEmpty: !_hideEmpty },
+      }, {
+        id: 'hide-full',
+        label: 'Hide full',
+        active: _hideFull,
+        title: _hideFull
+          ? 'Hiding zero-dock stations — click to show full stations too'
+          : 'Hide stations with zero docks available',
+        params: { hideFull: !_hideFull },
       }],
     };
   },
 
   getParams() {
-    return { hideEmpty: _hideEmpty };
+    return { hideEmpty: _hideEmpty, hideFull: _hideFull };
   },
 
   /**
-   * Apply Hide empty without refetching GBFS. System switching stays on
-   * setSelectedSystem (Plan 68) and is not accepted here.
+   * Apply Hide empty / Hide full without refetching GBFS. System switching
+   * stays on setSelectedSystem (Plan 68) and is not accepted here.
    * @param {Object} [params]
    * @returns {boolean}
    */
@@ -1902,6 +1935,10 @@ const bikeshareLayer = {
     if (Object.hasOwn(params, 'hideEmpty')) {
       const next = normalizeBikeshareHideEmpty(params.hideEmpty);
       if (next !== null) setHideEmpty(next);
+    }
+    if (Object.hasOwn(params, 'hideFull')) {
+      const next = normalizeBikeshareHideFull(params.hideFull);
+      if (next !== null) setHideFull(next);
     }
     return true;
   },
@@ -2005,6 +2042,7 @@ export function _setBikeshareSystemStorageForTest(storage) {
 export function _resetBikeshareSystemPickerForTest() {
   _selectedSystemId = DEFAULT_BIKESHARE_SYSTEM_ID;
   _hideEmpty = false;
+  _hideFull = false;
   _unavailable = false;
   _error = null;
   _enabled = false;
@@ -2026,7 +2064,7 @@ export function _resetBikeshareSystemPickerForTest() {
   abortAllInFlight();
 }
 
-/** Seed already-fetched station records so Hide empty can filter without GBFS. */
+/** Seed already-fetched station records so visibility chips can filter without GBFS. */
 export function _seedBikeshareStationsForTest(records, { cityId } = {}) {
   _stationRenderMap = new Map();
   _cityRuntime = new Map();
