@@ -25,6 +25,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- DISPLAY Grid toggle draws a local lat/lon graticule (`meridian.grid`,
+  default off). The step coarsens when zoomed out so a planet view stays
+  readable. Clean view may keep the lines; required credits stay on. Not a
+  data layer and no `/api`.
 - Added a Launches panel that lists the existing Launch Library 2 results
   the globe already fetches (`/api/launches`). Clicking a row flies to the
   pad when coordinates are present, otherwise the row is only selected.
