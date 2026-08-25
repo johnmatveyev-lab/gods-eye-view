@@ -2058,6 +2058,25 @@ body.ui-clean-view #scene-runtime.active {
   display: none;
 }
 
+#north-up-compass .north-up-compass-rose {
+  display: block;
+  width: 18px;
+  height: 18px;
+  transform: rotate(var(--north-up-heading, 0deg));
+  transition: transform 80ms linear;
+}
+
+#north-up-compass .north-up-needle {
+  display: block;
+  color: #ff8a80;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 18px;
+  text-align: center;
+}
+
 #global-loading-status {
   position: fixed;
   top: 74px;
@@ -4011,7 +4030,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -7123,7 +7142,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #stop-tracking, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view) {
   display: none !important;
 }
 
