@@ -96,6 +96,15 @@ import {
   writeRadioHideOffline,
 } from './radioOfflineFilter.js';
 import {
+  DEFAULT_RADIO_VOTES_FLOOR,
+  filterRadioStationsByVotesFloor,
+  normalizeRadioVotes,
+  normalizeRadioVotesFloor,
+  readRadioVotesFloor,
+  stationMatchesRadioVotesFloor,
+  writeRadioVotesFloor,
+} from './radioVotesFilter.js';
+import {
   DEFAULT_RADIO_VOLUME_PCT,
   radioMuteToggle,
   radioVolumePctToUnit,
@@ -157,6 +166,7 @@ const _radioEarthScreenCenter = new Cesium.Cartesian2();
 const _radioEarthToCenter = new Cesium.Cartesian3();
 export const DEFAULT_RADIO_FILTER = 'all';
 export { DEFAULT_RADIO_BITRATE_FLOOR };
+export { DEFAULT_RADIO_VOTES_FLOOR };
 export { isEnglishRadioStation };
 export const GLOBAL_RADIO_ALTITUDE_M = 2_000_000;
 
@@ -262,6 +272,7 @@ let _country = DEFAULT_RADIO_COUNTRY;
 let _state = DEFAULT_RADIO_STATE;
 let _englishOnly = DEFAULT_RADIO_ENGLISH_ONLY;
 let _hideOffline = DEFAULT_RADIO_HIDE_OFFLINE;
+let _votesFloor = DEFAULT_RADIO_VOTES_FLOOR;
 let _selectedId = null;
 let _selectedEntity = null;
 let _selectionGeneration = 0;
@@ -400,6 +411,7 @@ function isValidRadioDirectoryStation(station) {
 
 function freezeRadioStation(station) {
   const lastCheckOk = normalizeRadioLastCheckOk(station.lastCheckOk ?? station.lastcheckok);
+  const votes = normalizeRadioVotes(station.votes);
   return Object.freeze({
     id: station.id,
     name: station.name,
@@ -415,6 +427,7 @@ function freezeRadioStation(station) {
     metadataTrust: station.metadataTrust,
     codec: station.codec,
     bitrate: station.bitrate,
+    ...(votes == null ? {} : { votes }),
     ...(lastCheckOk === undefined ? {} : { lastCheckOk }),
   });
 }
@@ -794,6 +807,10 @@ function applyPersistedRadioEnglishOnly() {
 
 function applyPersistedRadioHideOffline() {
   _hideOffline = readRadioHideOffline();
+}
+
+function applyPersistedRadioVotesFloor() {
+  _votesFloor = readRadioVotesFloor();
 }
 
 function commitUserVolume(volume) {
@@ -1285,37 +1302,41 @@ function playingStationKeepId() {
 
 function directoryStations({ keepPlaying = true } = {}) {
   const keepStationId = keepPlaying ? playingStationKeepId() : null;
-  const keepOfflineStationId = keepPlaying
+  const keepPinnedStationId = keepPlaying
     ? [_audioStationId, _selectedId].filter(Boolean)
     : null;
-  return filterRadioStationsByOffline(
-    filterRadioStationsByEnglish(
-      filterRadioStationsByState(
-        filterRadioStationsByCountry(
-          filterRadioStationsByFavorites(
-            filterRadioStationsByCodec(
-              filterRadioStationsByBitrateFloor(
-                filterRadioStations(_stations, _filter),
-                _bitrateFloor,
+  return filterRadioStationsByVotesFloor(
+    filterRadioStationsByOffline(
+      filterRadioStationsByEnglish(
+        filterRadioStationsByState(
+          filterRadioStationsByCountry(
+            filterRadioStationsByFavorites(
+              filterRadioStationsByCodec(
+                filterRadioStationsByBitrateFloor(
+                  filterRadioStations(_stations, _filter),
+                  _bitrateFloor,
+                  { keepStationId },
+                ),
+                _codecFilter,
                 { keepStationId },
               ),
-              _codecFilter,
-              { keepStationId },
+              _favoriteIds,
+              { favoritesOnly: _favoritesOnly },
             ),
-            _favoriteIds,
-            { favoritesOnly: _favoritesOnly },
+            _country,
+            { keepStationId },
           ),
-          _country,
+          _state,
           { keepStationId },
         ),
-        _state,
+        _englishOnly,
         { keepStationId },
       ),
-      _englishOnly,
-      { keepStationId },
+      _hideOffline,
+      { keepStationId: keepPinnedStationId },
     ),
-    _hideOffline,
-    { keepStationId: keepOfflineStationId },
+    _votesFloor,
+    { keepStationId: keepPinnedStationId },
   );
 }
 
@@ -1338,6 +1359,9 @@ function stationMatchesCurrentDirectory(station, { keepPlaying = true } = {}) {
     && stationMatchesRadioState(station, _state, { keepStationId })
     && stationMatchesRadioEnglishFilter(station, _englishOnly, { keepStationId })
     && stationMatchesRadioOfflineFilter(station, _hideOffline, {
+      keepStationId: keepPlaying ? [_audioStationId, _selectedId].filter(Boolean) : null,
+    })
+    && stationMatchesRadioVotesFloor(station, _votesFloor, {
       keepStationId: keepPlaying ? [_audioStationId, _selectedId].filter(Boolean) : null,
     });
 }
@@ -1421,6 +1445,7 @@ export function getRadioUIState() {
     favoritesOnly: _favoritesOnly,
     englishOnly: _englishOnly,
     hideOffline: _hideOffline,
+    minVotes: _votesFloor,
     favoriteIds: Object.freeze([..._favoriteIds]),
     selectedFavorite: Boolean(selected && isRadioFavorite(selected.id, _favoriteIds)),
     categories: _categories,
@@ -2734,6 +2759,18 @@ export function setRadioHideOffline(enabled) {
   return true;
 }
 
+/** Raise or clear the min-votes floor without fetching or stopping audio. */
+export function setRadioVotesFloor(floorId) {
+  if (!radioPresentationAllowed()) return false;
+  const nextFloor = normalizeRadioVotesFloor(floorId) || DEFAULT_RADIO_VOTES_FLOOR;
+  const changed = nextFloor !== _votesFloor;
+  if (changed && (_tuningActive || _tuningAwaitingStationId)) endRadioTuning();
+  _votesFloor = writeRadioVotesFloor(nextFloor);
+  if (changed) applyRadioDirectoryFilterChange();
+  emitState();
+  return true;
+}
+
 /** Pin or unpin the selected (or playing) station. Caps at 20 stored ids. */
 export function toggleRadioFavorite(stationId) {
   if (!radioPresentationAllowed()) return false;
@@ -2976,6 +3013,7 @@ export const radioLayer = {
     applyPersistedRadioState();
     applyPersistedRadioEnglishOnly();
     applyPersistedRadioHideOffline();
+    applyPersistedRadioVotesFloor();
     installAudio();
     if (!_dataSource) {
       _dataSource = new Cesium.CustomDataSource('Radio stations');
@@ -3192,6 +3230,7 @@ export const radioLayer = {
     _state = DEFAULT_RADIO_STATE;
     _englishOnly = DEFAULT_RADIO_ENGLISH_ONLY;
     _hideOffline = DEFAULT_RADIO_HIDE_OFFLINE;
+    _votesFloor = DEFAULT_RADIO_VOTES_FLOOR;
     _renderById.clear();
     resetRadioClusterOverlayIdentities();
     _lastHorizonCameraPosition = null;
@@ -3263,6 +3302,7 @@ export const radioLayer = {
   setFavoritesOnly: setRadioFavoritesOnly,
   setEnglishOnly: setRadioEnglishOnly,
   setHideOffline: setRadioHideOffline,
+  setVotesFloor: setRadioVotesFloor,
   toggleFavorite: toggleRadioFavorite,
   selectStation: selectRadioStation,
   selectRequestedStation: selectRequestedRadioStation,

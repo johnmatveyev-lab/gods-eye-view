@@ -1376,6 +1376,14 @@
                 <button type="button" id="radio-hide-offline" class="pp-mode-btn radio-favorites-chip" aria-pressed="false" aria-label="Hide stations last checked as offline" disabled hidden>Hide offline</button>
               </div>
             </div>
+            <div class="radio-bitrate-row" id="radio-votes-row" hidden>
+              <span class="radio-filter-label" id="radio-votes-label">MIN VOTES</span>
+              <div id="radio-votes-floor" class="radio-bitrate-seg" role="radiogroup" aria-labelledby="radio-votes-label">
+                <button type="button" class="pp-mode-btn active" data-radio-votes="all" role="radio" aria-checked="true" disabled>All</button>
+                <button type="button" class="pp-mode-btn" data-radio-votes="10" role="radio" aria-checked="false" disabled>10+</button>
+                <button type="button" class="pp-mode-btn" data-radio-votes="100" role="radio" aria-checked="false" disabled>100+</button>
+              </div>
+            </div>
             <div class="radio-directory-query-row">
               <div class="radio-station-search-wrap">
                 <label class="radio-filter-label" for="radio-station-search">SEARCH STATIONS</label>

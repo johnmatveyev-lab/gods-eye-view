@@ -7219,6 +7219,10 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   flex: 1 1 12rem;
   min-width: 0;
 }
+#radio-votes-row #radio-votes-floor {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
 .radio-codec-seg {
   display: flex;
   flex: 0 0 auto;
