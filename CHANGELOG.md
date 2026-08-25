@@ -25,6 +25,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a left-stack **FIRES** list from the existing trailing-24h NASA FIRMS
+  payload (`/api/firms` `fires[]`). Up to 50 detections nearest the camera;
+  clicking a row flies there with the current world-focus helper. Keyless 503
+  or an empty payload shows unavailable copy and does not fetch NASA from the
+  client. The required FIRMS acknowledgement stays on the panel. Traffic
+  Live/Sim is unchanged. No extra `/api` route.
 - Added a DISPLAY-rail Keep above ground control. After the camera moves, if
   `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
   below terrain plus a small margin, the camera is lifted. The preference

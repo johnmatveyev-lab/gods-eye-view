@@ -138,6 +138,7 @@ import {
 import { isTr3b, toggleTr3b } from './data/tr3bRegistry.js';
 import satellitesLayer from './data/satellites.js';
 import cctvLayer from './data/cctv.js';
+import { attachFirmsListPanel } from './data/firmsListPanel.js';
 import radioLayer, {
   buildRadioTunerTicks,
   radioTunerCommitSlot,
@@ -366,6 +367,7 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
   { id: 'control-panel', pinnable: true },
   { id: 'location-bar', pinnable: true },
   { id: 'data-panel' },
+  { id: 'fires-panel' },
   { id: 'cctv-panel' },
   { id: 'radio-panel' },
   { id: 'scene-panel' },
@@ -376,6 +378,7 @@ const SHARE_PANEL_STATE_SPECS = Object.freeze([
 /** Standard map-view panels cleared out of the way on a fresh Cockpit entry. */
 const COCKPIT_ENTRY_COLLAPSE_PANEL_IDS = Object.freeze([
   'data-panel',
+  'fires-panel',
   'cctv-panel',
   'scene-panel',
   'pp-toggles',
@@ -2373,6 +2376,7 @@ export class StyleManager {
     this._clearSelectedLayersManagerPromise = null;
     this._clearSelectedLayersHandler = null;
     this._dataManager = null;
+    this._firmsListDetach = null;
     this._cctvUnsubscribe = null;
     this._radioUnsubscribe = null;
     this._radioState = null;
@@ -2520,6 +2524,7 @@ export class StyleManager {
     this._unbindInvertScroll = bindInvertScrollToggle(this._invertScrollBtn);
     this._cleanViewExitBtn = document.getElementById('clean-view-exit');
     this._dataPanel = document.getElementById('data-panel');
+    this._firesPanel = document.getElementById('fires-panel');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -4860,6 +4865,16 @@ export class StyleManager {
     }
     this._dataManager = dataManager || null;
     this.hud.attachDataManager(this._dataManager);
+    if (this._firmsListDetach) {
+      this._firmsListDetach();
+      this._firmsListDetach = null;
+    }
+    this._firmsListDetach = attachFirmsListPanel({
+      root: this._firesPanel,
+      viewer: this.viewer,
+      dataManager: this._dataManager,
+      setPanelCollapsed: (panelId, collapsed) => this.setPanelCollapsed(panelId, collapsed),
+    });
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();

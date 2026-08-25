@@ -1645,6 +1645,12 @@ its criteria cannot be silently ignored.
 | Submarine Cables ◠ | Removed (CC BY-NC-SA); registered no-op | `src/data/telegeographySubmarineCables.js` | — | no-op |
 | FIRMS Active Fires ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
 
+The left-stack **FIRES** panel lists up to 50 detections nearest the camera
+from that same trailing-24h `fires[]` payload and flies to a row with the
+existing world-focus helper. Keyless 503 / empty feed shows unavailable copy
+and does not fetch NASA from the client. The required FIRMS acknowledgement
+stays on the panel. Traffic Live/Sim is independent.
+
 `src/data/militaryAwareness.js` remains registered internally as the Contacts
 coordinator, but it is not a user-visible Data Layers entry. Its visible entry
 point is the right-side `CONTEXT` chooser's `CONTACTS` mode.
