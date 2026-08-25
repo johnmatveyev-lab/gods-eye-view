@@ -83,7 +83,7 @@ Updated: August 25, 2026
 > `local-firms`, `earthquakes`; `zoom_to_globe` supplies the camera), so
 > `GEV_REALTIME_TOOLS` is pinned by sha256 in the unit suite. A few shipped
 > descriptions were rewritten for the Meridian product name; the remaining
-> tools stay byte-identical. One instruction paragraph in `vite.config.js`
+> tools stay byte-identical. One instruction paragraph in `src/voice/realtimeInstructions.js`
 > teaches the phrase mapping; deleting it is the complete rollback.
 >
 > **ESC arbitration — three rules, do not collapse them into one.** (1) The
@@ -2136,7 +2136,7 @@ silently demoting every later lookup for the session.
 
 - **Token flow**: browser fetches a short-lived client secret from `/api/realtime/token`. Shared handlers in `src/voice/openaiApi.js` hold `OPENAI_API_KEY` and post the full session config (instructions, tool schemas, VAD, truncation) to `api.openai.com/v1/realtime/client_secrets`. Vite middleware and Vercel Node (`api/realtime/token.js`) use the same handler. SDP exchange goes directly to `api.openai.com/v1/realtime/calls` with the ephemeral token.
 - **Session defaults** (env-tunable): model `gpt-realtime-2` (or `gpt-realtime-2.1-mini` when the MINI tier is selected — see the model-tier entry below), voice `marin`, reasoning effort `low`, semantic VAD with low eagerness, no response interruption, context window truncated to ~3,000 post-instruction tokens with 0.5 retention ratio — the conversational window stays short because map state is fetched live per turn.
-- **Twenty-eight tools** (schemas defined server-side in `vite.config.js`, executed client-side in `src/voice/gevActions.js`): `fly_to_location`, `select_nearest_aircraft`, `adjust_camera_zoom`, `zoom_to_globe`, `set_layer_visibility`, `show_data_layers_menu`, `set_panel_open`, `set_visual_style`, `get_entity_context`, `get_current_view_state`, `set_hud`, `set_detection`, `set_map_stack`, `set_post_processing`, `control_scene`, `control_cctv`, `set_context_mode`, `control_cockpit`, `control_radio`, `track_entity`, `stop_tracking`, `frame_overhead`, `annotate_map`, `clear_annotations`, `move_camera`, `fly_route`, `analyst_query`, and `next_iss_pass`.
+- **Twenty-eight tools** (schemas defined server-side in `src/voice/realtimeTools.js`, executed client-side in `src/voice/gevActions.js`): `fly_to_location`, `select_nearest_aircraft`, `adjust_camera_zoom`, `zoom_to_globe`, `set_layer_visibility`, `show_data_layers_menu`, `set_panel_open`, `set_visual_style`, `get_entity_context`, `get_current_view_state`, `set_hud`, `set_detection`, `set_map_stack`, `set_post_processing`, `control_scene`, `control_cctv`, `set_context_mode`, `control_cockpit`, `control_radio`, `track_entity`, `stop_tracking`, `frame_overhead`, `annotate_map`, `clear_annotations`, `move_camera`, `fly_route`, `analyst_query`, and `next_iss_pass`.
 > **Reading `npm test` totals:** the count depends on the Node major. The two
 > GC-bracketed allocation microbenchmarks (`src/data/focusAllocations.test.mjs`
 > = 1 test, `src/overlays/worldOverlayAllocation.test.mjs` = 13) only RUN on the
