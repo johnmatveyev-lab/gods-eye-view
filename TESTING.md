@@ -71,6 +71,7 @@ settled and not applicable because no Google 3D tileset is active.
   - `window.__gevAnnotations.demo()` — lays the SF set down at once
   - `window.__gevAnnotations.clear()` — erase all marks
   - `window.__gevAnnotations.count()` — how many marks are live
+  - **Clear annotations** (top-center globe chrome) — same erase, no mic. Disabled when the board is empty.
 
 ---
 

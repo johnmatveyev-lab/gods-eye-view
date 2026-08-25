@@ -1982,6 +1982,11 @@ body.ui-clean-view #scene-runtime.active {
   transform: none;
 }
 
+#clear-annotations:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
 #top-center-actions .material-symbols-outlined {
   font-size: 18px;
 }
@@ -3910,7 +3915,7 @@ body.cockpit-mode :is(
   #military-awareness-panel, #military-awareness-direction-overlay,
   #cockpit-entry
 ) { display: none !important; }
-body.cockpit-mode :is(#clear-selected-layers, #share-btn, #home-view, #copy-view-link, #reset-globe-view) {
+body.cockpit-mode :is(#clear-selected-layers, #clear-annotations, #share-btn, #home-view, #copy-view-link, #reset-globe-view) {
   display: none !important;
 }
 body.cockpit-mode #left-panel-stack {
@@ -6865,7 +6870,7 @@ body.recording-mode #scene-runtime.active {
 }
 
 /* Scene playback owns layer and camera sequencing until Stop or completion. */
-body.scene-playback-mode :is(#clear-selected-layers, #home-view, #reset-globe-view) {
+body.scene-playback-mode :is(#clear-selected-layers, #clear-annotations, #home-view, #reset-globe-view) {
   display: none !important;
 }
 
