@@ -11,7 +11,9 @@ import {
   satelliteClassLegend,
   satelliteClassOf,
   tallySatelliteClasses,
+  weatherOrbitTag,
 } from './satelliteClass.js';
+import { twoline2satrec } from 'satellite.js';
 import {
   DEFAULT_SATELLITE_CLASS_FILTER,
   SATELLITE_CLASS_CHIP_CODES,
@@ -96,6 +98,30 @@ const DENSE_TLE = tleFor('44444', 'STARLINK-TEST');
 const ALT_TLE = tleFor('33333', 'DRIFTER-1');
 const ISS_TLE = tleFor('25544', 'ISS (ZARYA)');
 
+/**
+ * Weather TLE with explicit inclination + mean motion (rev/day). Columns match
+ * the NORAD line-2 layout so satellite.js reads n from substring(52, 63).
+ */
+function weatherTle(satnum, name, { inc, n }) {
+  const id = String(satnum).padStart(5, '0');
+  const incField = inc.toFixed(4).padStart(8, ' ');
+  const nField = n.toFixed(8).padStart(11, ' ');
+  const line1 = `1 ${id}U 98067A   08264.51782528 -.00002182  00000-0 -11606-4 0  2927`;
+  const line2 = `2 ${id} ${incField} 247.4627 0006703 130.5360 325.0288 ${nField}563537`;
+  return [name, line1, line2].join('\n');
+}
+
+const METOP_B_TLE = weatherTle(38771, 'METOP-B', { inc: 98.7, n: 14.21455 });
+const NOAA_20_TLE = weatherTle(43013, 'NOAA 20', { inc: 98.78, n: 14.19523 });
+const SUOMI_NPP_TLE = weatherTle(37849, 'SUOMI NPP', { inc: 98.8, n: 14.19530 });
+const GOES_16_TLE = weatherTle(41866, 'GOES 16', { inc: 0.50, n: 1.00273 });
+const WEATHER_CATALOG_TLE = [METOP_B_TLE, NOAA_20_TLE, SUOMI_NPP_TLE, GOES_16_TLE].join('\n');
+
+function weatherSatrec(tle) {
+  const [, line1, line2] = tle.split('\n');
+  return twoline2satrec(line1, line2);
+}
+
 function catalogChip(id) {
   return satellitesLayer.getRowControls().chips.find((entry) => entry.id === id);
 }
@@ -110,8 +136,11 @@ async function settleChip(maxTicks = 50) {
   return catalogChip('catalog-dense');
 }
 
-/** Every CelesTrak group the catalog ingests, plus the dense-mode tag. */
-const INGESTED_GROUPS = ['stations', 'visual', 'gps-ops', 'glonass', 'galileo', 'geo', 'weather', 'dense'];
+/** Every CelesTrak group the catalog ingests, plus weather orbit tags and dense. */
+const INGESTED_GROUPS = [
+  'stations', 'visual', 'gps-ops', 'glonass', 'galileo', 'geo',
+  'weather', 'weather-leo', 'weather-geo', 'dense',
+];
 
 test('every ingested CelesTrak group resolves to a real class', () => {
   // Guards against drift: adding a group to CATALOG_GROUPS without classifying
@@ -136,11 +165,22 @@ test('the three GNSS constellations share one NAV color and split by subtype', (
 
 test('class labels name the type, and the ISS names itself', () => {
   assert.equal(satelliteClassLabel('geo'), 'GEO');
-  assert.equal(satelliteClassLabel('weather'), 'GEO · WX');
+  assert.equal(satelliteClassLabel('weather'), 'VISUAL · WX');
+  assert.equal(satelliteClassLabel('weather-leo'), 'VISUAL · WX');
+  assert.equal(satelliteClassLabel('weather-geo'), 'GEO · WX');
   assert.equal(satelliteClassLabel('stations'), 'STATION');
   assert.equal(satelliteClassLabel('visual'), 'VISUAL');
   assert.equal(satelliteClassLabel('dense'), 'COMMS · STARLINK');
   assert.equal(satelliteClassLabel('stations', { isIss: true }), 'STATION · ISS');
+});
+
+test('weatherOrbitTag splits polar WX from the GEO belt by mean motion', () => {
+  assert.equal(weatherOrbitTag(weatherSatrec(METOP_B_TLE)), 'weather-leo');
+  assert.equal(weatherOrbitTag(weatherSatrec(NOAA_20_TLE)), 'weather-leo');
+  assert.equal(weatherOrbitTag(weatherSatrec(SUOMI_NPP_TLE)), 'weather-leo');
+  assert.equal(weatherOrbitTag(weatherSatrec(GOES_16_TLE)), 'weather-geo');
+  assert.equal(satelliteClassLabel(weatherOrbitTag(weatherSatrec(METOP_B_TLE))), 'VISUAL · WX');
+  assert.equal(satelliteClassLabel(weatherOrbitTag(weatherSatrec(GOES_16_TLE))), 'GEO · WX');
 });
 
 test('the ISS is a STATION whichever group a partial outage ingested it from', () => {
@@ -613,6 +653,52 @@ test('all-on class chips match the current catalog', () => {
     );
     assert.deepEqual(chips.slice(7), ['points', 'orbits'], 'POINTS sits next to ORBITS');
   } finally {
+    _clearDenseCatalogStateForTest();
+  }
+});
+
+test('Weather catalog + GEO off keeps polar WX and hides GOES 16', async () => {
+  const originalFetch = globalThis.fetch;
+  const log = console.log;
+  const warn = console.warn;
+  console.log = () => {};
+  console.warn = () => {};
+  try {
+    resetSatGroupCache();
+    setSatGroup('weather', { getItem: () => 'weather', setItem() {} });
+    _setDenseCatalogStateForTest({});
+    const viewer = { scene: { primitives: { add: (p) => p, remove() {} } } };
+    globalThis.fetch = async (url) => ({
+      ok: true,
+      text: async () => (String(url).endsWith('/weather') ? WEATHER_CATALOG_TLE : ''),
+    });
+
+    await satellitesLayer.update(viewer);
+    assert.equal(_catalogGroupForTest(38771), 'weather-leo');
+    assert.equal(_catalogGroupForTest(43013), 'weather-leo');
+    assert.equal(_catalogGroupForTest(37849), 'weather-leo');
+    assert.equal(_catalogGroupForTest(41866), 'weather-geo');
+    assert.equal(satelliteClassLabel(_catalogGroupForTest(38771)), 'VISUAL · WX');
+    assert.equal(satelliteClassLabel(_catalogGroupForTest(41866)), 'GEO · WX');
+
+    const geoOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'geo');
+    satellitesLayer.setParams({ satelliteClassFilter: geoOff });
+    const afterGeoOff = visibleIds();
+    assert.equal(afterGeoOff.includes(38771), true, 'METOP-B stays when GEO is off');
+    assert.equal(afterGeoOff.includes(43013), true, 'NOAA 20 stays when GEO is off');
+    assert.equal(afterGeoOff.includes(37849), true, 'SUOMI NPP stays when GEO is off');
+    assert.equal(afterGeoOff.includes(41866), false, 'GOES 16 hides when GEO is off');
+
+    const visualOff = toggleSatelliteClassFilter(DEFAULT_SATELLITE_CLASS_FILTER, 'visual');
+    satellitesLayer.setParams({ satelliteClassFilter: visualOff });
+    const afterVisualOff = visibleIds();
+    assert.equal(afterVisualOff.includes(38771), false, 'VISUAL off hides polar weather');
+    assert.equal(afterVisualOff.includes(41866), true, 'VISUAL off keeps GOES 16');
+  } finally {
+    console.log = log;
+    console.warn = warn;
+    globalThis.fetch = originalFetch;
+    resetSatGroupCache();
     _clearDenseCatalogStateForTest();
   }
 });

@@ -3,11 +3,14 @@
  *
  * The catalog already tags every satellite with the CelesTrak group it was
  * ingested from (`CATALOG_GROUPS` in satellites.js), so classification is a
- * pure lookup: no extra fetch, no heuristics, no per-frame work. This module is
- * the single source of truth for the class a satellite belongs to, the label
- * shown on its card, and the point color it renders in — the render path, the
- * tracked card, and the row legend all read the same table, so a palette edit
- * can never leave one surface disagreeing with another.
+ * pure lookup: no extra fetch, no per-frame work. Weather is the one ingest
+ * exception: CelesTrak's weather group mixes polar LEO with the GEO belt, so
+ * satellites.js stamps `weather-leo` / `weather-geo` from mean motion before
+ * this table is consulted. This module is the single source of truth for the
+ * class a satellite belongs to, the label shown on its card, and the point
+ * color it renders in — the render path, the tracked card, and the row legend
+ * all read the same table, so a palette edit can never leave one surface
+ * disagreeing with another.
  *
  * Deliberately Cesium-free: colors are CSS hex strings that satellites.js
  * converts once at module load. That keeps this file unit-testable and lets the
@@ -83,9 +86,28 @@ const GROUP_CLASS = Object.freeze({
   glonass: Object.freeze({ klass: 'nav', subtype: 'GLONASS' }),
   galileo: Object.freeze({ klass: 'nav', subtype: 'GALILEO' }),
   geo: Object.freeze({ klass: 'geo', subtype: null }),
-  weather: Object.freeze({ klass: 'geo', subtype: 'WX' }),
+  // Bare `weather` is the picker/CelesTrak group, not an orbit class. Without a
+  // satrec it must not claim the GEO belt — polar MetOp / NOAA / Suomi NPP
+  // live in the same CelesTrak file as GOES / Himawari.
+  weather: Object.freeze({ klass: 'visual', subtype: 'WX' }),
+  'weather-geo': Object.freeze({ klass: 'geo', subtype: 'WX' }),
+  'weather-leo': Object.freeze({ klass: 'visual', subtype: 'WX' }),
   dense: Object.freeze({ klass: 'comms', subtype: 'STARLINK' }),
 });
+
+/** TLE mean motion (rev/day) from satellite.js `satrec.no` (rad/min). */
+const MEAN_MOTION_REV_PER_DAY = 1440 / (2 * Math.PI);
+
+/**
+ * Split a CelesTrak weather TLE into LEO vs GEO by mean motion. Polar weather
+ * (~14 rev/day) is not the geostationary belt (~1 rev/day). n > 3 → LEO.
+ * @param {{ no?: number }|null|undefined} satrec Parsed SGP4 record.
+ * @returns {'weather-leo'|'weather-geo'} Ingest tag for GROUP_CLASS.
+ */
+export function weatherOrbitTag(satrec) {
+  const n = Number(satrec?.no) * MEAN_MOTION_REV_PER_DAY;
+  return n > 3 ? 'weather-leo' : 'weather-geo';
+}
 
 /** Unknown groups fall back to the neutral bucket rather than vanishing. */
 const FALLBACK = Object.freeze({ klass: 'visual', subtype: null });

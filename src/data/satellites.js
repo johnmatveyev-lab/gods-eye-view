@@ -21,6 +21,7 @@ import {
   satelliteClassLabel,
   satelliteClassLegend,
   tallySatelliteClasses,
+  weatherOrbitTag,
 } from './satelliteClass.js';
 import {
   DEFAULT_SATELLITE_CLASS_FILTER,
@@ -182,6 +183,18 @@ const POINT_STYLES = {
   weather: {
     pixelSize: 5,
     color: _classColor('weather'),
+    outlineColor: POINT_OUTLINE,
+    outlineWidth: 0,
+  },
+  'weather-geo': {
+    pixelSize: 5,
+    color: _classColor('weather-geo'),
+    outlineColor: POINT_OUTLINE,
+    outlineWidth: 0,
+  },
+  'weather-leo': {
+    pixelSize: 5,
+    color: _classColor('weather-leo'),
     outlineColor: POINT_OUTLINE,
     outlineWidth: 0,
   },
@@ -1914,11 +1927,17 @@ const satellitesLayer = {
         if (seen.has(noradId)) continue;
         seen.add(noradId);
 
+        // Weather mixes polar LEO with the GEO belt. Stamp the orbit class
+        // from mean motion so GEO / VISUAL chips can tell them apart.
+        const group = entry.group === 'weather'
+          ? weatherOrbitTag(satrec)
+          : entry.group;
+
         // Store in catalog
         _catalog.set(noradId, {
           name: entry.name,
           satrec,
-          group: entry.group,
+          group,
         });
 
         // Propagate initial position
@@ -1928,7 +1947,7 @@ const satellitesLayer = {
         const cartesian = Cesium.Cartesian3.fromDegrees(pos.longitude, pos.latitude, pos.altitude);
 
         // Add point primitive (styling from the shared table, WS-D3)
-        const style = _pointStyleFor(noradId, entry.group);
+        const style = _pointStyleFor(noradId, group);
         const point = _pointCollection.add({
           position: cartesian,
           pixelSize: style.pixelSize,
