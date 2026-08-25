@@ -89,6 +89,8 @@ test('unsigned hosted /me is anonymous with no voice', async () => {
   assert.equal(json.signedIn, false);
   assert.equal(json.voice, false);
   assert.equal(json.exhausted, false);
+  assert.equal(json.savedViews.available, false);
+  assert.deepEqual(json.savedViews.items, []);
 });
 
 test('signed-in Free account can start Checkout against the env price ID', async () => {
@@ -464,6 +466,33 @@ test('empty-store durability: /me stays Pro from Clerk publicMetadata across iso
   assert.equal(second.json.voice, true);
 });
 
+test('GET /me stays Free when getUserRecord throws on an empty store', async () => {
+  const runtime = hostedRuntime({
+    store: createAccountStore({ now: () => Date.parse('2026-08-25T12:00:00.000Z') }),
+    getUserRecord: async () => {
+      throw new Error('Clerk getUser failed');
+    },
+  });
+  const { status, json } = await dispatch(runtime, {
+    url: '/api/billing/me',
+    headers: { authorization: 'Bearer sess_test' },
+  });
+  assert.equal(status, 200);
+  assert.equal(json.plan, PLANS.FREE);
+  assert.equal(json.voice, false);
+});
+
+test('createBillingRuntime defaults getUserRecord to Clerk users.getUser when the secret is set', () => {
+  const runtime = createBillingRuntime({
+    env: {
+      CLERK_PUBLISHABLE_KEY: 'pk_test_example',
+      CLERK_SECRET_KEY: 'sk_test_example',
+    },
+    store: createAccountStore({ now: () => Date.parse('2026-08-25T12:00:00.000Z') }),
+  });
+  assert.equal(typeof runtime.getUserRecord, 'function');
+});
+
 test('webhook is non-2xx when the Clerk metadata write throws', async () => {
   const runtime = hostedRuntime({
     updateUserMetadata: async () => {
@@ -523,6 +552,9 @@ test('empty serverless store hydrates Pro from mocked Clerk so voice unlocks', a
   });
   assert.equal(json.plan, PLANS.PRO);
   assert.equal(json.voice, true);
+  assert.equal(json.savedViews.available, true);
+  assert.equal(json.savedViews.placeholder, false);
+  assert.deepEqual(json.savedViews.items, []);
 
   const voice = await authorizeVoiceRequest(
     mockReq({ headers: { authorization: 'Bearer sess_test' } }),

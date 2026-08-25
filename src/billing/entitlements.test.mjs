@@ -55,6 +55,7 @@ test('hosted Free vs Pro gates stay 15 min/day no voice versus $29/mo voice', ()
     nowMs: NOON,
   });
   assert.equal(free.voice, false);
+  assert.equal(free.savedViews.available, false);
   assert.equal(free.remaining.sessionSeconds, 15 * 60);
   assert.equal(free.upgrade.available, true);
   assert.equal(free.upgrade.priceUsd, 29);
@@ -103,7 +104,8 @@ test('Pro accounts get voice until the daily cap is exhausted', () => {
   });
   assert.equal(entitlement.voice, true);
   assert.equal(entitlement.savedViews.available, true);
-  assert.equal(entitlement.savedViews.placeholder, true);
+  assert.equal(entitlement.savedViews.placeholder, false);
+  assert.deepEqual(entitlement.savedViews.items, []);
   assert.equal(canUseVoice(entitlement), true);
 
   const exhausted = resolveEntitlements({
@@ -227,6 +229,12 @@ test('new billing surfaces do not ship Sidhu promo GIFs', async () => {
   assert.doesNotMatch(client, /\.gif/i);
   assert.doesNotMatch(accountHtml, /\.gif/i);
   assert.doesNotMatch(html, /docs\/media\/.*\.gif/);
+  assert.doesNotMatch(client, /Pro placeholder — saved camera views will live here/);
+  assert.match(client, /Save current view/);
+  assert.match(client, /Restore/);
+  assert.match(client, /Delete/);
+  assert.doesNotMatch(client, /updateUserMetadata/);
+  assert.doesNotMatch(client, /\/api\/saved/);
 });
 
 test('Checkout session params use the env price ID and omit payment_method_types', () => {

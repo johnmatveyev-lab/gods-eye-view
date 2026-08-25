@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { ShareLinkManager, decodeShareCreatedAtMs } from './sharelink.js';
+import { ShareLinkManager, decodeShareCreatedAtMs, decodeShareViewUrl, encodeShareViewUrl } from './sharelink.js';
 import { createDefaultLayerState } from './data/layerState.js';
 
 const uiSource = fs.readFileSync(new URL('./ui.js', import.meta.url), 'utf8');
@@ -206,6 +206,24 @@ test('copy timestamp parsing is strict and rejects malformed or future values', 
     );
   }
   assert.equal(decodeShareCreatedAtMs(new URLSearchParams('at=2001'), { nowMs }), null);
+});
+
+test('saved-view share URLs encode and decode through the existing hash helpers', () => {
+  const manager = makeManager();
+  manager.onStyleChange('thermal');
+  manager.onToggleChange(true, false, { mapStack: 'osm' });
+  clearTimeout(manager._debounceTimer);
+  manager._updateHash();
+  const liveHash = window.location.hash.slice(1);
+  const url = encodeShareViewUrl(window.location.href, liveHash);
+  assert.equal(decodeShareViewUrl(url), liveHash);
+
+  window.location.hash = `#${decodeShareViewUrl(url)}`;
+  const restored = manager.parseInitialHash();
+  assert.equal(restored.lat, 0);
+  assert.equal(restored.lon, 0);
+  assert.equal(restored.style, 'thermal');
+  assert.equal(restored.mapStack, 'osm');
 });
 
 test('copy adds a fresh ephemeral timestamp without aging the live URL', async () => {

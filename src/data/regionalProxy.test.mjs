@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import createViteConfig, {
   adsbLolFallbackAnchor,
   coalesceProxyRequest,
@@ -28,6 +29,12 @@ test('adjacent proxy validators also require every coordinate explicitly', () =>
   );
   assert.equal(adsbLolFallbackAnchor({ url: '?lat=12.5' }), null);
   assert.equal(adsbLolFallbackAnchor({ url: '?lon=12.5' }), null);
+});
+
+test('regional-brief Vite plugin forwards to the shared Node handler', () => {
+  const proxies = readFileSync(new URL('../../src/server/liveApiProxies.js', import.meta.url), 'utf8');
+  assert.match(proxies, /middlewares\.use\('\/api\/regional-brief', handleRegionalBrief\)/);
+  assert.doesNotMatch(proxies, /function fetchRegionalNews\(/);
 });
 
 test('new data proxies install the same routes in dev and preview servers', () => {

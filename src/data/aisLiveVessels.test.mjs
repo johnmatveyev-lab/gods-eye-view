@@ -8,6 +8,7 @@ import * as Cesium from 'cesium';
 import {
   AIS_FIRST_CONNECT_GRACE_MS,
   deriveAisFeedError,
+  describeAisLiveHttpFailure,
   classifyAisFeedSnapshot,
   buildVesselCard,
   buildSelectedVesselCard,
@@ -502,6 +503,34 @@ function jsonResponse(payload) {
   return { ok: true, status: 200, json: async () => payload };
 }
 
+function platformFailureResponse(status) {
+  return {
+    ok: false,
+    status,
+    json: async () => {
+      throw new SyntaxError('Unexpected token < in JSON');
+    },
+  };
+}
+
+function creditSpyViewer() {
+  const credits = [];
+  return {
+    viewer: {
+      creditDisplay: {
+        addStaticCredit(credit) {
+          credits.push(credit);
+        },
+      },
+    },
+    credits,
+  };
+}
+
+function creditHtml(credits) {
+  return credits.map((credit) => credit?.html || String(credit)).join('\n');
+}
+
 test('HTTP rejection ends first-connect grace without waiting for its deadline', async () => {
   const hadWindow = Object.hasOwn(globalThis, 'window');
   const priorWindow = globalThis.window;
@@ -536,6 +565,176 @@ test('HTTP rejection ends first-connect grace without waiting for its deadline',
     else delete globalThis.window;
     _setVesselStateForTest({ enabled: false });
     _setAisRuntimeForTest();
+  }
+});
+
+async function withAisFetchHarness(fetchImpl, run) {
+  const hadWindow = Object.hasOwn(globalThis, 'window');
+  const priorWindow = globalThis.window;
+  const priorFetch = globalThis.fetch;
+  const priorWarn = console.warn;
+  const clock = makeFakeAisRuntime();
+  const { viewer, credits } = creditSpyViewer();
+  globalThis.window = { location: { origin: 'http://localhost:4173' } };
+  globalThis.fetch = fetchImpl;
+  console.warn = () => {};
+  _setAisRuntimeForTest(clock.runtime);
+  _setVesselOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  _setVesselStateForTest({ viewer, records: [] });
+  try {
+    _beginAisSessionForTest();
+    return await run({ viewer, credits, clock });
+  } finally {
+    globalThis.fetch = priorFetch;
+    console.warn = priorWarn;
+    if (hadWindow) globalThis.window = priorWindow;
+    else delete globalThis.window;
+    _setVesselStateForTest({ enabled: false });
+    _setVesselOverlayHostForTest();
+    _setAisRuntimeForTest();
+  }
+}
+
+test('404/503 without an AIS feed status uses existing empty language', () => {
+  assert.equal(describeAisLiveHttpFailure(404, { error: 'Not found' }), 'feed unavailable');
+  assert.equal(describeAisLiveHttpFailure(503, { error: 'FUNCTION_INVOCATION_FAILED' }), 'feed unavailable');
+  assert.equal(
+    describeAisLiveHttpFailure(503, {
+      status: 'missing-key',
+      error: 'AISSTREAM_API_KEY is not set',
+    }),
+    'AISSTREAM_API_KEY not set',
+  );
+  assert.equal(describeAisLiveHttpFailure(502, { error: 'upstream' }), 'upstream');
+});
+
+test('hosted platform 404 stops AIS fetch retries and keeps empty unavailable language', async () => {
+  let fetches = 0;
+  await withAisFetchHarness(async () => {
+    fetches += 1;
+    return platformFailureResponse(404);
+  }, async ({ viewer, credits }) => {
+    await _loadLivePositionsForTest(viewer);
+    const feed = _getVesselFeedStateForTest();
+    assert.equal(fetches, 1);
+    assert.equal(feed.loading, false);
+    assert.equal(feed.status, 'unavailable');
+    assert.equal(feed.firstConnectPhase, 'unavailable');
+    assert.equal(feed.error, 'feed unavailable');
+    assert.equal(feed.stale, false);
+    assert.equal(layerFeedState(aisLiveVesselsLayer.getStats()), 'unavailable');
+    assert.equal(credits.length, 0);
+
+    await _loadLivePositionsForTest(viewer);
+    await _loadLivePositionsForTest(viewer);
+    assert.equal(fetches, 1, 'platform 404 must not retry-spin');
+    assert.equal(_getVesselFeedStateForTest().loading, false);
+    assert.doesNotMatch(creditHtml(credits), /AISStream\.io/);
+  });
+});
+
+test('hosted platform 503 stops AIS fetch retries without hanging the layer', async () => {
+  let fetches = 0;
+  await withAisFetchHarness(async () => {
+    fetches += 1;
+    return platformFailureResponse(503);
+  }, async ({ viewer, credits }) => {
+    await _loadLivePositionsForTest(viewer);
+    const feed = _getVesselFeedStateForTest();
+    assert.equal(fetches, 1);
+    assert.equal(feed.loading, false);
+    assert.equal(feed.status, 'unavailable');
+    assert.equal(feed.error, 'feed unavailable');
+    assert.equal(layerFeedState(aisLiveVesselsLayer.getStats()), 'unavailable');
+
+    await _loadLivePositionsForTest(viewer);
+    assert.equal(fetches, 1, 'platform 503 must not retry-spin');
+    assert.equal(credits.length, 0);
+  });
+});
+
+test('function 503 missing-key payload keeps existing language and stops retry-spin', async () => {
+  let fetches = 0;
+  await withAisFetchHarness(async () => {
+    fetches += 1;
+    return {
+      ok: false,
+      status: 503,
+      json: async () => ({
+        status: 'missing-key',
+        error: 'AISSTREAM_API_KEY is not set',
+      }),
+    };
+  }, async ({ viewer }) => {
+    await _loadLivePositionsForTest(viewer);
+    assert.equal(_getVesselFeedStateForTest().error, 'AISSTREAM_API_KEY not set');
+    await _loadLivePositionsForTest(viewer);
+    assert.equal(fetches, 1);
+    assert.equal(layerFeedState(aisLiveVesselsLayer.getStats()), 'unavailable');
+  });
+});
+
+test('preview live snapshot keeps polling and credits AISStream only after data lands', async () => {
+  let fetches = 0;
+  const record = makeRecord();
+  await withAisFetchHarness(async () => {
+    fetches += 1;
+    return jsonResponse({
+      status: 'live',
+      lastMessageAt: 1,
+      rows: [{
+        mmsi: record.mmsi,
+        name: record.name,
+        lat: 51.93,
+        lon: 4.05,
+      }],
+    });
+  }, async ({ viewer, credits }) => {
+    _setVesselStateForTest({ viewer, records: [record] });
+    _beginAisSessionForTest();
+    await _loadLivePositionsForTest(viewer);
+    const feed = _getVesselFeedStateForTest();
+    assert.equal(fetches, 1);
+    assert.equal(feed.firstConnectPhase, 'ready');
+    assert.equal(feed.error, null);
+    assert.equal(feed.acceptedRowCount, 1);
+    assert.match(creditHtml(credits), /AISStream\.io/);
+
+    await _loadLivePositionsForTest(viewer);
+    assert.equal(fetches, 2, 'a live Node snapshot host keeps polling');
+  });
+});
+
+test('empty or unavailable AIS snapshots do not show the AISStream.io credit', async () => {
+  const { viewer, credits } = creditSpyViewer();
+  _setVesselOverlayHostForTest({
+    setEntries() {},
+    setVisible() {},
+    clearSource() {},
+  });
+  _setVesselStateForTest({ viewer, records: [] });
+  try {
+    _beginAisSessionForTest();
+    _applyAisFeedSnapshotForTest(viewer, {
+      status: 'live',
+      lastMessageAt: 1,
+      rows: [],
+    });
+    assert.equal(credits.length, 0);
+    _applyAisFeedSnapshotForTest(viewer, {
+      status: 'missing-key',
+      error: 'AISSTREAM_API_KEY is not set',
+      rows: [],
+    });
+    assert.equal(credits.length, 0);
+    assert.doesNotMatch(creditHtml(credits), /AISStream\.io/);
+  } finally {
+    _setVesselStateForTest({ enabled: false });
+    _setVesselOverlayHostForTest();
   }
 });
 

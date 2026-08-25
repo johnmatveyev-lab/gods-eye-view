@@ -256,12 +256,12 @@ test('Vercel wrapper forwards the extracted handler and does not wrap route or i
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.ok(vercelJson.functions['api/terrain/heights.js']);
-  assert.equal(vercelJson.functions['api/route.js'], undefined);
   assert.equal(vercelJson.functions['api/military-installations.js'], undefined);
-  assert.equal(existsSync(path.join(ROOT, 'api/route.js')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/military-installations.js')), false);
-  assert.equal(existsSync(path.join(ROOT, 'api/route')), false);
   assert.equal(existsSync(path.join(ROOT, 'api/military-installations')), false);
+  const terrainModule = readFileSync(path.join(ROOT, 'src/data/terrainHeightsProxy.js'), 'utf8');
+  assert.doesNotMatch(terrainModule, /\/api\/route\b|military-installations/);
+  assert.doesNotMatch(source, /\/api\/route\b|military-installations/);
 
   const plugin = createTerrainHeightsProxy({ cachePath: null, skipDisk: true });
   assert.equal(plugin.name, 'terrain-heights-proxy');
