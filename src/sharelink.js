@@ -487,6 +487,18 @@ export class ShareLinkManager {
     }
   }
 
+  /** Copy the live share URL (same encode helper, no copy-time timestamp). */
+  async copyViewLink() {
+    const copiedUrl = this.currentShareUrl();
+    if (!copiedUrl) return false;
+    try {
+      await navigator.clipboard.writeText(copiedUrl);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   _scheduleUpdate() {
     if (this._destroyed || this._initialRestorePending) return;
     clearTimeout(this._debounceTimer);

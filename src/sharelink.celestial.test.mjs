@@ -461,7 +461,7 @@ test('every explicit visual UI gesture claims restore authority before it mutate
       hudToggle.indexOf("this._hudBtn.addEventListener('click'"),
       hudToggle.indexOf('if (this._hudLayoutSelect)'),
     ),
-    'this.hud.toggle()',
+    'this.cycleHud()',
     'HUD button',
   );
   assertClaimsBefore(

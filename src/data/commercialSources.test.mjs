@@ -26,14 +26,16 @@ test('production proxies never fetch OpenSky or Google News RSS', () => {
   const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
   const cctv = readFileSync(path.join(ROOT, 'src/data/cctvProxy.js'), 'utf8');
   const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
+  const adsbdb = readFileSync(path.join(ROOT, 'src/data/adsbdb.js'), 'utf8');
   const weather = readFileSync(path.join(ROOT, 'src/data/weatherEffects.js'), 'utf8');
   const handler = readFileSync(path.join(ROOT, 'src/data/regionalBriefHandler.js'), 'utf8');
-  for (const source of [flights, proxies, cctv, vite, weather, handler]) {
+  for (const source of [flights, proxies, cctv, vite, adsbdb, weather, handler]) {
     assert.doesNotMatch(source, /https:\/\/opensky-network\.org/);
     assert.doesNotMatch(source, /https:\/\/auth\.opensky-network\.org/);
     assert.doesNotMatch(source, /news\.google\.com/);
   }
   assert.match(flights, /api\.adsb\.lol/);
+  assert.match(adsbdb, /api\.adsbdb\.com/);
   assert.match(handler, /api\.gdeltproject\.org/);
   assert.match(weather, /api\.open-meteo\.com/);
   assert.doesNotMatch(weather, /openweathermap|weatherapi|visualcrossing|accuweather/i);
@@ -44,6 +46,7 @@ test('outbound proxy list has no TeleGeography URL', () => {
     'src/server/liveApiProxies.js',
     'src/server/openskyFlights.js',
     'src/data/gbfs.js',
+    'src/data/adsbdb.js',
     'src/data/regionalBriefHandler.js',
     'vite.config.js',
     'src/data/telegeographySubmarineCables.js',
@@ -79,6 +82,7 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.ok(!keys.includes('telegeography'));
   assert.ok(!keys.includes('aisstream'), 'AISStream credit is dynamic; hosted empty state must not show it');
   assert.ok(keys.includes('adsblol'));
+  assert.ok(keys.includes('adsbdb'));
   assert.ok(keys.includes('gdelt'));
   assert.ok(keys.includes('open-meteo'));
   assert.ok(keys.includes('tfl-cctv'));
@@ -87,6 +91,9 @@ test('in-app credits omit OpenSky, Google News RSS, and TeleGeography', () => {
   assert.match(osrm.html, /OSRM/);
   assert.match(osrm.html, /OpenStreetMap contributors/);
   assert.match(osrm.html, /ODbL/);
+  assert.ok(keys.includes('radio-browser'));
+  const radio = DATA_CREDITS.find((credit) => credit.key === 'radio-browser');
+  assert.match(radio.html, /Radio Browser/);
 });
 
 test('AIS stays BYOK on a long-lived Node host; hosted Vercel does not wrap AISStream', () => {
@@ -95,6 +102,7 @@ test('AIS stays BYOK on a long-lived Node host; hosted Vercel does not wrap AISS
   const client = readFileSync(path.join(ROOT, 'src/data/aisLiveVessels.js'), 'utf8');
   assert.doesNotMatch(client, /wss:\/\/stream\.aisstream\.io/);
   assert.doesNotMatch(client, /new WebSocket\(/);
+  assert.doesNotMatch(client, /updateInterval:\s*aisRetryInSec/);
 });
 
 test('TeleGeography cable GeoJSON is not present on disk', () => {
@@ -108,6 +116,8 @@ test('flights proxy plugin is still installed for the compatibility path', () =>
   const config = createViteConfig({ mode: 'test' });
   const byName = new Map(config.plugins.map((plugin) => [plugin.name, plugin]));
   assert.equal(typeof byName.get('opensky-proxy')?.configureServer, 'function');
+  assert.equal(typeof byName.get('tomtom-proxy')?.configureServer, 'function');
+  assert.equal(typeof byName.get('adsbdb-proxy')?.configureServer, 'function');
   assert.equal(typeof byName.get('adsblol-proxy')?.configureServer, 'function');
   assert.equal(typeof byName.get('meridian-billing')?.configureServer, 'function');
 });

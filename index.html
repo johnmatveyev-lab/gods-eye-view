@@ -17,6 +17,12 @@
   <div id="world-overlay-root" aria-hidden="true">
     <canvas id="world-overlay-canvas"></canvas>
   </div>
+  <div id="selected-contact-ident" hidden>
+    <button type="button" id="selected-contact-ident-value" class="selected-contact-ident-value"></button>
+    <button type="button" id="selected-contact-ident-copy" class="selected-contact-ident-copy" aria-label="Copy ident" title="Copy ident">
+      <span class="material-symbols-outlined" aria-hidden="true">content_copy</span>
+    </button>
+  </div>
   <div id="world-overlay-actions" class="world-overlay-accessibility" role="region" aria-label="Visible map targets">
     <div id="world-overlay-action-list"></div>
     <div id="world-overlay-status" role="status" aria-live="polite" aria-atomic="true"></div>
@@ -55,6 +61,12 @@
     </button>
     <button id="share-btn" type="button" aria-label="Copy share link" title="Copy share link">
       <span class="share-icon" aria-hidden="true">&#x1F517;</span>
+    </button>
+    <button id="home-view" type="button" aria-label="Home view" title="Home view (Home)" aria-keyshortcuts="Home">
+      <span class="material-symbols-outlined" aria-hidden="true">home</span>
+    </button>
+    <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
+      <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
     <button id="reset-globe-view" type="button" aria-label="Reset to full globe view" title="Reset camera and return to full globe view">
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
@@ -190,7 +202,13 @@
       <div class="cockpit-compass-tape" id="cockpit-compass-tape" aria-hidden="true"></div>
     </div>
     <div class="cockpit-position-readout">
-      <span id="cockpit-clock">--:--:--Z</span>
+      <span class="cockpit-clock-row">
+        <span id="cockpit-clock">--:--:--Z</span>
+        <span class="clock-mode-toggle" role="group" aria-label="Clock timezone">
+          <button type="button" data-clock-mode="utc" aria-pressed="true">UTC</button>
+          <button type="button" data-clock-mode="local" aria-pressed="false">Local</button>
+        </span>
+      </span>
       <span id="cockpit-position">--° · --°</span>
     </div>
     <aside id="cockpit-context" class="cockpit-context-window" aria-label="Contact cockpit summary" hidden>
@@ -375,9 +393,9 @@
       <button class="panel-collapse-btn pp-collapse-btn" data-collapse-target="pp-toggles" title="Collapse panel">&#x25C0;</button>
     </div>
     <div class="pp-toggle-group">
-      <button class="pp-toggle-btn" id="hud-toggle" title="Intelligence HUD (H)">
+      <button class="pp-toggle-btn" id="hud-toggle" title="Intelligence HUD — click to cycle layout (H)" aria-label="HUD layout: tactical" aria-pressed="true">
         <span class="pp-icon">&#x25CE;</span>
-        <span class="pp-label">HUD</span>
+        <span class="pp-label">TACTICAL</span>
       </button>
       <div class="pp-slider-row" id="hud-layout-row">
         <span class="pp-slider-mini-label">Layout</span>
@@ -596,6 +614,17 @@
         <span class="panel-title">DATA LAYERS</span>
         <span class="panel-divider"></span>
         <button class="panel-collapse-btn" data-collapse-target="data-panel" title="Collapse panel">+</button>
+      </div>
+      <div class="data-layer-filter-wrap">
+        <input
+          type="search"
+          id="data-layer-filter"
+          placeholder="Filter layers…"
+          autocomplete="off"
+          spellcheck="false"
+          aria-label="Filter layers"
+          aria-controls="data-toggles"
+        />
       </div>
       <div id="data-toggles" class="data-toggle-list"></div>
     </div>
@@ -842,6 +871,20 @@
   </aside>
 
   <div id="scene-runtime"></div>
+
+  <!-- First-visit responsible-use notice. Dismissible; never a hard wall over the
+       globe. Surfaces existing MERIDIAN_TERMS and the Cesium Data attribution
+       control. See src/responsibleUseNotice.js. -->
+  <aside id="responsible-use-notice" role="region" aria-labelledby="responsible-use-title" hidden>
+    <h2 id="responsible-use-title">Meridian</h2>
+    <p id="responsible-use-copy">This view uses public and third-party data. It can be delayed or wrong, and it is not for navigation or emergencies.</p>
+    <p class="responsible-use-terms" data-responsible-use-terms></p>
+    <div class="responsible-use-actions">
+      <a href="#meridian-terms">Terms</a>
+      <button type="button" data-responsible-use-attribution>Data attribution</button>
+      <button type="button" data-responsible-use-dismiss>Got it</button>
+    </div>
+  </aside>
 
   <!-- Explicit mission choice on a fresh session. Live feeds are not auto-enabled
        until the visitor asks; shared links skip this surface entirely. It returns

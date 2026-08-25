@@ -32,11 +32,13 @@ import {
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
+import { initResponsibleUseNotice } from './responsibleUseNotice.js';
 import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
 import { createLivePollScheduler } from './chrome/scheduler.js';
 import { installOfflineBanner } from './chrome/offlineBanner.js';
 
 initLogoGaze();
+initResponsibleUseNotice();
 const meridianAccountReady = initMeridianAccount();
 
 /**
@@ -253,7 +255,9 @@ async function init() {
         return dataManager.unregisterForQa(layerId);
       };
     }
-    dataManager.buildTogglePanel(document.getElementById('data-toggles'));
+    dataManager.buildTogglePanel(document.getElementById('data-toggles'), {
+      filterInput: document.getElementById('data-layer-filter'),
+    });
     styleManager.attachDataManager(dataManager);
 
     // Initialize deterministic scene playback for social clip capture
@@ -278,6 +282,7 @@ async function init() {
         // dataManager is passed explicitly: the globe missions enable bundled
         // keyless layers through it, and reaching for styleManager._dataManager
         // would make a private field part of this feature's contract.
+        initResponsibleUseNotice();
         initFirstRunExperience({ styleManager, dataManager });
       };
       loadingScreen.addEventListener('transitionend', revealFirstRun, { once: true });
@@ -346,6 +351,8 @@ async function init() {
     console.error('Meridian initialization failed:', error);
     loaderStatus.textContent = `Error: ${describeError(error)}`;
     loaderStatus.style.color = '#ff4444';
+    // The globe may have failed; the first-visit notice still has to appear.
+    initResponsibleUseNotice();
   }
 }
 

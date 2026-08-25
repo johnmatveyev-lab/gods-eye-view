@@ -12,6 +12,7 @@ import {
   clampBloomIntensity,
   decodeBloomIntensity,
 } from './bloom.js';
+import { flyToHomeView } from './camera.js';
 import { LOCATIONS, CITY_POIS, GLOBE_VIEW, flyToGlobeView, flyToPresetLocation, flyToPOI, searchAndFlyTo } from './locations.js';
 import { locationMiniStatus } from './locationStatus.js';
 import { interruptCameraMotion } from './cameraVerbs.js';
@@ -20,8 +21,27 @@ import {
   enterCockpitWithTracking,
 } from './cockpitTracking.js';
 import { IntelHUD } from './hud.js';
+import {
+  CLOCK_CHANGE_EVENT,
+  bindClockToggle,
+  formatChromeClock,
+  getClockMode,
+  syncClockToggleButtons,
+} from './clockPreference.js';
+import {
+  cycleHud,
+  hudChromeAriaLabel,
+  hudChromeLabel,
+  readStoredHudVariant,
+  writeStoredHudVariant,
+} from './hudCycle.js';
 import { ShareLinkManager } from './sharelink.js';
-import { cycleSensorLook, sensorLookLabel } from './sensorLookPolicy.js';
+import {
+  cycleSensorLook,
+  readStoredSensorLook,
+  sensorLookLabel,
+  writeStoredSensorLook,
+} from './sensorLookPolicy.js';
 import {
   isExplicitLayerStateOrigin,
   LayerStateCoordinator,
@@ -34,8 +54,9 @@ import {
   isCelestialRingStyleSupported,
   setKeyholeFadeTuning,
 } from './celestialRing.js';
-import { destroyTrackedReadout, initTrackedReadout } from './data/trackedReadout.js';
-import { destroyWorldOverlay, initWorldOverlay } from './overlays/worldOverlay.js';
+import { destroyTrackedReadout, getActiveTrackedReadoutId, initTrackedReadout } from './data/trackedReadout.js';
+import { destroySelectedContactIdent, initSelectedContactIdent } from './selectedContactIdent.js';
+import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
   destroyDetection,
   initDetection,
@@ -117,6 +138,12 @@ import {
   resolveLeftStackBottomBoundary,
   resolvePanelStackCorridor,
 } from './panelStackLayout.js';
+import {
+  clampPanelPosition,
+  sanitizeStoredPanelPositions,
+  resolveStoredPanelPosition,
+  isPanelRectOnScreen,
+} from './panelPosition.js';
 import {
   resolveCockpitUtilityAnchor,
   resolveCockpitUtilityLayout,
@@ -699,6 +726,7 @@ class CockpitViewController {
     this.headingValue = document.getElementById('cockpit-heading-value');
     this.compassTape = document.getElementById('cockpit-compass-tape');
     this.clock = document.getElementById('cockpit-clock');
+    this.clockToggle = this.clock?.closest('.cockpit-clock-row') || this.clock?.parentElement;
     this.position = document.getElementById('cockpit-position');
     this.aircraftMeta = document.getElementById('cockpit-aircraft-meta');
     this.route = document.getElementById('cockpit-route');
@@ -804,6 +832,15 @@ class CockpitViewController {
         else this.syncEntry();
       }),
     );
+    this._unbindClockToggle = bindClockToggle(this.clockToggle, {
+      onChange: () => this._paintChromeClock(),
+    });
+    this._listenerRemovers.push(() => this._unbindClockToggle?.());
+    this._listen(window, CLOCK_CHANGE_EVENT, () => {
+      this._paintChromeClock();
+      syncClockToggleButtons(this.clockToggle, getClockMode());
+    });
+    this._paintChromeClock();
     this._listen(this.entry, 'click', () => this.enter());
     this._listen(this.tr3bToggle, 'click', () => this.toggleTrackedTr3b());
     this._listen(this.mapViewButton, 'click', () => this.exit());
@@ -857,6 +894,10 @@ class CockpitViewController {
     if (!target?.addEventListener) return;
     target.addEventListener(type, handler, options);
     this._listenerRemovers.push(() => target.removeEventListener(type, handler, options));
+  }
+
+  _paintChromeClock() {
+    if (this.clock) this.clock.textContent = formatChromeClock(new Date(), getClockMode());
   }
 
   syncWeatherToggle(enabled) {
@@ -1458,7 +1499,7 @@ class CockpitViewController {
           .join('');
       }
     }
-    if (this.clock) this.clock.textContent = new Date().toISOString().slice(11, 19) + 'Z';
+    if (this.clock) this.clock.textContent = formatChromeClock(new Date(), getClockMode());
     if (this.position) {
       const lat = Number.isFinite(info.latitude)
         ? `${Math.abs(info.latitude).toFixed(3)}°${info.latitude >= 0 ? 'N' : 'S'}` : '--';
@@ -2364,10 +2405,12 @@ export class StyleManager {
     this._cctvMeta = document.getElementById('cctv-meta');
     this._cctvSummary = document.getElementById('cctv-summary');
     this._shareBtn = document.getElementById('share-btn');
+    this._copyViewLinkBtn = document.getElementById('copy-view-link');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
     this._globalLoadingLabel = document.getElementById('global-loading-label');
     this._globalLoadingDetail = document.getElementById('global-loading-detail');
+    this._homeViewBtn = document.getElementById('home-view');
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
@@ -2623,6 +2666,12 @@ export class StyleManager {
       this._updateDetectionButton(modeLabel);
     });
     initTrackedReadout(viewer);
+    initSelectedContactIdent({
+      viewer,
+      showToast: (text) => this._showToast(text),
+      getPaintRect: getOverlayPaintRect,
+      getActiveTrackedId: getActiveTrackedReadoutId,
+    });
     setDetectionStyle(this.activeStyle);
     this._applyDetectionDensityFromUi();
 
@@ -2633,12 +2682,15 @@ export class StyleManager {
     this._initPanelChrome();
     this._initLeftPanelAdaptiveLayout();
     this._initRightPanelAdaptiveLayout();
+    this._initRestoredPanelPositions();
     this._initRadioPanel();
     this._initCctvPanel();
     this._initGlobalContextPanel();
     this._initLocationBar();
     this._initShareButton();
+    this._initCopyViewLinkButton();
     this._initClearSelectedLayersButton();
+    this._initHomeViewButton();
     this._initResetGlobeButton();
     this._initHUDToggle();
     this._initModels3dToggle();
@@ -2699,6 +2751,10 @@ export class StyleManager {
         })();
       }, 1500);
     } else {
+      const storedLook = readStoredSensorLook();
+      if (storedLook && storedLook !== this.activeStyle) {
+        this.setStyle(storedLook, { applyPreset: true, revealParameters: false, restore: true });
+      }
       this._syncShareState();
     }
     // A recipient can orbit before or during the delayed share flight. That
@@ -2946,7 +3002,9 @@ export class StyleManager {
     if (!el || !el.style.top || el.style.top === 'auto') return;
     const top = parseInt(el.style.top, 10);
     if (!Number.isFinite(top)) return;
-    el.style.top = `${this._clampToViewport(0, top, el).top}px`;
+    const clamped = this._clampToViewport(0, top, el);
+    if (!clamped) return;
+    el.style.top = `${clamped.top}px`;
     this._pinPanelToRight(el);
   }
 
@@ -3346,7 +3404,7 @@ export class StyleManager {
       this.cycleLook();
     });
 
-    // Keyboard shortcuts: 1-7, H, Escape
+    // Keyboard shortcuts: 1-7, H (HUD), Home (home view), Escape
     this._globalKeydownHandler = (e) => {
       // Ignore when interacting with a form control (except Escape). Global
       // hotkeys ('1'-'7', 'h', 'o', 'v', 'd', 'c', 'f') otherwise fire while a
@@ -3370,10 +3428,22 @@ export class StyleManager {
         }
       }
       if (e.key.toLowerCase() === 'h') {
+        // h = HUD toggle — Home view uses the Home key, not H
         this.shareLinkManager?.claimRestoreLane?.('visual');
         this.hud.toggle();
         this._updateHudButtonState();
         this._syncShareState();
+      }
+      if (e.key === 'Home') {
+        if (
+          e.target === this._radioTunerSlider
+          || e.target === this._globalContextFlightsBtn
+          || e.target === this._globalContextMissionsBtn
+        ) {
+          return;
+        }
+        e.preventDefault();
+        this.goHome();
       }
       if (e.key.toLowerCase() === 'o') this._toggleOrbit();
       if (e.key.toLowerCase() === 'v') this.toggleCleanView();
@@ -3643,6 +3713,7 @@ export class StyleManager {
     if (this._hudLayoutSelect && this._hudLayoutSelect.value !== this.hud.getVariant()) {
       this._hudLayoutSelect.value = this.hud.getVariant();
     }
+    writeStoredHudVariant(this.hud.getVariant());
     this._syncShareState();
     this._scheduleAdaptivePanelLayout({ settle: true });
   }
@@ -3938,6 +4009,7 @@ export class StyleManager {
    * @returns {void}
    */
   _initPanelChrome() {
+    this._sanitizeRestoredPanelPositions();
     const targets = new Set();
     document.querySelectorAll('.panel-collapse-btn[data-collapse-target]').forEach((btn) => {
       const targetId = btn.dataset.collapseTarget;
@@ -3964,6 +4036,25 @@ export class StyleManager {
     this._initCommandDockPins();
     this._initCommandDockTrayMetrics();
     this._maybeNotifyLayoutReset();
+  }
+
+  /**
+   * On boot, clamp or reset leftover/current panelPos keys that would restore
+   * a panel off-screen. Does not rename leftover godsEyeView.* keys.
+   * @returns {void}
+   */
+  _sanitizeRestoredPanelPositions() {
+    try {
+      sanitizeStoredPanelPositions({
+        storage: localStorage,
+        panelIds: SHARE_PANEL_STATE_SPECS.map((spec) => spec.id),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        currentVersion: PANEL_POSITION_STORAGE_VERSION,
+      });
+    } catch {
+      // storage unavailable
+    }
   }
 
   /**
@@ -6839,6 +6930,56 @@ export class StyleManager {
     this._scheduleRightPanelLayout();
   }
 
+  /**
+   * After the rails claim their panels, restore leftover floating positions
+   * (clamped) and pull any still-off-screen panel back into the viewport.
+   * @returns {void}
+   */
+  _initRestoredPanelPositions() {
+    for (const spec of SHARE_PANEL_STATE_SPECS) {
+      const panelEl = document.getElementById(spec.id);
+      if (!panelEl) continue;
+      const parentId = panelEl.parentElement?.id;
+      const managed = parentId === 'right-context-rail' || parentId === 'left-panel-stack';
+      if (managed) continue;
+      this._restorePanelPosition(spec.id, panelEl);
+    }
+    this._clampRestoredPanelsOnScreen();
+  }
+
+  /**
+   * Last-chance boot clamp: leftover inline coords or a collapsed-off-screen
+   * restore must still leave the panel intersecting the viewport.
+   * @returns {void}
+   */
+  _clampRestoredPanelsOnScreen() {
+    const viewport = {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    };
+    for (const spec of SHARE_PANEL_STATE_SPECS) {
+      const panelEl = document.getElementById(spec.id);
+      if (!panelEl) continue;
+      const rect = panelEl.getBoundingClientRect();
+      if (isPanelRectOnScreen(rect, viewport)) continue;
+      const parentId = panelEl.parentElement?.id;
+      const managed = parentId === 'right-context-rail' || parentId === 'left-panel-stack';
+      if (managed) {
+        panelEl.style.removeProperty('left');
+        panelEl.style.removeProperty('top');
+        panelEl.style.removeProperty('right');
+        panelEl.style.removeProperty('bottom');
+        continue;
+      }
+      const clamped = this._clampToViewport(rect.left, rect.top, panelEl);
+      if (!clamped) continue;
+      panelEl.style.left = `${clamped.left}px`;
+      panelEl.style.top = `${clamped.top}px`;
+      panelEl.style.right = 'auto';
+      panelEl.style.bottom = 'auto';
+    }
+  }
+
   _scheduleRightPanelLayout({ reconsiderAutoCollapse = false } = {}) {
     if (reconsiderAutoCollapse) this._rightStackReconsiderAutoCollapse = true;
     if (!this._rightPanelStack || this._rightStackLayoutFrame !== null) return;
@@ -7475,15 +7616,23 @@ export class StyleManager {
    */
   _restorePanelPosition(panelId, panelEl) {
     try {
-      const raw = localStorage.getItem(this._panelStorageKey(panelId));
-      if (!raw) return;
-      const pos = JSON.parse(raw);
-      if (!pos || typeof pos.left !== 'number' || typeof pos.top !== 'number') return;
-      // Clamp to the viewport: a position saved at one window size would otherwise land off-screen at
-      // another (audit U2 — observed a panel at x:-192). The drag handler clamps; restore must too.
-      const { left, top } = this._clampToViewport(Math.round(pos.left), Math.round(pos.top), panelEl);
-      panelEl.style.left = `${left}px`;
-      panelEl.style.top = `${top}px`;
+      const resolved = resolveStoredPanelPosition(
+        localStorage,
+        panelId,
+        PANEL_POSITION_STORAGE_VERSION,
+      );
+      if (!resolved?.pos) return;
+      // Clamp leftover or current coords: a position saved at one window size
+      // would otherwise land off-screen at another. Same-key leftovers are
+      // not renamed this cycle.
+      const clamped = this._clampToViewport(
+        Math.round(resolved.pos.left),
+        Math.round(resolved.pos.top),
+        panelEl,
+      );
+      if (!clamped) return;
+      panelEl.style.left = `${clamped.left}px`;
+      panelEl.style.top = `${clamped.top}px`;
       panelEl.style.right = 'auto';
       panelEl.style.bottom = 'auto';
       if (panelId === 'pp-toggles') {
@@ -7500,16 +7649,18 @@ export class StyleManager {
    * @param {number} left - desired left (px)
    * @param {number} top - desired top (px)
    * @param {HTMLElement} panelEl - the panel element
-   * @returns {{left:number, top:number}}
+   * @returns {{left:number, top:number}|null}
    */
   _clampToViewport(left, top, panelEl) {
     const rect = panelEl.getBoundingClientRect();
-    const maxLeft = Math.max(6, window.innerWidth - rect.width - 6);
-    const maxTop = Math.max(6, window.innerHeight - rect.height - 6);
-    return {
-      left: Math.max(6, Math.min(maxLeft, left)),
-      top: Math.max(6, Math.min(maxTop, top)),
-    };
+    return clampPanelPosition({
+      left,
+      top,
+      width: rect.width,
+      height: rect.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
   }
 
   /**
@@ -7791,6 +7942,21 @@ export class StyleManager {
   // { ok, ...resultingState } so callers confirm only what actually happened.
 
   /**
+   * Advances the HUD one step along the existing set_hud cycle:
+   * operator → minimal → tactical → off → operator.
+   * @returns {{ok: boolean, visible?: boolean, layout?: string, error?: string}}
+   */
+  cycleHud() {
+    return cycleHud({
+      visible: !!this.hud?.visible,
+      layout: this.hud?.getVariant?.() || 'tactical',
+    }, {
+      setHudLayout: (layout) => this.setHudLayout(layout),
+      setHudVisible: (mode) => this.setHudVisible(mode),
+    });
+  }
+
+  /**
    * Sets HUD visibility mode. 'auto' restores style-driven show/hide.
    * @param {'on'|'off'|'auto'} mode - Visibility mode.
    * @returns {{ok: boolean, visible?: boolean, layout?: string, error?: string}}
@@ -7819,6 +7985,7 @@ export class StyleManager {
     }
     this.shareLinkManager?.claimRestoreLane?.('visual');
     this._setHudVariant(variant);
+    this._updateHudButtonState();
     return { ok: true, layout: this.hud.getVariant(), visible: !!this.hud.visible };
   }
 
@@ -9068,6 +9235,7 @@ export class StyleManager {
 
     // Notify share link manager
     this.shareLinkManager.onStyleChange(styleName);
+    writeStoredSensorLook(styleName);
     this._syncShareState();
   }
 
@@ -9632,6 +9800,25 @@ export class StyleManager {
     }
   }
 
+  /** Wire the Home control that flies to the settled first-load camera. */
+  _initHomeViewButton() {
+    this._homeViewBtn?.addEventListener('click', () => this.goHome());
+  }
+
+  /**
+   * Fly to the default first-load camera. Does not delete lastView;
+   * moveEnd overwrites the slot after the flight.
+   */
+  goHome() {
+    this._stopOrbit();
+    if (this.viewer) {
+      this.viewer.trackedEntity = undefined;
+      this.viewer.camera?.cancelFlight?.();
+      this.viewer.camera?.lookAtTransform?.(Cesium.Matrix4.IDENTITY);
+    }
+    flyToHomeView(this.viewer);
+  }
+
   /** Wire the persistent reset control to the same route used by voice. */
   _initResetGlobeButton() {
     this._globeResetHandler = () => { this.resetToGlobeView(); };
@@ -9797,6 +9984,14 @@ export class StyleManager {
     });
   }
 
+  /** Wire Copy view link — current share URL, no copy-time timestamp. */
+  _initCopyViewLinkButton() {
+    this._copyViewLinkBtn?.addEventListener('click', async () => {
+      const success = await this.shareLinkManager.copyViewLink();
+      this._showToast(success ? 'Link copied' : 'Copy failed');
+    });
+  }
+
   /**
    * Displays a temporary toast notification for 2 seconds.
    * @param {string} message - Text to show in the toast.
@@ -9904,15 +10099,15 @@ export class StyleManager {
   _initHUDToggle() {
     this._hudBtn.addEventListener('click', () => {
       this.shareLinkManager?.claimRestoreLane?.('visual');
-      this.hud.toggle();
-      this._updateHudButtonState();
-      this._syncShareState();
+      this.cycleHud();
     });
 
+    const storedVariant = readStoredHudVariant();
+    const initialVariant = storedVariant || 'tactical';
     if (this._hudLayoutSelect) {
-      this._hudLayoutSelect.value = 'tactical';
+      this._hudLayoutSelect.value = initialVariant;
     }
-    this._setHudVariant('tactical');
+    this._setHudVariant(initialVariant);
     this.hud.setMode('on');
     this._updateHudButtonState();
 
@@ -10029,9 +10224,17 @@ export class StyleManager {
    * @returns {void}
    */
   _updateHudButtonState() {
-    this._hudBtn.classList.toggle('active', this.hud.visible);
+    const hudState = {
+      visible: !!this.hud.visible,
+      layout: this.hud.getVariant(),
+    };
+    this._hudBtn.classList.toggle('active', hudState.visible);
+    this._hudBtn.setAttribute('aria-pressed', String(hudState.visible));
+    this._hudBtn.setAttribute('aria-label', hudChromeAriaLabel(hudState));
+    const label = this._hudBtn.querySelector('.pp-label');
+    if (label) label.textContent = hudChromeLabel(hudState);
     if (this._hudLayoutRow) {
-      this._hudLayoutRow.classList.toggle('visible', this.hud.visible);
+      this._hudLayoutRow.classList.toggle('visible', hudState.visible);
     }
     this._scheduleAdaptivePanelLayout({ settle: true });
   }
@@ -10318,6 +10521,7 @@ export class StyleManager {
       document.removeEventListener('gev:radio-selected', this._radioSelectedHandler);
       this._radioSelectedHandler = null;
     }
+    destroySelectedContactIdent();
     destroyTrackedReadout();
     destroyDetection();
     destroyWorldOverlay();

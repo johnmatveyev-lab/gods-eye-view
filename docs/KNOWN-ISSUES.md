@@ -1,6 +1,6 @@
 # KNOWN ISSUES
 
-Updated: July 8, 2026
+Updated: August 25, 2026
 
 This file tracks active runtime issues only.
 
@@ -22,29 +22,27 @@ Context:
 Current mitigation in runtime:
 - Fair per-road dot budget allocation (reduces hard starvation under global `MAX_DOTS` cap).
 - Center-shift threshold (reduces stale overlap lock while panning).
+- Viewport-first paint: in-view road segments consume `MAX_DOTS` and spawn before off-center extras (`src/data/trafficViewport.js`).
+- After jump-to-city (or first arrival from high altitude), one neighbor ring of nearby tiles is prefetched into the existing client tile cache so a fast pan does not need a second zoom.
 
 Next iteration candidates:
-- Prioritize currently visible road segments inside the active viewport before off-center segments.
-- Add neighbor prefetch ring for nearby tiles after jump-to-city actions.
 - Add adaptive dot cap by frame time (coverage first, density second).
 - Promote sync chip from loading indicator to true multi-phase progress.
 
 ---
 
 ### CCTV panel can appear "missing" after layout refactors
-Status: Open (workaround available)
+Status: Closed — boot clamp (2026-08-25)
 
 Context:
-- Panel positions are persisted in local storage and can restore off-screen after UI changes.
+- Leftover `godsEyeView.v6` / `v7` (and current `v8`) `panelPos` values could restore a panel off-screen.
+- Boot now clamps those coordinates in place, or resets that panel's pos/collapsed keys when the payload is unreadable. No console workaround.
 
-Workaround:
-- In browser console:
-  - `localStorage.removeItem('godsEyeView.v6.panelPos.cctv-panel');`
-  - `localStorage.removeItem('godsEyeView.v6.panelCollapsed.cctv-panel');`
-  - `location.reload();`
+Validation target:
+- `src/panelPosition.js`, `src/ui.js` (`_sanitizeRestoredPanelPositions`, `_clampRestoredPanelsOnScreen`)
 
-Related keys (current versions):
-- Panel positions: `godsEyeView.v7.panelPos.<panel-id>` (re-versioned 2026-06-10)
+Related keys (unchanged this cycle — leftovers are not renamed):
+- Panel positions: `godsEyeView.v8.panelPos.<panel-id>` (legacy `v6` / `v7` still read)
 - Panel collapsed state: `godsEyeView.v6.panelCollapsed.<panel-id>`
 - CCTV calibration: `godsEyeView.cctv.calibration.v2`
 

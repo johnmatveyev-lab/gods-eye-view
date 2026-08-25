@@ -46,3 +46,69 @@ export function applySensorLook(styleManager, styleId) {
 export function cycleSensorLook(styleManager) {
   return applySensorLook(styleManager, nextSensorLook(styleManager?.activeStyle));
 }
+
+/**
+ * Store key for the last sensor look. Written to sessionStorage unless
+ * this exact key is already present in localStorage.
+ */
+export const SENSOR_LOOK_STORE_KEY = 'gev:style:v1';
+
+function resolveStore(kind, injected) {
+  if (injected !== undefined) return injected;
+  try {
+    return kind === 'session' ? globalThis.sessionStorage : globalThis.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+function readItem(store, key) {
+  try {
+    return store?.getItem?.(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeItem(store, key, value) {
+  try {
+    if (typeof store?.setItem !== 'function') return false;
+    store.setItem(key, value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function existingDurableStore(storage) {
+  const store = resolveStore('local', storage);
+  return readItem(store, SENSOR_LOOK_STORE_KEY) != null ? store : null;
+}
+
+function normalizeStoredLook(value) {
+  if (SENSOR_LOOK_CYCLE.includes(value)) return value;
+  return null;
+}
+
+/** @returns {'retro'|'surveillance'|'thermal'|'noir'|'snow'|'normal'|null} */
+export function readStoredSensorLook({ storage, sessionStorageRef } = {}) {
+  const durable = existingDurableStore(storage);
+  const raw = durable
+    ? readItem(durable, SENSOR_LOOK_STORE_KEY)
+    : readItem(resolveStore('session', sessionStorageRef), SENSOR_LOOK_STORE_KEY);
+  return normalizeStoredLook(raw);
+}
+
+/**
+ * Persist a look. Never creates a durable key that was not already there.
+ * @returns {boolean}
+ */
+export function writeStoredSensorLook(styleId, { storage, sessionStorageRef } = {}) {
+  const normalized = normalizeStoredLook(styleId);
+  if (!normalized) return false;
+  const durable = existingDurableStore(storage);
+  if (durable) {
+    return writeItem(durable, SENSOR_LOOK_STORE_KEY, normalized);
+  }
+  return writeItem(resolveStore('session', sessionStorageRef), SENSOR_LOOK_STORE_KEY, normalized);
+}

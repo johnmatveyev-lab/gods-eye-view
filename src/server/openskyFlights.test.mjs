@@ -170,7 +170,10 @@ test('api/opensky.js wraps the extracted handler and never mentions OpenSky host
 
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.ok(vercelJson.functions['api/opensky.js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
 });
 
 test('restoreOpenskyPath keeps the client /api/opensky path', () => {

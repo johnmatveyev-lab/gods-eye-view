@@ -9,9 +9,12 @@ import { readLastView } from './lastView.js';
 import { createGevActionRunner } from './voice/gevActions.js';
 import {
   SENSOR_LOOK_CYCLE,
+  SENSOR_LOOK_STORE_KEY,
   nextSensorLook,
   sensorLookLabel,
   cycleSensorLook,
+  readStoredSensorLook,
+  writeStoredSensorLook,
 } from './sensorLookPolicy.js';
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
@@ -171,6 +174,29 @@ test('voice style commands stay in sync with the Look cycle ids', async () => {
   assert.equal(nextSensorLook('snow'), def.style);
 });
 
+test('Look persistence is session-only unless a style key already exists', () => {
+  const storage = memoryStorage();
+  const sessionStorageRef = memoryStorage();
+  writeStoredSensorLook('surveillance', { storage, sessionStorageRef });
+  assert.equal(storage.getItem(SENSOR_LOOK_STORE_KEY), null, 'a missing durable key must not be created');
+  assert.equal(sessionStorageRef.getItem(SENSOR_LOOK_STORE_KEY), 'surveillance');
+  assert.equal(readStoredSensorLook({ storage, sessionStorageRef }), 'surveillance');
+
+  writeStoredSensorLook('thermal', { storage, sessionStorageRef });
+  assert.equal(sessionStorageRef.getItem(SENSOR_LOOK_STORE_KEY), 'thermal');
+  assert.equal(storage.getItem(SENSOR_LOOK_STORE_KEY), null);
+});
+
+test('an already-present style key keeps the look durable', () => {
+  const storage = memoryStorage();
+  storage.setItem(SENSOR_LOOK_STORE_KEY, 'noir');
+  const sessionStorageRef = memoryStorage();
+  assert.equal(readStoredSensorLook({ storage, sessionStorageRef }), 'noir');
+  writeStoredSensorLook('snow', { storage, sessionStorageRef });
+  assert.equal(storage.getItem(SENSOR_LOOK_STORE_KEY), 'snow');
+  assert.equal(sessionStorageRef.getItem(SENSOR_LOOK_STORE_KEY), null);
+});
+
 test('Look control is a discoverable cycle, not HUD layout, density, or reduce-motion', () => {
   assert.match(html, /id="look-cycle-btn"/);
   assert.match(html, /Look/);
@@ -180,5 +206,7 @@ test('Look control is a discoverable cycle, not HUD layout, density, or reduce-m
   );
   assert.match(ui, /cycleSensorLook\(this\)|cycleLook\(/);
   assert.match(ui, /nextSensorLook|cycleSensorLook/);
+  assert.match(ui, /writeStoredSensorLook\(styleName\)/);
+  assert.match(ui, /readStoredSensorLook\(\)/);
   assert.match(css, /#command-dock #look-cycle-btn|#command-dock \.look-cycle-btn/);
 });

@@ -5,11 +5,38 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ## [Unreleased] — 2026-08-25
 
+### Changed
+
+- Ships poll interval is milliseconds (`60000` when live, `max(1000, nextAttemptAt-now)` when reconnecting). Missing-key / auth-failed leaves the manager poll unarmed and shows the stable key/unavailable string with no retry suffix. Hosted still does not wrap AISStream.
+- Street traffic now paints currently visible road segments before off-center extras in the same tile, and after a jump-to-city it prefetches one neighbor ring of nearby tiles into the existing client cache. `MAX_DOTS` and the center-shift gate are unchanged. No new traffic vendor or `/api` route.
+
 ### Added
 
 - Added a Look control that cycles the existing sensor styles — CRT, NVG,
   FLIR, Noir, Snow, then default — through the same setter the share URL and
   voice already use. No new looks.
+- Added a filter field at the top of the Data Layers list. It matches the
+  visible layer name plus existing voice common-names (fires, ships, bikes,
+  traffic, cameras, and the rest of that map). Empty query shows the full
+  legal list. TeleGeography cables, OpenSky, and Google News stay off the
+  list; the cables layer remains a registered no-op and is hidden from the
+  panel. UI filter only — no new `/api` routes or data sources.
+- Added a copy control on the selected-contact card for the visible asset
+  ident (aircraft callsign, else registration/hex; vessel name or MMSI;
+  satellite name or NORAD). Clicking the ident or the copy control copies it
+  and toasts `Copied UAL123`. Hidden with no selection. Aircraft, vessels, and
+  satellites only — no person-search and no server route.
+- HUD and cockpit clocks can switch UTC | Local next to the existing time.
+  Local uses the browser timezone. The choice persists as `meridian.clock`
+  (`utc` default). Share URLs, units, compass, and Home are unchanged.
+- Hosted `/api/google/nearby-places` on Vercel via `api/google/nearby-places.js`,
+  forwarding the same GET handler extracted to `src/google/nearbyPlaces.js`.
+  Reuses `GOOGLE_MAPS_API_KEY` and optional `GEV_RATELIMIT_GOOGLE_PER_MIN`.
+  Place labels only — the Google key never appears in JSON.
+- Added a hosted `/api/adsbdb` enrichment proxy (`api/adsbdb/[...path].js`)
+  that forwards route and aircraft lookups to `api.adsbdb.com` only, with a
+  24h in-memory cache, 404 negative-cache, last-good on error, and optional
+  `/tmp` persist. Dev/preview still use the Vite plugin. OpenSky is not used.
 - Hosted cockpit regional brief now shares one Node handler between Vite and
   Vercel (`api/regional-brief.js`). GET and POST return 200 JSON with place
   and/or weather and/or GDELT news — never a platform `NOT_FOUND`. Google News
@@ -43,10 +70,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
   returns 503/400 with variable names only.
+- Added hosted TomTom traffic tiles: `src/data/tomtom.js` owns the
+  budget-governed proxy, the Vite plugin forwards, and
+  `api/tomtom/[...path].js` serves `/api/tomtom/status` and flow tiles on
+  Vercel (256-tile memory cache, optional `/tmp`, in-isolate daily
+  budget, default 40k). A rewrite sends `*.pbf` tile URLs to the
+  function so they are not a static 404. Keyless installs return 503
+  `{error:'no_key'}` without contacting TomTom. Responses never echo
+  the key or upstream URL. This extract does not wrap `/api/ais-live`;
+  OpenSky stays off.
 - Added Vercel Node catch-all `api/[...path].js` that runs the same live
   `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
   adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
   terrain, Google Places, and the rest). No Next rewrite and no new vendors.
+- Hosted `/api/terrain/heights` on Vercel via `api/terrain/heights.js`,
+  forwarding the Re:Earth handler extracted to `src/data/terrainHeights.js`
+  / `terrainHeightsProxy.js`. Memory plus optional `/tmp` cache, single-flight,
+  serve-stale. No new elevation vendor. This extract does not wrap
+  `/api/military-installations`.
 - Added `api/opensky.js` for hosted civilian flights. The path stays
   `/api/opensky`; the handler is the extracted 250 nm adsb.lol snapshot
   (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).
