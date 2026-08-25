@@ -9637,8 +9637,11 @@ export class StyleManager {
    */
   goHome() {
     this._stopOrbit();
-    this.viewer?.camera?.cancelFlight?.();
-    this.viewer?.camera?.lookAtTransform?.(Cesium.Matrix4.IDENTITY);
+    if (this.viewer) {
+      this.viewer.trackedEntity = undefined;
+      this.viewer.camera?.cancelFlight?.();
+      this.viewer.camera?.lookAtTransform?.(Cesium.Matrix4.IDENTITY);
+    }
     flyToHomeView(this.viewer);
   }
 
