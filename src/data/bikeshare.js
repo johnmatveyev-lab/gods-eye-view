@@ -28,6 +28,14 @@ import {
   stationMatchesBikeshareEbikesOnly,
 } from './bikeshareEbikeFilter.js';
 import {
+  BIKESHARE_CAPACITY_FLOORS,
+  DEFAULT_BIKESHARE_CAPACITY,
+  normalizeBikeshareCapacity,
+  readPersistedBikeshareCapacity,
+  stationMatchesBikeshareCapacity,
+  writePersistedBikeshareCapacity,
+} from './bikeshareCapacityFilter.js';
+import {
   BIKESHARE_LAST_REPORTED_WINDOWS,
   DEFAULT_BIKESHARE_LAST_REPORTED,
   normalizeBikeshareLastReported,
@@ -603,6 +611,8 @@ let _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
 let _ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY;
 /** Last-reported freshness window. Default All — no max age. */
 let _lastReported = DEFAULT_BIKESHARE_LAST_REPORTED;
+/** Hub-capacity floor chip. Default All — no numeric floor. */
+let _capacity = DEFAULT_BIKESHARE_CAPACITY;
 /** Optional storage override for picker persistence tests. */
 let _storageOverride = null;
 /** Manager callback when picker state changes. */
@@ -651,13 +661,13 @@ function isClosedBikeshareStation(record) {
 
 /**
  * Whether a station should stay on the globe under Hide empty / Hide full /
- * Hide closed / min-available / min-docks / E-bikes only / last-reported.
- * Unknown / non-finite counts stay visible for empty, full, the bike floor,
- * the dock floor, and e-bikes. Unknown operational flags stay visible for
- * Hide closed. Unknown / non-finite lastReported stays visible for the
- * freshness window. A selected station stays visible even after it goes
- * empty, full, closed, below a floor, to zero e-bikes, or stale, until
- * deselected. The filters AND independently.
+ * Hide closed / min-available / min-docks / E-bikes only / last-reported /
+ * capacity. Unknown / non-finite counts stay visible for empty, full, the
+ * bike floor, the dock floor, e-bikes, and hub capacity. Unknown
+ * operational flags stay visible for Hide closed. Unknown / non-finite
+ * lastReported stays visible for the freshness window. A selected station
+ * stays visible even after it goes empty, full, closed, below a floor, to
+ * zero e-bikes, or stale, until deselected. The filters AND independently.
  * @param {Object|null|undefined} record
  * @param {{
  *   hideEmpty?: boolean,
@@ -667,6 +677,7 @@ function isClosedBikeshareStation(record) {
  *   minDocks?: string|number|null,
  *   ebikesOnly?: boolean,
  *   lastReported?: string|number|null,
+ *   capacity?: string|number|null,
  *   selectedKey?: string|null,
  *   now?: number,
  * }} [options]
@@ -680,6 +691,7 @@ export function shouldShowBikeshareStation(record, {
   minDocks = DEFAULT_BIKESHARE_MIN_DOCKS,
   ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY,
   lastReported = DEFAULT_BIKESHARE_LAST_REPORTED,
+  capacity = DEFAULT_BIKESHARE_CAPACITY,
   selectedKey = null,
   now = Date.now(),
 } = {}) {
@@ -705,6 +717,9 @@ export function shouldShowBikeshareStation(record, {
   if (!stationMatchesBikeshareLastReported(record, lastReported, { now })) {
     return false;
   }
+  if (!stationMatchesBikeshareCapacity(record, capacity)) {
+    return false;
+  }
   return true;
 }
 
@@ -728,6 +743,7 @@ function applyStationVisibility(record) {
     minDocks: _minDocks,
     ebikesOnly: _ebikesOnly,
     lastReported: _lastReported,
+    capacity: _capacity,
     selectedKey: _selectedKey,
   });
   if (isSelected) {
@@ -810,6 +826,16 @@ function setLastReported(nextValue) {
   if (next == null || next === _lastReported) return false;
   _lastReported = next;
   writePersistedBikeshareLastReported(next, safeBikeshareStorage());
+  applyAllStationVisibility();
+  notifyRowControlsChanged();
+  return true;
+}
+
+function setCapacity(nextValue) {
+  const next = normalizeBikeshareCapacity(nextValue);
+  if (next == null || next === _capacity) return false;
+  _capacity = next;
+  writePersistedBikeshareCapacity(next, safeBikeshareStorage());
   applyAllStationVisibility();
   notifyRowControlsChanged();
   return true;
@@ -1648,8 +1674,10 @@ function applyStatusToPoints(cityId, statusMap) {
     if (!record) continue;
 
     const status = statusMap.get(record.stationId) || null;
-    const capacity = resolveCapacity(record.capacity, status);
-    record.capacity = capacity;
+    // Keep station_information capacity on the render record. The 15-dock
+    // fallback (and bikes+docks derivation) is render-size / color only —
+    // capacity chips must not treat that fallback as a real hub size.
+    const renderCapacity = resolveCapacity(record.capacity, status);
 
     record.bikesAvailable = toNonNegativeInteger(status?.bikesAvailable);
     record.docksAvailable = toNonNegativeInteger(status?.docksAvailable);
@@ -1660,8 +1688,8 @@ function applyStatusToPoints(cityId, statusMap) {
     record.isReturning = normalizeGbfsBool(status?.isReturning, true);
 
     // Update visual properties based on current status
-    record.point.pixelSize = capacityToPixelSize(capacity);
-    record.point.color = statusToColor(status, capacity);
+    record.point.pixelSize = capacityToPixelSize(renderCapacity);
+    record.point.color = statusToColor(status, renderCapacity);
     applyStationVisibility(record);
   }
 }
@@ -1914,6 +1942,8 @@ const bikeshareLayer = {
     _ebikesOnly = readPersistedBikeshareEbikesOnly(safeBikeshareStorage()) === true;
     _lastReported = readPersistedBikeshareLastReported(safeBikeshareStorage())
       || DEFAULT_BIKESHARE_LAST_REPORTED;
+    _capacity = readPersistedBikeshareCapacity(safeBikeshareStorage())
+      || DEFAULT_BIKESHARE_CAPACITY;
 
     _overlayHost.setVisible(BIKESHARE_SELECTED_OVERLAY_SOURCE_ID, false);
 
@@ -2047,11 +2077,11 @@ const bikeshareLayer = {
 
   /**
    * Picker of allowlisted systems plus Hide empty / Hide full / Hide closed /
-   * E-bikes only, All | 3+ | 5+ bike / dock chips, and All | 15m | 60m
-   * last-reported chips. The picker stays Plan 68: it still switches
-   * allowlisted systems. The chips are draw filters on already-fetched
-   * status, not a new feed. Manager hides this row while the bike layer is
-   * off.
+   * E-bikes only, All | 3+ | 5+ bike / dock chips, All | 15m | 60m
+   * last-reported chips, and All | 10+ | 20+ capacity chips. The picker
+   * stays Plan 68: it still switches allowlisted systems. The chips are
+   * draw filters on already-fetched status, not a new feed. Manager hides
+   * this row while the bike layer is off.
    * @returns {{ picker: object, chips: Array<object> }}
    */
   getRowControls() {
@@ -2120,6 +2150,13 @@ const bikeshareLayer = {
         active: _lastReported === window.id,
         group: 'Reported',
         params: { lastReported: window.id },
+      })), ...BIKESHARE_CAPACITY_FLOORS.map((floor) => ({
+        id: `capacity-${floor.id}`,
+        label: floor.label,
+        title: floor.title,
+        active: _capacity === floor.id,
+        group: 'Capacity',
+        params: { capacity: floor.id },
       }))],
     };
   },
@@ -2133,13 +2170,14 @@ const bikeshareLayer = {
       minDocks: _minDocks,
       ebikesOnly: _ebikesOnly,
       lastReported: _lastReported,
+      capacity: _capacity,
     };
   },
 
   /**
    * Apply Hide empty / Hide full / Hide closed / min-available / min-docks /
-   * E-bikes only / last-reported without refetching GBFS. System switching
-   * stays on setSelectedSystem (Plan 68) and is not accepted here.
+   * E-bikes only / last-reported / capacity without refetching GBFS. System
+   * switching stays on setSelectedSystem (Plan 68) and is not accepted here.
    * @param {Object} [params]
    * @returns {boolean}
    */
@@ -2172,6 +2210,10 @@ const bikeshareLayer = {
     if (Object.hasOwn(params, 'lastReported')) {
       const next = normalizeBikeshareLastReported(params.lastReported);
       if (next !== null) setLastReported(next);
+    }
+    if (Object.hasOwn(params, 'capacity')) {
+      const next = normalizeBikeshareCapacity(params.capacity);
+      if (next !== null) setCapacity(next);
     }
     return true;
   },
@@ -2281,6 +2323,7 @@ export function _resetBikeshareSystemPickerForTest() {
   _minDocks = DEFAULT_BIKESHARE_MIN_DOCKS;
   _ebikesOnly = DEFAULT_BIKESHARE_EBIKES_ONLY;
   _lastReported = DEFAULT_BIKESHARE_LAST_REPORTED;
+  _capacity = DEFAULT_BIKESHARE_CAPACITY;
   _unavailable = false;
   _error = null;
   _enabled = false;
