@@ -142,11 +142,12 @@ test('no Google News source picker in the UI', () => {
 });
 
 test('voice instructions refuse OpenSky and Google News RSS', () => {
+  const instructions = readFileSync(path.join(ROOT, 'src/voice/realtimeInstructions.js'), 'utf8');
   const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
-  assert.match(proxies, /OpenSky Network is disabled/);
-  assert.match(proxies, /Google News RSS is disabled/);
-  assert.match(proxies, /never fetch OpenSky/);
-  assert.match(proxies, /Never fetch Google News RSS/);
+  assert.match(instructions, /OpenSky Network is disabled/);
+  assert.match(instructions, /Google News RSS is disabled/);
+  assert.match(instructions, /never fetch OpenSky/);
+  assert.match(instructions, /Never fetch Google News RSS/);
   assert.doesNotMatch(proxies, /news\.google\.com/);
   assert.doesNotMatch(proxies, /https:\/\/opensky-network\.org/);
   assert.doesNotMatch(proxies, /function normalizeRssArticles/);

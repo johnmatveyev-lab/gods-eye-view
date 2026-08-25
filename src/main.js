@@ -33,6 +33,7 @@ import {
   releaseContinuousRender,
 } from './renderGovernor.js';
 import { installScopeMask } from './scopeMask.js';
+import { installCameraCrosshair, readCrosshairPreference } from './cameraCrosshair.js';
 import { initFirstRunExperience } from './firstRunExperience.js';
 import { initResponsibleUseNotice } from './responsibleUseNotice.js';
 import { attachVoiceGate, initMeridianAccount } from './billing/client.js';
@@ -306,6 +307,11 @@ async function init() {
     // see src/scopeMask.js. Installed before the UI so the DISPLAY-rail
     // toggle finds it live.
     installScopeMask(viewer);
+    // CSS plus at the same canvas-center pick copy-coords / measure use.
+    // Installed before the UI so the DISPLAY-rail toggle finds it live.
+    let storedCrosshair = false;
+    try { storedCrosshair = readCrosshairPreference(window.localStorage); } catch { /* default off */ }
+    installCameraCrosshair(viewer, { enabled: storedCrosshair });
 
     // The follow camera recomputes the tracked target's dead-reckon position
     // every frame — tracking anything is a per-frame animation. (perf wave 2)

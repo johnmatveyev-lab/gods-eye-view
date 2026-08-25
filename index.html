@@ -68,6 +68,17 @@
       <span class="contacts-roster-toggle-label">CONTACTS</span>
     </button>
     <button
+      id="installations-list-toggle"
+      type="button"
+      aria-pressed="false"
+      aria-controls="installations-viewport-list"
+      aria-label="Sites — mapped installations in view"
+      title="Sites — list mapped installations already loaded for this view"
+    >
+      <span class="material-symbols-outlined" aria-hidden="true">location_away</span>
+      <span class="installations-list-toggle-label">SITES</span>
+    </button>
+    <button
       id="launches-panel-toggle"
       type="button"
       aria-pressed="false"
@@ -125,6 +136,16 @@
       <span class="material-symbols-outlined" aria-hidden="true">public</span>
     </button>
   </nav>
+  <aside id="installations-viewport-list" hidden aria-label="Mapped installations in the current view">
+    <div class="installations-viewport-list-header">
+      <div>
+        <strong>MAPPED SITES</strong>
+        <span>Current view · public mapped features</span>
+      </div>
+      <output data-installations-list-count>—</output>
+    </div>
+    <div class="installations-viewport-list-body" data-installations-list></div>
+  </aside>
   <aside id="launches-panel" hidden aria-label="Upcoming launches">
     <div class="launches-panel-inner">
       <div class="launches-panel-header">
@@ -155,6 +176,11 @@
 
   <!-- Toast notification -->
   <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <div id="keyboard-shortcuts-overlay" hidden role="dialog" aria-modal="false" aria-hidden="true" aria-labelledby="keyboard-shortcuts-title">
+    <h2 id="keyboard-shortcuts-title">Keyboard shortcuts</h2>
+    <dl id="keyboard-shortcuts-list"></dl>
+  </div>
 
   <!-- Safe frame guides for recording composition -->
   <div id="safe-frame-overlay">
@@ -616,6 +642,12 @@
         <span class="pp-label">Grid</span>
       </button>
     </div>
+    <div class="pp-toggle-group">
+      <button class="pp-toggle-btn" id="crosshair-toggle" title="Crosshair — mark the camera-center aim point" aria-pressed="false">
+        <span class="pp-icon material-symbols-outlined" aria-hidden="true">add</span>
+        <span class="pp-label">Crosshair</span>
+      </button>
+    </div>
     <button class="pp-toggle-btn" id="clean-view-toggle" title="Hide UI chrome">
       <span class="pp-icon">&#x25A1;</span>
       <span class="pp-label">Clean UI</span>
@@ -805,6 +837,21 @@
         <div id="datacenter-in-view-items" class="in-view-site-list-items" role="list"></div>
         <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
       </div>
+    </div>
+  </div>
+
+  <!-- Nearby NASA FIRMS fires (trailing 24h payload; click flies to the detection) -->
+  <div id="fires-panel" class="panel-collapsible collapsed" data-panel-id="fires-panel">
+    <div class="panel-glow"></div>
+    <div class="fires-panel-inner">
+      <div class="panel-header">
+        <span class="panel-title">FIRES</span>
+        <span class="panel-divider"></span>
+        <button class="panel-collapse-btn" data-collapse-target="fires-panel" title="Collapse panel">+</button>
+      </div>
+      <div id="fires-list-meta" class="fires-list-meta">Enable FIRMS Active Fires to list nearby detections.</div>
+      <ol id="fires-list" class="fires-list" aria-label="Nearby NASA FIRMS fires"></ol>
+      <p id="fires-list-ack" class="fires-list-ack">We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Earth Observing System Data and Information System (EOSDIS).</p>
     </div>
   </div>
 
@@ -1134,7 +1181,7 @@
     <p class="first-run-note" data-first-run-status role="status" aria-live="polite">Tip: sign in for a Free demo. Voice is a Pro feature on hosted Meridian.</p>
   </aside>
 
-  <p id="meridian-terms">Meridian is independent, based on the MIT-licensed God's Eye View project. It is not affiliated with Bilawal Sidhu or the God's Eye View series.</p>
+  <p id="meridian-terms">Meridian is independent, based on the MIT-licensed God's Eye View project. It is not affiliated with, endorsed by, or an official continuation of Bilawal Sidhu or the God's Eye View series.</p>
 
   <div id="billing-exhausted" hidden>
     <div class="billing-exhausted-card">
