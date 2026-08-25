@@ -113,15 +113,22 @@ export function approximateDistanceM(latA, lonA, latB, lonB) {
  */
 export function parseNearbyPlacesQuery(url) {
   const requestUrl = parseRequestUrl(url);
-  const latitude = Number(requestUrl.searchParams.get('lat'));
-  const longitude = Number(requestUrl.searchParams.get('lon'));
+  const latRaw = requestUrl.searchParams.get('lat');
+  const lonRaw = requestUrl.searchParams.get('lon');
+  const latitude = Number(latRaw);
+  const longitude = Number(lonRaw);
   const radiusM = Math.max(25, Math.min(5000, Number(requestUrl.searchParams.get('radiusM')) || 250));
   return {
     latitude,
     longitude,
     radiusM,
-    valid: Number.isFinite(latitude) && Number.isFinite(longitude),
+    valid: presentCoordinate(latRaw) && presentCoordinate(lonRaw)
+      && Number.isFinite(latitude) && Number.isFinite(longitude),
   };
+}
+
+function presentCoordinate(value) {
+  return value != null && String(value).trim() !== '';
 }
 
 /**

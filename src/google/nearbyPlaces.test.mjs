@@ -180,4 +180,12 @@ test('nearby-places is place labels only — no person-search fields', () => {
   const query = parseNearbyPlacesQuery('/api/google/nearby-places?lat=40.75&lon=-73.99&radiusM=12');
   assert.equal(query.valid, true);
   assert.equal(query.radiusM, 25);
+
+  const equator = parseNearbyPlacesQuery('/api/google/nearby-places?lat=0&lon=0');
+  assert.equal(equator.valid, true);
+  assert.equal(equator.latitude, 0);
+  assert.equal(equator.longitude, 0);
+
+  assert.equal(parseNearbyPlacesQuery('/api/google/nearby-places').valid, false);
+  assert.equal(parseNearbyPlacesQuery('/api/google/nearby-places?lat=&lon=').valid, false);
 });
