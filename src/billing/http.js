@@ -33,6 +33,15 @@ export function createBillingRuntime({
   });
 
   const readJson = readBody || defaultReadBody;
+  const resolveUserRecord = typeof getUserRecord === 'function'
+    ? getUserRecord
+    : (config.clerkSecretKey
+      ? (userId) => {
+          if (!userId) return null;
+          const clerk = createClerkClient({ secretKey: config.clerkSecretKey });
+          return clerk.users.getUser(userId);
+        }
+      : undefined);
 
   return {
     config,
@@ -41,7 +50,7 @@ export function createBillingRuntime({
     verifyToken,
     createStripe,
     getUserEmail,
-    getUserRecord,
+    getUserRecord: resolveUserRecord,
     updateUserMetadata,
     readJson,
 

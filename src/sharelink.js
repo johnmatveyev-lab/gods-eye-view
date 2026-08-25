@@ -442,15 +442,22 @@ export class ShareLinkManager {
     this._scheduleUpdate();
   }
 
+  /** Snapshot the current camera, style, and layers as a share URL. */
+  currentShareUrl({ nowMs = Date.now(), includeCreatedAt = false } = {}) {
+    const params = this._buildHashParams();
+    if (!params) return null;
+    if (includeCreatedAt) {
+      params.set(SHARE_CREATED_AT_PARAM, String(Math.floor(nowMs / 1000)));
+    }
+    return encodeShareViewUrl(window.location.href, params.toString());
+  }
+
   /** Copy a current-state snapshot with a copy-time timestamp. Returns true on success. */
   async copyLink({ nowMs = Date.now() } = {}) {
-    const params = this._buildHashParams();
-    if (!params) return false;
-    params.set(SHARE_CREATED_AT_PARAM, String(Math.floor(nowMs / 1000)));
-    const copiedUrl = new URL(window.location.href);
-    copiedUrl.hash = params.toString();
+    const copiedUrl = this.currentShareUrl({ nowMs, includeCreatedAt: true });
+    if (!copiedUrl) return false;
     try {
-      await navigator.clipboard.writeText(copiedUrl.href);
+      await navigator.clipboard.writeText(copiedUrl);
       return true;
     } catch {
       return false;
@@ -542,6 +549,23 @@ export class ShareLinkManager {
     this._panelStateProvider = null;
     this._styleParamStateProvider = null;
     this._onRestore = null;
+  }
+}
+
+/** Build a share URL from the current page and a hash snapshot. */
+export function encodeShareViewUrl(href, hash) {
+  const url = new URL(href);
+  url.hash = String(hash || '').replace(/^#/, '');
+  return url.href;
+}
+
+/** Read the share-hash payload stored on a saved-view URL. */
+export function decodeShareViewUrl(urlString) {
+  try {
+    const parsed = new URL(urlString, 'http://localhost/');
+    return parsed.hash.replace(/^#/, '');
+  } catch {
+    return '';
   }
 }
 

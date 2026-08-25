@@ -302,7 +302,7 @@ test('Vite plugin forwards to the extracted adsbdb handler', () => {
   const config = createViteConfig({ mode: 'test' });
   const byName = new Map(config.plugins.map((plugin) => [plugin.name, plugin]));
   assert.equal(typeof byName.get('adsbdb-proxy')?.configureServer, 'function');
-  const vite = readFileSync(path.join(ROOT, 'vite.config.js'), 'utf8');
-  assert.match(vite, /adsbdbProxy/);
-  assert.doesNotMatch(vite, /function adsbdbProxy\(/);
+  const proxies = readFileSync(path.join(ROOT, 'src/server/liveApiProxies.js'), 'utf8');
+  assert.match(proxies, /adsbdbProxy/);
+  assert.doesNotMatch(proxies, /function adsbdbProxy\(/);
 });

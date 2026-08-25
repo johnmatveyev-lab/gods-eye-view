@@ -46,7 +46,7 @@ remain subject to their own licenses and terms. Notably:
     requested).
 
 Live sources (Google Maps, adsb.lol, adsbdb, AISStream, CelesTrak, USGS,
-OSM Overpass, City of Austin, GBFS, GDELT, Open-Meteo) are fetched at runtime
+OSM Overpass, FOSSGIS OSRM, City of Austin, GBFS, GDELT, Open-Meteo) are fetched at runtime
 under each provider's terms. OpenSky Network and Google News RSS are disabled
 in this commercial fork.
 

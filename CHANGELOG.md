@@ -11,18 +11,57 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   that forwards route and aircraft lookups to `api.adsbdb.com` only, with a
   24h in-memory cache, 404 negative-cache, last-good on error, and optional
   `/tmp` persist. Dev/preview still use the Vite plugin. OpenSky is not used.
+- Hosted `/api/route` on Vercel via `api/route.js`, forwarding the same GET
+  handler extracted to `src/data/osrmRoute.js`. Public FOSSGIS OSRM only
+  (foot/car/bike, 2–12 coords, span guard, rate limiter). Failures are
+  `{ok:false}` JSON, not a platform 404. No commercial router.
 - Added hosted commercial billing: Clerk sign-in, a capped Free demo, and
   Stripe Checkout for Pro ($29/mo). Voice and uncapped use are Pro-only when
   Clerk is configured. Stripe/Clerk secrets stay server-side; tests mock them.
+- Pro accounts can save, restore, and delete up to 10 camera/style/layer
+  views in `localStorage` (`meridian.savedViews.<clerkUserId>`). Share-link
+  encode/decode is reused. Free and anonymous stay hidden and write nothing.
 - Added Vercel Node functions `api/billing/[...path].js` and
   `api/stripe/webhook.js` that forward to `handleBillingHttp`, so hosted
   Checkout is not a static-SPA 404. Missing `CLERK_*` / `STRIPE_*` env
   returns 503/400 with variable names only.
+- Added Vercel Node catch-all `api/[...path].js` that runs the same live
+  `/api` proxy plugins Vite uses (realtime, CCTV, TomTom, radio, launches,
+  adsb.lol, HUD summary, Overpass, GBFS, weather, FIRMS, CelesTrak, AIS,
+  terrain, Google Places, and the rest). No Next rewrite and no new vendors.
+- Added `api/opensky.js` for hosted civilian flights. The path stays
+  `/api/opensky`; the handler is the extracted 250 nm adsb.lol snapshot
+  (`COMMERCIAL_FLIGHT_SOURCE='adsb.lol'`, `OPENSKY_ENABLED=false`).
+  `/api/opensky-track` stays 410. No `OPENSKY_*` env.
+- Added hosted aircraft-trace functions `api/adsblol/trace.js` (real
+  adsb.lol tar1090 proxy) and `api/opensky-track.js` (hard 410, no OpenSky
+  fetch). Vite forwards to `src/data/trackBackfill.js`.
+- Added dedicated hosted `GET /api/adsblol/mil` (`api/adsblol/mil.js`) for
+  the adsb.lol military feed (ODbL). The Vite plugin forwards to
+  `src/data/adsblolMil.js`: 12s memory cache, stale-on-error, User-Agent
+  `Meridian-adsblol-proxy/1.0`. This extract does not wrap AIS or enable OpenSky.
+- Added dedicated Vercel Node function `api/cctv/[...path].js` for the
+  existing public CCTV catalog/proxy (`sources`, `health`, `stream`,
+  `frame`/`media`). Helpers live in `src/data/cctvProxy.js`; Vite still
+  forwards the same plugin. Does not wrap AIS or Google text-search.
+
+### Changed
+
+- TeleGeography submarine cables stay registered as a commercial no-op and are
+  now unselectable: the Data Layers panel hides the enable control, manager
+  enable is a no-op, and voice `set_layer` refuses undersea/submarine cables
+  with “layer is a commercial no-op”. No cable geometry is fetched.
+- Voice “OpenSky” is refused with “OpenSky is disabled”. Civilian flights stay
+  labeled Live Flights / adsb.lol; `/api/opensky` remains the adsb.lol
+  compatibility path and never contacts opensky-network.org.
 
 ### Fixed
 
 - Hosted billing no longer writes a local JSON store on Vercel (read-only FS).
-  `GET /api/billing/me` and checkout `ALREADY_PRO` read
+  `createBillingRuntime` defaults `getUserRecord` to Clerk `users.getUser`
+  when `CLERK_SECRET_KEY` is set, so `/me` reads `publicMetadata.meridianPlan`
+  in production. Webhook still awaits that Clerk write and returns non-2xx
+  if it fails. `GET /api/billing/me` and checkout `ALREADY_PRO` read
   `publicMetadata.meridianPlan` from Clerk (`users.getUser`) so Pro survives
   an empty isolate. Webhook `checkout.session.completed` awaits that Clerk
   write (including `stripeCustomerId` / `stripeSubscriptionId`) and returns
