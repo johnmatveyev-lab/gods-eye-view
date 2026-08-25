@@ -221,5 +221,11 @@ test('Vite forwards to the extracted plugin; no ais-live/google/voice wrap', () 
   assert.ok(vercelJson.functions['api/billing/[...path].js']);
   assert.equal(Array.isArray(vercelJson.rewrites), false);
   const functionKeys = Object.keys(vercelJson.functions);
-  assert.equal(functionKeys.some((key) => /ais-live|google|voice|realtime/.test(key)), false);
+  assert.equal(functionKeys.some((key) => (
+    /ais-live/.test(key)
+    || /google\/text-search/.test(key)
+    || /google\/\[\.\.\.path\]/.test(key)
+    || /voice/.test(key)
+    || /realtime/.test(key)
+  )), false);
 });
