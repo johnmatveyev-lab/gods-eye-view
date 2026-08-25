@@ -1511,6 +1511,84 @@ function extractNamedFunction(source, name) {
   return source.slice(start, start + 2200);
 }
 
+test('calibration-source catalog visibility hides raw-prior when Raw is off and keeps the selected camera', () => {
+  const calibrated = {
+    camera: { id: 'cal-cam', name: 'Calibrated', calSource: 'manual', poseSource: 'curated', lat: 30.26, lon: -97.74, headingDeg: 0, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  const curated = {
+    camera: { id: 'curated-cam', name: 'Curated', calSource: null, poseSource: 'curated', lat: 30.27, lon: -97.75, headingDeg: 10, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  const raw = {
+    camera: { id: 'raw-cam', name: 'Raw', calSource: null, poseSource: null, lat: 30.28, lon: -97.76, headingDeg: 20, fovDeg: 60, rangeM: 200 },
+    billboard: { show: true },
+    coverageEntities: [{ show: true }],
+    projection: null,
+  };
+  try {
+    _setCctvCoverageStateForTest({
+      records: [calibrated, curated, raw],
+      activeCameraId: 'cal-cam',
+      calSource: { calibrated: true, curated: true, 'raw-prior': true },
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.deepEqual(cctvLayer.getParams().calSource, { calibrated: true, curated: true, 'raw-prior': true });
+    assert.equal(calibrated.billboard.show, true, 'all on matches the current catalog');
+    assert.equal(curated.billboard.show, true);
+    assert.equal(raw.billboard.show, true);
+
+    _setCctvCoverageStateForTest({
+      records: [calibrated, curated, raw],
+      activeCameraId: 'cal-cam',
+      calSource: { calibrated: true, curated: true, 'raw-prior': false },
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(calibrated.billboard.show, true, 'manual save stays');
+    assert.equal(curated.billboard.show, true, 'curated stays');
+    assert.equal(raw.billboard.show, false, 'raw-prior icon hides');
+    assert.equal(raw.coverageEntities[0].show, false, 'raw-prior coverage hides');
+
+    _setCctvCoverageStateForTest({
+      records: [calibrated, curated, raw],
+      activeCameraId: 'cal-cam',
+      calSource: { calibrated: true, curated: false, 'raw-prior': false },
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    applyCctvCatalogVisibility();
+    assert.equal(calibrated.billboard.show, true, 'Calibrated-only keeps manual saves');
+    assert.equal(curated.billboard.show, false, 'Calibrated-only hides curated');
+    assert.equal(raw.billboard.show, false, 'Calibrated-only hides raw-prior');
+
+    _setCctvCoverageStateForTest({
+      records: [calibrated, curated, raw],
+      activeCameraId: 'raw-cam',
+      calSource: { calibrated: true, curated: true, 'raw-prior': false },
+      coverageMode: 'on',
+      showProjection: false,
+    });
+    raw.billboard.show = false;
+    applyCctvCatalogVisibility();
+    assert.equal(raw.billboard.show, true, 'selected raw-prior camera stays');
+    assert.equal(calibrated.billboard.show, true);
+    assert.equal(curated.billboard.show, true);
+  } finally {
+    _setCctvCoverageStateForTest({
+      enabled: false,
+      calSource: { calibrated: true, curated: true, 'raw-prior': true },
+    });
+  }
+});
+
 test('heading-confidence visibility re-applies from memory and does not refetch sources or health', () => {
   const source = fs.readFileSync(
     path.join(path.dirname(fileURLToPath(import.meta.url)), 'cctv.js'),
@@ -1534,6 +1612,28 @@ test('heading-confidence visibility re-applies from memory and does not refetch 
   assert.match(source, /params\.headingConfidence != null/);
   assert.match(source, /applyCatalogVisibility\(\)/);
   assert.doesNotMatch(source, /\/api\/cctv\/heading/);
+});
+
+test('calibration-source visibility re-applies from memory and does not refetch sources or health', () => {
+  const source = fs.readFileSync(
+    path.join(path.dirname(fileURLToPath(import.meta.url)), 'cctv.js'),
+    'utf8',
+  );
+  assert.match(source, /from '\.\/cctvCalBadgeFilter\.js'/);
+  assert.match(source, /sourceMatchesCalBadge/);
+  assert.match(source, /_calSourceFilter/);
+  const apply = extractNamedFunction(source, 'applyCatalogVisibility');
+  assert.doesNotMatch(apply, /loadCameraSources/);
+  assert.doesNotMatch(apply, /syncHealthState/);
+  assert.doesNotMatch(apply, /SOURCE_ENDPOINT|HEALTH_ENDPOINT/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/sources/);
+  assert.doesNotMatch(apply, /\/api\/cctv\/health/);
+  assert.match(apply, /refreshHorizonCulling/);
+  assert.match(apply, /refreshCoverageStyles/);
+  assert.match(apply, /refreshAmbientCards/);
+  assert.match(source, /params\.calSource != null/);
+  assert.match(source, /applyCatalogVisibility\(\)/);
+  assert.doesNotMatch(source, /\/api\/cctv\/cal-source/);
 });
 
 test('Image off hides still billboards and keeps the selected image camera', () => {

@@ -5,13 +5,14 @@
  * copied onto a catalog camera). Known-unhealthy tokens hide; missing and
  * unknown stay visible. Selected camera stays. Default off.
  *
- * ANDs with city/source, Hide no feed, feed type, and heading-confidence
- * chips. No extra /api.
+ * ANDs with city/source, Hide no feed, feed type, heading-confidence,
+ * and calibration-source chips. No extra /api.
  */
 
 import { sourceMatchesCityFilter } from './cctvCityFilter.js';
 import { sourceMatchesHeadingConfidence } from './cctvHeadingConfidenceFilter.js';
 import { sourceMatchesFeedTypeFilter as sourceMatchesFeedTypeChips } from './cctvFeedTypeFilter.js';
+import { sourceMatchesCalBadge } from './cctvCalBadgeFilter.js';
 
 export const CCTV_HIDE_UNHEALTHY_STORAGE_KEY = 'meridian.cctvHideUnhealthy';
 
@@ -125,6 +126,7 @@ export function sourceMatchesHealthFilter(source, hideUnhealthy, selectedId, hea
  *   feedType?: unknown,
  *   feedTypes?: unknown,
  *   headingConfidence?: unknown,
+ *   calSource?: unknown,
  *   selectedId?: unknown,
  *   healthById?: Map<string, {status?: string}|string>|Record<string, {status?: string}|string>|null,
  * }} [prefs]
@@ -144,6 +146,11 @@ export function sourceMatchesVisibleCctvFilters(source, prefs = {}) {
   })) {
     return false;
   }
+  if (!sourceMatchesCalBadge(source, prefs.calSource, {
+    selectedId: prefs.selectedId,
+  })) {
+    return false;
+  }
   return true;
 }
 
@@ -156,6 +163,7 @@ export function sourceMatchesVisibleCctvFilters(source, prefs = {}) {
  *   feedType?: unknown,
  *   feedTypes?: unknown,
  *   headingConfidence?: unknown,
+ *   calSource?: unknown,
  *   selectedId?: unknown,
  *   healthById?: Map<string, {status?: string}|string>|Record<string, {status?: string}|string>|null,
  * }} [prefs]
