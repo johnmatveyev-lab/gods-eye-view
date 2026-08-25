@@ -30,6 +30,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a two-click Measure mode on the globe: two terrain picks draw a
+  geodesic line and show the distance in the current `km | nm | mi` units.
+  Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
+  points only — no person-search, OpenSky, Google News, or TeleGeography.
 - Hosted Data Layers now list in-view OSM dams from the existing bundled
   payload (cap 50). Clicking a row flies to those coords using the layer's
   current stem-click camera. Empty or off yields an empty list. The

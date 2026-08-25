@@ -23,7 +23,7 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   );
   const topCenterActions = html.match(/<nav id="top-center-actions"[\s\S]*?<\/nav>/);
   assert.ok(topCenterActions, 'Top-center globe actions are missing');
-  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="clear-annotations"[\s\S]*?id="share-btn"[\s\S]*?id="north-up-compass"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"[\s\S]*?id="earthquake-list-toggle"/);
+  assert.match(topCenterActions[0], /id="clear-selected-layers"[\s\S]*?id="clear-annotations"[\s\S]*?id="share-btn"[\s\S]*?id="north-up-compass"[\s\S]*?id="home-view"[\s\S]*?id="stop-tracking"[\s\S]*?id="copy-view-link"[\s\S]*?id="measure-toggle"[\s\S]*?id="fullscreen-view"[\s\S]*?id="reset-globe-view"[\s\S]*?id="earthquake-list-toggle"/);
   assert.equal((html.match(/id="earthquake-list-toggle"/g) || []).length, 1, 'Quakes list must have one DOM owner');
   assert.equal((html.match(/id="earthquake-list-panel"/g) || []).length, 1, 'Quakes panel must have one DOM owner');
   assert.equal((html.match(/id="fullscreen-view"/g) || []).length, 1, 'Fullscreen must have one DOM owner');
@@ -31,6 +31,7 @@ test('Cockpit has one reset action beside its bottom exit path', () => {
   assert.equal((html.match(/id="north-up-compass"/g) || []).length, 1, 'North-up compass must have one DOM owner');
   assert.equal((html.match(/id="home-view"/g) || []).length, 1, 'Home view must have one DOM owner');
   assert.equal((html.match(/id="copy-view-link"/g) || []).length, 1, 'Copy view link must have one DOM owner');
+  assert.equal((html.match(/id="measure-toggle"/g) || []).length, 1, 'Measure must have one DOM owner');
   assert.equal((html.match(/id="reset-globe-view"/g) || []).length, 1, 'Reset Globe must have one DOM owner');
   assert.equal((html.match(/id="cockpit-reset-globe"/g) || []).length, 1, 'Cockpit Reset must have one DOM owner');
   const viewSwitcher = html.match(/<nav id="view-switcher"[\s\S]*?<\/nav>/);
@@ -263,6 +264,10 @@ test('Cockpit owns a focused shared Display portal and compact Radio controls', 
     css,
     /body\.scene-playback-mode :is\(#clear-selected-layers, #clear-annotations, #home-view, #north-up-compass, #stop-tracking, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)\s*\{\s*display:\s*none !important;/,
   );
+  assert.match(
+    css,
+    /body\.scene-playback-mode :is\(#measure-toggle, #measure-readout\)\s*\{\s*display:\s*none !important;/,
+  );
   assert.match(sceneDirector, /this\._running = true;\s*document\.body\.classList\.add\('scene-playback-mode'\);/);
   assert.match(sceneDirector, /styleManager\.setRecordingMode\(false\);\s*document\.body\.classList\.remove\('scene-playback-mode'\);/);
   assert.equal((html.match(/id="hud-toggle"/g) || []).length, 1, 'HUD control must have one stateful DOM owner');
@@ -493,6 +498,11 @@ test('Cockpit hides the complete top-center globe action group', () => {
   assert.match(
     css,
     /body\.cockpit-mode :is\(#clear-selected-layers, #clear-annotations, #share-btn, #north-up-compass, #home-view, #stop-tracking, #copy-view-link, #fullscreen-view, #clean-view-chrome, #reset-globe-view, #earthquake-list-toggle, #earthquake-list-panel\)\s*\{\s*display:\s*none !important;/,
+    'Cockpit must hide each map-only globe action even if its group layout is disturbed',
+  );
+  assert.match(
+    css,
+    /body\.cockpit-mode :is\(#measure-toggle, #measure-readout\)\s*\{\s*display:\s*none !important;/,
     'Cockpit must hide each map-only globe action even if its group layout is disturbed',
   );
 });

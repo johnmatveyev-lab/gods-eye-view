@@ -120,6 +120,9 @@
     <button id="copy-view-link" type="button" aria-label="Copy view link" title="Copy view link">
       <span class="material-symbols-outlined" aria-hidden="true">link</span>
     </button>
+    <button id="measure-toggle" type="button" aria-label="Measure distance" title="Measure distance" aria-pressed="false">
+      <span class="material-symbols-outlined" aria-hidden="true">straighten</span>
+    </button>
     <div id="camera-coords">
       <button type="button" id="camera-coords-value" class="camera-coords-value" aria-label="Copy camera coordinates" title="Copy lat,lon">—, —</button>
       <button type="button" id="camera-coords-copy" class="camera-coords-copy" aria-label="Copy lat,lon" title="Copy lat,lon">
@@ -139,6 +142,10 @@
       <span class="material-symbols-outlined" aria-hidden="true">landslide</span>
     </button>
   </nav>
+  <div id="measure-readout" hidden>
+    <span id="measure-readout-label">Click two globe points</span>
+    <button id="measure-clear" type="button">Clear</button>
+  </div>
   <aside id="installations-viewport-list" hidden aria-label="Mapped installations in the current view">
     <div class="installations-viewport-list-header">
       <div>

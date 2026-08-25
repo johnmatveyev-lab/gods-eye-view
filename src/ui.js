@@ -282,6 +282,13 @@ import {
   subscribeDistanceUnit,
 } from './units.js';
 import {
+  clearMeasure,
+  destroyMeasure,
+  initMeasure,
+  isMeasureActive,
+  setMeasureActive,
+} from './measure.js';
+import {
   getPowerMode as readViewerPowerMode,
   installPowerMode,
   setPowerMode as writeViewerPowerMode,
@@ -510,6 +517,7 @@ const LEFT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -561,6 +569,7 @@ const RIGHT_STACK_OBSTACLE_SELECTOR = [
   '#title-bar',
   '#style-indicator',
   '#top-center-actions',
+  '#measure-readout',
   '#traffic-sync-chip',
   '#cctv-sync-chip',
   '#intel-hud .hud-top-left',
@@ -2688,6 +2697,10 @@ export class StyleManager {
     this._shareBtn = document.getElementById('share-btn');
     this._northUpCompassBtn = document.getElementById('north-up-compass');
     this._copyViewLinkBtn = document.getElementById('copy-view-link');
+    this._measureToggleBtn = document.getElementById('measure-toggle');
+    this._measureReadout = document.getElementById('measure-readout');
+    this._measureReadoutLabel = document.getElementById('measure-readout-label');
+    this._measureClearBtn = document.getElementById('measure-clear');
     this._fullscreenBtn = document.getElementById('fullscreen-view');
     this._clearSelectedLayersBtn = document.getElementById('clear-selected-layers');
     this._globalLoadingStatus = document.getElementById('global-loading-status');
@@ -2986,6 +2999,9 @@ export class StyleManager {
       getPaintRect: getOverlayPaintRect,
       getActiveTrackedId: getActiveTrackedReadoutId,
     });
+    initMeasure(viewer, {
+      onChange: (state) => this._syncMeasureUi(state),
+    });
     initCameraCoords({
       viewer,
       showToast: (text) => this._showToast(text),
@@ -3007,6 +3023,7 @@ export class StyleManager {
     this._initLocationBar();
     this._initShareButton();
     this._initCopyViewLinkButton();
+    this._initMeasureButton();
     this._initFullscreenButton();
     this._initDatacenterInViewList();
     this._initClearSelectedLayersButton();
@@ -11153,6 +11170,37 @@ export class StyleManager {
     });
   }
 
+  /** Wire two-click geodesic Measure. Does not call /api/route. */
+  _initMeasureButton() {
+    this._measureToggleBtn?.addEventListener('click', () => {
+      setMeasureActive(!isMeasureActive());
+    });
+    this._measureClearBtn?.addEventListener('click', () => {
+      clearMeasure();
+    });
+    this._syncMeasureUi();
+  }
+
+  /**
+   * Keep the Measure button and readout in sync with the current pair.
+   * @param {{active?: boolean, prompt?: string}|null} [state]
+   * @returns {void}
+   */
+  _syncMeasureUi(state = null) {
+    const active = state?.active ?? isMeasureActive();
+    const prompt = state?.prompt || 'Click two globe points';
+    if (this._measureToggleBtn) {
+      this._measureToggleBtn.setAttribute('aria-pressed', active ? 'true' : 'false');
+      this._measureToggleBtn.classList.toggle('active', active);
+    }
+    if (this._measureReadout) {
+      this._measureReadout.hidden = !active;
+    }
+    if (this._measureReadoutLabel) {
+      this._measureReadoutLabel.textContent = prompt;
+    }
+  }
+
   /**
    * In-view OSM datacenter list. Reads the existing layer payload and flies
    * with the same stem-click destination. Installations stay on their own list.
@@ -11663,6 +11711,7 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    destroyMeasure();
     this._keepAboveDispose?.();
     this._keepAboveDispose = null;
     this._unbindZoomToPointer?.();
