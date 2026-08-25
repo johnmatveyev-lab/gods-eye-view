@@ -341,6 +341,13 @@ import {
   writeLockTiltPreference,
 } from './lockTilt.js';
 import {
+  CROSSHAIR_DEFAULT,
+  CROSSHAIR_STORAGE_KEY,
+  readCrosshairPreference,
+  setCameraCrosshairEnabled,
+  writeCrosshairPreference,
+} from './cameraCrosshair.js';
+import {
   fetchRegionalBrief,
   regionalDistanceM,
   weatherCodeLabel,
@@ -2527,6 +2534,8 @@ export class StyleManager {
     this._liveSunBtn = document.getElementById('live-sun-toggle');
     this._liveSunEnabled = false;
     this._gridBtn = document.getElementById('grid-toggle');
+    this._crosshairBtn = document.getElementById('crosshair-toggle');
+    this._crosshairEnabled = CROSSHAIR_DEFAULT;
     this._scopeBtn = document.getElementById('scope-toggle');
     this._scopeFeatherSlider = document.getElementById('scope-feather-slider');
     this._scopeFeatherValue = document.getElementById('scope-feather-value');
@@ -2989,6 +2998,7 @@ export class StyleManager {
     this._initLiveSunToggle();
     this._initScaleBar();
     this._initLockTiltToggle();
+    this._initCrosshairToggle();
     this._applyGlobalPostDefaults();
     this._restoreSessionDetectionDensity();
     this._initOrbit();
@@ -4015,6 +4025,42 @@ export class StyleManager {
     }
     this.viewer?.scene?.requestRender?.();
     return { ok: true, lockTilt: next };
+  }
+
+  _initCrosshairToggle() {
+    this._crosshairBtn?.addEventListener('click', () => {
+      this.setCrosshairEnabled(!this._crosshairEnabled);
+    });
+    let stored = CROSSHAIR_DEFAULT;
+    try {
+      stored = readCrosshairPreference(window.localStorage);
+    } catch {
+      stored = CROSSHAIR_DEFAULT;
+    }
+    this.setCrosshairEnabled(stored, { persist: false });
+  }
+
+  /**
+   * Show or hide the camera-center plus. Same aim point as copy-coords / measure.
+   * @param {boolean} enabled
+   * @param {{persist?: boolean}} [options]
+   * @returns {{ok: boolean, crosshair: boolean}}
+   */
+  setCrosshairEnabled(enabled, { persist = true } = {}) {
+    const next = !!enabled;
+    this._crosshairEnabled = next;
+    setCameraCrosshairEnabled(next);
+    this._crosshairBtn?.classList.toggle('active', next);
+    this._crosshairBtn?.setAttribute('aria-pressed', String(next));
+    if (this._crosshairBtn) {
+      this._crosshairBtn.title = next
+        ? 'Crosshair on — plus marks the camera-center aim point'
+        : 'Crosshair — mark the camera-center aim point';
+    }
+    if (persist) {
+      try { writeCrosshairPreference(window.localStorage, next); } catch { /* best effort */ }
+    }
+    return { ok: true, crosshair: next };
   }
 
   /**

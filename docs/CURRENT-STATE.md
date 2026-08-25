@@ -2,6 +2,13 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — camera crosshair (plan 80)** (`src/cameraCrosshair.js`).
+> DISPLAY-rail Crosshair draws a CSS plus at the canvas center — the hosted
+> aim point for copy-coords (`src/copyCameraCoords.js`, still
+> `positionCartographic`) and measure. Default off; persist
+> `meridian.crosshair`. Clean view may keep the plus; `#cesium-credits`
+> stays visible. Local overlay only: no Cesium entity, no `/api`.
+
 > **2026-08-25 — contact label declutter (plan 59)** (`src/contactLabels.js`).
 > DISPLAY gets a Labels on/off control (`#contact-labels-toggle`). Off hides
 > ambient contact billboard text (detection callsigns and contact-source
