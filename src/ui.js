@@ -402,6 +402,13 @@ import {
   speedRulerTicks,
 } from './cockpitMath.js';
 import {
+  hasPanelPrefix,
+  layoutResetNotifiedSuffix,
+  prefKey,
+  readPrefKey,
+  writePrefKey,
+} from './prefStorage.js';
+import {
   peekModelsPreference,
   writeModelsPreference,
 } from './modelsPreference.js';
@@ -4685,7 +4692,8 @@ export class StyleManager {
 
   /**
    * On boot, clamp or reset leftover/current panelPos keys that would restore
-   * a panel off-screen. Does not rename leftover godsEyeView.* keys.
+   * a panel off-screen. Leftover godsEyeView.* keys copy onto meridian.*
+   * once and stay in place; leftover versions are not rewritten to v8.
    * @returns {void}
    */
   _sanitizeRestoredPanelPositions() {
@@ -4816,11 +4824,10 @@ export class StyleManager {
    */
   _maybeNotifyLayoutReset() {
     try {
-      const marker = `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.layoutResetNotified`;
-      if (localStorage.getItem(marker)) return;
-      localStorage.setItem(marker, '1');
-      const hadOldPositions = Object.keys(localStorage)
-        .some((key) => key.startsWith('godsEyeView.v6.panelPos.'));
+      const marker = prefKey(layoutResetNotifiedSuffix(PANEL_POSITION_STORAGE_VERSION));
+      if (readPrefKey(localStorage, marker)) return;
+      writePrefKey(localStorage, marker, '1');
+      const hadOldPositions = hasPanelPrefix(localStorage, 'v6.panelPos.');
       if (hadOldPositions) {
         this._showToast('Panel layout updated — positions reset to new defaults');
       }
@@ -7636,7 +7643,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelStorageKey(panelId) {
-    return `godsEyeView.${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`;
+    return prefKey(`${PANEL_POSITION_STORAGE_VERSION}.panelPos.${panelId}`);
   }
 
   /**
@@ -7645,7 +7652,7 @@ export class StyleManager {
    * @returns {string} localStorage key.
    */
   _panelCollapseStorageKey(panelId) {
-    return `godsEyeView.${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`;
+    return prefKey(`${PANEL_LAYOUT_STORAGE_VERSION}.panelCollapsed.${panelId}`);
   }
 
   /**
@@ -7661,7 +7668,7 @@ export class StyleManager {
     let stored = null;
     if (allowStored) {
       try {
-        stored = localStorage.getItem(this._panelCollapseStorageKey(panelId));
+        stored = readPrefKey(localStorage, this._panelCollapseStorageKey(panelId));
         if (stored === '1') collapsed = true;
         if (stored === '0') collapsed = false;
       } catch {
@@ -7689,7 +7696,7 @@ export class StyleManager {
    */
   _savePanelCollapsedState(panelId, collapsed) {
     try {
-      localStorage.setItem(this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
+      writePrefKey(localStorage, this._panelCollapseStorageKey(panelId), collapsed ? '1' : '0');
     } catch {
       // storage unavailable
     }
@@ -8475,8 +8482,8 @@ export class StyleManager {
       );
       if (!resolved?.pos) return;
       // Clamp leftover or current coords: a position saved at one window size
-      // would otherwise land off-screen at another. Same-key leftovers are
-      // not renamed this cycle.
+      // would otherwise land off-screen at another. Leftover versions stay on
+      // their version; only the prefix copies onto meridian.*.
       const clamped = this._clampToViewport(
         Math.round(resolved.pos.left),
         Math.round(resolved.pos.top),
@@ -8524,7 +8531,7 @@ export class StyleManager {
   _savePanelPosition(panelId, panelEl) {
     const rect = panelEl.getBoundingClientRect();
     try {
-      localStorage.setItem(this._panelStorageKey(panelId), JSON.stringify({
+      writePrefKey(localStorage, this._panelStorageKey(panelId), JSON.stringify({
         left: Math.round(rect.left),
         top: Math.round(rect.top),
       }));

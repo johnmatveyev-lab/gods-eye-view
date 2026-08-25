@@ -371,14 +371,14 @@ function formatSavedViewWhen(createdAt) {
 }
 
 function captureCurrentShareUrl() {
-  const manager = window.__godsEyeView?.styleManager?.shareLinkManager;
+  const manager = window.__meridian?.styleManager?.shareLinkManager;
   const captured = manager?.currentShareUrl?.();
   if (captured) return captured;
   return encodeShareViewUrl(window.location.href, window.location.hash);
 }
 
 function applySavedViewUrl(url) {
-  const manager = window.__godsEyeView?.styleManager?.shareLinkManager;
+  const manager = window.__meridian?.styleManager?.shareLinkManager;
   const hash = decodeShareViewUrl(url);
   if (manager && hash) {
     window.location.hash = hash;

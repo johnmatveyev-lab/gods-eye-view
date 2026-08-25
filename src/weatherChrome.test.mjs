@@ -99,7 +99,7 @@ function fakeToggleRoot(buttons) {
 }
 
 test('the stored key stays the existing cockpit weather-effects flag and defaults off', () => {
-  assert.equal(WX_STORAGE_KEY, 'godsEyeView.cockpitWeatherEffects.enabled');
+  assert.equal(WX_STORAGE_KEY, 'meridian.cockpitWeatherEffects.enabled');
   assert.equal(DEFAULT_WX_ENABLED, false);
   assert.equal(WX_TOGGLE_EVENT, 'gev:cockpit-weather-toggle');
   assert.equal(WX_STATE_EVENT, 'gev:cockpit-weather-state');
@@ -107,6 +107,16 @@ test('the stored key stays the existing cockpit weather-effects flag and default
   assert.equal(wxEnabledFromStoredValue(''), false);
   assert.equal(wxEnabledFromStoredValue('0'), false);
   assert.equal(wxEnabledFromStoredValue('1'), true);
+});
+
+test('a leftover godsEyeView WX key copies onto meridian and still applies', () => {
+  resetWxPreferenceCache();
+  const storage = memoryStorage({
+    'godsEyeView.cockpitWeatherEffects.enabled': '1',
+  });
+  assert.equal(readWxPreference(storage), true);
+  assert.equal(storage.getItem('meridian.cockpitWeatherEffects.enabled'), '1');
+  assert.equal(storage.getItem('godsEyeView.cockpitWeatherEffects.enabled'), '1');
 });
 
 test('empty or unreadable storage keeps WX off', () => {

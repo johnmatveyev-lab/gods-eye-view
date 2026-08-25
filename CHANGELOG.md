@@ -33,6 +33,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
+  a row to fly to that event (cap 50). Empty or failed feed shows
+  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
 - Added a two-click Measure mode on the globe: two terrain picks draw a
   geodesic line and show the distance in the current `km | nm | mi` units.
   Escape or Clear exits. Does not call `/api/route` or OSRM. User-picked
@@ -46,9 +49,6 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
   10–30k / &gt;30k) on the current adsb.lol payload. Units relabel the stops;
   the meter thresholds stay 10,000 ft and 30,000 ft. The choice persists as
   `meridian.altBand`. Empty bands show an empty layer. No `/api`.
-- Added a hosted Quakes list from the existing USGS 24h M2.5+ payload. Click
-  a row to fly to that event (cap 50). Empty or failed feed shows
-  UNAVAILABLE. No new `/api` route, and the FIRMS list stays independent.
 - Added a DISPLAY-rail Crosshair on/off overlay: a CSS plus at the same
   camera-center aim point copy-coords and measure already use. Default off.
   Persists as `meridian.crosshair`. Clean view may keep it; credits stay
@@ -300,6 +300,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 - Voice “Google News” / “news RSS” is refused with “Google News RSS is
   disabled”. Cockpit headlines stay GDELT with citation and never fetch
   news.google.com. No Google News source picker.
+
+### Changed
+
+- Remaining runtime preference keys now write `meridian.*`. A first read of a
+  known `godsEyeView.*` layout or settings key copies it once and leaves the
+  older key in place. Proxy User-Agents identify as Meridian; the window
+  handle is `window.__meridian`. LICENSE credit and the UI title are unchanged.
 
 ### Fixed
 

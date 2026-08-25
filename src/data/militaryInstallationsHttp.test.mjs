@@ -198,6 +198,8 @@ test('installations handler is public OSM mapped context only', () => {
   const moduleSource = readFileSync(path.join(ROOT, 'src/data/militaryInstallationsHttp.js'), 'utf8');
   assert.match(moduleSource, /overpass-api\.de/);
   assert.match(moduleSource, /landuse"="military/);
+  assert.match(moduleSource, /Meridian-overpass-proxy\/1\.0/);
+  assert.doesNotMatch(moduleSource, /gods-eye-view-overpass-proxy/);
   assert.doesNotMatch(moduleSource, /opensky-network\.org|news\.google\.com|telegeography|quantum-earth/i);
   assert.doesNotMatch(moduleSource, /places:searchText|findPlaceFromPhoneNumber|people\.googleapis/);
   assert.doesNotMatch(moduleSource, /\/api\/route|\/api\/ais-live/);
