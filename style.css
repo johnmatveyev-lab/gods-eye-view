@@ -1635,6 +1635,26 @@ body.recording-mode #scale-bar {
   text-transform: none;
 }
 
+#aircraft-class-filter-row {
+  align-items: flex-start;
+  min-width: 184px;
+}
+.aircraft-class-chips {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.aircraft-class-chips .pp-mode-btn {
+  flex: 0 0 auto;
+  min-width: 34px;
+  padding: 0 5px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 4px;
+}
+.aircraft-class-chips .pp-mode-btn + .pp-mode-btn { border-left: 1px solid rgba(255, 255, 255, 0.14); }
+.aircraft-class-chips .pp-mode-btn:not(.active) { opacity: 0.55; }
+
 #clean-view-toggle {
   width: var(--pp-expanded-width);
 }

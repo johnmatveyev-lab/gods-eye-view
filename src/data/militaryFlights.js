@@ -32,6 +32,11 @@ import {
 } from './iconOrientation.js';
 import { stickyText, stickyNumber } from './aircraftMeta.js';
 import { classifyAircraft, CLASS_SCALE_2D, CLASS_SCALE_3D, CLASS_MODEL_REAL } from './aircraftClass.js';
+import {
+  AIRCRAFT_CLASS_FILTER_ALL,
+  aircraftClassPassesFilter,
+  normalizeAircraftClassFilter,
+} from './aircraftClassFilter.js';
 import { modelAnchorWorld, modelVisualAnchor, trailAnchorForModel, trailHeadStart, visualCenterForModel } from './modelVisualAnchor.js';
 import { aircraftIcon, TRACKED_ICON_PX } from './aircraftIcons.js';
 import {
@@ -249,6 +254,8 @@ let _models3dMode = 'proximity'; // 'proximity' = nearest MODEL_MAX in view; 'al
 /** Ground-speed band in knots. Null/null is OFF (show all). */
 let _speedMinKt = null;
 let _speedMaxKt = null;
+/** PLAN 98: class chips. Default ALL ON — current mixed-fleet view stays. */
+let _aircraftClassFilter = AIRCRAFT_CLASS_FILTER_ALL;
 let _lastModelCapWarnMs = 0; // throttle the "more planes in view than the cap" console notice
 // The tracked entity's billboard goes transparent (rather than hidden) once the model takes
 // over, so it keeps supplying a bounding sphere for follow-camera framing. We only drop its
@@ -468,6 +475,27 @@ function _contactIconColor(icao24, { tracked = false } = {}) {
   return MIL_ICON_COLOR;
 }
 
+/** PLAN 98 class matcher — reuses meta.klass only. */
+function _classAndMatcher(contact) {
+  return aircraftClassPassesFilter(contact?.klass, _aircraftClassFilter);
+}
+
+function _revealFleetBillboard(icao24, bb) {
+  if (!bb || icao24 === _trackedIcao) return;
+  bb.show = _matchesInFlightFilters(icao24, _flightData.get(icao24));
+}
+
+function _applyAircraftClassFilterNow() {
+  for (const [icao, bb] of _billboards) {
+    if (icao === _trackedIcao) continue;
+    if (_matchesInFlightFilters(icao, _flightData.get(icao))) continue;
+    if (bb.show) bb.show = false;
+    const model = _models.get(icao);
+    if (model?.show) model.show = false;
+  }
+  _lastFleetTickMs = 0;
+}
+
 /** Apply the current normal/cockpit visual contract to one owned fleet billboard. */
 function _applyFleetBillboardPresentation(icao24, bb) {
   if (!bb) return;
@@ -505,6 +533,7 @@ function _refreshCockpitNearContacts() {
   const distancesSquared = [];
   for (const [icao24, bb] of _billboards) {
     if (icao24 === _trackedIcao || !bb?.position) continue;
+    if (!_matchesInFlightFilters(icao24, _flightData.get(icao24))) continue;
     distancesSquared.push([
       icao24,
       Cesium.Cartesian3.distanceSquared(_viewer.camera.positionWC, bb.position),
@@ -1714,7 +1743,7 @@ function _syncModelToClass(icao24) {
   const current = _models.get(icao24);
   if ((current && current._gevSpecKey !== key) || (!current && _modelPending.has(icao24))) {
     const bb = _billboards.get(icao24);
-    if (bb && icao24 !== _trackedIcao) bb.show = true;
+    if (bb) _revealFleetBillboard(icao24, bb);
     _releaseModel(icao24);
   }
   if (icao24 === _trackedIcao && _trackedModel && _trackedModel._gevSpecKey !== key) {
@@ -1753,7 +1782,7 @@ function _drainIrReloadQueue() {
     const model = _models.get(icao);
     if (!model || model._gevIrBoost === _irBoost) continue; // already right state
     const bb = _billboards.get(icao);
-    if (bb && icao !== _trackedIcao) bb.show = true;
+    if (bb) _revealFleetBillboard(icao, bb);
     _releaseModel(icao);
   }
   if (_irReloadQueue.length === 0) _irReloadQueue = null;
@@ -2049,7 +2078,7 @@ function _fleetTick() {
       // at selection time, not just at the handoff below.
       if (isTr3b(icao)) continue;
       if (_contactHiddenByOperatorFilter(icao, _flightData.get(icao))) continue;
-      // Ground planes compete for model slots like everyone else (product rule)
+      // Ground planes compete for model slots like everyone else (product rule
       // 2026-07-03, mirror of flights.js — no air/ground distinction; grounded
       // placement is handled by the one-shot ground snap in _modelDisplayPosition).
       const d2 = Cesium.Cartesian3.distanceSquared(camPos, bb.position);
@@ -2095,18 +2124,18 @@ function _fleetTick() {
     // ellipsoid (mirror of flights.js — sub-ellipsoid points near the limb
     // read "beyond the horizon" and would hide low contacts awaiting floors).
     const beyondHorizon = !occluder.isPointVisible(info?.cullPosition || bb.position);
-    const filteredOut = _contactHiddenByOperatorFilter(icao24, info);
-    const hide = beyondHorizon || filteredOut;
+    const classHidden = !_matchesInFlightFilters(icao24, info);
+    const allowShow = !beyondHorizon && !classHidden;
     // A billboard flipping INTO view (horizon reveal while the camera idles)
     // gets its rotation refreshed THIS tick even without a pose change —
     // otherwise it reappears wearing its stale (often creation-north) nose for
     // up to ROTATION_REFRESH_MS. (Model-handed-off planes also read show=false
     // here; harmless — the model branch below `continue`s past the rotation.)
-    const revealed = !hide && !bb.show;
-    if (bb.show === hide) bb.show = !hide;
-    if (hide) {
-      // Also hide any 3D model — otherwise a model that crossed the limb would keep
-      // rendering through the hidden globe at its last matrix.
+    const revealed = allowShow && !bb.show;
+    if (bb.show !== allowShow) bb.show = allowShow;
+    if (!allowShow) {
+      // Also hide any 3D model — otherwise a model that crossed the limb or a
+      // class/heading-filtered contact would keep rendering at its last matrix.
       const m = _models.get(icao24);
       if (m && m.show) m.show = false;
       continue;
@@ -2542,7 +2571,7 @@ function _clearTracking(skipViewerUntrack = false, {
   if (_billboards.has(_trackedIcao)) {
     const bb = _billboards.get(_trackedIcao);
     const meta = _flightData.get(_trackedIcao);
-    bb.show = true;
+    bb.show = _matchesInFlightFilters(_trackedIcao, meta);
     bb.width = 20;
     bb.height = 20;
     // Ground-aware restore (a plane untracked while taxiing comes back at
@@ -2804,13 +2833,21 @@ export function mapAnalystRecord(icao24, info) {
  * plus optional getNearby, getDetectableObjects, and getStats accessors.
  * @type {Object}
  */
+function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
+  return contactPassesInFlightFilters(info || {}, {
+    id: icao24,
+    speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
+    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher],
+  });
+}
+
 function _passesInFlightFilters(icao24, info) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher],
+    andMatchers: [_headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher],
   });
 }
 
@@ -3342,7 +3379,7 @@ const militaryFlightsLayer = {
             // close (_groundDepthDistance).
             disableDepthTestDistance: _groundDepthDistance(),
             id: icao24,
-            show: !isTracked, // hidden if currently tracked (entity replaces it)
+            show: !isTracked && _matchesInFlightFilters(icao24, meta),
           });
           _billboards.set(icao24, bb);
           _applyFleetBillboardPresentation(icao24, bb);
@@ -3570,7 +3607,7 @@ const militaryFlightsLayer = {
         _syncTracked2dRotation();
         // Restore fleet billboards (horizon-cull re-asserts next tick), but NEVER the tracked
         // plane's own fleet billboard — its tracked entity is the visual (avoids a double-image).
-        if (_billboardCollection) for (const [icao, bb] of _billboards) { if (icao !== _trackedIcao) bb.show = true; }
+        if (_billboardCollection) for (const [icao, bb] of _billboards) _revealFleetBillboard(icao, bb);
         _applyInFlightFilterVisibility();
       }
     }
@@ -3613,6 +3650,13 @@ const militaryFlightsLayer = {
         _applyPendingTrackingRestore();
       }
     }
+    if (Object.hasOwn(params, 'aircraftClassFilter')) {
+      const next = normalizeAircraftClassFilter(params.aircraftClassFilter) ?? AIRCRAFT_CLASS_FILTER_ALL;
+      if (next !== _aircraftClassFilter) {
+        _aircraftClassFilter = next;
+        _applyAircraftClassFilterNow();
+      }
+    }
     return true;
   },
   getParams() {
@@ -3625,6 +3669,7 @@ const militaryFlightsLayer = {
       selectedMilitaryTrackingId: _trackedIcao,
       speedMinKt: _speedMinKt,
       speedMaxKt: _speedMaxKt,
+      aircraftClassFilter: _aircraftClassFilter,
     };
   },
   getRowControls() {
@@ -3736,13 +3781,13 @@ const militaryFlightsLayer = {
       if (_cockpitContactMode && icao24.toLowerCase() === _cockpitSubjectId) continue;
       if (!_passesInFlightFilters(icao24, _flightData.get(icao24))) continue;
       const isTracked = icao24 === _trackedIcao;
-      if (_contactHiddenByOperatorFilter(icao24, _flightData.get(icao24))) continue;
+      const info = _flightData.get(icao24);
+      if (_contactHiddenByOperatorFilter(icao24, info)) continue;
       // Keep planes rendered as a 3D model (billboard hidden) so the detection box
       // doesn't vanish on the 2D→3D handoff; bb.position stays current while hidden.
       const model = _models.get(icao24);
       const modelOwnsVisual = _modelOwnsVisual(icao24);
       if (!isTracked && !bb.show && !modelOwnsVisual) continue;
-      const info = _flightData.get(icao24);
       const callsign = info?.callsign?.trim();
       const registration = info?.registration?.trim();
       let object = _detectionObjects.get(icao24);

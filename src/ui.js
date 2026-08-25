@@ -79,6 +79,12 @@ import {
   isExplicitLayerStateOrigin,
   LayerStateCoordinator,
 } from './data/layerState.js';
+import {
+  AIRCRAFT_CLASS_FILTER_ALL,
+  aircraftClassFilterMap,
+  normalizeAircraftClassFilter,
+  toggleAircraftClassFilter,
+} from './data/aircraftClassFilter.js';
 import { renderMapStackChips, syncMapStackChips } from './mapStackChips.js';
 import { OrbitController } from './orbit.js';
 import {
@@ -3028,6 +3034,8 @@ export class StyleManager {
     this._speedBandClear = document.getElementById('speed-band-clear');
     this._speedMinKt = null;
     this._speedMaxKt = null;
+    this._aircraftClassChips = document.getElementById('aircraft-class-chips');
+    this._aircraftClassFilter = AIRCRAFT_CLASS_FILTER_ALL;
     this._trailsBtn = document.getElementById('trails-toggle');
     // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
     // existing tracked-target trail renderer without stopping track.
@@ -11565,6 +11573,11 @@ export class StyleManager {
       button.classList.toggle('active', active);
       button.setAttribute('aria-checked', String(active));
     }
+    if (Object.hasOwn(options, 'aircraftClassFilter')) {
+      this._aircraftClassFilter = normalizeAircraftClassFilter(options.aircraftClassFilter)
+        ?? AIRCRAFT_CLASS_FILTER_ALL;
+      this._syncAircraftClassChips();
+    }
     this._layoutRightPanels();
   }
 
@@ -11593,6 +11606,31 @@ export class StyleManager {
     }
     this._syncModels3dButtonState();
     syncModeRow();
+    this._initAircraftClassChips();
+  }
+
+  _initAircraftClassChips() {
+    if (!this._aircraftClassChips) return;
+    this._aircraftClassChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-aircraft-class]');
+      if (!chip || !this._aircraftClassChips.contains(chip)) return;
+      const klass = chip.dataset.aircraftClass;
+      this._aircraftClassFilter = toggleAircraftClassFilter(this._aircraftClassFilter, klass);
+      this._setModels3dParams({ aircraftClassFilter: this._aircraftClassFilter });
+      this._syncAircraftClassChips();
+    });
+    this._syncAircraftClassChips();
+  }
+
+  _syncAircraftClassChips() {
+    const enabled = aircraftClassFilterMap(this._aircraftClassFilter);
+    const chips = this._aircraftClassChips?.querySelectorAll?.('[data-aircraft-class]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = enabled[chip.dataset.aircraftClass] === true;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
   }
 
   _setModels3dEnabled(enabled, { persist = true } = {}) {
