@@ -6,6 +6,8 @@ export const config = {
   },
 };
 
+const CCTV_RESOURCE_KINDS = new Set(['frame', 'stream', 'media']);
+
 /**
  * Restore /api/cctv/... when a Vercel catch-all hands us only the leftover
  * path. Do not invent a SPA rewrite. Do not wrap AIS or Google text-search.
@@ -22,11 +24,57 @@ export function restoreCctvApiPath(url) {
   return `/api/cctv${rest.startsWith('/') ? rest : `/${rest}`}${parsed.search}`;
 }
 
+/**
+ * Vite-on-Vercel treats `[...path].js` as one extra segment, so
+ * `/api/cctv/frame?id=354` can reach Node while `/frame/354` cannot.
+ * Promote `?id=` onto `/frame/:id` (and stream/media) after the mount.
+ */
+export function promoteCctvResourceId(url, query = {}) {
+  const parsed = parseUrl(url);
+  const match = parsed.pathname.match(/^\/(frame|stream|media)\/?$/);
+  const id = firstQueryValue(query?.id, parsed.searchParams.get('id'));
+  if (!match || !id) {
+    return `${parsed.pathname}${parsed.search}`;
+  }
+  parsed.searchParams.delete('id');
+  const search = parsed.searchParams.toString();
+  return `/${match[1]}/${encodeURIComponent(id)}${search ? `?${search}` : ''}`;
+}
+
+/**
+ * Dedicated `api/cctv/{frame,stream,media}/[id].js` entries may hand us
+ * leftover `/354`, `/frame/354`, or the full `/api/cctv/frame/354`.
+ */
+export function ensureCctvResourceUrl(url, kind, query = {}) {
+  const resource = String(kind || '').trim();
+  if (!CCTV_RESOURCE_KINDS.has(resource)) {
+    return String(url || '/');
+  }
+  const parsed = parseUrl(url);
+  const segments = parsed.pathname.split('/').filter(Boolean);
+  const kindIdx = segments.lastIndexOf(resource);
+  const idFromKind = kindIdx >= 0 ? segments[kindIdx + 1] : '';
+  const last = segments.at(-1) || '';
+  const reserved = new Set(['api', 'cctv', 'sources', 'health', ...CCTV_RESOURCE_KINDS]);
+  const id = firstQueryValue(
+    query?.id,
+    parsed.searchParams.get('id'),
+    idFromKind,
+    reserved.has(last) ? '' : last,
+  );
+  if (!id) {
+    return `${parsed.pathname}${parsed.search}`;
+  }
+  parsed.searchParams.delete('id');
+  const search = parsed.searchParams.toString();
+  return `/api/cctv/${resource}/${encodeURIComponent(id)}${search ? `?${search}` : ''}`;
+}
+
 export function createVercelCctvHandler(pluginFactory = cctvProxy) {
   let middleware = null;
   return async function handler(req, res) {
     const fullUrl = restoreCctvApiPath(req.url);
-    req.url = stripCctvMount(fullUrl);
+    req.url = promoteCctvResourceId(stripCctvMount(fullUrl), req.query);
     if (!middleware) {
       middleware = mountCctvMiddleware(pluginFactory);
     }
@@ -64,6 +112,19 @@ function mountCctvMiddleware(pluginFactory) {
     throw new Error('CCTV plugin did not register a middleware');
   }
   return fn;
+}
+
+function firstQueryValue(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) {
+      const found = firstQueryValue(...value);
+      if (found) return found;
+      continue;
+    }
+    const text = String(value ?? '').trim();
+    if (text) return text;
+  }
+  return '';
 }
 
 function parseUrl(url) {

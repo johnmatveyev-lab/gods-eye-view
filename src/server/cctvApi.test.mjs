@@ -5,15 +5,22 @@ import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DATA_CREDITS } from '../data/dataCredits.js';
-import cctvHandler, { createVercelCctvHandler, restoreCctvApiPath } from './cctvApi.js';
+import cctvHandler, {
+  createVercelCctvHandler,
+  ensureCctvResourceUrl,
+  promoteCctvResourceId,
+  restoreCctvApiPath,
+} from './cctvApi.js';
+import frameById from '../../api/cctv/frame/[id].js';
 
 const ROOT = path.resolve(fileURLToPath(new URL('../..', import.meta.url)));
 
-function mockReq({ method = 'GET', url = '/', headers = {} } = {}) {
+function mockReq({ method = 'GET', url = '/', headers = {}, query } = {}) {
   const req = new EventEmitter();
   req.method = method;
   req.url = url;
   req.headers = headers;
+  req.query = query;
   return req;
 }
 
@@ -91,6 +98,11 @@ test('Vercel CCTV entry forwards to the existing catalog proxy only', () => {
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/cctv/[...path].js']);
   assert.equal(vercelJson.functions['api/cctv/[...path].js'].includeFiles, 'config/**');
+  assert.equal(existsSync(path.join(ROOT, 'api/cctv/[path].js')), false);
+  assert.equal(existsSync(path.join(ROOT, 'api/cctv/frame/[id].js')), true);
+  assert.equal(existsSync(path.join(ROOT, 'api/cctv/stream/[id].js')), true);
+  assert.equal(existsSync(path.join(ROOT, 'api/cctv/media/[id].js')), true);
+  assert.equal(vercelJson.functions['api/cctv/frame/[id].js']?.includeFiles, 'config/**');
   for (const rule of vercelJson.rewrites || []) {
     assert.match(rule.source, /^\/api\/tomtom\//);
     assert.match(rule.destination, /^\/api\/tomtom\//);
@@ -152,6 +164,71 @@ test('restoreCctvApiPath does not require a vercel.json rewrite', () => {
   assert.equal(restoreCctvApiPath('/cctv/health'), '/api/cctv/health');
   assert.equal(restoreCctvApiPath('/api/cctv/stream/abc'), '/api/cctv/stream/abc');
   assert.equal(restoreCctvApiPath('/frame/xyz?label=x'), '/api/cctv/frame/xyz?label=x');
+});
+
+test('promoteCctvResourceId lifts ?id= onto /frame/:id after the mount', () => {
+  assert.equal(promoteCctvResourceId('/frame?id=354'), '/frame/354');
+  assert.equal(promoteCctvResourceId('/frame/', { id: '354' }), '/frame/354');
+  assert.equal(
+    promoteCctvResourceId('/frame?id=354&label=Congress'),
+    '/frame/354?label=Congress',
+  );
+  assert.equal(promoteCctvResourceId('/frame/354'), '/frame/354');
+  assert.equal(promoteCctvResourceId('/sources'), '/sources');
+});
+
+test('ensureCctvResourceUrl rebuilds leftover /354 into /api/cctv/frame/354', () => {
+  assert.equal(ensureCctvResourceUrl('/354', 'frame'), '/api/cctv/frame/354');
+  assert.equal(ensureCctvResourceUrl('/frame/354', 'frame'), '/api/cctv/frame/354');
+  assert.equal(ensureCctvResourceUrl('/api/cctv/frame/354', 'frame'), '/api/cctv/frame/354');
+  assert.equal(ensureCctvResourceUrl('/frame?id=354', 'frame'), '/api/cctv/frame/354');
+  assert.equal(ensureCctvResourceUrl('/354', 'stream'), '/api/cctv/stream/354');
+});
+
+test('GET /api/cctv/frame/354 is a handler image with X-CCTV-Source', async () => {
+  const frame = await dispatch(cctvHandler, { url: '/api/cctv/frame/354' });
+  assert.equal(frame.status, 200);
+  assert.match(
+    String(frame.headers['Content-Type'] || frame.headers['content-type'] || ''),
+    /image\/(jpeg|jpg|png|svg\+xml)/,
+  );
+  assert.match(
+    String(frame.headers['X-CCTV-Source'] || frame.headers['x-cctv-source'] || ''),
+    /upstream-image|streetview|synthetic/,
+  );
+  assertNotPlatform404(frame);
+
+  const queryId = await dispatch(cctvHandler, { url: '/api/cctv/frame?id=354' });
+  assert.equal(queryId.status, 200);
+  assert.match(
+    String(queryId.headers['Content-Type'] || queryId.headers['content-type'] || ''),
+    /image\/(jpeg|jpg|png|svg\+xml)/,
+  );
+  assert.match(
+    String(queryId.headers['X-CCTV-Source'] || queryId.headers['x-cctv-source'] || ''),
+    /upstream-image|streetview|synthetic/,
+  );
+  assertNotPlatform404(queryId);
+
+  const leftover = await dispatch(frameById, { url: '/354' });
+  assert.equal(leftover.status, 200);
+  assert.match(
+    String(leftover.headers['X-CCTV-Source'] || leftover.headers['x-cctv-source'] || ''),
+    /upstream-image|streetview|synthetic/,
+  );
+  assertNotPlatform404(leftover);
+
+  const health = await dispatch(cctvHandler, { url: '/api/cctv/health' });
+  assert.equal(health.status, 200);
+  assert.ok(Array.isArray(health.json?.cameras));
+  assert.ok(health.json.cameras.some((camera) => camera.id === '354'));
+});
+
+test('client still requests /api/cctv/frame/:id', () => {
+  const client = readFileSync(path.join(ROOT, 'src/data/cctv.js'), 'utf8');
+  assert.match(client, /const FRAME_ENDPOINT = '\/api\/cctv\/frame'/);
+  assert.match(client, /FRAME_ENDPOINT\}\/\$\{encodeURIComponent\(camera\.id\)\}/);
+  assert.doesNotMatch(client, /FRAME_ENDPOINT\?id=/);
 });
 
 test('dedicated CCTV handler does not serve ais-live or google/text-search', async () => {
