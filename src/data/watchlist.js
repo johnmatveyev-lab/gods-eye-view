@@ -8,6 +8,17 @@
  * a position. Persistence is local only (`meridian.watchlist`). No /api.
  */
 
+import {
+  WATCHLIST_IN_VIEW_ONLY_CHIP_ID,
+  WATCHLIST_NONE_IN_VIEW,
+  filterWatchlistByInView,
+  getWatchlistInViewOnly,
+  hydrateWatchlistInViewOnly,
+  resetWatchlistInViewOnlyForTest,
+  setWatchlistInViewOnly,
+  subscribeWatchlistInViewOnly,
+} from './watchlistInViewFilter.js';
+
 export const WATCHLIST_STORAGE_KEY = 'meridian.watchlist';
 export const WATCHLIST_CAP = 10;
 export const WATCHLIST_NOT_IN_VIEW = 'not in view';
@@ -259,29 +270,37 @@ export function subscribeWatchlist(listener) {
 /** Test-only: restore an empty watchlist without clearing subscribers. */
 export function resetWatchlistForTest() {
   currentIdents = [];
+  resetWatchlistInViewOnlyForTest();
   for (const listener of listeners) listener(currentIdents.slice());
 }
 
 /**
  * Paint the watch list. Empty/not-in-view rows never include coordinates.
+ * In-view-only keeps only idents already returned by `highlightedWatchIdents`.
  * @param {HTMLElement|null} items
  * @param {Iterable<string>|null|undefined} list
  * @param {Array<object>|null|undefined} flights
+ * @param {unknown} [inViewOnly=false]
  */
-export function renderWatchlist(items, list, flights) {
+export function renderWatchlist(items, list, flights, inViewOnly = false) {
   if (!items) return;
   const idents = sanitizeWatchlist(list);
+  const visible = filterWatchlistByInView(
+    idents,
+    highlightedWatchIdents(idents, flights),
+    inViewOnly,
+  );
   items.replaceChildren();
-  if (idents.length === 0) {
+  if (visible.length === 0) {
     const empty = items.ownerDocument?.createElement?.('div')
       || globalThis.document?.createElement?.('div');
     if (!empty) return;
     empty.className = 'watchlist-empty';
-    empty.textContent = 'No watched aircraft';
+    empty.textContent = idents.length === 0 ? 'No watched aircraft' : WATCHLIST_NONE_IN_VIEW;
     items.appendChild(empty);
     return;
   }
-  for (const ident of idents) {
+  for (const ident of visible) {
     const row = items.ownerDocument?.createElement?.('div')
       || globalThis.document?.createElement?.('div');
     if (!row) return;
@@ -323,6 +342,7 @@ export function bindWatchlist({
   panel = null,
   items = null,
   addButton = null,
+  inViewToggle = null,
   getFlights = () => [],
   getSelectedContact = () => null,
   trackById = null,
@@ -335,14 +355,28 @@ export function bindWatchlist({
 
   let open = false;
   const windowListeners = [];
+  hydrateWatchlistInViewOnly(storage);
+  const inViewChip = inViewToggle
+    || panel?.querySelector?.(`#${WATCHLIST_IN_VIEW_ONLY_CHIP_ID}`)
+    || panel?.querySelector?.('[data-watchlist-in-view]')
+    || globalThis.document?.getElementById?.(WATCHLIST_IN_VIEW_ONLY_CHIP_ID)
+    || null;
 
   const refresh = () => {
     const idents = getWatchlist();
     const flights = typeof getFlights === 'function' ? getFlights() || [] : [];
-    if (items) renderWatchlist(items, idents, flights);
+    const inViewOnly = getWatchlistInViewOnly();
+    if (items) renderWatchlist(items, idents, flights, inViewOnly);
     if (toggle) {
       toggle.setAttribute('aria-pressed', open ? 'true' : 'false');
       toggle.classList?.toggle?.('active', open);
+    }
+    if (inViewChip) {
+      inViewChip.setAttribute('aria-pressed', inViewOnly ? 'true' : 'false');
+      inViewChip.classList?.toggle?.('active', inViewOnly);
+      inViewChip.hidden = !open;
+      if (open) inViewChip.removeAttribute?.('hidden');
+      else inViewChip.setAttribute?.('hidden', '');
     }
     if (panel) {
       panel.hidden = !open;
@@ -390,6 +424,13 @@ export function bindWatchlist({
     refresh();
   };
 
+  const onInViewToggle = (event) => {
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+    setWatchlistInViewOnly(!getWatchlistInViewOnly(), { storage });
+    refresh();
+  };
+
   const onItemsClick = (event) => {
     const remove = event?.target?.closest?.('[data-watch-remove]');
     if (remove) {
@@ -411,7 +452,9 @@ export function bindWatchlist({
 
   addButton?.addEventListener?.('click', onAdd);
   toggle?.addEventListener?.('click', onToggle);
+  inViewChip?.addEventListener?.('click', onInViewToggle);
   items?.addEventListener?.('click', onItemsClick);
+  const unsubscribeInView = subscribeWatchlistInViewOnly(() => refresh());
   if (windowTarget?.addEventListener) {
     for (const name of [
       'gev:entity-selected',
@@ -432,11 +475,13 @@ export function bindWatchlist({
     destroy() {
       addButton?.removeEventListener?.('click', onAdd);
       toggle?.removeEventListener?.('click', onToggle);
+      inViewChip?.removeEventListener?.('click', onInViewToggle);
       items?.removeEventListener?.('click', onItemsClick);
       for (const { name, handler } of windowListeners) {
         windowTarget?.removeEventListener?.(name, handler);
       }
       unsubscribe();
+      unsubscribeInView();
     },
   };
 }

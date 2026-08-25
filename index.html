@@ -197,7 +197,18 @@
     </button>
   </nav>
   <aside id="watchlist-panel" hidden>
-    <div class="watchlist-header">WATCH</div>
+    <div class="watchlist-header">
+      <span>WATCH</span>
+      <button
+        type="button"
+        id="watchlist-in-view-only"
+        class="watchlist-in-view-chip"
+        data-watchlist-in-view="only"
+        aria-pressed="false"
+        hidden
+        title="Hide watched aircraft that are not in the current flights view"
+      >In-view-only</button>
+    </div>
     <div id="watchlist-items" role="list"></div>
   </aside>
   <div id="measure-readout" hidden>
