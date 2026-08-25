@@ -1,5 +1,14 @@
 import { MERIDIAN_TERMS, PLANS, PRO_PRICE_USD } from './plans.js';
 import { formatRemainingBudget } from './usage.js';
+import { decodeShareViewUrl, encodeShareViewUrl } from '../sharelink.js';
+import {
+  canUseSavedViews,
+  deleteSavedView,
+  loadSavedViews,
+  restoreSavedView,
+  saveCurrentView,
+  shouldShowSavedViewsButton,
+} from './savedViews.js';
 
 const HEARTBEAT_MS = 30_000;
 const HEARTBEAT_SECONDS = 30;
@@ -145,7 +154,7 @@ function renderAccount(root, account) {
   root.user.hidden = !signedIn;
   root.upgrade.hidden = !(entitlement?.upgrade?.available);
   root.manage.hidden = !(signedIn && plan === PLANS.PRO && entitlement?.stripeConfigured);
-  root.saved.hidden = !(signedIn && plan === PLANS.PRO);
+  root.saved.hidden = !shouldShowSavedViewsButton(entitlement);
   root.exhausted.hidden = !entitlement?.exhausted;
 
   if (signedIn && root.user.childElementCount === 0 && account.clerk) {
@@ -165,11 +174,7 @@ function bindChrome(root, account) {
   root.upgrade.addEventListener('click', () => startCheckout(account, root));
   root.manage.addEventListener('click', () => startPortal(account, root));
   root.saved.addEventListener('click', () => {
-    openModal(root.modal, {
-      title: 'Saved views',
-      body: 'Pro placeholder — saved camera views will live here. Nothing is stored yet.',
-      primary: 'Close',
-    }, account, { primaryAction: 'close' });
+    openSavedViews(root, account);
   });
   root.exhausted.querySelector('[data-billing-upgrade]')?.addEventListener('click', () => startCheckout(account, root));
   root.modal.querySelector('[data-billing-close]')?.addEventListener('click', () => closeModal(root.modal));
@@ -177,7 +182,13 @@ function bindChrome(root, account) {
     const action = root.modal.dataset.primaryAction || 'upgrade';
     if (action === 'signin') openSignIn(root, account);
     else if (action === 'upgrade') void startCheckout(account, root);
+    else if (action === 'save-view') saveViewFromModal(root, account);
     else closeModal(root.modal);
+  });
+  root.modal.addEventListener('click', (event) => {
+    const button = event.target.closest?.('[data-saved-view-action]');
+    if (!button) return;
+    handleSavedViewAction(root, account, button);
   });
 }
 
@@ -195,6 +206,8 @@ function openSignIn(root, account) {
   root.modal.querySelector('[data-billing-body]').textContent =
     'Free includes a 15-minute daily globe demo. Voice and a higher cap are Pro.';
   root.modal.querySelector('[data-billing-primary]').hidden = true;
+  const saved = root.modal.querySelector('[data-saved-views]');
+  if (saved) saved.hidden = true;
   const mount = root.modal.querySelector('[data-clerk-sign-in]');
   mount.hidden = false;
   mount.replaceChildren();
@@ -210,11 +223,166 @@ function openModal(modal, { title, body, primary }, account, { primaryAction = '
   button.hidden = primaryAction === 'close';
   button.textContent = primary;
   modal.querySelector('[data-clerk-sign-in]').hidden = true;
+  const saved = modal.querySelector('[data-saved-views]');
+  if (saved) saved.hidden = primaryAction !== 'save-view';
 }
 
 function closeModal(modal) {
   modal.hidden = true;
   modal.querySelector('[data-clerk-sign-in]')?.replaceChildren();
+  const saved = modal.querySelector('[data-saved-views]');
+  if (saved) saved.hidden = true;
+}
+
+function openSavedViews(root, account) {
+  const entitlement = account.entitlement;
+  if (!shouldShowSavedViewsButton(entitlement)) return;
+  const userId = account.clerk?.user?.id;
+  const items = userId ? loadSavedViews(window.localStorage, userId) : [];
+  const atCap = items.length >= 10;
+  openModal(root.modal, {
+    title: 'Saved views',
+    body: atCap
+      ? 'This browser holds 10 saved views. Delete one to save another.'
+      : 'Save this camera, style, and layer setup. Views stay on this device for your Pro account.',
+    primary: 'Save current view',
+  }, account, { primaryAction: 'save-view' });
+  const nameInput = root.modal.querySelector('[data-saved-view-name]');
+  if (nameInput) {
+    nameInput.value = defaultSavedViewName(items.length);
+    nameInput.hidden = atCap;
+  }
+  const saveButton = root.modal.querySelector('[data-billing-primary]');
+  if (saveButton) saveButton.hidden = atCap;
+  renderSavedViewsList(root.modal, items);
+}
+
+function saveViewFromModal(root, account) {
+  const entitlement = account.entitlement;
+  if (!canUseSavedViews(entitlement)) return;
+  const userId = account.clerk?.user?.id;
+  if (!userId) return;
+  const nameInput = root.modal.querySelector('[data-saved-view-name]');
+  const name = String(nameInput?.value || '').trim() || defaultSavedViewName(0);
+  const result = saveCurrentView({
+    storage: window.localStorage,
+    userId,
+    entitlement,
+    name,
+    url: captureCurrentShareUrl(),
+    nowMs: Date.now(),
+    id: `sv_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+  });
+  if (!result.ok && result.reason === 'cap') {
+    root.modal.querySelector('[data-billing-body]').textContent =
+      'This browser holds 10 saved views. Delete one to save another.';
+  }
+  openSavedViews(root, account);
+}
+
+function handleSavedViewAction(root, account, button) {
+  const entitlement = account.entitlement;
+  if (!canUseSavedViews(entitlement)) return;
+  const userId = account.clerk?.user?.id;
+  const id = button.getAttribute('data-saved-view-id');
+  const action = button.getAttribute('data-saved-view-action');
+  const items = userId ? loadSavedViews(window.localStorage, userId) : [];
+  const item = items.find((row) => row.id === id);
+  switch (action) {
+    case 'restore':
+      if (!item) return;
+      restoreSavedView({
+        entitlement,
+        url: item.url,
+        assignLocation: applySavedViewUrl,
+      });
+      closeModal(root.modal);
+      return;
+    case 'delete':
+      if (!id) return;
+      deleteSavedView({
+        storage: window.localStorage,
+        userId,
+        entitlement,
+        id,
+      });
+      openSavedViews(root, account);
+      return;
+    default: {
+      const _exhaustive = action;
+      return _exhaustive;
+    }
+  }
+}
+
+function renderSavedViewsList(modal, items) {
+  const list = modal.querySelector('[data-saved-views-list]');
+  if (!list) return;
+  list.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement('p');
+    empty.className = 'saved-views-empty';
+    empty.textContent = 'No saved views yet.';
+    list.appendChild(empty);
+    return;
+  }
+  for (const item of items) {
+    const row = document.createElement('div');
+    row.className = 'saved-view-row';
+    const meta = document.createElement('div');
+    meta.className = 'saved-view-meta';
+    const name = document.createElement('strong');
+    name.textContent = item.name;
+    const when = document.createElement('span');
+    when.textContent = formatSavedViewWhen(item.createdAt);
+    meta.append(name, when);
+    const actions = document.createElement('div');
+    actions.className = 'saved-view-actions';
+    const restore = document.createElement('button');
+    restore.type = 'button';
+    restore.textContent = 'Restore';
+    restore.setAttribute('data-saved-view-action', 'restore');
+    restore.setAttribute('data-saved-view-id', item.id);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = 'Delete';
+    remove.setAttribute('data-saved-view-action', 'delete');
+    remove.setAttribute('data-saved-view-id', item.id);
+    actions.append(restore, remove);
+    row.append(meta, actions);
+    list.appendChild(row);
+  }
+}
+
+function defaultSavedViewName(count) {
+  return `View ${count + 1}`;
+}
+
+function formatSavedViewWhen(createdAt) {
+  const date = new Date(createdAt);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString();
+}
+
+function captureCurrentShareUrl() {
+  const manager = window.__godsEyeView?.styleManager?.shareLinkManager;
+  const captured = manager?.currentShareUrl?.();
+  if (captured) return captured;
+  return encodeShareViewUrl(window.location.href, window.location.hash);
+}
+
+function applySavedViewUrl(url) {
+  const manager = window.__godsEyeView?.styleManager?.shareLinkManager;
+  const hash = decodeShareViewUrl(url);
+  if (manager && hash) {
+    window.location.hash = hash;
+    const state = manager.parseInitialHash();
+    if (state) {
+      void manager.applyState(state).then(() => manager.completeInitialRestore());
+    }
+    return;
+  }
+  window.location.assign(url);
 }
 
 async function startCheckout(account, root) {
@@ -363,6 +531,13 @@ function ensureAccountChrome() {
         <button type="button" class="billing-modal-close" data-billing-close aria-label="Close">×</button>
         <h2 id="billing-modal-title" data-billing-title>Account</h2>
         <p data-billing-body></p>
+        <div data-saved-views hidden>
+          <label class="saved-view-name-label">
+            <span>Name</span>
+            <input type="text" data-saved-view-name maxlength="80" autocomplete="off" />
+          </label>
+          <div data-saved-views-list></div>
+        </div>
         <div data-clerk-sign-in hidden></div>
         <button type="button" class="billing-modal-primary" data-billing-primary>Continue</button>
       </div>

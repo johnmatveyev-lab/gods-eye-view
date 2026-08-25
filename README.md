@@ -67,7 +67,7 @@ Leave the billing keys unset for self-host / BYOK. The globe still works when `G
 | Plan | What you get |
 |------|----------------|
 | **Free** (signed in) | Globe works. No voice. Hard daily cap: **15 minutes** of session time and a request budget. Remaining budget is shown in the account chip. |
-| **Pro** ($29/mo) | Voice (OpenAI Realtime via the **server** `OPENAI_API_KEY`, never a ChatGPT consumer subscription). Higher daily cap (8 hours). Saved-views placeholder. |
+| **Pro** ($29/mo) | Voice (OpenAI Realtime via the **server** `OPENAI_API_KEY`, never a ChatGPT consumer subscription). Higher daily cap (8 hours). Up to 10 saved views in this browser. |
 
 Setup:
 

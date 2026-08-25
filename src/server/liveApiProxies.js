@@ -27,15 +27,20 @@ import {
   normalizeBudget as normalizeTomTomBudget,
   isOverBudget as isTomTomOverBudget,
 } from '../data/tomtomTiles.js';
-import { filterTrailing24h, parseFirmsCsv } from '../data/firmsCsv.js';
+import { firmsProxy } from '../data/firms.js';
 import { normalizeRadioCountryInput } from '../data/radioCountry.js';
 import {
   normalizeRegionalArticles,
   normalizeRegionalPlace,
   normalizeRegionalWeather,
 } from '../data/regionalBrief.js';
-import { normalizeAdsbLolPointResponse } from '../data/adsbLolFallback.js';
 import { createAisStreamAdapter, isRecognizedAisEnvelope } from '../data/aisStreamAdapter.js';
+import {
+  COMMERCIAL_FLIGHT_SOURCE,
+  OPENSKY_ENABLED,
+  adsbLolFallbackAnchor,
+  handleOpenskyFlightsHttp,
+} from './openskyFlights.js';
 import { rejectIfVoiceForbidden } from '../billing/http.js';
 import { parseSilenceTimeoutEnv } from '../data/aisWatchdog.js';
 import {
@@ -55,20 +60,9 @@ const __dirname = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 // ---------------------------------------------------------------------------
 // Civilian flights: adsb.lol only (OpenSky is disabled in this commercial fork)
 // ---------------------------------------------------------------------------
-/** Commercial flights feed. OpenSky is not contacted. */
-export const COMMERCIAL_FLIGHT_SOURCE = 'adsb.lol';
-/** Hard off — do not fetch opensky-network.org from production paths. */
-export const OPENSKY_ENABLED = false;
+export { COMMERCIAL_FLIGHT_SOURCE, OPENSKY_ENABLED, adsbLolFallbackAnchor };
 /** Hard off — cockpit headlines use GDELT only. */
 export const GOOGLE_NEWS_RSS_ENABLED = false;
-/** Regional civilian snapshot cache, keyed by a coarse 0.25° view anchor. */
-const _adsbLolPointCache = new Map();
-/** Per-anchor single-flight map for concurrent regional requests. */
-const _adsbLolPointInFlight = new Map();
-const ADSBLOL_POINT_CACHE_MS = 12000;
-const ADSBLOL_POINT_CACHE_MAX = 80;
-const ADSBLOL_POINT_RADIUS_NM = 250;
-const ADSBLOL_POINT_MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
 // ---------------------------------------------------------------------------
 // Overpass API proxy constants and cache state
 // ---------------------------------------------------------------------------
@@ -1191,8 +1185,6 @@ function radioBrowserProxy() {
     configurePreviewServer: install,
   };
 }
-// GBFS proxy lives in src/data/gbfs.js — Vite and Vercel both import it.
-
 // ---------------------------------------------------------------------------
 // AISStream live vessel cache state
 // ---------------------------------------------------------------------------
@@ -1741,225 +1733,7 @@ function tomtomProxy() {
   };
 }
 
-/**
- * NASA FIRMS live active-fire proxy with a memory + disk cache.
- * Upstream: https://firms.modaps.eosdis.nasa.gov/api/area/csv/{KEY}/{SOURCE}/world/2
- *
- * Merges three VIIRS NRT sources (NOAA-20, NOAA-21, Suomi-NPP — independent
- * satellites, no cross-source dedup) fetched sequentially with `days=2`
- * (`days=1` means "current UTC day", nearly empty just after 00:00Z) and
- * clamps to the trailing 24 h via src/data/firmsCsv.js. FIRMS quota is
- * 5,000 transactions / 10 min per MAP_KEY, so the cache is the point:
- * TTL 30 min, single-flight refresh, serve-stale-on-failure, and a
- * fresh-enough disk cache (.gev-cache/firms.json) prevents ANY upstream
- * fetch across dev-server restarts. Pattern mirrors celestrakProxy.
- *
- * Routes:
- *   GET /api/firms        → {fetchedAt, stale, ttlMs, sources, count, fires}
- *   GET /api/firms/status → {hasKey, lastFetch, count, stale, ttlMs, transactions}
- *
- * Keyless (no FIRMS_MAP_KEY): /api/firms → 503 {error:'no_key'}; status →
- * {hasKey:false}. Upstream is never touched without a key.
- *
- * @returns {import('vite').Plugin}
- */
-function firmsProxy() {
-  const TTL_MS = 30 * 60_000;
-  const STATUS_TTL_MS = 5 * 60_000;
-  const SOURCES = ['VIIRS_NOAA20_NRT', 'VIIRS_NOAA21_NRT', 'VIIRS_SNPP_NRT'];
-  const CACHE_DIR = path.join(process.cwd(), '.gev-cache');
-  const CACHE_PATH = path.join(CACHE_DIR, 'firms.json');
-
-  /** @type {?{at: number, sources: Array<object>, fires: Array<object>}} */
-  let mem = null;
-  let diskChecked = false;
-  /** @type {?Promise<?{at: number, sources: Array<object>, fires: Array<object>}>} single-flight refresh */
-  let inflight = null;
-  /** @type {?{at: number, transactions: ?{used: number, limit: number}}} mapkey_status cache */
-  let statusCache = null;
-  /** @type {?Promise<?{used: number, limit: number}>} */
-  let statusInflight = null;
-
-  const mapKey = () => String(process.env.FIRMS_MAP_KEY || '').trim();
-
-  async function readDiskOnce() {
-    if (diskChecked) return;
-    diskChecked = true;
-    try {
-      const parsed = JSON.parse(await fsp.readFile(CACHE_PATH, 'utf8'));
-      if (Number.isFinite(parsed?.at) && Array.isArray(parsed?.sources) && Array.isArray(parsed?.fires)) {
-        mem = parsed;
-      }
-    } catch { /* no disk cache yet */ }
-  }
-
-  async function writeDisk(entry) {
-    try {
-      await fsp.mkdir(CACHE_DIR, { recursive: true });
-      await fsp.writeFile(CACHE_PATH, JSON.stringify(entry), 'utf8');
-    } catch (err) {
-      console.warn('[firms-proxy] cache write failed:', err?.message || err);
-    }
-  }
-
-  /**
-   * Fetch + parse one FIRMS source. Throws on HTTP error or a non-CSV body
-   * (FIRMS reports errors as HTML/plain text, never CSV). Never log the URL —
-   * it embeds the MAP_KEY.
-   */
-  async function fetchSource(key, source) {
-    const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(key)}/${source}/world/2`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(60_000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const records = parseFirmsCsv(await res.text());
-    if (records === null) throw new Error('non-CSV upstream response');
-    return records;
-  }
-
-  /**
-   * Refresh all sources sequentially (quota courtesy — never in parallel).
-   * Partial success (≥1 source ok) still produces a cacheable entry with the
-   * failed sources marked ok:false; total failure throws so the caller can
-   * serve stale.
-   */
-  async function refreshUpstream(key) {
-    const now = Date.now();
-    const sources = [];
-    const fires = [];
-    for (const source of SOURCES) {
-      try {
-        const records = filterTrailing24h(await fetchSource(key, source), now);
-        sources.push({ source, count: records.length, ok: true });
-        fires.push(...records);
-      } catch (err) {
-        console.warn(`[firms-proxy] ${source} fetch failed:`, err?.message || err);
-        sources.push({ source, count: 0, ok: false });
-      }
-    }
-    if (!sources.some((s) => s.ok)) throw new Error('all FIRMS sources failed');
-    return { at: now, sources, fires };
-  }
-
-  /**
-   * Cache entry → response payload. Fires are RE-filtered to the trailing
-   * 24 h at serve time so a stale cache never serves >24h-old detections.
-   */
-  function buildPayload(entry, stale) {
-    const fires = filterTrailing24h(entry.fires, Date.now());
-    return {
-      fetchedAt: entry.at,
-      stale,
-      ttlMs: TTL_MS,
-      sources: entry.sources,
-      count: fires.length,
-      fires,
-    };
-  }
-
-  /** mapkey_status transactions, cached 5 min, best-effort (null on failure). */
-  function getTransactions(key) {
-    const now = Date.now();
-    if (statusCache && now - statusCache.at < STATUS_TTL_MS) {
-      return Promise.resolve(statusCache.transactions);
-    }
-    if (!statusInflight) {
-      statusInflight = (async () => {
-        try {
-          const url = `https://firms.modaps.eosdis.nasa.gov/mapserver/mapkey_status/?MAP_KEY=${encodeURIComponent(key)}`;
-          const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const body = await res.json();
-          const used = Number(body?.current_transactions);
-          const limit = Number(body?.transaction_limit);
-          return Number.isFinite(used) && Number.isFinite(limit) ? { used, limit } : null;
-        } catch (err) {
-          console.warn('[firms-proxy] mapkey status failed:', err?.message || err);
-          return null;
-        }
-      })()
-        .then((transactions) => {
-          statusCache = { at: Date.now(), transactions };
-          return transactions;
-        })
-        .finally(() => { statusInflight = null; });
-    }
-    return statusInflight;
-  }
-
-  return {
-    name: 'firms-proxy',
-    configureServer(server) {
-      server.middlewares.use('/api/firms', async (req, res) => {
-        const sendJson = (status, obj) => {
-          if (res.headersSent) return;
-          res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
-          res.end(JSON.stringify(obj));
-        };
-        try {
-          const subPath = String(req.url || '').split('?')[0];
-          const key = mapKey();
-          await readDiskOnce();
-
-          if (subPath === '/status') {
-            if (!key) {
-              sendJson(200, { hasKey: false, lastFetch: null, count: null, stale: false, ttlMs: TTL_MS, transactions: null });
-              return;
-            }
-            const transactions = await getTransactions(key);
-            sendJson(200, {
-              hasKey: true,
-              lastFetch: mem ? mem.at : null,
-              count: mem ? mem.fires.length : null,
-              stale: mem ? Date.now() - mem.at >= TTL_MS : false,
-              ttlMs: TTL_MS,
-              transactions,
-            });
-            return;
-          }
-
-          if (!key) {
-            sendJson(503, { error: 'no_key' });
-            return;
-          }
-
-          const entry = mem;
-          if (entry && Date.now() - entry.at < TTL_MS) {
-            sendJson(200, buildPayload(entry, false));
-            return;
-          }
-          // Stale or missing → refresh, single-flight (concurrent requests
-          // share one upstream pass). Capture the promise locally BEFORE
-          // awaiting: the .finally() nulls `inflight` the moment it settles.
-          if (!inflight) {
-            inflight = refreshUpstream(key)
-              .then(async (fresh) => {
-                mem = fresh;
-                await writeDisk(fresh);
-                return fresh;
-              })
-              .catch((err) => {
-                console.warn(`[firms-proxy] refresh failed (${err?.message || err}) — serving cache if any`);
-                return null;
-              })
-              .finally(() => { inflight = null; });
-          }
-          const pending = inflight;
-          const fresh = await pending;
-          if (fresh) {
-            sendJson(200, buildPayload(fresh, false));
-          } else if (entry) {
-            sendJson(200, buildPayload(entry, true)); // upstream down — stale beats empty
-          } else {
-            sendJson(502, { error: 'firms fetch failed and no cache available' });
-          }
-        } catch (err) {
-          console.warn('[firms-proxy] error:', err?.message || err);
-          sendJson(500, { error: 'firms proxy error' });
-        }
-      });
-    },
-  };
-}
+/** NASA FIRMS handlers live in src/data/firms.js (Vite + Vercel /api/firms). */
 
 /**
  * Re:Earth terrain point-height proxy: batched lon/lat → ellipsoidal height
@@ -2587,95 +2361,6 @@ function overpassProxy() {
   };
 }
 
-export function adsbLolFallbackAnchor(req) {
-  const incoming = new URL(req?.url || '', 'http://localhost');
-  const latitude = requiredFiniteQueryNumber(incoming.searchParams, 'lat');
-  const longitude = requiredFiniteQueryNumber(incoming.searchParams, 'lon');
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null;
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null;
-  return { latitude, longitude };
-}
-
-async function fetchAdsbLolPointFallback(req) {
-  const anchor = adsbLolFallbackAnchor(req);
-  if (!anchor) return null;
-  const roundedLat = Math.round(anchor.latitude * 4) / 4;
-  const roundedLon = Math.round(anchor.longitude * 4) / 4;
-  const cacheKey = `${roundedLat.toFixed(2)},${roundedLon.toFixed(2)}`;
-  const cached = _adsbLolPointCache.get(cacheKey);
-  const now = Date.now();
-  if (cached && now - cached.cachedAt < ADSBLOL_POINT_CACHE_MS) {
-    return { ...cached, cacheStatus: 'HIT' };
-  }
-
-  const request = coalesceProxyRequest(_adsbLolPointInFlight, cacheKey, async () => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
-    try {
-      const upstream = await fetch(
-        `https://api.adsb.lol/v2/lat/${roundedLat}/lon/${roundedLon}/dist/${ADSBLOL_POINT_RADIUS_NM}`,
-        {
-          headers: {
-            Accept: 'application/json',
-            'User-Agent': 'meridian-adsblol-flights/1.0',
-          },
-          signal: controller.signal,
-        },
-      );
-      if (!upstream.ok) throw new Error(`upstream HTTP ${upstream.status}`);
-      const payload = await readResponseJsonCapped(upstream, ADSBLOL_POINT_MAX_RESPONSE_BYTES);
-      const normalized = normalizeAdsbLolPointResponse(payload);
-      const record = {
-        body: JSON.stringify(normalized),
-        cachedAt: Date.now(),
-        count: normalized.states.length,
-      };
-      _adsbLolPointCache.delete(cacheKey);
-      _adsbLolPointCache.set(cacheKey, record);
-      while (_adsbLolPointCache.size > ADSBLOL_POINT_CACHE_MAX) {
-        _adsbLolPointCache.delete(_adsbLolPointCache.keys().next().value);
-      }
-      return record;
-    } finally {
-      clearTimeout(timeoutId);
-    }
-  });
-  try {
-    const record = await request.promise;
-    return { ...record, cacheStatus: request.shared ? 'INFLIGHT' : 'MISS' };
-  } catch (error) {
-    if (!request.shared && error?.name !== 'AbortError') {
-      console.warn('[adsb.lol Flights]', error?.message || error);
-    }
-    return cached ? { ...cached, cacheStatus: 'STALE' } : null;
-  }
-}
-
-function buildAdsbLolFlightHeaders({ cacheStatus, reason }) {
-  return {
-    'Content-Type': 'application/json',
-    'Cache-Control': 'no-store',
-    'X-Flight-Source': COMMERCIAL_FLIGHT_SOURCE,
-    'X-Flight-Coverage': `${ADSBLOL_POINT_RADIUS_NM}nm regional`,
-    'X-Flight-Cache': cacheStatus,
-    'X-Flight-Reason': reason,
-  };
-}
-
-async function serveAdsbLolFlightsSnapshot(req, res, reason) {
-  const snapshot = await fetchAdsbLolPointFallback(req);
-  if (!snapshot) return false;
-  res.writeHead(200, {
-    ...buildAdsbLolFlightHeaders({
-      cacheStatus: snapshot.cacheStatus,
-      reason,
-    }),
-    'X-Flight-Count': String(snapshot.count),
-  });
-  res.end(snapshot.body);
-  return true;
-}
-
 /**
  * Vite plugin: civilian flights proxy.
  *
@@ -2689,26 +2374,7 @@ function openSkyProxy() {
   return {
     name: 'opensky-proxy',
     configureServer(server) {
-      server.middlewares.use('/api/opensky', async (req, res) => {
-        try {
-          if (await serveAdsbLolFlightsSnapshot(req, res, 'adsblol_primary')) return;
-          res.writeHead(400, buildAdsbLolFlightHeaders({
-            cacheStatus: 'MISS',
-            reason: 'missing_view_anchor',
-          }));
-          res.end(JSON.stringify({
-            error: 'adsb.lol regional snapshot requires lat and lon query parameters',
-          }));
-        } catch (e) {
-          console.error('[adsb.lol Flights Proxy]', e.message);
-          if (await serveAdsbLolFlightsSnapshot(req, res, 'adsblol_proxy_error')) return;
-          res.writeHead(502, buildAdsbLolFlightHeaders({
-            cacheStatus: 'MISS',
-            reason: 'proxy_error',
-          }));
-          res.end(JSON.stringify({ error: 'adsb.lol flights proxy error' }));
-        }
-      });
+      server.middlewares.use('/api/opensky', (req, res) => handleOpenskyFlightsHttp(req, res));
     },
   };
 }
