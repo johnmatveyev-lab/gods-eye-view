@@ -222,10 +222,9 @@ test('cached weather-effects stay Celsius and do not grow a temperature endpoint
   assert.equal(second.json.status, 'cached');
   assert.equal(calls.length, 1);
   assert.equal(existsSync(path.join(ROOT, 'api/weather-units.js')), false);
-  assert.doesNotMatch(
-    readFileSync(path.join(ROOT, 'src/data/weatherUnits.js'), 'utf8'),
-    /\/api\/weather-effects|fetchOpenMeteoWeather/,
-  );
+  const helper = readFileSync(path.join(ROOT, 'src/data/weatherUnits.js'), 'utf8');
+  assert.match(helper, /does not fetch `\/api\/weather-effects`/);
+  assert.doesNotMatch(helper, /fetchOpenMeteoWeather|\bfetch\s*\(/);
 });
 
 test('fresh cache is served without a second Open-Meteo call', async () => {

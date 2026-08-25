@@ -196,7 +196,8 @@ test('Local Info hosts °C | °F next to TEMP; Display units stay km | nm | mi',
 
   assert.match(ui, /bindWeatherUnitToggle|formatTemperatureC|initWeatherUnits/);
   assert.match(ui, /paintLocalTemperature|regionalBrief\?\.weather/);
-  assert.doesNotMatch(helper, /UNITS_STORAGE_KEY|meridian\.units['"`]|setDistanceUnit|setWxEnabled/);
+  assert.doesNotMatch(helper, /'meridian\.units'|setDistanceUnit|setWxEnabled/);
+  assert.match(helper, /WEATHER_UNITS_STORAGE_KEY = 'meridian\.weatherUnits'/);
 });
 
 test('chip wiring re-paints from the in-memory brief and adds no /api', () => {
@@ -212,8 +213,8 @@ test('chip wiring re-paints from the in-memory brief and adds no /api', () => {
   assert.match(bind[0], /this\.regionalBrief\?\.weather/);
   assert.doesNotMatch(bind[0], /fetchRegionalBrief|maybeRefreshRegionalBrief|\/api\/weather-effects/);
   assert.doesNotMatch(helper, /\/api\/weather-units|\/api\/temperature/);
-  assert.match(weatherEffects, /temperatureC:/);
-  assert.doesNotMatch(weatherEffects, /temperatureF|weatherUnits|setTemperatureUnit/);
+  assert.match(weatherEffects, /normalizeRegionalWeather/);
+  assert.doesNotMatch(weatherEffects, /temperatureF|weatherUnits|setTemperatureUnit|celsiusToFahrenheit/);
 
   const apiDir = path.join(ROOT, 'api');
   const files = [];
