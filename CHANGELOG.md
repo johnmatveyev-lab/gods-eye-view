@@ -25,6 +25,11 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a DISPLAY-rail Keep above ground control. After the camera moves, if
+  `globe.getHeight` or the warm `/api/terrain/heights` floor says the eye is
+  below terrain plus a small margin, the camera is lifted. The preference
+  persists as `meridian.keepAbove` and defaults on. Cockpit interior still
+  owns the camera. A terrain 503 skips the lift. No new API.
 - Contact Labels on/off (declutter) hides ambient callsign billboards on
   busy FIRs. Dots, models, and trails stay. Selected/tracked ident cards stay.
   Density still only changes detections. Persists `meridian.contactLabels`

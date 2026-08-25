@@ -89,6 +89,11 @@ import {
   hydrateTrailsEnabled,
   setTrailsEnabled,
 } from './data/trailPreference.js';
+import {
+  hydrateKeepAboveEnabled,
+  installKeepAboveGround,
+  setKeepAboveEnabled,
+} from './cameraAboveGround.js';
 import { destroyCameraCoords, initCameraCoords } from './copyCameraCoords.js';
 import { destroyWorldOverlay, getOverlayPaintRect, initWorldOverlay } from './overlays/worldOverlay.js';
 import {
@@ -2868,6 +2873,11 @@ export class StyleManager {
     // DISPLAY-rail Trails toggle. Default ON (`meridian.trails`); hides the
     // existing tracked-target trail renderer without stopping track.
     this._trailsEnabled = true;
+    this._keepAboveBtn = document.getElementById('keep-above-toggle');
+    // DISPLAY-rail Keep above ground. Default ON (`meridian.keepAbove`);
+    // lifts the map camera after a move when an existing terrain helper
+    // says the eye is below the mesh. Cockpit interior skips this clamp.
+    this._keepAboveEnabled = true;
 
     // The shared world-overlay host must own its one postRender lane before
     // detection and tracked-readout initialize. It stays transparent until a
@@ -2918,6 +2928,7 @@ export class StyleManager {
     this._initHUDToggle();
     this._initModels3dToggle();
     this._initTrailsToggle();
+    this._initKeepAboveToggle();
     this._initLiveSunToggle();
     this._initScaleBar();
     this._applyGlobalPostDefaults();
@@ -10918,6 +10929,38 @@ export class StyleManager {
     this._trailsBtn?.setAttribute('aria-pressed', String(this._trailsEnabled));
   }
 
+  /**
+   * Wires the DISPLAY-rail Keep above ground toggle and installs the camera
+   * clamp. Off persists `meridian.keepAbove` and leaves zoom/tilt unclamped.
+   * Cockpit interior still owns the camera while active.
+   */
+  _initKeepAboveToggle() {
+    this._keepAboveEnabled = hydrateKeepAboveEnabled();
+    this._keepAboveDispose?.();
+    this._keepAboveDispose = installKeepAboveGround(this.viewer, {
+      isEnabled: () => this._keepAboveEnabled !== false,
+      isCockpitActive: () => this.cockpitView?.active === true,
+      requestRender: governorRequestRender,
+      setCameraCartesian: (carto) => {
+        this.viewer.camera.position = Cesium.Cartesian3.fromRadians(
+          carto.longitude,
+          carto.latitude,
+          carto.height,
+        );
+      },
+    });
+    this._keepAboveBtn?.addEventListener('click', () => {
+      this._keepAboveEnabled = setKeepAboveEnabled(!this._keepAboveEnabled);
+      this._syncKeepAboveButtonState();
+    });
+    this._syncKeepAboveButtonState();
+  }
+
+  _syncKeepAboveButtonState() {
+    this._keepAboveBtn?.classList.toggle('active', this._keepAboveEnabled);
+    this._keepAboveBtn?.setAttribute('aria-pressed', String(this._keepAboveEnabled));
+  }
+
   _initHUDToggle() {
     this._hudBtn.addEventListener('click', () => {
       this.shareLinkManager?.claimRestoreLane?.('visual');
@@ -11194,6 +11237,8 @@ export class StyleManager {
     this._disposed = true;
     this._unitsUnsubscribe?.();
     this._unitsUnsubscribe = null;
+    this._keepAboveDispose?.();
+    this._keepAboveDispose = null;
     uninstallScaleBar();
     // Revoke persistence/hash authority before teardown can emit manager changes.
     this._layerStateCoordinator?.destroy();
