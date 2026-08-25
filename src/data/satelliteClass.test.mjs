@@ -577,24 +577,25 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
 test('hiding points keeps POINTS, ORBITS, Core|Dense, and the class row', async () => {
   try {
     _setDenseCatalogStateForTest({});
-    assert.equal(satellitesLayer.getRowControls().chips.length, 12);
+    assert.equal(satellitesLayer.getRowControls().chips.length, 15);
 
     // Operator (or Space Missions) can hide dots via the existing showPoints
     // param. The row must stay so POINTS can turn back on and Orbits /
-    // Core|Dense / class / period chips remain independent.
+    // Core|Dense / class / period / inclination chips remain independent.
     satellitesLayer.setParams({ showPoints: false });
     const hidden = satellitesLayer.getRowControls();
-    assert.equal(hidden.chips.length, 12, 'row stays while dots are hidden');
+    assert.equal(hidden.chips.length, 15, 'row stays while dots are hidden');
     assert.equal(hidden.chips.find((chip) => chip.id === 'points')?.active, false);
     assert.ok(hidden.chips.some((chip) => chip.id === 'orbits'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'catalog-core'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'class-station'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'period-all'));
+    assert.ok(hidden.chips.some((chip) => chip.id === 'inc-eq'));
     assert.ok((hidden.selects || []).some((entry) => entry.id === 'sat-group'));
     assert.ok(hidden.readout?.id, 'Next ISS readout stays on the row');
 
     satellitesLayer.setParams({ showPoints: true });
-    assert.equal(satellitesLayer.getRowControls().chips.length, 12, 'POINTS on restores the same row');
+    assert.equal(satellitesLayer.getRowControls().chips.length, 15, 'POINTS on restores the same row');
     assert.equal(satellitesLayer.getRowControls().chips.find((chip) => chip.id === 'points')?.active, true);
   } finally {
     _clearDenseCatalogStateForTest();
@@ -657,7 +658,12 @@ test('all-on class chips match the current catalog', () => {
       ['period-all', 'period-100', 'period-128'],
       'period chips sit after class chips',
     );
-    assert.deepEqual(chips.slice(10), ['points', 'orbits'], 'POINTS sits next to ORBITS');
+    assert.deepEqual(
+      chips.slice(10, 13),
+      ['inc-eq', 'inc-mid', 'inc-polar'],
+      'inclination chips sit after period chips',
+    );
+    assert.deepEqual(chips.slice(13), ['points', 'orbits'], 'POINTS sits next to ORBITS');
   } finally {
     _clearDenseCatalogStateForTest();
   }

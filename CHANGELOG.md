@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Satellites row has client-only **Eq | Mid | Polar** inclination chips
+  next to period chips. Default all on matches the current catalog. The
+  chips filter already-fetched CelesTrak satrecs by `satrec.inclo`
+  converted from SGP4 radians to degrees: **Eq** &lt; 30°, **Mid** 30–80°,
+  **Polar** ≥ 80°. Missing or non-finite inclination stays visible. The
+  tracked satellite stays. Chip changes re-filter in memory and AND with
+  Core | Dense, class chips, POINTS, ORBITS, and period — no extra
+  `/api/celestrak` fetch and no new endpoint. Preference persists as
+  `meridian.satInclination` and is not a share-link field. Catalog refresh
+  and group switch keep the chip set. Hidden when the Satellites layer is
+  off. Distinct from Plan 164 period chips (minutes, not plane).
 - Mapped Installations has a client-only **Footprints only** toggle next to
   the Plan 151 class chips. Default off matches the current points +
   polygons view. On skips in-memory records whose `footprint` is missing,
