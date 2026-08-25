@@ -66,6 +66,13 @@ import {
   normalizeAisHideParked,
   vesselMatchesParkedFilter,
 } from './aisParkedFilter.js';
+import {
+  DEFAULT_AIS_MIN_SPEED,
+  aisMinSpeedChipModels,
+  filterVesselsByMinSpeed,
+  normalizeAisMinSpeed,
+  vesselMatchesMinSpeedFilter,
+} from './aisMinSpeedFilter.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -561,16 +568,17 @@ const aisLiveVesselsLayer = {
   },
 
   /**
-   * Type chips and Hide parked re-filter in-memory vessels.
+   * Type chips, Hide parked, and min-speed re-filter in-memory vessels.
    * Never hits `/api/ais-live`.
-   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown }} [params]
+   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown, minSpeed?: unknown }} [params]
    * @returns {boolean}
    */
   setParams(params = {}) {
     if (!params || typeof params !== 'object') return false;
     const hasType = Object.hasOwn(params, 'vesselTypeFilter');
     const hasParked = Object.hasOwn(params, 'hideParked');
-    if (!hasType && !hasParked) return true;
+    const hasMinSpeed = Object.hasOwn(params, 'minSpeed');
+    if (!hasType && !hasParked && !hasMinSpeed) return true;
 
     let nextType = state.typeFilter;
     if (hasType) {
@@ -586,18 +594,31 @@ const aisLiveVesselsLayer = {
       nextParked = parked;
     }
 
-    if (nextType === state.typeFilter && nextParked === state.hideParked) return true;
+    let nextMinSpeed = state.minSpeed;
+    if (hasMinSpeed) {
+      const floor = normalizeAisMinSpeed(params.minSpeed);
+      if (floor == null) return false;
+      nextMinSpeed = floor;
+    }
+
+    if (
+      nextType === state.typeFilter
+      && nextParked === state.hideParked
+      && nextMinSpeed === state.minSpeed
+    ) return true;
     state.typeFilter = nextType;
     state.hideParked = nextParked;
+    state.minSpeed = nextMinSpeed;
     if (state.enabled && state.viewer) updateVisibility(true);
     return true;
   },
 
-  /** @returns {{ vesselTypeFilter: string, hideParked: boolean }} */
+  /** @returns {{ vesselTypeFilter: string, hideParked: boolean, minSpeed: string }} */
   getParams() {
     return {
       vesselTypeFilter: state.typeFilter,
       hideParked: state.hideParked,
+      minSpeed: state.minSpeed,
     };
   },
 
@@ -606,6 +627,7 @@ const aisLiveVesselsLayer = {
       chips: [
         ...vesselTypeChipModels(state.typeFilter),
         aisHideParkedChipModel(state.hideParked),
+        ...aisMinSpeedChipModels(state.minSpeed),
       ],
     };
   },
@@ -837,6 +859,8 @@ const state = {
   typeFilter: DEFAULT_VESSEL_TYPE_FILTER,
   /** Client-only Hide parked. Re-applied on the already-fetched vessel list. */
   hideParked: DEFAULT_AIS_HIDE_PARKED,
+  /** Client-only min-speed floor. Re-applied on the already-fetched vessel list. */
+  minSpeed: DEFAULT_AIS_MIN_SPEED,
 };
 
 /** Replace live AIS rows through the production reconciliation path (DEV only). */
@@ -1200,9 +1224,13 @@ function selectedVesselId() {
 
 function visibleVesselRecords() {
   const selectedId = selectedVesselId();
-  return filterVesselsByParked(
-    filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
-    state.hideParked,
+  return filterVesselsByMinSpeed(
+    filterVesselsByParked(
+      filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
+      state.hideParked,
+      selectedId,
+    ),
+    state.minSpeed,
     selectedId,
   );
 }
@@ -1210,7 +1238,8 @@ function visibleVesselRecords() {
 function vesselTypeVisible(record) {
   const selectedId = selectedVesselId();
   return vesselMatchesTypeFilter(record, state.typeFilter, { selectedId })
-    && vesselMatchesParkedFilter(record, state.hideParked, { selectedId });
+    && vesselMatchesParkedFilter(record, state.hideParked, { selectedId })
+    && vesselMatchesMinSpeedFilter(record, state.minSpeed, { selectedId });
 }
 
 function addRecordPrimitives(record, occluder) {
@@ -2153,6 +2182,7 @@ function resetState() {
   state.trailBackfillToken = 0;
   state.typeFilter = DEFAULT_VESSEL_TYPE_FILTER;
   state.hideParked = DEFAULT_AIS_HIDE_PARKED;
+  state.minSpeed = DEFAULT_AIS_MIN_SPEED;
 }
 
 /**

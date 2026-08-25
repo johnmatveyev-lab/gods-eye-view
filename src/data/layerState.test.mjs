@@ -78,7 +78,7 @@ function paramsForLayer(id) {
     return { installationClassFilter: 'all' };
   }
   if (id === 'ais-live-vessels') {
-    return { vesselTypeFilter: 'all', hideParked: false };
+    return { vesselTypeFilter: 'all', hideParked: false, minSpeed: 'all' };
   }
   if (id === 'radio') {
     return {
@@ -495,6 +495,33 @@ test('AIS Hide parked persists on ais-live-vessels and defaults off', () => {
   const decoded = decodeLayerStateParams(params);
   assert.equal(decoded.options['ais-live-vessels'].hideParked, true);
   assert.equal(layerOptionsForRestore(decoded, 'ais-live-vessels').hideParked, true);
+});
+
+test('AIS min-speed chips persist on ais-live-vessels and default All', () => {
+  const defaults = createDefaultLayerState();
+  assert.equal(defaults.options['ais-live-vessels'].minSpeed, 'all');
+
+  const omitted = decodeLayerStateParams(new URLSearchParams('v=2&l=a'));
+  assert.equal(omitted.options['ais-live-vessels'].minSpeed, 'all',
+    'existing a links keep every speed visible');
+
+  const five = normalizeLayerState({
+    enabledLayerIds: ['ais-live-vessels'],
+    options: { 'ais-live-vessels': { minSpeed: '5' } },
+  });
+  const fiveParams = encodeLayerStateParams(new URLSearchParams('v=2'), five);
+  assert.match(fiveParams.get('lo'), /a\.s\.5/);
+  const fiveDecoded = decodeLayerStateParams(fiveParams);
+  assert.equal(fiveDecoded.options['ais-live-vessels'].minSpeed, '5');
+  assert.equal(layerOptionsForRestore(fiveDecoded, 'ais-live-vessels').minSpeed, '5');
+
+  const ten = normalizeLayerState({
+    enabledLayerIds: ['ais-live-vessels'],
+    options: { 'ais-live-vessels': { minSpeed: '10' } },
+  });
+  const tenParams = encodeLayerStateParams(new URLSearchParams('v=2'), ten);
+  assert.match(tenParams.get('lo'), /a\.s\.t/);
+  assert.equal(decodeLayerStateParams(tenParams).options['ais-live-vessels'].minSpeed, '10');
 });
 
 test('installation class chips persist on military-installations and default all on', () => {

@@ -69,6 +69,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has client-only **All | 5+ | 10+** min-speed chips next to Hide parked
+  and the Plan 153 type chips. Default All matches the current harbor view.
+  5+ skips in-memory vessels whose `speed` is a finite value under 5 kt;
+  10+ is stricter (under 10 kt). Missing or non-finite speed stays visible.
+  A selected vessel stays. Chip changes re-filter already fetched AIS rows
+  and AND with Tanker | Cargo | Passenger | Fishing | Service | Other and
+  Hide parked — no extra AISStream fetch and no `/api`. Preference persists
+  as `ais-live-vessels.minSpeed` (`a.s.5` / `a.s.t`). Hidden when the AIS
+  layer is off. Feed refresh keeps the floor. Existing AIS layer only.
 - Earthquake **Quake | Explosion | Quarry | Other** chips sit next to the
   reviewed and PAGER rows. Default all on matches the current USGS all_day
   discs. Chips filter cached `properties.type`: `earthquake` is Quake,
