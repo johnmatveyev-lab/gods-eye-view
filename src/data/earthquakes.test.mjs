@@ -13,6 +13,7 @@ import {
   DEFAULT_EARTHQUAKE_NETWORKS,
   DEFAULT_EARTHQUAKE_PAGER_ALERTS,
   DEFAULT_EARTHQUAKE_REVIEWED_ONLY,
+  DEFAULT_EARTHQUAKE_SIG_FLOOR,
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
   EARTHQUAKE_DEPTH_BANDS,
   EARTHQUAKE_EVENT_TYPES,
@@ -21,6 +22,8 @@ import {
   EARTHQUAKE_OVERLAY_COHORT_LIMIT,
   EARTHQUAKE_OVERLAY_COLLISION_CAPACITY,
   EARTHQUAKE_PAGER_ALERTS,
+  EARTHQUAKE_SIG_FLOOR_STORAGE_KEY,
+  EARTHQUAKE_SIGNIFICANT_SIG_CUTOFF,
   EARTHQUAKE_TIME_WINDOWS_HOURS,
   USGS_ALL_DAY_URL,
   createEarthquakeOverlayEntry,
@@ -34,6 +37,7 @@ import {
   filterEarthquakeFeaturesByNetwork,
   filterEarthquakeFeaturesByPagerAlert,
   filterEarthquakeFeaturesByReviewedStatus,
+  filterEarthquakeFeaturesBySigFloor,
   filterEarthquakeFeaturesByTimeWindow,
   filterEarthquakeFeaturesByTsunamiFlag,
   isSignificantEarthquake,
@@ -43,6 +47,7 @@ import {
   normalizeEarthquakeNetworks,
   normalizeEarthquakePagerAlerts,
   normalizeEarthquakeReviewedOnly,
+  normalizeEarthquakeSigFloor,
   normalizeEarthquakeTimeWindowHours,
   normalizeEarthquakeTsunamiOnly,
   selectEarthquakeOverlayCohort,
@@ -2941,6 +2946,329 @@ test('network chips sit next to mag/depth/time/tsunami/PAGER/reviewed/type/felt,
     assert.equal(layer.getParams().reviewedOnly, false);
     assert.equal(layer.getParams().feltOnly, false);
     assert.equal(layer.getParams().eventTypes, 'QERO');
+    assert.equal(layer.getParams().pagerAlerts, 'GYORN');
+    assert.equal(layer.getParams().sigFloor, DEFAULT_EARTHQUAKE_SIG_FLOOR);
+  } finally {
+    layer.destroy(viewer);
+  }
+});
+
+// ── Plan 183: significance-floor chips (client-side, same USGS all_day) ───────
+
+function sigFeature(id, mag, sig, {
+  depthKm = 8.2,
+  tsunami,
+  alert,
+  type,
+  status,
+  felt,
+  net,
+  time = 1_753_600_000_000,
+} = {}) {
+  const properties = { mag, place: String(id), time };
+  if (sig !== undefined) properties.sig = sig;
+  if (tsunami !== undefined) properties.tsunami = tsunami;
+  if (alert !== undefined) properties.alert = alert;
+  if (type !== undefined) properties.type = type;
+  if (status !== undefined) properties.status = status;
+  if (felt !== undefined) properties.felt = felt;
+  if (net !== undefined) properties.net = net;
+  return {
+    id,
+    geometry: { coordinates: [-122.4, 37.79, depthKm] },
+    properties,
+  };
+}
+
+const MIXED_SIG_DAY = Object.freeze({
+  features: Object.freeze([
+    sigFeature('low-145', 3.1, 145),
+    sigFeature('mid-340', 4.7, 340),
+    sigFeature('hi-600', 5.2, 600, { depthKm: 80 }),
+    sigFeature('missing-sig', 4.0),
+    sigFeature('nan-sig', 4.1, Number.NaN),
+    sigFeature('micro-sig', 2.4, 90),
+    sigFeature('us-tsunami', 4.4, 360, {
+      tsunami: 1,
+      alert: 'green',
+      type: 'earthquake',
+      status: 'reviewed',
+      felt: 6,
+      net: 'us',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+    sigFeature('us-fresh', 4.7, 280, {
+      alert: 'green',
+      status: 'reviewed',
+      felt: 9,
+      net: 'us',
+      time: 1_800_000_000_000 - 0.5 * HOUR_MS,
+    }),
+    sigFeature('tx-low', 4.0, 145, { net: 'tx' }),
+  ]),
+});
+
+test('significance chips default All and match the current mag/depth/time/tsunami/PAGER/reviewed/type/felt/network view', async () => {
+  assert.equal(DEFAULT_EARTHQUAKE_SIG_FLOOR, 'all');
+  assert.equal(EARTHQUAKE_SIGNIFICANT_SIG_CUTOFF, 600);
+  assert.equal(normalizeEarthquakeSigFloor(undefined), 'all');
+  assert.equal(normalizeEarthquakeSigFloor('300'), '300');
+  assert.equal(normalizeEarthquakeSigFloor('bogus'), null);
+  assert.equal(isSignificantEarthquake(5.0), true);
+  assert.equal(isSignificantEarthquake(4.7), false);
+
+  const current = filterEarthquakeFeatures(MIXED_SIG_DAY.features, {
+    magnitudeFloor: 2.5,
+    depthBands: DEFAULT_EARTHQUAKE_DEPTH_BANDS,
+    timeWindowHours: 24,
+    tsunamiOnly: false,
+    reviewedOnly: false,
+    feltOnly: false,
+    pagerAlerts: DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+    networks: DEFAULT_EARTHQUAKE_NETWORKS,
+  }).map((feature) => feature.id);
+  assert.deepEqual(
+    filterEarthquakeFeaturesBySigFloor(MIXED_SIG_DAY.features, DEFAULT_EARTHQUAKE_SIG_FLOOR)
+      .map((feature) => feature.id),
+    MIXED_SIG_DAY.features.map((feature) => feature.id),
+  );
+  assert.deepEqual(
+    filterEarthquakeFeatures(MIXED_SIG_DAY.features, {
+      magnitudeFloor: 2.5,
+      sigFloor: DEFAULT_EARTHQUAKE_SIG_FLOOR,
+    }).map((feature) => feature.id),
+    current,
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_SIG_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    assert.equal(layer.getParams().sigFloor, 'all');
+    assert.equal(await layer.update(viewer), true);
+    assert.deepEqual(entityIds(viewer._dataSources[0]), [...current].sort());
+    assert.equal(layer.getStats().count, current.length);
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('300+ hides a sig:145 M3.1 and keeps a sig:340 M4.7; missing sig stays; All restores', async () => {
+  const at300 = filterEarthquakeFeaturesBySigFloor(MIXED_SIG_DAY.features, '300')
+    .map((feature) => feature.id);
+  assert.ok(!at300.includes('low-145'));
+  assert.ok(at300.includes('mid-340'));
+  assert.ok(at300.includes('hi-600'));
+  assert.ok(at300.includes('missing-sig'));
+  assert.ok(at300.includes('nan-sig'));
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_SIG_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ sigFloor: '300' }), true);
+    let ids = entityIds(viewer._dataSources[0]);
+    assert.ok(!ids.includes('low-145'));
+    assert.ok(ids.includes('mid-340'));
+    assert.ok(ids.includes('missing-sig'));
+    assert.ok(!layer.getListRecords().some((row) => row.id === 'low-145'));
+    assert.equal(layer.setParams({ sigFloor: 'all' }), true);
+    ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('low-145'));
+    assert.ok(ids.includes('mid-340'));
+    assert.ok(ids.includes('missing-sig'));
+    assert.equal(layer.getParams().sigFloor, 'all');
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('selected event stays visible when its significance is below the floor', async () => {
+  assert.deepEqual(
+    filterEarthquakeFeaturesBySigFloor(MIXED_SIG_DAY.features, '300', {
+      selectedId: 'low-145',
+    }).map((feature) => feature.id).filter((id) => id === 'low-145' || id === 'mid-340'),
+    ['low-145', 'mid-340'],
+  );
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const feed = stubUsgs(MIXED_SIG_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ selectedId: 'low-145', sigFloor: '300' }), true);
+    const ids = entityIds(viewer._dataSources[0]);
+    assert.ok(ids.includes('low-145'));
+    assert.ok(ids.includes('mid-340'));
+    assert.ok(!ids.includes('micro-sig'));
+    assert.ok(layer.getListRecords().some((row) => row.id === 'low-145'));
+  } finally {
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('significance chips AND with mag/depth/time/tsunami/PAGER/reviewed/type/felt/network and redraw from cached geojson', async () => {
+  const now = 1_800_000_000_000;
+  const anded = filterEarthquakeFeatures(MIXED_SIG_DAY.features, {
+    magnitudeFloor: 4.0,
+    depthBands: 'S',
+    timeWindowHours: 1,
+    tsunamiOnly: true,
+    reviewedOnly: true,
+    feltOnly: true,
+    pagerAlerts: 'G',
+    eventTypes: 'Q',
+    networks: 'U',
+    sigFloor: '300',
+    now,
+  }).map((feature) => feature.id);
+  assert.deepEqual(anded, ['us-tsunami']);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const originalNow = Date.now;
+  Date.now = () => now;
+  const feed = stubUsgs(MIXED_SIG_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(feed.fetches, 1);
+    assert.equal(layer.setParams({
+      magnitudeFloor: 4.0,
+      depthBands: 'S',
+      timeWindowHours: 1,
+      tsunamiOnly: true,
+      reviewedOnly: true,
+      feltOnly: true,
+      pagerAlerts: 'G',
+      eventTypes: 'Q',
+      networks: 'U',
+      sigFloor: '300',
+    }), true);
+    assert.equal(feed.fetches, 1, 'significance chips must not refetch the already-cached all_day feed');
+    assert.deepEqual(entityIds(viewer._dataSources[0]), ['us-tsunami']);
+    assert.equal(layer.getParams().sigFloor, '300');
+    assert.equal(layer.getParams().networks, 'U');
+    assert.equal(layer.getParams().eventTypes, 'Q');
+    assert.equal(layer.getParams().feltOnly, true);
+    assert.equal(layer.getParams().reviewedOnly, true);
+    assert.equal(layer.getParams().tsunamiOnly, true);
+    assert.equal(layer.getParams().pagerAlerts, 'G');
+    assert.equal(layer.getParams().depthBands, 'S');
+    assert.equal(layer.getParams().magnitudeFloor, 4.0);
+    assert.equal(layer.getParams().timeWindowHours, 1);
+  } finally {
+    Date.now = originalNow;
+    feed.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('USGS refresh keeps the significance chip set applied to the new payload', async () => {
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  const first = stubUsgs(MIXED_SIG_DAY);
+  try {
+    layer.init(viewer);
+    layer.enable(viewer);
+    await layer.update(viewer);
+    assert.equal(layer.setParams({ sigFloor: '300' }), true);
+    assert.ok(!entityIds(viewer._dataSources[0]).includes('low-145'));
+    first.restore();
+    const second = stubUsgs({
+      features: [
+        sigFeature('fresh-340', 4.4, 340),
+        sigFeature('fresh-145', 3.3, 145),
+        sigFeature('mid-340', 4.7, 340),
+      ],
+    });
+    try {
+      assert.equal(await layer.update(viewer), true);
+      assert.equal(layer.getParams().sigFloor, '300');
+      assert.deepEqual(entityIds(viewer._dataSources[0]), ['fresh-340', 'mid-340']);
+      assert.ok(!entityIds(viewer._dataSources[0]).includes('fresh-145'));
+    } finally {
+      second.restore();
+    }
+  } finally {
+    first.restore();
+    layer.destroy(viewer);
+  }
+});
+
+test('significance chips sit next to mag/depth/time/tsunami/PAGER/reviewed/type/felt/network, persist, and hide with the layer', async () => {
+  const source = readFileSync(new URL('./earthquakes.js', import.meta.url), 'utf8');
+  const helper = readFileSync(new URL('./earthquakeSigFilter.js', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../../index.html', import.meta.url), 'utf8');
+  const ui = readFileSync(new URL('../ui.js', import.meta.url), 'utf8');
+  const css = readFileSync(new URL('../../style.css', import.meta.url), 'utf8');
+  assert.match(html, /id="earthquake-sig-chips"/);
+  assert.match(html, /data-earthquake-sig="all"/);
+  assert.match(html, /data-earthquake-sig="100"/);
+  assert.match(html, /data-earthquake-sig="300"/);
+  assert.match(html, /data-earthquake-sig="600"/);
+  assert.match(html, /id="earthquake-network-chips"/);
+  assert.match(html, /id="earthquake-type-chips"/);
+  assert.match(html, /id="earthquake-felt-chips"/);
+  assert.match(html, /id="earthquake-reviewed-chips"/);
+  assert.match(html, /id="earthquake-pager-chips"/);
+  assert.match(html, /id="earthquake-tsunami-chips"/);
+  assert.match(html, /id="earthquake-depth-chips"/);
+  assert.match(html, /id="earthquake-time-chips"/);
+  assert.match(ui, /earthquake-sig-chips|data-earthquake-sig/);
+  assert.match(ui, /_earthquakeSigChips\.hidden = !enabled/);
+  assert.match(css, /earthquake-sig-chip/);
+  assert.match(helper, /properties\.sig/);
+  assert.match(helper, /meridian\.earthquakeSigFloor/);
+  assert.match(source, /readEarthquakeSigFloor|writeEarthquakeSigFloor/);
+  assert.equal(EARTHQUAKE_SIG_FLOOR_STORAGE_KEY, 'meridian.earthquakeSigFloor');
+  assert.match(source, /USGS_ALL_DAY_URL|all_day\.geojson/);
+  assert.doesNotMatch(source, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(source, /significant_day|4\.5_day|2\.5_day|M1\.0_day/);
+  assert.doesNotMatch(html, /quantum-earth|opensky-network|news\.google|telegeography/i);
+  assert.doesNotMatch(helper, /quantum-earth|opensky-network|news\.google|telegeography/i);
+
+  const viewer = makeViewer();
+  const { overlayHost } = makeHost();
+  const layer = createEarthquakesLayer({ overlayHost });
+  try {
+    const chips = layer.getRowControls().chips;
+    const sigs = chips.filter((chip) => chip.id.startsWith('sig-'));
+    assert.deepEqual(sigs.map((chip) => chip.label), ['All', '100+', '300+', '600+']);
+    assert.deepEqual(sigs.map((chip) => chip.active), [true, false, false, false]);
+    assert.ok(sigs.every((chip) => chip.group === 'Significance'));
+    assert.equal(layer.getParams().sigFloor, 'all');
+    assert.equal(layer.setParams({ sigFloor: '300' }), true);
+    assert.deepEqual(
+      layer.getRowControls().chips.filter((chip) => chip.id.startsWith('sig-')).map((chip) => chip.active),
+      [false, false, true, false],
+    );
+    assert.equal(layer.setParams({ sigFloor: 'bogus' }), false);
+    assert.equal(layer.getParams().sigFloor, '300');
+    assert.equal(layer.getParams().magnitudeFloor, 2.5);
+    assert.equal(layer.getParams().timeWindowHours, 24);
+    assert.equal(layer.getParams().tsunamiOnly, false);
+    assert.equal(layer.getParams().reviewedOnly, false);
+    assert.equal(layer.getParams().feltOnly, false);
+    assert.equal(layer.getParams().eventTypes, 'QERO');
+    assert.equal(layer.getParams().networks, 'UACNO');
     assert.equal(layer.getParams().pagerAlerts, 'GYORN');
   } finally {
     layer.destroy(viewer);

@@ -63,6 +63,14 @@ import {
   normalizeEarthquakeNetworks,
   toggleEarthquakeNetwork,
 } from './earthquakeNetworkFilter.js';
+import {
+  DEFAULT_EARTHQUAKE_SIG_FLOOR,
+  earthquakeSigFloorChipModels,
+  filterEarthquakeFeaturesBySigFloor,
+  normalizeEarthquakeSigFloor,
+  readEarthquakeSigFloor,
+  writeEarthquakeSigFloor,
+} from './earthquakeSigFilter.js';
 
 export {
   DEFAULT_EARTHQUAKE_TIME_WINDOW_HOURS,
@@ -138,6 +146,21 @@ export {
   toggleEarthquakeNetwork,
 } from './earthquakeNetworkFilter.js';
 
+export {
+  DEFAULT_EARTHQUAKE_SIG_FLOOR,
+  EARTHQUAKE_SIG_FLOORS,
+  EARTHQUAKE_SIG_FLOOR_STORAGE_KEY,
+  EARTHQUAKE_SIGNIFICANT_SIG_CUTOFF,
+  earthquakeMatchesSigFloor,
+  earthquakeSigFloorChipModels,
+  earthquakeSigFloorValue,
+  earthquakeSignificance,
+  filterEarthquakeFeaturesBySigFloor,
+  normalizeEarthquakeSigFloor,
+  readEarthquakeSigFloor,
+  writeEarthquakeSigFloor,
+} from './earthquakeSigFilter.js';
+
 /**
  * USGS earthquake discs — last 24 hours, operator floor 2.5+ / 4.0+ / 5.0+ / 6.0+
  * (default 2.5+, the historic hard-skip), Shallow | Intermediate | Deep chips
@@ -145,10 +168,12 @@ export {
  * (default 24h), a Tsunami only toggle (default off), a Reviewed only
  * toggle (default off), a Felt only toggle (default off), Quake |
  * Explosion | Quarry | Other type chips (default all on), US | AK | CI |
- * NC | Other network chips (default all on), and Green | Yellow | Orange |
- * Red | None PAGER chips (default all on). Floor, depth, time, tsunami,
- * reviewed, felt, type, network, and PAGER chips re-filter the last
- * all_day GeoJSON in memory; they do not change the USGS product.
+ * NC | Other network chips (default all on), Green | Yellow | Orange |
+ * Red | None PAGER chips (default all on), and exclusive All | 100+ |
+ * 300+ | 600+ significance-floor chips (default All; 600 is USGS's own
+ * significant cutoff on properties.sig). Floor, depth, time, tsunami,
+ * reviewed, felt, type, network, PAGER, and significance chips re-filter
+ * the last all_day GeoJSON in memory; they do not change the USGS product.
  *
  * Ellipse axes are STATIC (plain numbers), redefined only when a poll brings
  * new data. They must never become a `CallbackProperty` again: every entity
@@ -358,10 +383,11 @@ export function filterEarthquakeFeaturesByDepthBands(
 /**
  * AND the operator magnitude floor, depth chips, time window, tsunami flag,
  * reviewed-status toggle, felt-report toggle, event-type chips, contributing-
- * network chips, and PAGER alert chips. A selected event stays visible
- * through the tsunami, reviewed, felt, type, network, and PAGER gates.
+ * network chips, PAGER alert chips, and significance-floor chips. A selected
+ * event stays visible through the tsunami, reviewed, felt, type, network,
+ * PAGER, and significance gates.
  * @param {Array<object>|null|undefined} features
- * @param {{magnitudeFloor?: number, depthBands?: unknown, timeWindowHours?: unknown, tsunamiOnly?: unknown, reviewedOnly?: unknown, feltOnly?: unknown, eventTypes?: unknown, networks?: unknown, pagerAlerts?: unknown, selectedId?: string|null, now?: number}} [options]
+ * @param {{magnitudeFloor?: number, depthBands?: unknown, timeWindowHours?: unknown, tsunamiOnly?: unknown, reviewedOnly?: unknown, feltOnly?: unknown, eventTypes?: unknown, networks?: unknown, pagerAlerts?: unknown, sigFloor?: unknown, selectedId?: string|null, now?: number}} [options]
  * @returns {Array<object>}
  */
 export function filterEarthquakeFeatures(features, {
@@ -374,39 +400,44 @@ export function filterEarthquakeFeatures(features, {
   eventTypes = DEFAULT_EARTHQUAKE_EVENT_TYPES,
   networks = DEFAULT_EARTHQUAKE_NETWORKS,
   pagerAlerts = DEFAULT_EARTHQUAKE_PAGER_ALERTS,
+  sigFloor = DEFAULT_EARTHQUAKE_SIG_FLOOR,
   selectedId = null,
   now = Date.now(),
 } = {}) {
-  return filterEarthquakeFeaturesByNetwork(
-    filterEarthquakeFeaturesByPagerAlert(
-      filterEarthquakeFeaturesByEventType(
-        filterEarthquakeFeaturesByFeltReports(
-          filterEarthquakeFeaturesByReviewedStatus(
-            filterEarthquakeFeaturesByTsunamiFlag(
-              filterEarthquakeFeaturesByTimeWindow(
-                filterEarthquakeFeaturesByDepthBands(
-                  filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
-                  depthBands,
+  return filterEarthquakeFeaturesBySigFloor(
+    filterEarthquakeFeaturesByNetwork(
+      filterEarthquakeFeaturesByPagerAlert(
+        filterEarthquakeFeaturesByEventType(
+          filterEarthquakeFeaturesByFeltReports(
+            filterEarthquakeFeaturesByReviewedStatus(
+              filterEarthquakeFeaturesByTsunamiFlag(
+                filterEarthquakeFeaturesByTimeWindow(
+                  filterEarthquakeFeaturesByDepthBands(
+                    filterEarthquakeFeaturesByMagnitudeFloor(features, magnitudeFloor),
+                    depthBands,
+                  ),
+                  timeWindowHours,
+                  now,
                 ),
-                timeWindowHours,
-                now,
+                tsunamiOnly,
+                { selectedId },
               ),
-              tsunamiOnly,
+              reviewedOnly,
               { selectedId },
             ),
-            reviewedOnly,
+            feltOnly,
             { selectedId },
           ),
-          feltOnly,
+          eventTypes,
           { selectedId },
         ),
-        eventTypes,
+        pagerAlerts,
         { selectedId },
       ),
-      pagerAlerts,
+      networks,
       { selectedId },
     ),
-    networks,
+    sigFloor,
     { selectedId },
   );
 }
@@ -521,6 +552,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
   let _eventTypes = DEFAULT_EARTHQUAKE_EVENT_TYPES;
   let _networks = DEFAULT_EARTHQUAKE_NETWORKS;
   let _pagerAlerts = DEFAULT_EARTHQUAKE_PAGER_ALERTS;
+  let _sigFloor = readEarthquakeSigFloor();
   let _selectedId = null;
   let _lastGeojson = null;
 
@@ -536,6 +568,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       eventTypes: _eventTypes,
       networks: _networks,
       pagerAlerts: _pagerAlerts,
+      sigFloor: _sigFloor,
       selectedId: _selectedId,
     });
     _dataSource.entities.removeAll();
@@ -614,7 +647,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
 
     _count = count;
     _listRecords = listRecords;
-    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands} · ${_timeWindowHours}h${_tsunamiOnly ? ' · tsunami' : ''}${_reviewedOnly ? ' · reviewed' : ''}${_feltOnly ? ' · felt' : ''}${_eventTypes !== DEFAULT_EARTHQUAKE_EVENT_TYPES ? ` · types ${_eventTypes}` : ''}${_networks !== DEFAULT_EARTHQUAKE_NETWORKS ? ` · nets ${_networks}` : ''}${_pagerAlerts !== DEFAULT_EARTHQUAKE_PAGER_ALERTS ? ` · pager ${_pagerAlerts}` : ''})`);
+    console.log(`[Data:Earthquakes] Updated: ${_count} events (M${_magnitudeFloor.toFixed(1)}+ · ${_depthBands} · ${_timeWindowHours}h${_tsunamiOnly ? ' · tsunami' : ''}${_reviewedOnly ? ' · reviewed' : ''}${_feltOnly ? ' · felt' : ''}${_eventTypes !== DEFAULT_EARTHQUAKE_EVENT_TYPES ? ` · types ${_eventTypes}` : ''}${_networks !== DEFAULT_EARTHQUAKE_NETWORKS ? ` · nets ${_networks}` : ''}${_pagerAlerts !== DEFAULT_EARTHQUAKE_PAGER_ALERTS ? ` · pager ${_pagerAlerts}` : ''}${_sigFloor !== DEFAULT_EARTHQUAKE_SIG_FLOOR ? ` · sig ${_sigFloor}+` : ''})`);
   }
 
   const layer = {
@@ -705,6 +738,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _eventTypes = DEFAULT_EARTHQUAKE_EVENT_TYPES;
     _networks = DEFAULT_EARTHQUAKE_NETWORKS;
     _pagerAlerts = DEFAULT_EARTHQUAKE_PAGER_ALERTS;
+    _sigFloor = DEFAULT_EARTHQUAKE_SIG_FLOOR;
     _selectedId = null;
   },
 
@@ -719,6 +753,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       eventTypes: _eventTypes,
       networks: _networks,
       pagerAlerts: _pagerAlerts,
+      sigFloor: _sigFloor,
       selectedId: _selectedId,
     };
   },
@@ -734,8 +769,9 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     const hasEventTypes = Object.hasOwn(params, 'eventTypes');
     const hasNetworks = Object.hasOwn(params, 'networks');
     const hasPager = Object.hasOwn(params, 'pagerAlerts');
+    const hasSig = Object.hasOwn(params, 'sigFloor');
     const hasSelected = Object.hasOwn(params, 'selectedId');
-    if (!hasFloor && !hasDepth && !hasTime && !hasTsunami && !hasReviewed && !hasFelt && !hasEventTypes && !hasNetworks && !hasPager && !hasSelected) return true;
+    if (!hasFloor && !hasDepth && !hasTime && !hasTsunami && !hasReviewed && !hasFelt && !hasEventTypes && !hasNetworks && !hasPager && !hasSig && !hasSelected) return true;
 
     let nextFloor = _magnitudeFloor;
     if (hasFloor) {
@@ -800,6 +836,13 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       nextPager = alerts;
     }
 
+    let nextSig = _sigFloor;
+    if (hasSig) {
+      const floor = normalizeEarthquakeSigFloor(params.sigFloor);
+      if (floor == null) return false;
+      nextSig = floor;
+    }
+
     let nextSelected = _selectedId;
     if (hasSelected) {
       nextSelected = params.selectedId == null || params.selectedId === ''
@@ -817,6 +860,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
       && nextEventTypes === _eventTypes
       && nextNetworks === _networks
       && nextPager === _pagerAlerts
+      && nextSig === _sigFloor
       && nextSelected === _selectedId
     ) return true;
     _magnitudeFloor = nextFloor;
@@ -828,6 +872,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
     _eventTypes = nextEventTypes;
     _networks = nextNetworks;
     _pagerAlerts = nextPager;
+    if (hasSig) writeEarthquakeSigFloor(nextSig);
+    _sigFloor = nextSig;
     _selectedId = nextSelected;
     applyCachedGeojson();
     return true;
@@ -907,6 +953,7 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
           title: EARTHQUAKE_PAGER_ALERT_TITLES[alert],
           params: { pagerAlerts: toggleEarthquakePagerAlert(_pagerAlerts, alert) },
         })),
+        ...earthquakeSigFloorChipModels(_sigFloor),
       ],
       legend: [],
     };
@@ -949,7 +996,8 @@ export function createEarthquakesLayer({ overlayHost = DEFAULT_OVERLAY_HOST } = 
    * Snapshot for the hosted Quakes list. Same USGS features the discs
    * already parsed — no second fetch — and already clipped to the operator
    * magnitude floor, depth chips, time window, tsunami flag, reviewed
-   * status, felt reports, event type, contributing network, AND PAGER alert.
+   * status, felt reports, event type, contributing network, PAGER alert,
+   * AND significance floor.
    * A failed feed returns []
    * so the list can show UNAVAILABLE instead of stale rows or a hang.
    * @returns {Array<Object>}

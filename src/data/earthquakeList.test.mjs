@@ -303,6 +303,9 @@ test('legal: USGS credit, Meridian title, MIT notice, no banned sources', () => 
   assert.match(html, /data-earthquake-pager="green"/);
   assert.match(html, /id="earthquake-type-chips"/);
   assert.match(html, /data-earthquake-type="quake"/);
+  assert.match(html, /id="earthquake-network-chips"/);
+  assert.match(html, /id="earthquake-sig-chips"/);
+  assert.match(html, /data-earthquake-sig="300"/);
   assert.doesNotMatch(html, /quantum-earth/i);
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
   assert.match(credits, /Data courtesy of the U\.S\. Geological Survey/);
