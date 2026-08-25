@@ -3051,6 +3051,10 @@ export class StyleManager {
     // lifts the map camera after a move when an existing terrain helper
     // says the eye is below the mesh. Cockpit interior skips this clamp.
     this._keepAboveEnabled = true;
+    this._airborneOnlyBtn = document.getElementById('airborne-only-toggle');
+    // DISPLAY-rail Airborne only. Default OFF so parked/taxi draw stays until
+    // the operator arms it. Persists with existing flight layer options.
+    this._airborneOnly = false;
 
     // The shared world-overlay host must own its one postRender lane before
     // detection and tracked-readout initialize. It stays transparent until a
@@ -3115,6 +3119,7 @@ export class StyleManager {
     this._initTrailsToggle();
     this._initEmergencyHighlightToggle();
     this._initKeepAboveToggle();
+    this._initAirborneOnlyToggle();
     this._initLiveSunToggle();
     this._initScaleBar();
     this._initLockTiltToggle();
@@ -5364,6 +5369,7 @@ export class StyleManager {
           onDurableStateChange: (state) => {
             this._syncModels3dFromLayerState(state);
             this._syncSpeedBandFromLayerState(state);
+            this._syncAirborneOnlyFromLayerState(state);
           },
           onTrackingRestoreStatus: (result) => this._handleShareTrackingRestoreStatus(result),
         },
@@ -5385,6 +5391,7 @@ export class StyleManager {
         const durable = this._layerStateCoordinator?.getDurableState();
         this._syncModels3dFromLayerState(durable);
         this._syncSpeedBandFromLayerState(durable);
+        this._syncAirborneOnlyFromLayerState(durable);
         // Share links keep their encoded models3d; a laptop that chose Models
         // off via meridian.models otherwise stays on the billboard path.
         if (!this._initialShareState) this._applyStoredModelsPreference();
@@ -11788,6 +11795,37 @@ export class StyleManager {
   _syncKeepAboveButtonState() {
     this._keepAboveBtn?.classList.toggle('active', this._keepAboveEnabled);
     this._keepAboveBtn?.setAttribute('aria-pressed', String(this._keepAboveEnabled));
+  }
+
+  /**
+   * Wires the DISPLAY-rail Airborne only toggle to both flight layers.
+   * On hides contacts with the existing onGround flag; a selected/tracked
+   * contact that just landed stays visible. Persists as flights.airborneOnly.
+   */
+  _initAirborneOnlyToggle() {
+    this._syncAirborneOnlyButtonState();
+    this._airborneOnlyBtn?.addEventListener('click', () => {
+      this._setAirborneOnlyEnabled(!this._airborneOnly);
+    });
+  }
+
+  _setAirborneOnlyEnabled(enabled) {
+    this._airborneOnly = !!enabled;
+    this._dataManager?.setLayerParams('flights', { airborneOnly: this._airborneOnly }, { origin: 'user' });
+    this._dataManager?.setLayerParams('military', { airborneOnly: this._airborneOnly }, { origin: 'user' });
+    this._syncAirborneOnlyButtonState();
+  }
+
+  _syncAirborneOnlyFromLayerState(state) {
+    const options = state?.options?.flights;
+    if (!options) return;
+    this._airborneOnly = options.airborneOnly === true;
+    this._syncAirborneOnlyButtonState();
+  }
+
+  _syncAirborneOnlyButtonState() {
+    this._airborneOnlyBtn?.classList.toggle('active', this._airborneOnly);
+    this._airborneOnlyBtn?.setAttribute('aria-pressed', String(this._airborneOnly));
   }
 
   _initHUDToggle() {

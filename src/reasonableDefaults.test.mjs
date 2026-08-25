@@ -274,6 +274,15 @@ test('a share link that carries detection OFF still restores OFF', () => {
   assert.equal(dense.detectionDensity, 75);
 });
 
+test('first run opens with Airborne only off so grounded contacts still draw', () => {
+  assert.match(indexHtml, /id="airborne-only-toggle"[^>]*aria-pressed="false"/,
+    'index.html: Airborne only paints unpressed before ui.js hydrates');
+  assert.match(uiSource, /this\._airborneOnly = false;/,
+    'ui.js: the DISPLAY rail believes Airborne only is off');
+  assert.match(uiSource, /_initAirborneOnlyToggle/,
+    'ui.js: the control is wired to existing flight layer options');
+});
+
 test('first run opens with tracked-target trails on', () => {
   assert.match(indexHtml, /class="pp-toggle-btn active" id="trails-toggle" aria-pressed="true"/,
     'index.html: Trails paints lit before ui.js hydrates storage');
