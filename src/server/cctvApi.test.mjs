@@ -91,7 +91,10 @@ test('Vercel CCTV entry forwards to the existing catalog proxy only', () => {
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/cctv/[...path].js']);
   assert.equal(vercelJson.functions['api/cctv/[...path].js'].includeFiles, 'config/**');
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
 });
 

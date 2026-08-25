@@ -98,7 +98,10 @@ test('Vercel Node entry forwards to handleGbfsHttp without a Next rewrite', () =
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/gbfs/[...target].js']);
-  assert.equal(Array.isArray(vercelJson.rewrites), false);
+  for (const rule of vercelJson.rewrites || []) {
+    assert.match(rule.source, /^\/api\/tomtom\//);
+    assert.match(rule.destination, /^\/api\/tomtom\//);
+  }
   assert.doesNotMatch(JSON.stringify(vercelJson), /index\.html/);
 });
 
