@@ -29,8 +29,16 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 const indexHtml = readFileSync(path.join(ROOT, 'index.html'), 'utf8');
 const uiSource = readFileSync(path.join(ROOT, 'src', 'ui.js'), 'utf8');
 const flightsSource = readFileSync(path.join(ROOT, 'src', 'data', 'flights.js'), 'utf8');
+const militarySource = readFileSync(path.join(ROOT, 'src', 'data', 'militaryFlights.js'), 'utf8');
 const firstRunSource = readFileSync(path.join(ROOT, 'src', 'firstRunExperience.js'), 'utf8');
 const license = readFileSync(path.join(ROOT, 'LICENSE'), 'utf8');
+
+function militaryShapedMatches(info, band) {
+  return aircraftMatchesAltitudeBand({
+    altitudeM: Number.isFinite(info?.altitudeFt) ? info.altitudeFt * 0.3048 : null,
+    onGround: info?.onGround === true,
+  }, band);
+}
 
 function memoryStorage(initial = {}) {
   const data = { ...initial };
@@ -178,9 +186,30 @@ test('DISPLAY chrome and flights layer stay client-side on the current payload',
   assert.match(uiSource, /subscribeDistanceUnit/);
   assert.match(flightsSource, /aircraftMatchesAltitudeBand|filterFlightsByAltitudeBand|applyAltitudeBandToFlights/);
   assert.match(flightsSource, /hydrateAltitudeBand|getAltitudeBand|subscribeAltitudeBand/);
+  assert.match(militarySource, /aircraftMatchesAltitudeBand/);
+  assert.match(militarySource, /subscribeAltitudeBand/);
+  const militaryAndMatchers = militarySource.match(/andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher\]/g);
+  assert.equal(militaryAndMatchers?.length, 2, 'both military andMatchers arrays include _altitudeAndMatcher');
   assert.doesNotMatch(uiSource.slice(uiSource.indexOf('_initAltitudeBand'), uiSource.indexOf('_initAltitudeBand') + 800), /fetch\(|\/api\//);
   assert.doesNotMatch(flightsSource, /opensky-network\.org|google\.com\/news|telegeography/i);
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
+}
+
+test('military altitudeFt converts to meters for the shared Alt chips', () => {
+  const low = { altitudeFt: 3500, onGround: false };
+  const high = { altitudeFt: 37000, onGround: false };
+  const ground = { onGround: true };
+
+  assert.equal(militaryShapedMatches(low, 'gt30k'), false);
+  assert.equal(militaryShapedMatches(low, 'lt10k'), true);
+  assert.equal(militaryShapedMatches(high, 'gt30k'), true);
+  assert.equal(militaryShapedMatches(high, 'lt10k'), false);
+
+  assert.equal(militaryShapedMatches(ground, 'surface'), true);
+  assert.equal(militaryShapedMatches(ground, 'lt10k'), false);
+  assert.equal(militaryShapedMatches(ground, 'mid'), false);
+  assert.equal(militaryShapedMatches(ground, 'gt30k'), false);
+  assert.equal(militaryShapedMatches(ground, 'all'), true);
 });
 
 test('first-run missions do not write meridian.altBand', () => {
