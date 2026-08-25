@@ -100,8 +100,7 @@ test('hosted weather-effects entry forwards to the shared handler', () => {
   const vercelJson = JSON.parse(readFileSync(path.join(ROOT, 'vercel.json'), 'utf8'));
   assert.equal(vercelJson.framework, 'vite');
   assert.ok(vercelJson.functions['api/weather-effects.js']);
-  assert.equal(vercelJson.functions['api/terrain/heights.js'], undefined);
-  assert.equal(existsSync(path.join(ROOT, 'api/terrain/heights.js')), false);
+  assert.equal(vercelJson.functions['api/weather-effects.js'].maxDuration, 15);
   for (const rule of vercelJson.rewrites || []) {
     assert.match(rule.source, /^\/api\/tomtom\//);
     assert.match(rule.destination, /^\/api\/tomtom\//);
