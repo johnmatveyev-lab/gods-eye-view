@@ -29,7 +29,7 @@ const FADE_MS = 1200;
 // Hard ceiling on simultaneously-live marks. Protects against a runaway voice
 // session (or a bad model call that keeps appending) from accumulating unbounded
 // Cesium entities + SVG nodes. Persistent marks accumulate until cleared.
-const MAX_LIVE_ANNOTATIONS = 120;
+export const MAX_LIVE_ANNOTATIONS = 120;
 // Deferred-outline retry backoff. A TRANSIENT Overpass failure (slow mirror, network
 // blip) aborts the client fetch, but the /api/overpass proxy keeps the upstream
 // request going and caches the late completion — so a re-run ~8 s later is usually a

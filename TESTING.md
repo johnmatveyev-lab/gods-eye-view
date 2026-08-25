@@ -76,6 +76,7 @@ settled and not applicable because no Google 3D tileset is active.
   - **Undo last annotation** (next to Clear) — drops only the last mark. Disabled when the board is empty. Does not cancel an in-flight annotate.
   - **Export annotations** (next to Undo) — downloads `meridian-annotations.geojson` from the live board. Disabled when the board is empty.
   - **Import annotations** (next to Export) — file picker for that GeoJSON. Appends marks from coordinates only (no geocode). Stays enabled on an empty board. Malformed files toast `Invalid GeoJSON` and change nothing.
+  - Persistent marks (`persist: true`) are snapshotted to `meridian.annotations` on `onChange` and restored on reload. Clear empties that key. TTL marks do not come back.
 
 ---
 

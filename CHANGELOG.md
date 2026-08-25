@@ -33,6 +33,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Persistent whiteboard marks now survive a reload. `onChange` writes a compact
+  snapshot of persistent marks (`id`, `type`, `label`, `color`, `anchor`, `to`,
+  `ring`/`path`) to `meridian.annotations`. Boot restores once through the same
+  latitude/longitude `annotate()` path as Import — no geocode, Places, or
+  Overpass. TTL / expiring marks are skipped. Clear empties the key. Undo,
+  Import, and Export stay the live-board source of truth. Operator-local only;
+  not an alert service. No new chrome and no `/api`.
 - Netlify hosting: `netlify.toml` publishes the Vite `dist`, pins Node 24, and
   serves `/api/*` through a Functions v2 catch-all that invokes the existing
   Vercel Node handlers. The SPA fallback is `/index.html` only after `/api/*`.
