@@ -13,6 +13,8 @@ import {
   SAT_LAUNCH_YEAR_STORAGE_KEY,
   filterSatellitesByLaunchYear,
   getSatLaunchYear,
+  attachInternationalDesignator,
+  internationalDesignatorFromTleLine1,
   internationalDesignatorYear,
   normalizeSatLaunchYear,
   readSatLaunchYearPreference,
@@ -174,9 +176,18 @@ test('normalize accepts only All | 2020s | 2010s | older chip ids', () => {
 });
 
 test('internationalDesignatorYear decodes satrec.intldesg 57–99 as 1900s else 2000s', () => {
+  const issLine1 = ISS_TLE.split('\n')[1];
+  const starlinkLine1 = STARLINK_2024_TLE.split('\n')[1];
+  const navLine1 = NAV_2010_TLE.split('\n')[1];
   const iss = satrecFromTle(ISS_TLE);
   const starlink = satrecFromTle(STARLINK_2024_TLE);
   const nav = satrecFromTle(NAV_2010_TLE);
+  assert.equal(iss.intldesg, undefined, 'satellite.js 6 does not copy TLE columns 10–17');
+  assert.equal(internationalDesignatorFromTleLine1(issLine1), '98067A');
+  assert.equal(internationalDesignatorFromTleLine1(starlinkLine1), '24001A');
+  attachInternationalDesignator(iss, issLine1);
+  attachInternationalDesignator(starlink, starlinkLine1);
+  attachInternationalDesignator(nav, navLine1);
   assert.match(String(iss.intldesg), /^98067A/);
   assert.match(String(starlink.intldesg), /^24001A/);
   assert.equal(internationalDesignatorYear(iss), 1998);

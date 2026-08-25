@@ -57,6 +57,7 @@ import {
 } from './satelliteEccentricityFilter.js';
 import {
   DEFAULT_SAT_LAUNCH_YEAR,
+  attachInternationalDesignator,
   getSatLaunchYear,
   internationalDesignatorYear,
   resetSatLaunchYearCache,
@@ -727,6 +728,17 @@ function parseTLE(text) {
 }
 
 /**
+ * Parse a TLE pair and stamp `satrec.intldesg` from line 1 columns 10–17.
+ * satellite.js 6 does not copy that existing CelesTrak field.
+ * @param {string} line1
+ * @param {string} line2
+ * @returns {object}
+ */
+function satrecFromTleLines(line1, line2) {
+  return attachInternationalDesignator(twoline2satrec(line1, line2), line1);
+}
+
+/**
  * Propagate satellite position at a given JS Date.
  * Returns geodetic position plus inertial speed from the same SGP4 propagation
  * epoch, or null on error.
@@ -1370,7 +1382,7 @@ async function _loadDenseCatalog({ signal = null } = {}) {
       const end = Math.min(start + DENSE_CREATE_CHUNK, entries.length);
       for (let i = start; i < end; i++) {
         const entry = entries[i];
-        const satrec = twoline2satrec(entry.line1, entry.line2);
+        const satrec = satrecFromTleLines(entry.line1, entry.line2);
         if (!satrec || satrec.error !== 0) continue;
         const noradId = Number(satrec.satnum);
         if (_catalog.has(noradId)) continue; // core catalog keeps priority
@@ -2076,7 +2088,7 @@ const satellitesLayer = {
       const seen = new Set();
 
       for (const entry of allEntries) {
-        const satrec = twoline2satrec(entry.line1, entry.line2);
+        const satrec = satrecFromTleLines(entry.line1, entry.line2);
         if (!satrec || satrec.error !== 0) continue;
 
         const noradId = Number(satrec.satnum);
@@ -2750,7 +2762,7 @@ async function _fetchIssSatrecSidecar(signal) {
     const entries = parseTLE(await res.text());
     if (signal) signal.throwIfAborted();
     for (const entry of entries) {
-      const satrec = twoline2satrec(entry.line1, entry.line2);
+      const satrec = satrecFromTleLines(entry.line1, entry.line2);
       if (!satrec || satrec.error !== 0) continue;
       if (Number(satrec.satnum) !== ISS_NORAD) continue;
       _issSatrec = satrec;
@@ -2862,7 +2874,7 @@ export function findSatelliteOrbitTrackInTle(tleText, query, options = {}) {
     }
   }
   if (!bestEntry || bestScore < 12) return null;
-  const satrec = twoline2satrec(bestEntry.line1, bestEntry.line2);
+  const satrec = satrecFromTleLines(bestEntry.line1, bestEntry.line2);
   if (!satrec || satrec.error !== 0) return null;
   return orbitTrackFromRecord(bestEntry.name, satrec);
 }

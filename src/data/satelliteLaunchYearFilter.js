@@ -59,6 +59,31 @@ export function normalizeSatLaunchYear(value) {
 }
 
 /**
+ * TLE line 1 columns 10–17 (COSPAR / international designator).
+ * satellite.js 6 does not copy this onto the satrec.
+ * @param {string|null|undefined} line1
+ * @returns {string}
+ */
+export function internationalDesignatorFromTleLine1(line1) {
+  return String(line1 || '').slice(9, 17).trim();
+}
+
+/**
+ * Stamp `satrec.intldesg` from the already-fetched TLE line so launch-year
+ * chips can read the existing CelesTrak field. No-op when the satrec already
+ * carries a designator or the line has no columns 10–17.
+ * @param {{intldesg?: string}|null|undefined} satrec
+ * @param {string|null|undefined} line1
+ * @returns {{intldesg?: string}|null|undefined}
+ */
+export function attachInternationalDesignator(satrec, line1) {
+  if (!satrec || satrec.intldesg) return satrec;
+  const designator = internationalDesignatorFromTleLine1(line1);
+  if (designator) satrec.intldesg = designator;
+  return satrec;
+}
+
+/**
  * Decode the COSPAR / international-designator year from a satellite.js satrec.
  * `intldesg` is the TLE field (`YYNNNPPP`, e.g. `98067A`). 57–99 → 1900s,
  * else 2000s. Missing or unparseable designators return null.
