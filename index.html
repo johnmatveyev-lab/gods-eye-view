@@ -457,6 +457,12 @@
       </div>
     </div>
     <div class="pp-toggle-group">
+      <button class="pp-toggle-btn active" id="scale-bar-toggle" title="Scale bar — on-globe distance in the current unit" aria-pressed="true">
+        <span class="pp-icon" aria-hidden="true">▬</span>
+        <span class="pp-label">Scale</span>
+      </button>
+    </div>
+    <div class="pp-toggle-group">
       <button class="pp-toggle-btn" id="detection-toggle" title="Detection Overlay (D)" aria-label="Detection overlay" aria-pressed="false">
         <span class="pp-icon">&#x25A3;</span>
         <span class="pp-label">DETECT</span>
@@ -1083,6 +1089,16 @@
       <div data-clerk-sign-in hidden></div>
       <button type="button" class="billing-modal-primary" data-billing-primary>Continue</button>
     </div>
+  </div>
+
+  <!-- Local scale bar. Sits next to #cesium-credits, including clean view. -->
+  <div id="scale-bar" class="scale-bar" role="img" aria-label="Scale" hidden>
+    <div class="scale-bar-track" aria-hidden="true">
+      <span class="scale-bar-tick"></span>
+      <span class="scale-bar-shaft"></span>
+      <span class="scale-bar-tick"></span>
+    </div>
+    <span class="scale-bar-label">—</span>
   </div>
 
   <!-- Intelligence HUD Overlay -->
