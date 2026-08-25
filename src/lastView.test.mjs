@@ -112,6 +112,17 @@ test('moveEnd persists lastView and a clean reload restores that pose', () => {
   assert.equal(restored.alt, 800);
 });
 
+test('lastView that includes fires restores fires, not the first-visit flights default', () => {
+  const firesHash = `${SHARE_HASH}&l=w`;
+  const storage = memoryStorage();
+  writeLastView(storage, encodeShareViewUrl(HREF, firesHash));
+  const manager = makeManager('', { storage });
+  const parsed = manager.parseInitialHash();
+  assert.ok(parsed?.layerState, 'clean URL must apply lastView layers');
+  assert.deepEqual(parsed.layerState.enabledLayerIds, ['local-firms']);
+  assert.equal(parsed.layerState.enabledLayerIds.includes('flights'), false);
+});
+
 test('an incoming share link wins over lastView', () => {
   const storage = memoryStorage();
   writeLastView(storage, encodeShareViewUrl(HREF, SHARE_HASH));
