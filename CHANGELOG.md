@@ -7,6 +7,10 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Space Missions PREV/NEXT and the N/M index walk the chip-filtered roster
+  (status AND provider), not the full 30-day launch list. Rocket Lab-only is
+  `1 / 2` then `2 / 2`; NEXT from Grain Goddess is Lightning God, never the
+  next SpaceX row. Ends of the filtered list disable. Client-only; no `/api`.
 - Hosted CelesTrak disk cache writes `/tmp/meridian-celestrak` on Netlify /
   Vercel / Lambda instead of `cwd/.gev-cache` (`/var/task` is read-only). A
   seeded body plus upstream miss is 200 `STALE-ERROR`, not 502 `NONE`. Write

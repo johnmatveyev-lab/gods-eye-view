@@ -23,6 +23,8 @@ import rocketLaunchesLayer, {
   missionPathPresentation,
   missionRosterEntries,
   launchPassesMissionFilters,
+  missionRosterNavState,
+  selectAdjacentMission,
   missionZoomPitch,
   orbitProgressAtTime,
   normalizeReplaySpeed,
@@ -543,6 +545,101 @@ test('status Go AND one provider keeps only matching missions', () => {
     selectedLaunchId: 'ula-go',
   });
   assert.deepEqual(selected.map((entry) => entry.launch.id).sort(), ['sx-go', 'ula-go']);
+});
+
+function rocketLabNavLaunches(includeTbd = false) {
+  return [
+    {
+      id: 'grain-goddess',
+      name: 'Electron | The Grain Goddess Provides',
+      provider: 'Rocket Lab',
+      status: 'Go',
+      launchTime: '2026-07-20T00:00:00Z',
+    },
+    {
+      id: 'starlink-17-38',
+      name: 'Falcon 9 | Starlink Group 17-38',
+      provider: 'SpaceX',
+      status: 'Go',
+      launchTime: '2026-07-19T00:00:00Z',
+    },
+    ...(includeTbd ? [{
+      id: 'rocket-lab-tbd',
+      name: 'Electron | Filtered TBD',
+      provider: 'Rocket Lab',
+      status: 'TBD',
+      launchTime: '2026-07-18T12:00:00Z',
+    }] : []),
+    {
+      id: 'lightning-god',
+      name: 'Electron | Lightning God',
+      provider: 'Rocket Lab',
+      status: 'Go',
+      launchTime: '2026-07-18T00:00:00Z',
+    },
+  ];
+}
+
+function rocketLabOnlyFilter() {
+  return normalizeLaunchProviderFilter({
+    'Rocket Lab': true,
+    SpaceX: false,
+  }, ['Rocket Lab', 'SpaceX']);
+}
+
+test('Rocket Lab-only PREV/NEXT walks the filtered roster, not the full launch list', () => {
+  const launches = rocketLabNavLaunches();
+  const providerFilter = rocketLabOnlyFilter();
+  const grain = missionRosterNavState(launches, 'grain-goddess', { providerFilter });
+  assert.equal(grain.indexLabel, '1 / 2');
+  assert.equal(grain.prevDisabled, true);
+  assert.equal(grain.nextDisabled, false);
+
+  const nextFromGrain = selectAdjacentMission(launches, 'grain-goddess', 1, { providerFilter });
+  assert.equal(nextFromGrain?.launch.id, 'lightning-god');
+  assert.notEqual(nextFromGrain?.launch.id, 'starlink-17-38');
+  assert.equal(nextFromGrain?.launch.name, 'Electron | Lightning God');
+
+  const lightning = missionRosterNavState(launches, 'lightning-god', { providerFilter });
+  assert.equal(lightning.indexLabel, '2 / 2');
+  assert.equal(lightning.prevDisabled, false);
+  assert.equal(lightning.nextDisabled, true);
+  assert.equal(
+    selectAdjacentMission(launches, 'lightning-god', 1, { providerFilter }),
+    null,
+  );
+  assert.equal(
+    selectAdjacentMission(launches, 'lightning-god', -1, { providerFilter })?.launch.id,
+    'grain-goddess',
+  );
+});
+
+test('filtered PREV/NEXT stays inside the status AND provider set', () => {
+  const launches = rocketLabNavLaunches(true);
+  const providerFilter = rocketLabOnlyFilter();
+  const andOptions = { statusFilter: 'g', providerFilter };
+  const grain = missionRosterNavState(launches, 'grain-goddess', andOptions);
+  assert.equal(grain.indexLabel, '1 / 2');
+  assert.deepEqual(grain.entries.map((entry) => entry.launch.id), [
+    'grain-goddess',
+    'lightning-god',
+  ]);
+
+  const nextFromGrain = selectAdjacentMission(launches, 'grain-goddess', 1, andOptions);
+  assert.equal(nextFromGrain?.launch.id, 'lightning-god');
+  assert.notEqual(nextFromGrain?.launch.id, 'starlink-17-38');
+  assert.notEqual(nextFromGrain?.launch.id, 'rocket-lab-tbd');
+
+  const lightning = missionRosterNavState(launches, 'lightning-god', andOptions);
+  assert.equal(lightning.indexLabel, '2 / 2');
+  assert.equal(lightning.nextDisabled, true);
+  assert.equal(selectAdjacentMission(launches, 'lightning-god', 1, andOptions), null);
+
+  const selectedSpaceX = missionRosterNavState(launches, 'starlink-17-38', andOptions);
+  assert.equal(selectedSpaceX.current, -1);
+  assert.equal(selectedSpaceX.prevDisabled, true);
+  assert.equal(selectedSpaceX.nextDisabled, true);
+  assert.equal(selectAdjacentMission(launches, 'starlink-17-38', 1, andOptions), null);
 });
 
 test('GEO-off roster hides GTO and keeps LEO while ANDing status and provider', () => {
