@@ -93,8 +93,13 @@ async function dispatchToken(options = {}, deps = {}) {
 
 test('token mint posts the server key to OpenAI and returns only the ephemeral secret', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
-  const { status, json, body, headers } = await dispatchToken({ method: 'POST' }, {
-    runtime: createBillingRuntime({ env: {} }),
+  const { status, json, body, headers } = await dispatchToken({
+    method: 'POST',
+    headers: { authorization: 'Bearer sess_test' },
+  }, {
+    runtime: hostedRuntime({
+      getUserRecord: async () => ({ publicMetadata: { meridianPlan: PLANS.PRO } }),
+    }),
     fetchImpl,
   });
   assert.equal(status, 200);
@@ -151,15 +156,15 @@ test('hosted Free is forbidden for voice token mint; Pro is allowed', async () =
   assert.equal(pro.calls.length, 1);
 });
 
-test('self-host without Clerk still mints a token when OPENAI_API_KEY is set', async () => {
+test('Clerk unset fails closed and never mints a token', async () => {
   const { fetchImpl, calls } = mockOpenAiFetch();
   const { status, json } = await dispatchToken({}, {
     runtime: createBillingRuntime({ env: {} }),
     fetchImpl,
   });
-  assert.equal(status, 200);
-  assert.equal(json.value, EPHEMERAL);
-  assert.equal(calls.length, 1);
+  assert.equal(status, 401);
+  assert.equal(json.code, BILLING_CODES.AUTH_REQUIRED);
+  assert.equal(calls.length, 0);
 });
 
 test('Vercel without Clerk fails closed and never mints a token', async () => {

@@ -92,8 +92,32 @@ export function resetBillingRuntime() {
 }
 
 export async function authorizeVoiceRequest(req, runtime = getBillingRuntime()) {
+  if (!runtime.config?.clerkConfigured) {
+    if (runtime.config?.clerkPartial) {
+      const missing = missingClerkEnv(runtime.config);
+      return {
+        ok: false,
+        hosted: true,
+        status: 503,
+        body: {
+          error: `Hosted billing is not configured. ${formatMissingEnvError(missing)}`,
+          code: BILLING_CODES.CLERK_NOT_CONFIGURED,
+          missing,
+        },
+      };
+    }
+    return {
+      ok: false,
+      hosted: false,
+      status: 401,
+      body: {
+        error: 'Sign in required for voice.',
+        code: BILLING_CODES.AUTH_REQUIRED,
+      },
+    };
+  }
+
   const auth = await runtime.authorize(req);
-  if (!auth.hosted) return { ok: true, hosted: false };
   if (!auth.ok) {
     return { ok: false, status: auth.status, body: { error: auth.error, code: auth.code } };
   }
