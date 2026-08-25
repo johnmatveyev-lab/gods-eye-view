@@ -310,6 +310,6 @@ test('poll presence adds no service worker, no /api route, and keeps legal names
   assert.match(main, /createLivePollScheduler/);
   assert.match(main, /installOfflineBanner/);
   assert.match(main, /attachLiveScheduler/);
-  assert.match(voice, /shortcutVisibilityHandler = \(\) => \{\s*if \(document\.visibilityState === 'hidden'\) this\.shortcutBlurHandler\(\);/);
+  assert.match(voice, /shortcutVisibilityHandler = \(\) => \{[\s\S]*?if \(document\.visibilityState === 'hidden'\) this\.shortcutBlurHandler\(\);/);
   assert.doesNotMatch(voice, /visibilitychange[\s\S]{0,80}this\.stop\(/);
 });

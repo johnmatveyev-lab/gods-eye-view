@@ -39,6 +39,8 @@ function installHudEnvironment(canPollFn) {
   globalThis.window = {
     setTimeout,
     clearTimeout,
+    addEventListener() {},
+    removeEventListener() {},
   };
   const viewer = {
     camera: {

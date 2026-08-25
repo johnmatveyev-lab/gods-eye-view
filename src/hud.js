@@ -709,7 +709,8 @@ export class IntelHUD {
    *   by character; otherwise sets it instantly.
    */
   async _updateSummary(animate = false, force = false) {
-    if (!this._canPoll() || this._livePollsSuspended) return;
+    if (this._livePollsSuspended) return;
+    if (!this._canPoll()) return;
     const fallbackText = this._composeSummary();
     if (!this._latestMetrics) {
       this._setSummaryText(fallbackText, animate);
