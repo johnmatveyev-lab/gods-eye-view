@@ -95,6 +95,7 @@ html, body {
 #selected-contact-ident[hidden] { display: none; }
 .selected-contact-ident-value,
 .selected-contact-ident-copy,
+.selected-contact-card-copy,
 .selected-contact-ident-watch {
   pointer-events: auto;
   margin: 0;
@@ -111,6 +112,7 @@ html, body {
   text-align: left;
 }
 .selected-contact-ident-copy,
+.selected-contact-card-copy,
 .selected-contact-ident-watch {
   flex: 0 0 22px;
   width: 22px;
@@ -124,6 +126,7 @@ html, body {
 #selected-contact-ident-watch[hidden],
 .selected-contact-ident-watch[hidden] { display: none; }
 .selected-contact-ident-copy .material-symbols-outlined,
+.selected-contact-card-copy .material-symbols-outlined,
 .selected-contact-ident-watch .material-symbols-outlined {
   font-size: 15px;
   line-height: 1;
@@ -132,17 +135,32 @@ html, body {
 .selected-contact-ident-value:focus-visible,
 .selected-contact-ident-copy:hover,
 .selected-contact-ident-copy:focus-visible,
+.selected-contact-card-copy:hover,
+.selected-contact-card-copy:focus-visible,
 .selected-contact-ident-watch:hover,
 .selected-contact-ident-watch:focus-visible {
   outline: none;
 }
 .selected-contact-ident-copy:hover,
 .selected-contact-ident-copy:focus-visible,
+.selected-contact-card-copy:hover,
+.selected-contact-card-copy:focus-visible,
 .selected-contact-ident-watch:hover,
 .selected-contact-ident-watch:focus-visible,
 .selected-contact-ident-watch[aria-pressed="true"] {
   color: #fff;
   background: rgba(107, 232, 255, 0.16);
+}
+.selected-contact-card-copy:disabled {
+  opacity: 0.4;
+  cursor: default;
+  color: rgba(232, 240, 244, 0.45);
+  background: transparent;
+}
+.selected-contact-card-copy:disabled:hover,
+.selected-contact-card-copy:disabled:focus-visible {
+  color: rgba(232, 240, 244, 0.45);
+  background: transparent;
 }
 
 /* Scope mask — the explicit circular viewport treatment (see

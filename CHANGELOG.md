@@ -33,6 +33,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Added a Copy card control next to Copy ident on the selected-contact
+  readout. It pastes the public ADS-B fields already shown from describe()
+  (ident, registration, hex, type, alt, speed, heading, lat/lon) and omits
+  missing values instead of writing "unknown". Commercial and military
+  flights share that card shape. Copy ident still copies only the ident.
+  Disabled when nothing is selected. Clipboard writeText only — no origin /
+  destination, news, snapshot, or `/api`.
 - Persistent whiteboard marks now survive a reload. `onChange` writes a compact
   snapshot of persistent marks (`id`, `type`, `label`, `color`, `anchor`, `to`,
   `ring`/`path`) to `meridian.annotations`. Boot restores once through the same

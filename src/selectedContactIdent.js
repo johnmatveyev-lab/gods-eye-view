@@ -1,4 +1,9 @@
 import { getSelectedEntityContext } from './data/contextStore.js';
+import {
+  SELECTED_CONTACT_CARD_COPY_ID,
+  contactCardFieldsFromContext,
+  copySelectedContactCard,
+} from './selectedContactCard.js';
 
 /** Tracked-card host source id. Duplicated as a literal so this module never
  *  imports the Cesium-backed overlay host just to copy an ident. */
@@ -10,7 +15,8 @@ const VESSEL_OVERLAY_SOURCE_ID = 'ais-live-vessels';
  * @module selectedContactIdent
  * @description Copy control for the selected-contact card's visible asset
  * ident — aircraft callsign/hex, vessel name/MMSI, or satellite name/NORAD.
- * Public asset ids already on the card. No named-person search. No server route.
+ * A sibling Copy card control pastes the describe() readout fields already
+ * shown. Public asset ids already on the card. No named-person search. No server route.
  */
 
 export const SELECTED_CONTACT_IDENT_ROOT_ID = 'selected-contact-ident';
@@ -42,6 +48,7 @@ let _showToast = null;
 let _root = null;
 let _valueButton = null;
 let _copyButton = null;
+let _cardButton = null;
 let _watchButton = null;
 let _getPaintRect = null;
 let _getActiveTrackedId = null;
@@ -219,11 +226,13 @@ export function initSelectedContactIdent(options = {}) {
   _root = options.root || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_ROOT_ID);
   _valueButton = options.identButton || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_VALUE_ID);
   _copyButton = options.copyButton || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_COPY_ID);
+  _cardButton = options.cardButton || globalThis.document?.getElementById(SELECTED_CONTACT_CARD_COPY_ID) || null;
   _watchButton = options.watchButton || globalThis.document?.getElementById(SELECTED_CONTACT_IDENT_WATCH_ID);
   if (!_root || !_valueButton || !_copyButton) return;
 
   _valueButton.addEventListener('click', onCopyClick);
   _copyButton.addEventListener('click', onCopyClick);
+  _cardButton?.addEventListener?.('click', onCardCopyClick);
 
   const host = options.windowTarget || globalThis.window;
   bindWindow(host, 'gev:entity-selected', syncSelectedContactIdent);
@@ -242,6 +251,7 @@ export function initSelectedContactIdent(options = {}) {
 export function destroySelectedContactIdent() {
   _valueButton?.removeEventListener?.('click', onCopyClick);
   _copyButton?.removeEventListener?.('click', onCopyClick);
+  _cardButton?.removeEventListener?.('click', onCardCopyClick);
   _trackedEntityChangedRemove?.();
   _trackedEntityChangedRemove = null;
   stopPositionUpdates();
@@ -255,6 +265,7 @@ export function destroySelectedContactIdent() {
   _root = null;
   _valueButton = null;
   _copyButton = null;
+  _cardButton = null;
   _watchButton = null;
   _clipboard = null;
   _active = null;
@@ -292,6 +303,7 @@ export function syncSelectedContactIdent() {
   _valueButton.setAttribute('aria-label', `Copy ${selection.ident}`);
   _copyButton.setAttribute('aria-label', `Copy ${selection.ident}`);
   _copyButton.title = `Copy ${selection.ident}`;
+  setCardEnabled(true);
   positionControl(selection);
   startPositionUpdates();
 }
@@ -330,6 +342,29 @@ function onCopyClick(event) {
   return copySelectedContactIdent(ident);
 }
 
+function onCardCopyClick(event) {
+  event?.preventDefault?.();
+  event?.stopPropagation?.();
+  if (!_active) return false;
+  const context = typeof _getSelectedContext === 'function' ? _getSelectedContext() : null;
+  return copySelectedContactCard(contactCardFieldsFromContext(context, _active.ident), {
+    clipboard: _clipboard,
+    showToast: _showToast,
+  });
+}
+
+function setCardEnabled(enabled) {
+  if (!_cardButton) return;
+  _cardButton.disabled = !enabled;
+  if (enabled) {
+    _cardButton.removeAttribute?.('disabled');
+    _cardButton.setAttribute?.('aria-label', 'Copy card');
+    _cardButton.title = 'Copy card';
+  } else {
+    _cardButton.setAttribute?.('disabled', '');
+  }
+}
+
 function hideControl() {
   _active = null;
   stopPositionUpdates();
@@ -339,6 +374,7 @@ function hideControl() {
   delete _root.dataset?.kind;
   delete _root.dataset?.ident;
   if (_valueButton) _valueButton.textContent = '';
+  setCardEnabled(false);
   if (_watchButton) {
     _watchButton.hidden = true;
     _watchButton.setAttribute?.('hidden', '');
@@ -369,7 +405,8 @@ function positionControl(selection) {
   const watchExtra = selection?.kind === 'aircraft' && _watchButton && !_watchButton.hidden
     ? WATCH_BUTTON_SIZE_PX
     : 0;
-  _root.style.width = `${Math.round(rect.w + COPY_BUTTON_SIZE_PX + watchExtra + 4)}px`;
+  const cardExtra = _cardButton ? COPY_BUTTON_SIZE_PX : 0;
+  _root.style.width = `${Math.round(rect.w + COPY_BUTTON_SIZE_PX + cardExtra + watchExtra + 4)}px`;
   _root.style.height = `${titleH}px`;
   if (_valueButton) {
     _valueButton.style.width = `${Math.max(8, Math.round(rect.w - 8))}px`;
