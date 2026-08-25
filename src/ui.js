@@ -126,6 +126,12 @@ import {
   resolvePanelStackCorridor,
 } from './panelStackLayout.js';
 import {
+  clampPanelPosition,
+  sanitizeStoredPanelPositions,
+  resolveStoredPanelPosition,
+  isPanelRectOnScreen,
+} from './panelPosition.js';
+import {
   resolveCockpitUtilityAnchor,
   resolveCockpitUtilityLayout,
 } from './cockpitUtilityLayout.js';
@@ -2661,6 +2667,7 @@ export class StyleManager {
     this._initPanelChrome();
     this._initLeftPanelAdaptiveLayout();
     this._initRightPanelAdaptiveLayout();
+    this._initRestoredPanelPositions();
     this._initRadioPanel();
     this._initCctvPanel();
     this._initGlobalContextPanel();
@@ -2975,7 +2982,9 @@ export class StyleManager {
     if (!el || !el.style.top || el.style.top === 'auto') return;
     const top = parseInt(el.style.top, 10);
     if (!Number.isFinite(top)) return;
-    el.style.top = `${this._clampToViewport(0, top, el).top}px`;
+    const clamped = this._clampToViewport(0, top, el);
+    if (!clamped) return;
+    el.style.top = `${clamped.top}px`;
     this._pinPanelToRight(el);
   }
 
@@ -3974,6 +3983,7 @@ export class StyleManager {
    * @returns {void}
    */
   _initPanelChrome() {
+    this._sanitizeRestoredPanelPositions();
     const targets = new Set();
     document.querySelectorAll('.panel-collapse-btn[data-collapse-target]').forEach((btn) => {
       const targetId = btn.dataset.collapseTarget;
@@ -4000,6 +4010,25 @@ export class StyleManager {
     this._initCommandDockPins();
     this._initCommandDockTrayMetrics();
     this._maybeNotifyLayoutReset();
+  }
+
+  /**
+   * On boot, clamp or reset leftover/current panelPos keys that would restore
+   * a panel off-screen. Does not rename leftover godsEyeView.* keys.
+   * @returns {void}
+   */
+  _sanitizeRestoredPanelPositions() {
+    try {
+      sanitizeStoredPanelPositions({
+        storage: localStorage,
+        panelIds: SHARE_PANEL_STATE_SPECS.map((spec) => spec.id),
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        currentVersion: PANEL_POSITION_STORAGE_VERSION,
+      });
+    } catch {
+      // storage unavailable
+    }
   }
 
   /**
@@ -6875,6 +6904,56 @@ export class StyleManager {
     this._scheduleRightPanelLayout();
   }
 
+  /**
+   * After the rails claim their panels, restore leftover floating positions
+   * (clamped) and pull any still-off-screen panel back into the viewport.
+   * @returns {void}
+   */
+  _initRestoredPanelPositions() {
+    for (const spec of SHARE_PANEL_STATE_SPECS) {
+      const panelEl = document.getElementById(spec.id);
+      if (!panelEl) continue;
+      const parentId = panelEl.parentElement?.id;
+      const managed = parentId === 'right-context-rail' || parentId === 'left-panel-stack';
+      if (managed) continue;
+      this._restorePanelPosition(spec.id, panelEl);
+    }
+    this._clampRestoredPanelsOnScreen();
+  }
+
+  /**
+   * Last-chance boot clamp: leftover inline coords or a collapsed-off-screen
+   * restore must still leave the panel intersecting the viewport.
+   * @returns {void}
+   */
+  _clampRestoredPanelsOnScreen() {
+    const viewport = {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    };
+    for (const spec of SHARE_PANEL_STATE_SPECS) {
+      const panelEl = document.getElementById(spec.id);
+      if (!panelEl) continue;
+      const rect = panelEl.getBoundingClientRect();
+      if (isPanelRectOnScreen(rect, viewport)) continue;
+      const parentId = panelEl.parentElement?.id;
+      const managed = parentId === 'right-context-rail' || parentId === 'left-panel-stack';
+      if (managed) {
+        panelEl.style.removeProperty('left');
+        panelEl.style.removeProperty('top');
+        panelEl.style.removeProperty('right');
+        panelEl.style.removeProperty('bottom');
+        continue;
+      }
+      const clamped = this._clampToViewport(rect.left, rect.top, panelEl);
+      if (!clamped) continue;
+      panelEl.style.left = `${clamped.left}px`;
+      panelEl.style.top = `${clamped.top}px`;
+      panelEl.style.right = 'auto';
+      panelEl.style.bottom = 'auto';
+    }
+  }
+
   _scheduleRightPanelLayout({ reconsiderAutoCollapse = false } = {}) {
     if (reconsiderAutoCollapse) this._rightStackReconsiderAutoCollapse = true;
     if (!this._rightPanelStack || this._rightStackLayoutFrame !== null) return;
@@ -7511,15 +7590,23 @@ export class StyleManager {
    */
   _restorePanelPosition(panelId, panelEl) {
     try {
-      const raw = localStorage.getItem(this._panelStorageKey(panelId));
-      if (!raw) return;
-      const pos = JSON.parse(raw);
-      if (!pos || typeof pos.left !== 'number' || typeof pos.top !== 'number') return;
-      // Clamp to the viewport: a position saved at one window size would otherwise land off-screen at
-      // another (audit U2 — observed a panel at x:-192). The drag handler clamps; restore must too.
-      const { left, top } = this._clampToViewport(Math.round(pos.left), Math.round(pos.top), panelEl);
-      panelEl.style.left = `${left}px`;
-      panelEl.style.top = `${top}px`;
+      const resolved = resolveStoredPanelPosition(
+        localStorage,
+        panelId,
+        PANEL_POSITION_STORAGE_VERSION,
+      );
+      if (!resolved?.pos) return;
+      // Clamp leftover or current coords: a position saved at one window size
+      // would otherwise land off-screen at another. Same-key leftovers are
+      // not renamed this cycle.
+      const clamped = this._clampToViewport(
+        Math.round(resolved.pos.left),
+        Math.round(resolved.pos.top),
+        panelEl,
+      );
+      if (!clamped) return;
+      panelEl.style.left = `${clamped.left}px`;
+      panelEl.style.top = `${clamped.top}px`;
       panelEl.style.right = 'auto';
       panelEl.style.bottom = 'auto';
       if (panelId === 'pp-toggles') {
@@ -7536,16 +7623,18 @@ export class StyleManager {
    * @param {number} left - desired left (px)
    * @param {number} top - desired top (px)
    * @param {HTMLElement} panelEl - the panel element
-   * @returns {{left:number, top:number}}
+   * @returns {{left:number, top:number}|null}
    */
   _clampToViewport(left, top, panelEl) {
     const rect = panelEl.getBoundingClientRect();
-    const maxLeft = Math.max(6, window.innerWidth - rect.width - 6);
-    const maxTop = Math.max(6, window.innerHeight - rect.height - 6);
-    return {
-      left: Math.max(6, Math.min(maxLeft, left)),
-      top: Math.max(6, Math.min(maxTop, top)),
-    };
+    return clampPanelPosition({
+      left,
+      top,
+      width: rect.width,
+      height: rect.height,
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+    });
   }
 
   /**
