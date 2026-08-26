@@ -7906,6 +7906,30 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 
 #military-awareness-panel[hidden] { display: none; }
 .military-awareness-subject { margin: 0 0 7px; color: #fff; }
+.military-awareness-identified-chips { display: flex; gap: 5px; margin: 0 0 8px; }
+.military-awareness-identified-chip {
+  border: 1px solid rgba(98,181,255,0.34);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: #a9d9ff;
+  background: rgba(42,113,171,0.12);
+  font: 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.07em;
+  cursor: pointer;
+}
+.military-awareness-identified-chip:hover,
+.military-awareness-identified-chip:focus-visible {
+  color: #fff;
+  border-color: rgba(127,200,255,0.85);
+  background: rgba(66,148,211,0.24);
+  outline: none;
+}
+.military-awareness-identified-chip.active,
+.military-awareness-identified-chip[aria-pressed="true"] {
+  color: #fff;
+  border-color: rgba(127,200,255,0.92);
+  background: rgba(66,148,211,0.36);
+}
 .military-awareness-controls { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin: 0 0 8px; }
 .military-awareness-controls button { border: 1px solid rgba(98,181,255,0.34); border-radius: 4px; padding: 4px 3px; color: #a9d9ff; background: rgba(42,113,171,0.12); font: 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: 0.07em; cursor: pointer; }
 .military-awareness-controls button:hover, .military-awareness-controls button:focus-visible { color: #fff; border-color: rgba(127,200,255,0.85); background: rgba(66,148,211,0.24); outline: none; }

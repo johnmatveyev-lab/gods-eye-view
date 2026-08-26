@@ -427,7 +427,10 @@ test('Identified-only is a flights-row chip: no DISPLAY rail, no new /api', () =
   const flights = data('flights.js');
   const helper = data('flightIdentifiedFilter.js');
   const military = data('militaryFlights.js');
-  assert.doesNotMatch(html, /identified-only|Identified only/);
+  const awarenessStart = html.indexOf('id="military-awareness-panel"');
+  const beforeAwareness = awarenessStart === -1 ? html : html.slice(0, awarenessStart);
+  assert.doesNotMatch(beforeAwareness, /identified-only|Identified only/,
+    'flights Identified-only stays a data-row chip, not DISPLAY-rail HTML');
   assert.doesNotMatch(ui, /identifiedOnly|_initIdentifiedOnly/);
   assert.match(flights, /identifiedOnlyChipModel\(/);
   assert.match(flights, /passesIdentifiedOnlyFilter/);
