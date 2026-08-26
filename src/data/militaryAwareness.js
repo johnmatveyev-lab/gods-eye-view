@@ -40,9 +40,19 @@ import {
   passesAwarenessRangeFilter,
   setAwarenessRangeFilter,
 } from './awarenessRangeFilter.js';
+import {
+  AWARENESS_AIRCRAFT_CHIP_LABEL,
+  AWARENESS_AIRCRAFT_CHIP_TITLE,
+  filterAwarenessAircraftContacts,
+  getAwarenessAircraftOnlyEnabled,
+  hydrateAwarenessAircraftOnlyEnabled,
+  passesAwarenessAircraftFilter,
+  setAwarenessAircraftOnlyEnabled,
+} from './awarenessAircraftFilter.js';
 
 hydrateAwarenessIdentifiedEnabled();
 hydrateAwarenessRangeFilter();
+hydrateAwarenessAircraftOnlyEnabled();
 
 const AIRCRAFT_DEPENDENCIES = ['flights', 'military'];
 const DEFERRED_DEPENDENCIES = ['ais-live-vessels', 'military-installations'];
@@ -272,6 +282,12 @@ function ensurePanel() {
       if (action.dataset.awarenessAction === 'range') {
         militaryAwarenessLayer.setParams({
           range: action.dataset.awarenessRange,
+        });
+        if (!state.results) hidePanel();
+      }
+      if (action.dataset.awarenessAction === 'aircraft-only') {
+        militaryAwarenessLayer.setParams({
+          aircraftOnly: !getAwarenessAircraftOnlyEnabled(),
         });
         if (!state.results) hidePanel();
       }
@@ -519,10 +535,10 @@ function evaluateSubject(subject, sourceStates = collectSourceStates()) {
   const installations = militaryInstallationsLayer.getNearby(position, AWARENESS_RADIUS_M, AWARENESS_QUERY_LIMIT)
     .filter((item) => !isSame(subject, item, 'military-installations', 'id'));
   const roster = {
-    flights: filterIdentifiedRoster(flights, subject),
-    military: filterIdentifiedRoster(military, subject),
-    vessels: filterIdentifiedRoster(vessels, subject),
-    installations: filterIdentifiedRoster(installations, subject),
+    flights: filterIdentifiedRoster(flights, subject, 'flights'),
+    military: filterIdentifiedRoster(military, subject, 'military'),
+    vessels: filterIdentifiedRoster(vessels, subject, 'ais-live-vessels'),
+    installations: filterIdentifiedRoster(installations, subject, 'military-installations'),
   };
   return {
     subject,
@@ -669,13 +685,23 @@ function isFlightLayer(layerId) {
   return layerId === 'flights' || layerId === 'military';
 }
 
-function filterIdentifiedRoster(items, subject) {
-  const identified = filterAwarenessIdentifiedContacts(items, {
+function stampAwarenessLayerId(items, layerId) {
+  if (!layerId || !Array.isArray(items)) return items;
+  return items.map((item) => (item?.layerId ? item : { ...item, layerId }));
+}
+
+function filterIdentifiedRoster(items, subject, layerId) {
+  const tagged = stampAwarenessLayerId(items, layerId);
+  const identified = filterAwarenessIdentifiedContacts(tagged, {
     identifiedOnly: getAwarenessIdentifiedEnabled(),
     subjectId: subject?.id,
   });
-  return filterAwarenessRangeContacts(identified, {
+  const ranged = filterAwarenessRangeContacts(identified, {
     range: getAwarenessRangeFilter(),
+    subjectId: subject?.id,
+  });
+  return filterAwarenessAircraftContacts(ranged, {
+    aircraftOnly: getAwarenessAircraftOnlyEnabled(),
     subjectId: subject?.id,
   });
 }
@@ -687,6 +713,9 @@ function awarenessIdentifiedAllows(item, subject = state.subject) {
   }) && passesAwarenessRangeFilter(item, {
     range: getAwarenessRangeFilter(),
     subjectId: subject?.id,
+  }) && passesAwarenessAircraftFilter(item, {
+    aircraftOnly: getAwarenessAircraftOnlyEnabled(),
+    subjectId: subject?.id,
   });
 }
 
@@ -694,6 +723,13 @@ function identifiedOnlyChipHtml() {
   const on = getAwarenessIdentifiedEnabled() === true;
   return `<div class="military-awareness-identified-chips" role="group" aria-label="${AWARENESS_IDENTIFIED_CHIP_LABEL}">
     <button type="button" class="military-awareness-identified-chip${on ? ' active' : ''}" data-awareness-action="identified-only" aria-pressed="${on ? 'true' : 'false'}" title="${AWARENESS_IDENTIFIED_CHIP_TITLE}">${AWARENESS_IDENTIFIED_CHIP_LABEL}</button>
+  </div>`;
+}
+
+function aircraftOnlyChipHtml() {
+  const on = getAwarenessAircraftOnlyEnabled() === true;
+  return `<div class="military-awareness-aircraft-chips" role="group" aria-label="${AWARENESS_AIRCRAFT_CHIP_LABEL}">
+    <button type="button" class="military-awareness-aircraft-chip${on ? ' active' : ''}" data-awareness-action="aircraft-only" aria-pressed="${on ? 'true' : 'false'}" title="${AWARENESS_AIRCRAFT_CHIP_TITLE}">${AWARENESS_AIRCRAFT_CHIP_LABEL}</button>
   </div>`;
 }
 
@@ -705,7 +741,7 @@ function rangeChipsHtml() {
 }
 
 function awarenessFilterChipsHtml() {
-  return `${identifiedOnlyChipHtml()}${rangeChipsHtml()}`;
+  return `${identifiedOnlyChipHtml()}${aircraftOnlyChipHtml()}${rangeChipsHtml()}`;
 }
 
 function normalizeAircraftClass(value) {
@@ -751,6 +787,13 @@ function selectNavigationTargets(sourceCohorts, subject, visitedKeys, {
   }
   targets = targets.filter((target) => passesAwarenessRangeFilter(target.item, {
     range: getAwarenessRangeFilter(),
+    subjectId: subject?.id,
+  }));
+  targets = targets.filter((target) => passesAwarenessAircraftFilter({
+    ...target.item,
+    layerId: target.item?.layerId || target.layerId,
+  }, {
+    aircraftOnly: getAwarenessAircraftOnlyEnabled(),
     subjectId: subject?.id,
   }));
   return targets;
@@ -1055,7 +1098,11 @@ export function findCompatibleHistoryIndex(history, startIndex, direction, {
     if (aircraftOnly && !isFlightLayer(subject?.layerId)) continue;
     if (targetLayer && subject?.layerId !== targetLayer) continue;
     if (aircraftClass && !aircraftClassMatchesFilter(resolveItem(subject), aircraftClass)) continue;
-    if (!awarenessIdentifiedAllows(resolveItem(subject))) continue;
+    const resolved = resolveItem(subject);
+    const contact = resolved?.layerId || !subject?.layerId
+      ? resolved
+      : { ...resolved, layerId: subject.layerId };
+    if (!awarenessIdentifiedAllows(contact)) continue;
     return index;
   }
   return -1;
@@ -1840,30 +1887,41 @@ const militaryAwarenessLayer = {
       const previous = getAwarenessRangeFilter();
       rangeChanged = setAwarenessRangeFilter(params.range) !== previous;
     }
+    let aircraftChanged = false;
+    if (typeof params.aircraftOnly === 'boolean') {
+      const previous = getAwarenessAircraftOnlyEnabled();
+      aircraftChanged = setAwarenessAircraftOnlyEnabled(params.aircraftOnly) !== previous;
+    }
     let activation;
     if (typeof params.passive === 'boolean') {
       const wasPassive = state.passive;
       state.passive = params.passive;
       if (state.enabled && wasPassive && !state.passive) activation = activateOperationalContext();
-    } else if (typeof params.identifiedOnly !== 'boolean' && params.range === undefined) {
+    } else if (
+      typeof params.identifiedOnly !== 'boolean'
+      && params.range === undefined
+      && typeof params.aircraftOnly !== 'boolean'
+    ) {
       return;
     }
-    if ((identifiedChanged || rangeChanged) && state.enabled && state.subject) {
+    if ((identifiedChanged || rangeChanged || aircraftChanged) && state.enabled && state.subject) {
       refreshSelectedSubject(true);
     }
     return activation;
   },
-  /** @returns {{ passive: boolean, identifiedOnly: boolean, range: string }} Current runtime parameters. */
+  /** @returns {{ passive: boolean, identifiedOnly: boolean, range: string, aircraftOnly: boolean }} Current runtime parameters. */
   getParams() {
     return {
       passive: state.passive,
       identifiedOnly: getAwarenessIdentifiedEnabled(),
       range: getAwarenessRangeFilter(),
+      aircraftOnly: getAwarenessAircraftOnlyEnabled(),
     };
   },
   init(viewer) {
     hydrateAwarenessIdentifiedEnabled();
     hydrateAwarenessRangeFilter();
+    hydrateAwarenessAircraftOnlyEnabled();
     detachRuntimeListeners();
     state.unitsUnsubscribe?.();
     state.unitsUnsubscribe = subscribeDistanceUnit(() => {

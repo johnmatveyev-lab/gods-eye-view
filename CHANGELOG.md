@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Global Context has a client-only **Aircraft only** toggle on the Contacts
+  roster, next to Identified only and the All | &lt;50 km | &lt;10 km range
+  chips. Default **off** keeps all four cohorts. **On** keeps flights +
+  military and drops AIS vessels and mapped sites from the already-fetched
+  `getNearby` roster and NEXT walk. The current subject always stays, even
+  when it is a vessel or site. Missing `layerId` stays. AND with Identified
+  only and the range chips. Chip changes re-filter already-fetched records
+  — no extra fetch and no `/api`. The 250 km ring (`AWARENESS_RADIUS_M`)
+  is unchanged. Preference persists as `meridian.awarenessAircraftOnly`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write). Distinct
+  from Identified only, the range-floor chips, and hide-ground.
 - Hosted Quakes list has client-only exclusive **All | &lt;6 h | &lt;1 h**
   age-ceiling chips. Default **All** keeps 20 min / 3 h / 12 h events on
   the current 50-row nearest/recent list. **&lt;6 h** drops 12 h and keeps
