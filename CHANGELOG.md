@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Sites list has client-only exclusive **All | Airfield | Naval**
+  class chips after the Plan 235 OSM-type chips. Default **All** keeps the
+  current 50-row viewport list, including range and military_land.
+  **Airfield** keeps `class === 'airfield'` and drops naval_base.
+  **Naval** keeps `class === 'naval_base'` and drops airfield. Other
+  classes (range, military_land, anything else) drop on those chips.
+  Missing, empty, or unknown class stays visible on every chip. The
+  selected / tracked record always stays if it already passed the other
+  list filters. AND with Plan 209 Mapped only, Plan 220 Named only, and
+  Plan 235 OSM-type. Distinct from Plan 151 globe class chips. Re-applies
+  the already-fetched viewport payload — no extra fetch and no new
+  `/api`. Preference persists as `meridian.sitesListClass`
+  (LayerStateCoordinator restore, no share-URL write).
 - Dams in-view list has a client-only **Wikipedia only** toggle next to the
   Plan 229 **River only** chip, Plan 224 **Operator only**, Plan 218
   **Named only**, and Plan 205 **All | 10+ MW | 100+ MW** output-floor
