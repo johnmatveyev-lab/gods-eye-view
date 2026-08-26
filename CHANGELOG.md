@@ -7,6 +7,13 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Website only** toggle next to
+  **Method only**. Default **off** keeps the current roster, including
+  plants with no OSM website. On hides missing / empty / whitespace-only
+  `website` / `contact:website`. A selected row stays. AND after Method
+  only. Persists as `meridian.damWebsiteOnly` (`1` / `0`; not a
+  share-link field). Distinct from 205 / 218 / 224 / 229 / 240 / 249 /
+  279 / 287 and from datacenter Website only (285).
 - Datacenters in-view list has a client-only **Dated only** toggle after
   Website only. Default **off** keeps the current in-view OSM list,
   including missing, empty, and whitespace `start_date`. **On** hides
