@@ -21,8 +21,7 @@
  * adsbdb type name. Selected/tracked exemption lives on the layer
  * AND gate, not here. Persistence is local
  * (`meridian.flightHideNoTypeName`) and rides LayerStateCoordinator
- * restore via the flights layer params. It is not written into the
- * share URL.
+ * restore via the flights layer params. It is not written into the share URL.
  */
 
 export const HIDE_NO_TYPE_NAME_DEFAULT = false;
