@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has client-only exclusive **All | 2.0NRT | Other** product-version
+  chips after the Plan 211 track-size row. Default **All** keeps C2 NRT
+  (`2.0NRT`) and older `1.0NRT`. **2.0NRT** drops `1.0NRT`. **Other** keeps
+  `1.0NRT` and missing versions. Missing version fails open on All. The
+  selected fire always stays. Chip changes re-filter the already-fetched
+  `/api/firms` CSV and AND with FRP, confidence, brightness, scan, track,
+  day-night, age, sensor, and satellite — no extra NASA fetch and no new
+  `/api`. Preference persists as `meridian.firmsVersion` (LayerStateCoordinator
+  restore, no share-URL write). Distinct from Plan 155/192 brightness, 163
+  satellite, 204 scan, 211 track, 210 list confidence, and 219 list FRP.
+  NASA FIRMS acknowledgement unchanged.
 - The hosted FIRES list has client-only exclusive **All | 10+ MW | 100+ MW**
   FRP-floor chips. Default **All** keeps 1 / 10 / 100 MW on the current
   50-nearest ranking. **10+ MW** drops 1 MW. **100+ MW** keeps 100 and

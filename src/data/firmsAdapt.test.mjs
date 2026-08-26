@@ -30,6 +30,7 @@ const proxyRecord = (overrides = {}) => ({
   acqTime: '1006',
   satellite: 'N20',
   instrument: 'VIIRS',
+  version: '2.0NRT',
   ...overrides,
 });
 
@@ -49,6 +50,7 @@ test('adapter maps a proxy record into the internal fire-record shape', () => {
   assert.equal(fire.acqMs, Date.UTC(2026, 6, 16, 10, 6));
   assert.equal(fire.sensor, 'VIIRS');
   assert.equal(fire.satellite, 'N20');
+  assert.equal(fire.version, '2.0NRT');
   assert.equal(fire.contextEntity, null);
   assert.equal(fire.position, null);
 });
