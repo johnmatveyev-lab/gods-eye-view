@@ -2700,7 +2700,7 @@ test('awareness runtime parameters return a detached snapshot', () => {
   militaryAwarenessLayer.setParams({ passive: false });
   const snapshot = militaryAwarenessLayer.getParams();
   militaryAwarenessLayer.setParams({ passive: true });
-  assert.deepEqual(snapshot, { passive: false });
+  assert.deepEqual(snapshot, { passive: false, identifiedOnly: false });
 });
 
 test('Contacts refresh cadence is snappy while the camera moves and parked otherwise', () => {
