@@ -1201,6 +1201,11 @@
         <button type="button" class="fires-sensor-chip" data-firms-list-frp="10" aria-pressed="false" title="Keep detections at or above 10 MW on the FIRES list">10+ MW</button>
         <button type="button" class="fires-sensor-chip" data-firms-list-frp="100" aria-pressed="false" title="Keep detections at or above 100 MW on the FIRES list">100+ MW</button>
       </div>
+      <div id="fires-list-age-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS list age" hidden>
+        <button type="button" class="fires-sensor-chip active" data-firms-list-age="all" aria-pressed="true" title="Show every FIRMS list age">All</button>
+        <button type="button" class="fires-sensor-chip" data-firms-list-age="6" aria-pressed="false" title="Keep detections younger than 6 hours on the FIRES list">&lt;6 h</button>
+        <button type="button" class="fires-sensor-chip" data-firms-list-age="1" aria-pressed="false" title="Keep detections younger than 1 hour on the FIRES list">&lt;1 h</button>
+      </div>
       <div id="fires-list-meta" class="fires-list-meta">Enable FIRMS Active Fires to list nearby detections.</div>
       <ol id="fires-list" class="fires-list" aria-label="Nearby NASA FIRMS fires"></ol>
       <p id="fires-list-ack" class="fires-list-ack">We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Earth Observing System Data and Information System (EOSDIS).</p>

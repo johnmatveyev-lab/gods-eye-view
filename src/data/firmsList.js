@@ -17,6 +17,10 @@ import {
   getFirmsListFrp,
   getFirmsListSelectedId,
 } from './firmsListFrpFilter.js';
+import {
+  fireMeetsListAge,
+  getFirmsListAge,
+} from './firmsListAgeFilter.js';
 
 /** Hosted list ceiling: nearest detections to the current camera. */
 export const FIRMS_LIST_LIMIT = 50;
@@ -40,14 +44,17 @@ export const FIRMS_ACKNOWLEDGEMENT =
 
 /**
  * Rank fires by great-circle distance to the camera and cap the list.
- * List-confidence and list-FRP chips AND before the cap so High / 100+ MW
- * can fill the 50 rows from farther detections. A selected fire always stays.
- * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *}>} fires
+ * List-confidence, list-FRP, and list-age chips AND before the cap so
+ * High / 100+ MW / <1 h can fill the 50 rows from farther detections.
+ * A selected fire always stays.
+ * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *, acqMs?: *}>} fires
  * @param {{lat?: number, lon?: number}|null} origin
  * @param {number} [limit=FIRMS_LIST_LIMIT]
  * @param {string} [listConf]
  * @param {string} [listFrp]
  * @param {string|null} [selectedId]
+ * @param {string} [listAge]
+ * @param {number} [now]
  * @returns {Array<object>}
  */
 export function listNearestFires(
@@ -57,6 +64,8 @@ export function listNearestFires(
   listConf,
   listFrp,
   selectedId,
+  listAge,
+  now = Date.now(),
 ) {
   if (!Array.isArray(fires)) return [];
   const originLat = Number(origin?.lat);
@@ -65,6 +74,7 @@ export function listNearestFires(
   const cap = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : FIRMS_LIST_LIMIT;
   const conf = listConf === undefined ? getFirmsListConf() : listConf;
   const frp = listFrp === undefined ? getFirmsListFrp() : listFrp;
+  const age = listAge === undefined ? getFirmsListAge() : listAge;
   const selected = selectedId === undefined ? getFirmsListSelectedId() : selectedId;
   const selectedKey = selected == null || selected === '' ? '' : String(selected);
   const ranked = [];
@@ -76,6 +86,7 @@ export function listNearestFires(
     const isSelected = Boolean(selectedKey) && String(id) === selectedKey;
     if (!isSelected && !fireMeetsListConf(fire, conf)) continue;
     if (!isSelected && !fireMeetsListFrp(fire, frp, { selectedId: selectedKey })) continue;
+    if (!isSelected && !fireMeetsListAge(fire, age, { selectedId: selectedKey, now })) continue;
     const distanceKm = hasOrigin ? greatCircleKm(originLat, originLon, lat, lon) : Number.POSITIVE_INFINITY;
     ranked.push({
       ...fire,
@@ -140,6 +151,7 @@ export function resolveFireListView({
   listConf,
   listFrp,
   selectedId,
+  listAge,
 } = {}) {
   const acknowledgement = FIRMS_ACKNOWLEDGEMENT;
   if (keyRequired) {
@@ -151,7 +163,16 @@ export function resolveFireListView({
   if (loading && (!Array.isArray(fires) || fires.length === 0)) {
     return { status: 'loading', copy: FIRMS_LIST_LOADING_COPY, rows: [], acknowledgement };
   }
-  const nearest = listNearestFires(fires, camera, FIRMS_LIST_LIMIT, listConf, listFrp, selectedId);
+  const nearest = listNearestFires(
+    fires,
+    camera,
+    FIRMS_LIST_LIMIT,
+    listConf,
+    listFrp,
+    selectedId,
+    listAge,
+    now,
+  );
   if (!nearest.length) {
     return { status: 'unavailable', copy: FIRMS_LIST_EMPTY_COPY, rows: [], acknowledgement };
   }

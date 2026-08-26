@@ -216,6 +216,12 @@ import {
   setFirmsListFrp,
 } from './data/firmsListFrpFilter.js';
 import {
+  getFirmsListAge,
+  hydrateFirmsListAge,
+  normalizeFirmsListAge,
+  setFirmsListAge,
+} from './data/firmsListAgeFilter.js';
+import {
   firmsSensorFilterFlags,
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
@@ -2908,6 +2914,7 @@ export class StyleManager {
     this._firmsVersionChips = document.getElementById('fires-version-chips');
     this._firmsListConfChips = document.getElementById('fires-list-conf-chips');
     this._firmsListFrpChips = document.getElementById('fires-list-frp-chips');
+    this._firmsListAgeChips = document.getElementById('fires-list-age-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -3467,6 +3474,7 @@ export class StyleManager {
     this._initFirmsVersionChips();
     this._initFirmsListConfChips();
     this._initFirmsListFrpChips();
+    this._initFirmsListAgeChips();
     this._initInstallationClassChips();
     this._initInstallationFootprintChip();
     this._initInstallationNamedChip();
@@ -5630,6 +5638,7 @@ export class StyleManager {
           this._syncFirmsVersionChips();
           this._syncFirmsListConfChips();
           this._syncFirmsListFrpChips();
+          this._syncFirmsListAgeChips();
         }
         if (change?.layerId === 'ais-live-vessels') {
           this._syncAisTypeChips();
@@ -12307,6 +12316,31 @@ export class StyleManager {
       this._syncFirmsListFrpChips();
     });
     this._syncFirmsListFrpChips();
+  }
+
+  _syncFirmsListAgeChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsListAgeChips) this._firmsListAgeChips.hidden = !enabled;
+    const current = getFirmsListAge();
+    const chips = this._firmsListAgeChips?.querySelectorAll?.('[data-firms-list-age]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsListAge === current;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsListAgeChips() {
+    hydrateFirmsListAge();
+    if (!this._firmsListAgeChips) return;
+    this._firmsListAgeChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-list-age]');
+      if (!chip || !this._firmsListAgeChips.contains(chip)) return;
+      setFirmsListAge(normalizeFirmsListAge(chip.dataset.firmsListAge));
+      this._syncFirmsListAgeChips();
+    });
+    this._syncFirmsListAgeChips();
   }
 
   _syncInstallationClassChips() {

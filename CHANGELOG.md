@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has client-only exclusive **All | &lt;6 h | &lt;1 h**
+  age-floor chips. Default **All** keeps 20 min / 3 h / 12 h on the current
+  50-nearest ranking. **&lt;6 h** drops 12 h and keeps 3 h. **&lt;1 h**
+  keeps 20 min and drops 3 h. Missing or non-finite `acqMs` stays visible.
+  A selected fire always stays. Chips AND with Plan 210 list confidence
+  and Plan 219 list FRP and apply before the 50-row cap on the
+  already-fetched `/api/firms` snapshot — no extra NASA fetch and no new
+  `/api`. Distinct from the globe 6 / 12 / 24 h age window. Preference
+  persists as `meridian.firmsListAge` (LayerStateCoordinator restore, no
+  share-URL write). NASA FIRMS acknowledgement is unchanged.
 - Dams in-view list has a client-only **Operator only** toggle next to the
   Plan 218 **Named only** chip and the Plan 205 **All | 10+ MW | 100+ MW**
   output-floor chips. Default **off** keeps the current roster, including
