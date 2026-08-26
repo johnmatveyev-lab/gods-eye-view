@@ -1,6 +1,6 @@
 // PLAN 209 — Sites list Mapped only toggle. Client-only filter of
 // already-fetched viewport rows. Distinct from 151 class, 165 footprints,
-// 186 named, and 202 osmType (those are globe chips).
+// 186 named, 202 osmType, and the globe Mapped only chip.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -12,9 +12,11 @@ import {
   SITES_MAPPED_ONLY_CHIP_TITLE,
   SITES_MAPPED_ONLY_STORAGE_KEY,
   filterInstallationsByMappedOnly,
+  filterViewportSitesList,
   installationIsPlaceCandidate,
   installationMatchesMappedFilter,
   normalizeSitesMappedOnly,
+  readSitesListMappedPref,
   readSitesMappedOnly,
   sitesMappedOnlyChipModel,
   writeSitesMappedOnly,
@@ -111,6 +113,8 @@ const MIXED = Object.freeze([
 
 test('Mapped only defaults off and keeps the current 50-row list', () => {
   assert.equal(DEFAULT_SITES_MAPPED_ONLY, false);
+  assert.equal(filterViewportSitesList, filterInstallationsByMappedOnly);
+  assert.equal(readSitesListMappedPref, readSitesMappedOnly);
   assert.equal(SITES_MAPPED_ONLY_CHIP_LABEL, 'Mapped only');
   assert.equal(SITES_MAPPED_ONLY_CHIP_TITLE, 'Hide Google Places candidates from this list');
   assert.equal(SITES_MAPPED_ONLY_STORAGE_KEY, 'meridian.sitesMappedOnly');
@@ -129,7 +133,7 @@ test('Mapped only defaults off and keeps the current 50-row list', () => {
     kind: index % 3 === 0 ? 'place_candidate' : 'installation',
     name: `Site ${index}`,
   }));
-  const off = listViewportInstallations(overflow, { mappedOnly: false });
+  const off = listViewportInstallations(overflow, { listMappedPref: false });
   assert.equal(off.length, 50);
   assert.equal(off.at(-1).id, 'osm:node:49');
   assert.ok(off.some((row) => row.id.startsWith('google:')));
@@ -155,7 +159,7 @@ test('on hides google:* place_candidate rows and keeps osm:* installations', () 
   assert.deepEqual(kept, ['osm:node:1', 'osm:way:2', 'google:land', 'osm:relation:9']);
   assert.ok(!kept.includes('google:abc'));
 
-  const rows = listViewportInstallations(MIXED, { mappedOnly: true });
+  const rows = listViewportInstallations(MIXED, { listMappedPref: true });
   assert.deepEqual(rows.map((row) => row.id), ['osm:node:1', 'osm:way:2', 'google:land', 'osm:relation:9']);
   assert.ok(rows.every((row) => row.id !== 'google:abc'));
 });
@@ -166,12 +170,12 @@ test('off keeps the mixed 50-row payload; on fills the cap from mapped rows', ()
     kind: index < 10 ? 'place_candidate' : 'installation',
     name: `Site ${index}`,
   }));
-  const off = listViewportInstallations(payload, { mappedOnly: false });
+  const off = listViewportInstallations(payload, { listMappedPref: false });
   assert.equal(off.length, 50);
   assert.equal(off[0].id, 'google:0');
   assert.equal(off.at(-1).id, 'osm:node:49');
 
-  const on = listViewportInstallations(payload, { mappedOnly: true });
+  const on = listViewportInstallations(payload, { listMappedPref: true });
   assert.equal(on.length, 50);
   assert.equal(on[0].id, 'osm:node:10');
   assert.equal(on.at(-1).id, 'osm:node:59');
@@ -213,7 +217,7 @@ test('meridian.sitesMappedOnly persists and reload keeps the flip', () => {
   assert.equal(readSitesMappedOnly(memoryStorage(storage.snapshot())), true, 'reload keeps on');
 
   const restored = listViewportInstallations(MIXED, {
-    mappedOnly: readSitesMappedOnly(memoryStorage(storage.snapshot())),
+    listMappedPref: readSitesMappedOnly(memoryStorage(storage.snapshot())),
   });
   assert.deepEqual(restored.map((row) => row.id), ['osm:node:1', 'osm:way:2', 'google:land', 'osm:relation:9']);
 
@@ -263,7 +267,9 @@ test('chip sits on the Sites list; militaryInstallations.js is unchanged', () =>
   assert.doesNotMatch(helper, /\/api\//);
   assert.doesNotMatch(helper, /quantum-earth|news\.google|telegeography/i);
 
-  assert.match(list, /filterInstallationsByMappedOnly|readSitesMappedOnly/);
+  assert.match(list, /filterViewportSitesList|readSitesListMappedPref/);
+  assert.doesNotMatch(list, /mappedOnly|milMappedOnly|militaryMappedFilter|filterInstallationsByMapped/);
+  assert.doesNotMatch(list, /place_candidate/);
   assert.doesNotMatch(list, /\/api\//);
 
   assert.doesNotMatch(layer, /sitesMappedOnly|installationListMappedFilter/);

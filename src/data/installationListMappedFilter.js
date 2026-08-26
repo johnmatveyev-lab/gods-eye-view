@@ -11,8 +11,9 @@
  *
  * Off is the current 50-row list. On drops `kind === 'place_candidate'`.
  * Missing kind and `installation` stay. Distinct from Plan 151 class
- * chips, Plan 165 Footprints only, Plan 186 Named only, and Plan 202
- * OSM-type chips (those filter globe stems).
+ * chips, Plan 165 Footprints only, Plan 186 Named only, Plan 202
+ * OSM-type chips, and the globe Mapped only chip (those filter globe
+ * stems).
  */
 
 export const DEFAULT_SITES_MAPPED_ONLY = false;
@@ -128,3 +129,6 @@ export function writeSitesMappedOnly(mappedOnly, storage) {
     return false;
   }
 }
+
+export const filterViewportSitesList = filterInstallationsByMappedOnly;
+export const readSitesListMappedPref = readSitesMappedOnly;

@@ -6,8 +6,8 @@
 
 import { humanizeInstallationClass } from './militaryInstallationData.js';
 import {
-  filterInstallationsByMappedOnly,
-  readSitesMappedOnly,
+  filterViewportSitesList,
+  readSitesListMappedPref,
 } from './installationListMappedFilter.js';
 
 export const INSTALLATION_VIEWPORT_LIST_TOGGLE_ID = 'installations-list-toggle';
@@ -28,17 +28,17 @@ export function nextInstallationListOpen(currentlyOpen) {
 
 /**
  * Rows for the current payload. Empty bbox / empty payload → [].
- * Mapped only (list-only) drops `place_candidate` rows when on.
+ * The list-only Mapped only chip drops Google Places extras when on.
  * @param {Array<object>|null|undefined} records Layer `getViewportRecords()` snapshot.
- * @param {{cap?: number, mappedOnly?: unknown}} [options]
+ * @param {{cap?: number, listMappedPref?: unknown}} [options]
  * @returns {Array<{id: string, name: string, type: string, latitude: number, longitude: number}>}
  */
 export function listViewportInstallations(records, {
   cap = INSTALLATION_VIEWPORT_LIST_CAP,
-  mappedOnly = readSitesMappedOnly(),
+  listMappedPref = readSitesListMappedPref(),
 } = {}) {
   const limit = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : INSTALLATION_VIEWPORT_LIST_CAP;
-  const source = filterInstallationsByMappedOnly(records, mappedOnly);
+  const source = filterViewportSitesList(records, listMappedPref);
   if (!source.length || limit === 0) return [];
   const rows = [];
   for (const record of source) {
