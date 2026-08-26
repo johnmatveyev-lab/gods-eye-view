@@ -371,6 +371,11 @@ import {
   viewFromCamera as damsViewFromCamera,
 } from './data/damsList.js';
 import {
+  normalizeDamOutputFloor,
+  readDamOutputFloor,
+  writeDamOutputFloor,
+} from './data/damsOutputFilter.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -2942,6 +2947,7 @@ export class StyleManager {
     this._installationNamedChips = document.getElementById('installation-named-chips');
     this._installationOsmTypeChips = document.getElementById('installation-osm-type-chips');
     this._installationMappedChips = document.getElementById('installation-mapped-chips');
+    this._damsOutputChips = document.getElementById('dams-output-chips');
     this._aisTypeChips = document.getElementById('ais-type-chips');
     this._aisParkedChips = document.getElementById('ais-parked-chips');
     this._aisMinSpeedChips = document.getElementById('ais-min-speed-chips');
@@ -3399,6 +3405,7 @@ export class StyleManager {
     this._initLaunchesPanel();
     this._initStopTrackingButton();
     this._initDamsInViewList();
+    this._initDamsOutputChips();
     this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
@@ -5513,6 +5520,7 @@ export class StyleManager {
     this._syncAisHideNoImoChip();
     this._datacenterInViewList?.refresh();
     this._damsInViewList?.refresh();
+    this._syncDamsOutputChips();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5527,6 +5535,7 @@ export class StyleManager {
           }
           if (change?.layerId === DAMS_LAYER_ID) {
             this._damsInViewList?.refresh();
+            this._syncDamsOutputChips();
           }
         }
         if (change?.layerId === 'military-installations') {
@@ -11739,6 +11748,7 @@ export class StyleManager {
         return module.getListPayload() || [];
       },
       getView: () => damsViewFromCamera(this.viewer?.camera, Cesium.Math),
+      getOutputFloor: () => readDamOutputFloor(),
       flyTo: (site) => {
         const module = this._dataManager?.layers?.get(DAMS_LAYER_ID)?.module;
         if (typeof module?.flyToRecord === 'function') {
@@ -11760,6 +11770,31 @@ export class StyleManager {
     this._damsListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
       this._damsInViewList?.refresh();
     });
+  }
+
+  _syncDamsOutputChips() {
+    const enabled = this._dataManager?.isEnabled?.(DAMS_LAYER_ID) === true;
+    if (this._damsOutputChips) this._damsOutputChips.hidden = !enabled;
+    const floor = normalizeDamOutputFloor(readDamOutputFloor());
+    const chips = this._damsOutputChips?.querySelectorAll?.('[data-dam-output]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.damOutput === floor;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initDamsOutputChips() {
+    if (!this._damsOutputChips) return;
+    this._damsOutputChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dam-output]');
+      if (!chip || !this._damsOutputChips.contains(chip)) return;
+      writeDamOutputFloor(chip.dataset.damOutput);
+      this._syncDamsOutputChips();
+      this._damsInViewList?.refresh();
+    });
+    this._syncDamsOutputChips();
   }
 
   /**

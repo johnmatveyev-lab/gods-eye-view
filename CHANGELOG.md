@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has client-only exclusive **All | 10+ MW | 100+ MW**
+  output-floor chips. Default **All** matches the current in-view roster.
+  **10+ MW** hides sites whose bundled OSM `properties.output` parses below
+  10 MW (KW ÷ 1000, MW as-is). **100+ MW** keeps Itaipu-class plants.
+  Missing or unparseable output (`yes`, blank) stays visible. Globe stems
+  stay unchanged. Chip changes re-filter the already-bundled OSM / ODbL
+  snapshot — no extra fetch and no `/api`. Preference persists as
+  `meridian.damOutput` and is not a share-link field.
+  LayerStateCoordinator restore re-applies the stored floor. Hidden with
+  the dams list when the layer is off. Distinct from Plan 193 datacenter
+  hide-no-operator.
 - Hosted Quakes list has client-only exclusive **All | 5+ | 6+** magnitude-floor
   chips. Default **All** matches the current 50-row nearest/recent list.
   **5+** keeps rows whose `magnitude` is at least 5, then applies the existing

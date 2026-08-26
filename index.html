@@ -1123,6 +1123,11 @@
           <strong>DAMS IN VIEW</strong>
           <output id="dams-in-view-count" aria-live="polite">0</output>
         </div>
+        <div id="dams-output-chips" class="dams-output-chips" role="group" aria-label="Dam output">
+          <button type="button" class="dams-output-chip active" data-dam-output="all" aria-pressed="true" title="Show every dam regardless of plant output">All</button>
+          <button type="button" class="dams-output-chip" data-dam-output="10" aria-pressed="false" title="Hide dams below 10 MW">10+ MW</button>
+          <button type="button" class="dams-output-chip" data-dam-output="100" aria-pressed="false" title="Hide dams below 100 MW">100+ MW</button>
+        </div>
         <div id="dams-in-view-items" class="in-view-site-list-items" role="list"></div>
         <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
       </div>

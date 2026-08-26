@@ -16,6 +16,11 @@ import {
   renderDamsInViewList,
   viewFromCamera,
 } from './damsList.js';
+import {
+  DAM_OUTPUT_STORAGE_KEY,
+  readDamOutputFloor,
+  writeDamOutputFloor,
+} from './damsOutputFilter.js';
 import { DATA_CREDITS } from './dataCredits.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -125,6 +130,46 @@ function fakeDocument() {
   };
   return doc;
 }
+
+test('output floor All matches the current in-view list and persist flip reloads', () => {
+  const small = { ...MANSFIELD, output: '330KW' };
+  const plant = { ...TOM_MILLER, output: '14000 MW' };
+  const records = [small, plant];
+  const unfiltered = listDamsInView({ enabled: true, records, view: AUSTIN_VIEW });
+  assert.deepEqual(
+    listDamsInView({ enabled: true, records, view: AUSTIN_VIEW, outputFloor: 'all' }).map((site) => site.id),
+    unfiltered.map((site) => site.id),
+  );
+  assert.deepEqual(
+    listDamsInView({ enabled: true, records, view: AUSTIN_VIEW, outputFloor: '10' }).map((site) => site.id),
+    [plant.id],
+  );
+
+  const storage = {
+    data: {},
+    getItem(key) { return Object.hasOwn(this.data, key) ? this.data[key] : null; },
+    setItem(key, value) { this.data[key] = String(value); },
+  };
+  writeDamOutputFloor('100', storage);
+  assert.equal(storage.data[DAM_OUTPUT_STORAGE_KEY], '100');
+  assert.equal(readDamOutputFloor(storage), '100');
+  const items = fakeNode('div');
+  items.ownerDocument = fakeDocument();
+  const binder = bindDamsInViewList({
+    root: fakeNode('section'),
+    items,
+    getEnabled: () => true,
+    getRecords: () => records,
+    getView: () => AUSTIN_VIEW,
+    getOutputFloor: () => readDamOutputFloor(storage),
+    flyTo() {},
+  });
+  assert.deepEqual(binder.sites().map((site) => site.id), [plant.id]);
+  writeDamOutputFloor('all', storage);
+  binder.refresh();
+  assert.deepEqual(binder.sites().map((site) => site.id), unfiltered.map((site) => site.id));
+  binder.destroy();
+});
 
 test('list matches visible in-payload dams in the current view', () => {
   const listed = listDamsInView({
@@ -328,6 +373,8 @@ test('legal: existing OSM dams + MIT credit; no extra route or person lookup', (
   assert.equal(DAMS_LAYER_ID, 'local-dams');
   assert.match(html, /id="dams-in-view"/);
   assert.match(html, /DAMS IN VIEW/);
+  assert.match(html, /id="dams-output-chips"/);
+  assert.match(html, /data-dam-output="all"/);
   assert.match(html, /id="datacenter-in-view"/);
   assert.match(html, /© OpenStreetMap contributors/);
   assert.match(changelog, /in-view OSM dams/i);
