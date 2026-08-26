@@ -55,7 +55,13 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
   const geometricFeet = finiteNumber(aircraft?.alt_geom);
   const groundSpeedKnots = finiteNumber(aircraft?.gs);
   const verticalRateFpm = finiteNumber(aircraft?.baro_rate) ?? finiteNumber(aircraft?.geom_rate);
-  const track = finiteNumber(aircraft?.track);
+  // Prefer published track. When track is missing / non-finite, persist a
+  // finite true_heading (fallback mag_heading) into the track slot so
+  // Hide no heading can keep contacts that already publish a heading.
+  // Observer `dir` is bearing-to-observer, not heading — never use it.
+  const track = finiteNumber(aircraft?.track)
+    ?? finiteNumber(aircraft?.true_heading)
+    ?? finiteNumber(aircraft?.mag_heading);
   const publishedType = publishedText(aircraft?.t);
   const publishedReg = publishedText(aircraft?.r);
 
