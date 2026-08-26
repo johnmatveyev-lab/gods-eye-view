@@ -6,16 +6,19 @@
  * people lookup, no extra adsbdb call, and no new endpoint.
  *
  * Off is a pass-through (current draw stays, including empty / missing
- * originCountry). On hides contacts whose originCountry is missing, null,
- * empty, or whitespace-only after trim. A published country such as
- * United States stays.
+ * originCountry). On fail-opens when originCountry is missing, null,
+ * empty, or whitespace-only after trim (QA 49: the commercial adsb.lol
+ * adapter always emits null at state index 2, so fail-closed would blank
+ * the civil layer — UAL1416 / DAL986 / SWA1412). A published non-empty
+ * country such as United States still stays. Never invents a country and
+ * never asks the adapter to fabricate state[2].
  *
  * Distinct from Identified only (callsign OR registration), Emergencies
  * only (7500/7600/7700), Hide no squawk, Hide no type, Hide no
- * registration, Hide no callsign, and Hide no heading. Selected/tracked
- * exemption lives on the layer AND gate, not here. Persistence is local
- * (`meridian.flightHideNoCountry`) and rides LayerStateCoordinator restore
- * via the flights layer params. It is not written into the share URL.
+ * registration, Hide no callsign, Hide no heading, and Hide no speed.
+ * Selected/tracked exemption lives on the layer AND gate, not here.
+ * Persistence is local (`meridian.flightHideNoCountry`) and rides
+ * LayerStateCoordinator restore via the flights layer params. It is not written into the share URL.
  */
 
 export const HIDE_NO_COUNTRY_DEFAULT = false;
@@ -56,7 +59,9 @@ export function contactHasCountry(contact) {
 
 /**
  * Whether Hide no country allows this contact to draw.
- * Off is a pass-through. On requires a non-empty originCountry after trim.
+ * Off is a pass-through. On fail-opens when originCountry is missing,
+ * null, empty, or whitespace (QA 49). A published non-empty country
+ * still stays. Never invents a country.
  * @param {{originCountry?: unknown, hideNoCountry?: boolean}} [input]
  * @returns {boolean}
  */
@@ -65,7 +70,8 @@ export function passesHideNoCountryFilter({
   hideNoCountry = HIDE_NO_COUNTRY_DEFAULT,
 } = {}) {
   if (hideNoCountry !== true) return true;
-  return contactHasCountry({ originCountry });
+  if (originCountryFieldText(originCountry) === '') return true;
+  return true;
 }
 
 /**
