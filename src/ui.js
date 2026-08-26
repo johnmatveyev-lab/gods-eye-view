@@ -331,6 +331,10 @@ import {
   readLaunchListWebcastOnly,
   writeLaunchListWebcastOnly,
 } from './data/launchListWebcastFilter.js';
+import {
+  readLaunchListHideNoMission,
+  writeLaunchListHideNoMission,
+} from './data/launchListMissionFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   getEarthquakeListAgeFilter,
@@ -3186,6 +3190,7 @@ export class StyleManager {
     this._launchesPanelVehicleChips = document.getElementById('launches-panel-vehicle-chips');
     this._launchesPanelOrbitChips = document.getElementById('launches-panel-orbit-chips');
     this._launchesPanelWebcastChips = document.getElementById('launches-panel-webcast-chips');
+    this._launchesPanelMissionChips = document.getElementById('launches-panel-mission-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
     this._launchesPanelPayload = null;
@@ -11840,6 +11845,7 @@ export class StyleManager {
     this._syncLaunchesPanelVehicleChip();
     this._syncLaunchesPanelOrbitChip();
     this._syncLaunchesPanelWebcastChip();
+    this._syncLaunchesPanelMissionChip();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11905,6 +11911,13 @@ export class StyleManager {
       if (!chip || !this._launchesPanelWebcastChips.contains(chip)) return;
       writeLaunchListWebcastOnly(readLaunchListWebcastOnly() !== true);
       this._syncLaunchesPanelWebcastChip();
+      this._reapplyLaunchesPanelLspType();
+    });
+    this._launchesPanelMissionChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-list-hide-no-mission]');
+      if (!chip || !this._launchesPanelMissionChips.contains(chip)) return;
+      writeLaunchListHideNoMission(readLaunchListHideNoMission() !== true);
+      this._syncLaunchesPanelMissionChip();
       this._reapplyLaunchesPanelLspType();
     });
   }
@@ -12001,6 +12014,16 @@ export class StyleManager {
     }
   }
 
+  _syncLaunchesPanelMissionChip() {
+    const hide = readLaunchListHideNoMission() === true;
+    const chips = this._launchesPanelMissionChips?.querySelectorAll?.('[data-launch-list-hide-no-mission]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', hide);
+      chip.setAttribute('aria-pressed', String(hide));
+    }
+  }
+
   _reapplyLaunchesPanelLspType() {
     if (this._launchesPanelPayload == null) return;
     const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter(), {
@@ -12013,6 +12036,7 @@ export class StyleManager {
       hideNoVehicle: readLaunchListHideNoVehicle(),
       hideNoOrbit: readLaunchListHideNoOrbit(),
       webcastOnly: readLaunchListWebcastOnly(),
+      hideNoMission: readLaunchListHideNoMission(),
     });
     this._launchesPanelRows = rows;
     this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
@@ -12062,6 +12086,7 @@ export class StyleManager {
       hideNoVehicle: readLaunchListHideNoVehicle(),
       hideNoOrbit: readLaunchListHideNoOrbit(),
       webcastOnly: readLaunchListWebcastOnly(),
+      hideNoMission: readLaunchListHideNoMission(),
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
     this._launchesPanelPayload = presentation.payload ?? null;
