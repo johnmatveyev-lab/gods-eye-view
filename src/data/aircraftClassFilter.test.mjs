@@ -155,7 +155,7 @@ test('layers AND class chips with landed altitude and speed filters', () => {
   assert.match(flightsSrc, /aircraftMatchesAltitudeBand/);
   assert.match(flightsSrc, /_classAndMatcher/);
   assert.match(flightsSrc, /contactPassesInFlightFilters/);
-  assert.match(flightsSrc, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher\]/);
+  assert.match(flightsSrc, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher\]/);
   assert.equal(flightsSrc.includes("from './flightAltitudeBand.js'"), true);
   assert.equal(flightsSrc.includes("from './flightSpeedBand.js'"), true);
   assert.match(militarySrc, /_classAndMatcher/);
