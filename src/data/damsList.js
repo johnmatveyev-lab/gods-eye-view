@@ -3,7 +3,14 @@
  *
  * Reads the already-loaded `local-dams` payload (bundled OSM / ODbL
  * snapshot). Does not fetch and does not touch datacenters or installations.
+ * Plan 205 output-floor chips filter this list only — globe stems stay.
  */
+
+import {
+  DEFAULT_DAM_OUTPUT_FLOOR,
+  damMeetsOutputFloor,
+  readDamOutputFloor,
+} from './damsOutputFilter.js';
 
 export const DAMS_LAYER_ID = 'local-dams';
 export const DAMS_LIST_CAP = 50;
@@ -63,6 +70,7 @@ export function damDistanceKm(lat1, lon1, lat2, lon2) {
  * @param {Array<object>} options.records Payload from `getListPayload()`.
  * @param {{west?: number, south?: number, east?: number, north?: number, centerLat?: number, centerLon?: number}|null} [options.view]
  * @param {number} [options.cap]
+ * @param {unknown} [options.outputFloor] Exclusive All | 10+ MW | 100+ MW chip.
  * @returns {Array<{id: string, label: string, latitude: number, longitude: number, distanceKm: number}>}
  */
 export function listDamsInView({
@@ -70,6 +78,7 @@ export function listDamsInView({
   records,
   view = null,
   cap = DAMS_LIST_CAP,
+  outputFloor = DEFAULT_DAM_OUTPUT_FLOOR,
 } = {}) {
   if (!enabled) return [];
   if (!Array.isArray(records) || records.length === 0) return [];
@@ -83,6 +92,7 @@ export function listDamsInView({
 
   for (const record of records) {
     if (record?.visible === false) continue;
+    if (!damMeetsOutputFloor(record, outputFloor)) continue;
     const latitude = Number(record?.latitude);
     const longitude = Number(record?.longitude);
     if (!pointInViewBounds(latitude, longitude, view)) continue;
@@ -162,6 +172,7 @@ export function renderDamsInViewList(items, count, sites) {
  * @param {() => boolean} options.getEnabled
  * @param {() => Array<object>} options.getRecords
  * @param {() => object|null} options.getView
+ * @param {() => unknown} [options.getOutputFloor] Persist / chip floor. Defaults to `meridian.damOutput`.
  * @param {(site: object) => boolean|void} options.flyTo
  * @returns {{refresh: Function, destroy: Function, sites: () => Array<object>}|null}
  */
@@ -172,6 +183,7 @@ export function bindDamsInViewList({
   getEnabled,
   getRecords,
   getView,
+  getOutputFloor,
   flyTo,
 } = {}) {
   if (!root || !items || typeof getEnabled !== 'function' || typeof getRecords !== 'function') {
@@ -186,6 +198,9 @@ export function bindDamsInViewList({
       enabled,
       records: getRecords() || [],
       view: typeof getView === 'function' ? getView() : null,
+      outputFloor: typeof getOutputFloor === 'function'
+        ? getOutputFloor()
+        : readDamOutputFloor(),
     });
     root.hidden = !enabled;
     renderDamsInViewList(items, count, current);

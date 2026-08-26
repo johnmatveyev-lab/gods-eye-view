@@ -93,7 +93,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         brightness chips (`meridian.firmsBrightnessTi5`),
  *                         FIRMS scan-size chips (`meridian.firmsScan`),
  *                         Quake list magnitude-floor chips
- *                         (`meridian.quakeListMag`).
+ *                         (`meridian.quakeListMag`),
+ *                         dam output-floor chips (`meridian.damOutput`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
