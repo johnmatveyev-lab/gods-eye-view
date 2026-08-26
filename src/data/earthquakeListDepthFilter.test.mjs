@@ -26,6 +26,7 @@ import {
   setEarthquakeListDepthFilter,
   writeEarthquakeListDepthFilter,
 } from './earthquakeListDepthFilter.js';
+import { resetEarthquakeListAgeFilterForTest } from './earthquakeListAgeFilter.js';
 import {
   LayerStateCoordinator,
   encodeLayerStateParams,
@@ -67,6 +68,7 @@ const MIXED = [D15, D70, D80, D400];
 
 beforeEach(() => {
   resetEarthquakeListDepthFilterForTest();
+  resetEarthquakeListAgeFilterForTest();
 });
 
 test('All keeps 15/80/400 km', () => {

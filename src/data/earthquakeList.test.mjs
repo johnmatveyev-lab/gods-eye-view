@@ -16,12 +16,14 @@ import {
   renderEarthquakeList,
   selectEarthquakeListRows,
 } from './earthquakeList.js';
+import { resetEarthquakeListAgeFilterForTest } from './earthquakeListAgeFilter.js';
 import { resetEarthquakeListDepthFilterForTest } from './earthquakeListDepthFilter.js';
 import { resetEarthquakeListMagFilterForTest } from './earthquakeListMagFilter.js';
 
 beforeEach(() => {
   resetEarthquakeListMagFilterForTest();
   resetEarthquakeListDepthFilterForTest();
+  resetEarthquakeListAgeFilterForTest();
 });
 import { createEarthquakesLayer } from './earthquakes.js';
 
@@ -304,6 +306,10 @@ test('legal: USGS credit, Meridian title, MIT notice, no banned sources', () => 
   assert.match(html, /data-earthquake-list-depth="all"/);
   assert.match(html, /data-earthquake-list-depth="70"/);
   assert.match(html, /data-earthquake-list-depth="20"/);
+  assert.match(html, /id="earthquake-list-age-chips"/);
+  assert.match(html, /data-earthquake-list-age="all"/);
+  assert.match(html, /data-earthquake-list-age="6"/);
+  assert.match(html, /data-earthquake-list-age="1"/);
   assert.match(html, /id="earthquake-depth-chips"/);
   assert.match(html, /data-earthquake-depth="shallow"/);
   assert.match(html, /id="earthquake-time-chips"/);

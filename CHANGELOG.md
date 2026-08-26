@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Quakes list has client-only exclusive **All | &lt;6 h | &lt;1 h**
+  age-ceiling chips. Default **All** keeps 20 min / 3 h / 12 h events on
+  the current 50-row nearest/recent list. **&lt;6 h** drops 12 h and keeps
+  3 h. **&lt;1 h** keeps 20 min and drops 3 h. Missing or non-finite
+  `timeMs` stays visible. The selected row always stays. AND with the
+  Plan 208 magnitude floor and Plan 216 depth ceiling. Distinct from the
+  globe 1h / 6h / 24h time-window chips. Re-applies the already-fetched
+  USGS snapshot — no extra fetch and no new `/api`. Preference persists
+  as `meridian.quakeListAge` (LayerStateCoordinator restore, no
+  share-URL write).
 - Civil flights have a client-only **Hide no callsign** toggle after Hide no
   registration. Default **off** keeps the current draw, including missing
   and present callsigns. On drops already-fetched contacts whose `callsign`

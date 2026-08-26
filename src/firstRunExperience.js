@@ -99,6 +99,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         (`meridian.quakeListMag`),
  *                         Quake list depth-ceiling chips
  *                         (`meridian.quakeListDepth`),
+ *                         Quake list age-ceiling chips
+ *                         (`meridian.quakeListAge`),
  *                         dam output-floor chips (`meridian.damOutput`),
  *                         dam Named only toggle (`meridian.damNamedOnly`),
  *                         dam Operator only toggle (`meridian.damOperatorOnly`),
@@ -124,6 +126,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setLaunchHideUnknownSite` /
  *                         `setEarthquakeListMagFilter` /
  *                         `setEarthquakeListDepthFilter` /
+ *                         `setEarthquakeListAgeFilter` /
  *                         `setFirmsListConf` / `setFirmsListFrp` /
  *                         `setFirmsListAge` /
  *                         `writeLaunchListMappedOnly` /

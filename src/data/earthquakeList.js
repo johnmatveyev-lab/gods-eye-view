@@ -4,6 +4,11 @@
  */
 
 import {
+  earthquakeListRowMatchesAgeCeiling,
+  getEarthquakeListAgeFilter,
+  hydrateEarthquakeListAgeFilter,
+} from './earthquakeListAgeFilter.js';
+import {
   earthquakeListRowMatchesDepthCeiling,
   getEarthquakeListDepthFilter,
   hydrateEarthquakeListDepthFilter,
@@ -76,11 +81,12 @@ export function formatEarthquakeListRow(record) {
 
 /**
  * Cap to the ~50 most recent events, or the 50 nearest when an origin is given.
- * List magnitude-floor chips (All | 5+ | 6+) and depth-ceiling chips
- * (All | <70 km | <20 km) AND before the cap. The selected row stays
- * through the depth ceiling.
+ * List magnitude-floor chips (All | 5+ | 6+), depth-ceiling chips
+ * (All | <70 km | <20 km), and age-ceiling chips (All | <6 h | <1 h)
+ * AND before the cap. The selected row stays through the depth and
+ * age ceilings.
  * @param {Array<object>|null|undefined} records
- * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number, magFloor?: unknown, depthCeiling?: unknown, selectedId?: string|null}} [options]
+ * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, selectedId?: string|null, now?: number}} [options]
  * @returns {Array<object>}
  */
 export function selectEarthquakeListRows(records, {
@@ -88,7 +94,9 @@ export function selectEarthquakeListRows(records, {
   limit = EARTHQUAKE_LIST_LIMIT,
   magFloor = getEarthquakeListMagFilter(),
   depthCeiling = getEarthquakeListDepthFilter(),
+  ageCeiling = getEarthquakeListAgeFilter(),
   selectedId = null,
+  now = Date.now(),
 } = {}) {
   const cap = Math.max(0, Math.min(
     EARTHQUAKE_LIST_LIMIT,
@@ -104,6 +112,7 @@ export function selectEarthquakeListRows(records, {
     if (!row) continue;
     if (!earthquakeListRowMatchesMagFloor(row, magFloor)) continue;
     if (!earthquakeListRowMatchesDepthCeiling(row, depthCeiling, { selectedId })) continue;
+    if (!earthquakeListRowMatchesAgeCeiling(row, ageCeiling, { selectedId, now })) continue;
     if (hasOrigin) {
       row.distanceKm = earthquakeDistanceKm({ lat: originLat, lon: originLon }, row);
     }
@@ -123,10 +132,10 @@ export function selectEarthquakeListRows(records, {
 
 /**
  * Sync list presentation. Failed or empty feed → unavailable, never a hang.
- * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null, magFloor?: unknown, depthCeiling?: unknown, selectedId?: string|null}} [input]
+ * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, selectedId?: string|null, now?: number}} [input]
  * @returns {{status: 'ready'|'unavailable', rows: Array<object>, message: string|null, source: string}}
  */
-export function presentEarthquakeList({ records, error, origin, magFloor, depthCeiling, selectedId } = {}) {
+export function presentEarthquakeList({ records, error, origin, magFloor, depthCeiling, ageCeiling, selectedId, now } = {}) {
   if (error) {
     return {
       status: 'unavailable',
@@ -135,7 +144,7 @@ export function presentEarthquakeList({ records, error, origin, magFloor, depthC
       source: EARTHQUAKE_LIST_SOURCE,
     };
   }
-  const rows = selectEarthquakeListRows(records, { origin, magFloor, depthCeiling, selectedId });
+  const rows = selectEarthquakeListRows(records, { origin, magFloor, depthCeiling, ageCeiling, selectedId, now });
   if (!rows.length) {
     return {
       status: 'unavailable',
@@ -281,6 +290,7 @@ export function initEarthquakeListControl({
   if (!button || !panel || !list) return null;
   hydrateEarthquakeListMagFilter();
   hydrateEarthquakeListDepthFilter();
+  hydrateEarthquakeListAgeFilter();
   let open = false;
 
   const refresh = () => {
