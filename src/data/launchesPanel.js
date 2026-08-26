@@ -5,18 +5,24 @@
  * the row is only selected. Failed payloads are empty/unavailable, never a hang.
  * Exclusive All | Commercial | Government chips re-filter
  * `launch_service_provider.type` on that already-fetched payload.
+ * Mapped only then hides rows missing finite pad lat/lon.
  */
 
 import {
   DEFAULT_LAUNCH_LSP_TYPE_FILTER,
   filterLaunchesByLspType,
 } from './launchLspTypeFilter.js';
+import {
+  DEFAULT_LAUNCH_LIST_MAPPED_ONLY,
+  filterLaunchListByMappedOnly,
+} from './launchListMappedFilter.js';
 
 export const LAUNCHES_PANEL_ID = 'launches-panel';
 export const LAUNCHES_PANEL_TOGGLE_ID = 'launches-panel-toggle';
 export const LAUNCHES_PANEL_LIST_ID = 'launches-panel-list';
 export const LAUNCHES_PANEL_COUNT_ID = 'launches-panel-count';
 export const LAUNCHES_PANEL_LSP_CHIPS_ID = 'launches-panel-lsp-chips';
+export const LAUNCHES_PANEL_MAPPED_CHIPS_ID = 'launches-panel-mapped-chips';
 /** Same feed the globe layer already uses. Do not invent another route. */
 export const LAUNCHES_FEED_URL = '/api/launches';
 /** Same close-pad range Space Missions already uses for pad focus. */
@@ -83,14 +89,24 @@ function compactLaunchLabel(name, maxLength = 27) {
  * Keeps records without pad coords so they can still be selected.
  * Exclusive LSP-type chips re-filter `launch_service_provider.type`
  * without another fetch. All leaves the current list unchanged.
+ * Mapped only then drops rows missing finite pad coords; off keeps
+ * those rows selectable. A selected id always stays.
  * @param {object|Array|null} payload `{results:[…]}` or a launch array.
  * @param {unknown} [filter]
+ * @param {{mappedOnly?: unknown, selectedId?: string|null}} [options]
  * @returns {Array<object>}
  */
-export function launchesPanelRows(payload, filter = DEFAULT_LAUNCH_LSP_TYPE_FILTER) {
+export function launchesPanelRows(
+  payload,
+  filter = DEFAULT_LAUNCH_LSP_TYPE_FILTER,
+  {
+    mappedOnly = DEFAULT_LAUNCH_LIST_MAPPED_ONLY,
+    selectedId = null,
+  } = {},
+) {
   const launches = Array.isArray(payload) ? payload : payload?.results;
   if (!Array.isArray(launches)) return [];
-  return filterLaunchesByLspType(launches, filter).map((launch, index) => {
+  const rows = filterLaunchesByLspType(launches, filter).map((launch, index) => {
     const coords = launchPadCoordinates(launch);
     const pad = launch?.pad || {};
     const location = pad.location || {};
@@ -107,6 +123,7 @@ export function launchesPanelRows(payload, filter = DEFAULT_LAUNCH_LSP_TYPE_FILT
       source: launch?.source || 'Launch Library 2',
     };
   });
+  return filterLaunchListByMappedOnly(rows, mappedOnly, selectedId);
 }
 
 /**
@@ -186,6 +203,8 @@ export function launchesPanelLoadingPresentation() {
  * @param {object|Array|null} [input.cachedPayload]
  * @param {string} [input.url]
  * @param {unknown} [input.filter]
+ * @param {unknown} [input.mappedOnly]
+ * @param {string|null} [input.selectedId]
  * @returns {Promise<object>}
  */
 export async function loadLaunchesPanelPayload({
@@ -193,19 +212,21 @@ export async function loadLaunchesPanelPayload({
   cachedPayload = null,
   url = LAUNCHES_FEED_URL,
   filter = DEFAULT_LAUNCH_LSP_TYPE_FILTER,
+  mappedOnly = DEFAULT_LAUNCH_LIST_MAPPED_ONLY,
+  selectedId = null,
 } = {}) {
   try {
     const response = await fetchImpl(url);
     if (!response?.ok) throw new Error(`HTTP ${response?.status || 0}`);
     const payload = await response.json();
-    const rows = launchesPanelRows(payload, filter);
+    const rows = launchesPanelRows(payload, filter, { mappedOnly, selectedId });
     return {
       ...launchesPanelEmptyPresentation({ available: true, items: rows, payload }),
       payload,
     };
   } catch {
     if (cachedPayload != null && isLaunchesPayload(cachedPayload)) {
-      const rows = launchesPanelRows(cachedPayload, filter);
+      const rows = launchesPanelRows(cachedPayload, filter, { mappedOnly, selectedId });
       if (rows.length) {
         return {
           ...launchesPanelEmptyPresentation({ available: true, items: rows, payload: cachedPayload }),
