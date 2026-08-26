@@ -198,6 +198,9 @@ import {
   normalizeScanCeiling,
 } from './data/firmsScanFilter.js';
 import {
+  normalizeTrackCeiling,
+} from './data/firmsTrackFilter.js';
+import {
   firmsSensorFilterFlags,
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
@@ -2858,6 +2861,7 @@ export class StyleManager {
     this._firmsBrightnessChips = document.getElementById('fires-brightness-chips');
     this._firmsBrightnessTi5Chips = document.getElementById('fires-brightness-ti5-chips');
     this._firmsScanChips = document.getElementById('fires-scan-chips');
+    this._firmsTrackChips = document.getElementById('fires-track-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -3404,6 +3408,7 @@ export class StyleManager {
     this._initFirmsBrightnessChips();
     this._initFirmsBrightnessTi5Chips();
     this._initFirmsScanChips();
+    this._initFirmsTrackChips();
     this._initInstallationClassChips();
     this._initInstallationFootprintChip();
     this._initInstallationNamedChip();
@@ -5553,6 +5558,7 @@ export class StyleManager {
           this._syncFirmsBrightnessChips();
           this._syncFirmsBrightnessTi5Chips();
           this._syncFirmsScanChips();
+          this._syncFirmsTrackChips();
         }
         if (change?.layerId === 'ais-live-vessels') {
           this._syncAisTypeChips();
@@ -12021,6 +12027,32 @@ export class StyleManager {
       this._syncFirmsScanChips();
     });
     this._syncFirmsScanChips();
+  }
+
+  _syncFirmsTrackChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsTrackChips) this._firmsTrackChips.hidden = !enabled;
+    const layer = this._dataManager?.layers?.get('local-firms')?.module;
+    const ceiling = normalizeTrackCeiling(layer?.getParams?.()?.trackCeiling);
+    const chips = this._firmsTrackChips?.querySelectorAll?.('[data-firms-track]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsTrack === ceiling;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsTrackChips() {
+    if (!this._firmsTrackChips) return;
+    this._firmsTrackChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-track]');
+      if (!chip || !this._firmsTrackChips.contains(chip)) return;
+      const next = normalizeTrackCeiling(chip.dataset.firmsTrack);
+      this._dataManager?.setLayerParams?.('local-firms', { trackCeiling: next }, { origin: 'user' });
+      this._syncFirmsTrackChips();
+    });
+    this._syncFirmsTrackChips();
   }
 
   _syncInstallationClassChips() {

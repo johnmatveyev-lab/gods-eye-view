@@ -92,6 +92,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         (`meridian.launchHideUnknownSite`), FIRMS TI5
  *                         brightness chips (`meridian.firmsBrightnessTi5`),
  *                         FIRMS scan-size chips (`meridian.firmsScan`),
+ *                         FIRMS track-size chips (`meridian.firmsTrack`),
  *                         Quake list magnitude-floor chips
  *                         (`meridian.quakeListMag`).
  *                         All are defaults or separate durable prefs the

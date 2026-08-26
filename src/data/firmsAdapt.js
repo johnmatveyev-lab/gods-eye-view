@@ -32,6 +32,7 @@ export function adaptFirmsRecords(records) {
       brightness: finiteNumber(record.brightness),
       brightnessTi5: finiteNumber(record.brightnessTi5),
       scanKm: finiteNumber(record.scanKm ?? record.scan),
+      trackKm: finiteNumber(record.trackKm ?? record.track),
       night: daynight === 'N',
       daynight: daynight === 'N' || daynight === 'D' ? daynight : '',
       acqMs: parseAcquisitionMs(record.acqDate, record.acqTime, acqCache),
