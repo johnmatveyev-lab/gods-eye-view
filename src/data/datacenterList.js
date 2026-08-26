@@ -4,9 +4,10 @@
  * Reads the already-loaded `local-datacenters` payload (bundled OSM / ODbL
  * snapshot). Does not fetch, does not query Overpass, and does not touch
  * mapped installations or FIRMS. Plan 206 operator chips, Plan 270 Named
- * only, and Plan 285 Website only re-filter this list only — globe stems
- * stay. Named only ANDs after the operator matcher; Website only ANDs
- * after Named only.
+ * only, Plan 285 Website only, and Plan 291 Dated only re-filter this
+ * list only — globe stems stay. Named only ANDs after the operator
+ * matcher; Website only ANDs after Named only; Dated only ANDs after
+ * Website only.
  */
 
 import {
@@ -24,6 +25,11 @@ import {
   datacenterMatchesWebsiteFilter,
   getDatacenterListWebsiteOnly,
 } from './datacenterListWebsiteFilter.js';
+import {
+  DEFAULT_DATACENTER_DATED_ONLY,
+  datacenterMatchesDatedOnlyFilter,
+  getDatacenterListDatedOnly,
+} from './datacenterListDatedOnlyFilter.js';
 
 export const DATACENTER_LAYER_ID = 'local-datacenters';
 export const DATACENTER_LIST_CAP = 50;
@@ -86,6 +92,7 @@ export function datacenterDistanceKm(lat1, lon1, lat2, lon2) {
  * @param {unknown} [options.operatorFilter] Exclusive All | AWS | Equinix chip.
  * @param {unknown} [options.namedOnly] Named only toggle. Default off.
  * @param {unknown} [options.websiteOnly] Website only toggle. Default off.
+ * @param {unknown} [options.datedOnly] Dated only toggle. Default off.
  * @param {string|null} [options.selectedId] Selected list / globe row stays
  *   when it already passed the other matchers.
  * @returns {Array<{id: string, label: string, latitude: number, longitude: number, distanceKm: number}>}
@@ -98,6 +105,7 @@ export function listDatacentersInView({
   operatorFilter = DEFAULT_DATACENTER_LIST_OPERATOR,
   namedOnly = DEFAULT_DATACENTER_NAMED_ONLY,
   websiteOnly = DEFAULT_DATACENTER_WEBSITE_ONLY,
+  datedOnly = DEFAULT_DATACENTER_DATED_ONLY,
   selectedId = null,
 } = {}) {
   if (!enabled) return [];
@@ -120,6 +128,7 @@ export function listDatacentersInView({
     const label = String(record.label || 'Datacenter').trim() || 'Datacenter';
     if (!datacenterMatchesNamedFilter({ id, label }, namedOnly, { selectedId })) continue;
     if (!datacenterMatchesWebsiteFilter(record, websiteOnly, { selectedId })) continue;
+    if (!datacenterMatchesDatedOnlyFilter(record, datedOnly, { selectedId })) continue;
     listed.push({
       id,
       label,
@@ -198,6 +207,7 @@ export function renderDatacenterInViewList(items, count, sites) {
  * @param {() => object|null} options.getView
  * @param {() => unknown} [options.getNamedOnly] Persist / chip toggle.
  * @param {() => unknown} [options.getWebsiteOnly] Persist / chip toggle.
+ * @param {() => unknown} [options.getDatedOnly] Persist / chip toggle.
  * @param {() => string|null} [options.getSelectedId] Globe / list selection.
  * @param {(site: object) => boolean|void} options.flyTo
  * @returns {{refresh: Function, destroy: Function, sites: () => Array<object>}|null}
@@ -211,6 +221,7 @@ export function bindDatacenterInViewList({
   getView,
   getNamedOnly,
   getWebsiteOnly,
+  getDatedOnly,
   getSelectedId,
   flyTo,
 } = {}) {
@@ -235,6 +246,9 @@ export function bindDatacenterInViewList({
       websiteOnly: typeof getWebsiteOnly === 'function'
         ? getWebsiteOnly()
         : getDatacenterListWebsiteOnly(),
+      datedOnly: typeof getDatedOnly === 'function'
+        ? getDatedOnly()
+        : getDatacenterListDatedOnly(),
       selectedId: hostSelected || selectedId,
     });
     root.hidden = !enabled;
