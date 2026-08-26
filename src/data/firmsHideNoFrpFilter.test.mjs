@@ -591,7 +591,9 @@ test('FIRMS row exposes Hide no FRP from getRowControls() without a new /api', (
   const hideIndex = chips.findIndex((chip) => chip.id === FIRMS_HIDE_NO_FRP_CHIP_ID);
   const scanIndex = chips.findIndex((chip) => chip.id === 'hide-no-scan');
   assert.ok(hideIndex === scanIndex + 1, 'Hide no FRP sits after Hide no scan');
-  assert.ok(!chips.some((chip) => chip.id === 'hide-no-track'), 'list Hide no track is not a globe chip');
+  const hideTrack = chips.find((chip) => chip.id === 'hide-no-track');
+  assert.ok(hideTrack, '286 Hide no track sits on the globe row after Hide no FRP');
+  assert.deepEqual(hideTrack.params, { hideNoTrack: true }, 'globe Hide no track is not list firmsListHideNoTrack');
   layer.setParams({ hideNoFrp: true });
   assert.equal(
     layer.getRowControls().chips.find((chip) => chip.id === FIRMS_HIDE_NO_FRP_CHIP_ID).active,

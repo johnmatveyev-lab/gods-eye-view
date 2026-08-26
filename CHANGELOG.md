@@ -7,6 +7,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no track** toggle after Hide no
+  FRP. Default **off** keeps the current overlay, including missing /
+  non-finite / `trackKm<=0`. **On** keeps `trackKm > 0` and drops those
+  sentinels. Presence-only — not the All | <0.5km | <0.4km track
+  ceiling (`meridian.firmsTrack`, still fail-open). Selected id stays.
+  Re-filters the already-fetched `/api/firms` payload. Persists as
+  `meridian.firmsHideNoTrack` (`1` / `0`; no share-URL). Distinct from
+  list Hide no track (276, `meridian.firmsListHideNoTrack`).
 - The hosted Launches panel has a client-only **Hide no mission** toggle after
   Webcast only. Default **off** keeps the current list, including
   no-mission rows. **On** keeps rows whose copied `mission` is a
