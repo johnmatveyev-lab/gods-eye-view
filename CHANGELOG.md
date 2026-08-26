@@ -7,6 +7,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no FRP** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps the current 50-row list, including missing / non-finite /
+  `frp<=0`. On is presence-only: hides those sentinels and keeps a
+  real MW (`frp > 0`, e.g. 120 MW). This is not an FRP floor. A
+  selected / tracked fire always stays. AND after Plan 210 list
+  confidence, Plan 219 list FRP, Plan 225 list age, Plan 230 list
+  Hide no satellite, Plan 252 list Hide no sensor, Plan 256 list Hide
+  no version, Plan 260 list Hide no day/night, Plan 266 list Hide no
+  acq, Plan 271 list Hide no scan, and Plan 276 list Hide no track,
+  before the 50-row cap. Distinct from those list chips, the list FRP
+  floor (`meridian.firmsListFrp` All | 10+ | 100+, which fail-opens
+  missing FRP), and globe Hide no FRP (281,
+  `meridian.firmsHideNoFrp`). `getRowControls()` owns the list chip —
+  index.html / ui.js do not re-declare it. Preference persists as
+  `meridian.firmsListHideNoFrp` (`'1'` / `'0'`; LayerStateCoordinator
+  restore, no share-URL write). No extra NASA fetch and no new `/api`.
+  NASA FIRMS acknowledgement is unchanged.
 - Dams in-view list has a client-only **Dated only** toggle next to the
   Plan 249 **Output only** chip, Plan 240 **Wikipedia only**, Plan 229
   **River only**, Plan 224 **Operator only**, Plan 218 **Named only**,
