@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no callsign** toggle after Hide no
+  registration. Default **off** keeps the current draw, including missing
+  and present callsigns. On drops already-fetched contacts whose `callsign`
+  is missing, empty, or whitespace after trim. A published callsign such as
+  DAL123 stays. The selected/tracked contact always stays. AND with
+  airborne-only, Emergencies only, Identified only, Hide no squawk, Hide no
+  type, and Hide no registration. Distinct from Identified only (callsign
+  OR registration) and Hide no registration. Re-applies the already-fetched
+  adsb.lol payload — no extra fetch and no new `/api`. Preference persists
+  as `meridian.flightHideNoCallsign` (LayerStateCoordinator restore, no
+  share-URL write). Military flights are unchanged.
 - FIRMS globe has client-only exclusive **All | <2 km² | <1 km²** pixel-area
   chips after the Plan 217 version row. Area is `scanKm × trackKm` on the
   already-adapted fire. Default **All** keeps 0.4×0.4 / 1×1 / 2×2.
