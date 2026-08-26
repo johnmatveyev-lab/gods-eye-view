@@ -7,6 +7,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Quakes list has client-only exclusive **All | 5+ | 6+** magnitude-floor
+  chips. Default **All** matches the current 50-row nearest/recent list.
+  **5+** keeps rows whose `magnitude` is at least 5, then applies the existing
+  50-row cap. **6+** keeps large events only. Missing magnitude still drops.
+  Distinct from the globe 2.5+ floor and Plan 183 significance chips. Re-applies
+  the already-fetched USGS snapshot — no extra fetch and no new `/api`.
+  Preference persists as `meridian.quakeListMag` (LayerStateCoordinator restore,
+  no share-URL write).
 - Mapped Installations has client-only exclusive **All | Way | Node | Relation**
   chips on the Mapped Sites list, next to class chips, Footprints only, and
   Named only. Default **All** matches the current named + class-labeled view.

@@ -252,6 +252,11 @@
       <div>
         <strong>QUAKES</strong>
         <span>USGS · 24H · M2.5+</span>
+        <div class="earthquake-list-mag-chips" id="earthquake-list-mag-chips" role="group" aria-label="Quake list magnitude floor">
+          <button type="button" class="earthquake-list-mag-chip active" data-earthquake-list-mag="all" aria-pressed="true" title="Show every listed earthquake regardless of magnitude">All</button>
+          <button type="button" class="earthquake-list-mag-chip" data-earthquake-list-mag="5" aria-pressed="false" title="Hide listed earthquakes below magnitude 5">5+</button>
+          <button type="button" class="earthquake-list-mag-chip" data-earthquake-list-mag="6" aria-pressed="false" title="Hide listed earthquakes below magnitude 6">6+</button>
+        </div>
         <div class="earthquake-time-chips" id="earthquake-time-chips" role="group" aria-label="Earthquake time window">
           <button type="button" class="earthquake-time-chip" data-earthquake-time="1" aria-pressed="false" title="Show earthquakes from the last 1 hour">1h</button>
           <button type="button" class="earthquake-time-chip" data-earthquake-time="6" aria-pressed="false" title="Show earthquakes from the last 6 hours">6h</button>

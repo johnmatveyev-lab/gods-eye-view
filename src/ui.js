@@ -248,6 +248,11 @@ import {
 } from './data/launchesPanel.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
+  getEarthquakeListMagFilter,
+  hydrateEarthquakeListMagFilter,
+  setEarthquakeListMagFilter,
+} from './data/earthquakeListMagFilter.js';
+import {
   earthquakeDepthBandFlags,
   earthquakeEventTypeFlags,
   earthquakeNetworkFlags,
@@ -3031,6 +3036,7 @@ export class StyleManager {
     this._earthquakePagerChips = document.getElementById('earthquake-pager-chips');
     this._earthquakeTypeChips = document.getElementById('earthquake-type-chips');
     this._earthquakeNetworkChips = document.getElementById('earthquake-network-chips');
+    this._earthquakeListMagChips = document.getElementById('earthquake-list-mag-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -5519,6 +5525,7 @@ export class StyleManager {
           this._syncEarthquakePagerChips();
           this._syncEarthquakeTypeChips();
           this._syncEarthquakeNetworkChips();
+          this._syncEarthquakeListMagChips();
         }
         if (change?.layerId === 'satellites') {
           syncIssPassReadout({ recompute: true });
@@ -12499,6 +12506,30 @@ export class StyleManager {
     this._syncEarthquakeNetworkChips();
   }
 
+  _syncEarthquakeListMagChips() {
+    const floor = getEarthquakeListMagFilter();
+    const chips = this._earthquakeListMagChips?.querySelectorAll?.('[data-earthquake-list-mag]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.earthquakeListMag === floor;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initEarthquakeListMagChips() {
+    hydrateEarthquakeListMagFilter();
+    if (!this._earthquakeListMagChips) return;
+    this._earthquakeListMagChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-list-mag]');
+      if (!chip || !this._earthquakeListMagChips.contains(chip)) return;
+      setEarthquakeListMagFilter(chip.dataset.earthquakeListMag);
+      this._syncEarthquakeListMagChips();
+      this._earthquakeListControl?.refresh();
+    });
+    this._syncEarthquakeListMagChips();
+  }
+
   _initEarthquakeListControl() {
     this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
@@ -12508,6 +12539,7 @@ export class StyleManager {
     this._initEarthquakePagerChips();
     this._initEarthquakeTypeChips();
     this._initEarthquakeNetworkChips();
+    this._initEarthquakeListMagChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,
       panel: this._earthquakeListPanel,
