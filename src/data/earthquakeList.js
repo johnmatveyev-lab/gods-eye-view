@@ -19,6 +19,14 @@ import {
   hydrateEarthquakeListMagFilter,
 } from './earthquakeListMagFilter.js';
 import {
+  earthquakeListHideNoPlaceChipModel,
+  earthquakeListRowMatchesPlaceFilter,
+  getEarthquakeListHideNoPlace,
+  hydrateEarthquakeListHideNoPlace,
+  setEarthquakeListHideNoPlace,
+  subscribeEarthquakeListHideNoPlace,
+} from './earthquakeListPlaceFilter.js';
+import {
   earthquakeListRangeChipModels,
   earthquakeListRowMatchesRangeCeiling,
   getEarthquakeListRangeFilter,
@@ -91,10 +99,11 @@ export function formatEarthquakeListRow(record) {
  * Cap to the ~50 most recent events, or the 50 nearest when an origin is given.
  * List magnitude-floor chips (All | 5+ | 6+), depth-ceiling chips
  * (All | <70 km | <20 km), age-ceiling chips (All | <6 h | <1 h),
- * and range-ceiling chips (All | <500 km | <100 km) AND before the
- * cap. The selected row stays through the depth, age, and range ceilings.
+ * range-ceiling chips (All | <500 km | <100 km), and Hide no place AND
+ * before the cap. The selected row stays through the depth, age, range,
+ * and place filters.
  * @param {Array<object>|null|undefined} records
- * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, rangeCeiling?: unknown, selectedId?: string|null, now?: number}} [options]
+ * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, rangeCeiling?: unknown, hideNoPlace?: unknown, selectedId?: string|null, now?: number}} [options]
  * @returns {Array<object>}
  */
 export function selectEarthquakeListRows(records, {
@@ -104,6 +113,7 @@ export function selectEarthquakeListRows(records, {
   depthCeiling = getEarthquakeListDepthFilter(),
   ageCeiling = getEarthquakeListAgeFilter(),
   rangeCeiling = getEarthquakeListRangeFilter(),
+  hideNoPlace = getEarthquakeListHideNoPlace(),
   selectedId = null,
   now = Date.now(),
 } = {}) {
@@ -128,6 +138,9 @@ export function selectEarthquakeListRows(records, {
     if (!earthquakeListRowMatchesRangeCeiling(row, rangeCeiling, { selectedId, hasOrigin })) {
       continue;
     }
+    if (!earthquakeListRowMatchesPlaceFilter(row, hideNoPlace, { selectedId })) {
+      continue;
+    }
     rows.push(row);
   }
   rows.sort((a, b) => {
@@ -144,10 +157,10 @@ export function selectEarthquakeListRows(records, {
 
 /**
  * Sync list presentation. Failed or empty feed → unavailable, never a hang.
- * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, rangeCeiling?: unknown, selectedId?: string|null, now?: number}} [input]
+ * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, rangeCeiling?: unknown, hideNoPlace?: unknown, selectedId?: string|null, now?: number}} [input]
  * @returns {{status: 'ready'|'unavailable', rows: Array<object>, message: string|null, source: string}}
  */
-export function presentEarthquakeList({ records, error, origin, magFloor, depthCeiling, ageCeiling, rangeCeiling, selectedId, now } = {}) {
+export function presentEarthquakeList({ records, error, origin, magFloor, depthCeiling, ageCeiling, rangeCeiling, hideNoPlace, selectedId, now } = {}) {
   if (error) {
     return {
       status: 'unavailable',
@@ -157,7 +170,7 @@ export function presentEarthquakeList({ records, error, origin, magFloor, depthC
     };
   }
   const rows = selectEarthquakeListRows(records, {
-    origin, magFloor, depthCeiling, ageCeiling, rangeCeiling, selectedId, now,
+    origin, magFloor, depthCeiling, ageCeiling, rangeCeiling, hideNoPlace, selectedId, now,
   });
   if (!rows.length) {
     return {
@@ -284,9 +297,11 @@ export function renderEarthquakeList(container, presentation, {
 
 /**
  * Hosted Quakes list chips. Mag / depth / age stay in the HTML row
- * from Plans 208 / 216 / 228; range chips are owned here so
- * index.html / ui.js do not re-declare them.
- * @returns {{chips: Array<object>}}
+ * from Plans 208 / 216 / 228; range chips and Hide no place are owned
+ * here so index.html / ui.js do not re-declare them. Exclusive range
+ * chips stay on `chips` (Plan 236); Hide no place is the sibling
+ * `hideNoPlace` toggle.
+ * @returns {{chips: Array<object>, hideNoPlace: object}}
  */
 export function getRowControls() {
   return {
@@ -298,7 +313,12 @@ export function getRowControls() {
       group: 'Range',
       params: { rangeCeiling: chip.id },
     })),
+    hideNoPlace: earthquakeListHideNoPlaceChipModel(getEarthquakeListHideNoPlace()),
   };
+}
+
+function rangeChipModelsFromControls() {
+  return getRowControls().chips.filter((chip) => chip.params?.rangeCeiling != null);
 }
 
 function createRangeChipElement(model, make) {
@@ -314,7 +334,7 @@ function createRangeChipElement(model, make) {
 
 function syncEarthquakeListRangeChips(root) {
   if (!root?.querySelectorAll) return;
-  const models = getRowControls().chips;
+  const models = rangeChipModelsFromControls();
   const chips = root.querySelectorAll('[data-earthquake-list-range]');
   for (const chip of chips) {
     const active = models.some((model) => (
@@ -351,7 +371,7 @@ function mountEarthquakeListRangeChips(panel) {
   }
   if (!root) return () => {};
   if (typeof make === 'function' && !root.querySelector?.('[data-earthquake-list-range]')) {
-    const nodes = getRowControls().chips.map((model) => createRangeChipElement(model, make));
+    const nodes = rangeChipModelsFromControls().map((model) => createRangeChipElement(model, make));
     if (typeof root.replaceChildren === 'function') root.replaceChildren(...nodes);
     else {
       for (const node of nodes) root.appendChild?.(node);
@@ -365,6 +385,72 @@ function mountEarthquakeListRangeChips(panel) {
   };
   root.addEventListener?.('click', onClick);
   syncEarthquakeListRangeChips(root);
+  return () => {
+    root.removeEventListener?.('click', onClick);
+  };
+}
+
+function createHideNoPlaceChipElement(model, make) {
+  const button = make('button');
+  button.type = 'button';
+  button.className = `earthquake-list-age-chip${model.active ? ' active' : ''}`;
+  button.dataset.earthquakeListHideNoPlace = model.active ? '1' : '0';
+  button.textContent = model.label;
+  if (model.title) button.title = model.title;
+  button.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  return button;
+}
+
+function syncEarthquakeListHideNoPlaceChip(root) {
+  if (!root?.querySelectorAll) return;
+  const model = getRowControls().hideNoPlace;
+  const chips = root.querySelectorAll('[data-earthquake-list-hide-no-place]');
+  for (const chip of chips) {
+    chip.classList?.toggle?.('active', model.active === true);
+    chip.dataset.earthquakeListHideNoPlace = model.active ? '1' : '0';
+    chip.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  }
+}
+
+/**
+ * Inject Hide no place next to the existing list chips.
+ * No-ops on the stub panels used by unit tests (no querySelector).
+ * @param {{querySelector?: Function, appendChild?: Function}|null} panel
+ * @returns {() => void}
+ */
+function mountEarthquakeListHideNoPlaceChip(panel) {
+  if (typeof panel?.querySelector !== 'function') return () => {};
+  let root = panel.querySelector('#earthquake-list-place-chips');
+  const make = globalThis.document?.createElement?.bind(globalThis.document);
+  if (!root && typeof make === 'function') {
+    root = make('div');
+    root.id = 'earthquake-list-place-chips';
+    root.className = 'earthquake-list-age-chips';
+    root.setAttribute('role', 'group');
+    root.setAttribute('aria-label', 'Hide listed earthquakes with no named place');
+    const after = panel.querySelector('#earthquake-list-range-chips')
+      || panel.querySelector('#earthquake-list-age-chips');
+    if (typeof after?.insertAdjacentElement === 'function') {
+      after.insertAdjacentElement('afterend', root);
+    } else {
+      const header = panel.querySelector('.earthquake-list-header > div') || panel;
+      header.appendChild?.(root);
+    }
+  }
+  if (!root) return () => {};
+  if (typeof make === 'function' && !root.querySelector?.('[data-earthquake-list-hide-no-place]')) {
+    const node = createHideNoPlaceChipElement(getRowControls().hideNoPlace, make);
+    if (typeof root.replaceChildren === 'function') root.replaceChildren(node);
+    else root.appendChild?.(node);
+  }
+  const onClick = (event) => {
+    const chip = event.target?.closest?.('[data-earthquake-list-hide-no-place]');
+    if (!chip || (typeof root.contains === 'function' && !root.contains(chip))) return;
+    setEarthquakeListHideNoPlace(getRowControls().hideNoPlace.params.hideNoPlace);
+    syncEarthquakeListHideNoPlaceChip(root);
+  };
+  root.addEventListener?.('click', onClick);
+  syncEarthquakeListHideNoPlaceChip(root);
   return () => {
     root.removeEventListener?.('click', onClick);
   };
@@ -394,7 +480,9 @@ export function initEarthquakeListControl({
   hydrateEarthquakeListDepthFilter();
   hydrateEarthquakeListAgeFilter();
   hydrateEarthquakeListRangeFilter();
+  hydrateEarthquakeListHideNoPlace();
   const unmountRangeChips = mountEarthquakeListRangeChips(panel);
+  const unmountHideNoPlaceChip = mountEarthquakeListHideNoPlaceChip(panel);
   let open = false;
 
   const refresh = () => {
@@ -439,6 +527,10 @@ export function initEarthquakeListControl({
     syncEarthquakeListRangeChips(panel.querySelector?.('#earthquake-list-range-chips') || panel);
     if (open) refresh();
   });
+  const unsubscribeHideNoPlace = subscribeEarthquakeListHideNoPlace(() => {
+    syncEarthquakeListHideNoPlaceChip(panel.querySelector?.('#earthquake-list-place-chips') || panel);
+    if (open) refresh();
+  });
   setOpen(false);
 
   return {
@@ -448,7 +540,9 @@ export function initEarthquakeListControl({
     destroy() {
       button.removeEventListener?.('click', onToggle);
       unsubscribeRange();
+      unsubscribeHideNoPlace();
       unmountRangeChips();
+      unmountHideNoPlaceChip();
       open = false;
     },
   };

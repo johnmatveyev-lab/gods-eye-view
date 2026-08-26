@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Quakes list has a client-only **Hide no place** toggle after the
+  Plan 236 range-ceiling chips. Default **off** keeps the current 50-row
+  nearest/recent list, including named USGS places and the UNAVAILABLE
+  fallback. **On** keeps a non-empty place that is not UNAVAILABLE
+  (Anchorage stays) and drops empty, whitespace, missing, or UNAVAILABLE
+  place. Missing / empty / UNAVAILABLE fail closed when on. The selected
+  row always stays. Place is a USGS region string, never a person name.
+  AND after the Plan 208 magnitude floor, Plan 216 depth ceiling, Plan
+  228 age ceiling, and Plan 236 range ceiling, before the 50-row cap.
+  Distinct from those chips and from hide-ground. Re-applies the
+  already-fetched USGS snapshot — no extra fetch and no new `/api`.
+  Preference persists as `meridian.quakeListHideNoPlace` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write).
 - AIS has a client-only **Hide no heading** toggle after the Plan 200
   **All | 15m | 1h** last-position chips. Default **off** keeps the current
   fleet, including heading-null / course-null contacts. **On** keeps a
