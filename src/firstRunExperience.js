@@ -110,6 +110,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         dam Wikipedia only toggle (`meridian.damWikiOnly`),
  *                         dam Output only toggle (`meridian.damOutputOnly`),
  *                         dam Dated only toggle (`meridian.damDatedOnly`),
+ *                         dam Method only toggle (`meridian.damMethodOnly`),
  *                         FIRMS list confidence chips (`meridian.firmsListConf`),
  *                         launch list mapped-only toggle
  *                         (`meridian.launchListMappedOnly`),

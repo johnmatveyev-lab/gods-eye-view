@@ -7,6 +7,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Method only** toggle next to
+  **Dated only**. Default **off** keeps the current roster, including
+  plants whose OSM `plant:method` is missing. On hides missing / empty
+  / whitespace-only method. A selected row stays. AND after Dated only.
+  Persists as `meridian.damMethodOnly` (`1` / `0`; not a share-link
+  field). Distinct from 205 / 218 / 224 / 229 / 240 / 249 / 279.
 - The hosted Launches panel has a client-only **Hide no probability** toggle
   after Hide no mission. Default **off** keeps the current list, including
   no-probability rows. **On** keeps rows whose copied `probability` is
