@@ -39,6 +39,7 @@ test('fixture first row maps every field, categorical confidence preserved raw',
   assert.equal(first.brightness, 303.6); // bright_ti4
   assert.equal(first.brightnessTi5, 290.73); // bright_ti5
   assert.equal(first.scan, 0.39); // scan column kept (pixel size km)
+  assert.equal(first.track, 0.36); // track column kept (along-track pixel km)
   assert.equal(first.frp, 0.53);
   assert.equal(first.confidence, 'n'); // categorical, passed through untouched
   assert.equal(first.daynight, 'N');

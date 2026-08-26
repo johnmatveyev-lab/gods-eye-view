@@ -24,6 +24,7 @@ const proxyRecord = (overrides = {}) => ({
   brightness: 303.6,
   brightnessTi5: 290.73,
   scan: 0.39,
+  track: 0.36,
   daynight: 'N',
   acqDate: '2026-07-16',
   acqTime: '1006',
@@ -42,6 +43,7 @@ test('adapter maps a proxy record into the internal fire-record shape', () => {
   assert.equal(fire.brightness, 303.6);
   assert.equal(fire.brightnessTi5, 290.73);
   assert.equal(fire.scanKm, 0.39);
+  assert.equal(fire.trackKm, 0.36);
   assert.equal(fire.night, true); // daynight 'N'
   assert.equal(fire.daynight, 'N');
   assert.equal(fire.acqMs, Date.UTC(2026, 6, 16, 10, 6));
@@ -177,11 +179,12 @@ test('records with non-finite lat/lon are skipped; index stays sequential', () =
 });
 
 test('non-finite frp/brightness → 0; empty input → []', () => {
-  const [fire] = adaptFirmsRecords([proxyRecord({ frp: 'n/a', brightness: undefined, brightnessTi5: undefined, scan: undefined })]);
+  const [fire] = adaptFirmsRecords([proxyRecord({ frp: 'n/a', brightness: undefined, brightnessTi5: undefined, scan: undefined, track: undefined })]);
   assert.equal(fire.frp, 0);
   assert.equal(fire.brightness, 0);
   assert.equal(fire.brightnessTi5, 0);
   assert.equal(fire.scanKm, 0);
+  assert.equal(fire.trackKm, 0);
   assert.deepEqual(adaptFirmsRecords([]), []);
   assert.deepEqual(adaptFirmsRecords(null), []);
 });
@@ -193,5 +196,15 @@ test('adapter stamps scanKm from the CSV scan column', () => {
   assert.equal(fromScanKm.scanKm, 0.41);
   const [modis] = adaptFirmsRecords([proxyRecord({ scan: 1, instrument: 'MODIS' })]);
   assert.equal(modis.scanKm, 1);
+  assert.equal(modis.sensor, 'MODIS');
+});
+
+test('adapter stamps trackKm from the CSV track column', () => {
+  const [fromTrack] = adaptFirmsRecords([proxyRecord({ track: 0.36 })]);
+  assert.equal(fromTrack.trackKm, 0.36);
+  const [fromTrackKm] = adaptFirmsRecords([proxyRecord({ track: undefined, trackKm: 0.41 })]);
+  assert.equal(fromTrackKm.trackKm, 0.41);
+  const [modis] = adaptFirmsRecords([proxyRecord({ track: 1, instrument: 'MODIS' })]);
+  assert.equal(modis.trackKm, 1);
   assert.equal(modis.sensor, 'MODIS');
 });
