@@ -100,6 +100,15 @@ import {
   normalizeAisHideNoImo,
   vesselMatchesHideNoImoFilter,
 } from './aisHideNoImoFilter.js';
+import {
+  DEFAULT_AIS_LAST_POS,
+  aisLastPosChipModels,
+  filterVesselsByLastPos,
+  normalizeAisLastPos,
+  readAisLastPos,
+  vesselMatchesLastPosFilter,
+  writeAisLastPos,
+} from './aisLastPosFilter.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -432,6 +441,7 @@ const aisLiveVesselsLayer = {
 
   init(viewer) {
     state.viewer = viewer;
+    state.lastPos = readAisLastPos();
     ensureCollections(viewer);
     _vesselOverlayHost.setVisible(VESSEL_OVERLAY_SOURCE_ID, false);
     installInteraction(viewer);
@@ -596,12 +606,13 @@ const aisLiveVesselsLayer = {
 
   /**
    * Type chips, Hide parked, min-speed, destination, Hide no dest,
-   * Hide unnamed, and Hide no IMO re-filter in-memory vessels. Never hits
-   * `/api/ais-live`.
-   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown, minSpeed?: unknown, destination?: unknown, hideNoDestination?: unknown, hideUnnamed?: unknown, hideNoImo?: unknown }} [params]
+   * Hide unnamed, Hide no IMO, and last-position freshness re-filter
+   * in-memory vessels. Never hits `/api/ais-live`.
+   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown, minSpeed?: unknown, destination?: unknown, hideNoDestination?: unknown, hideUnnamed?: unknown, hideNoImo?: unknown, lastPos?: unknown }} [params]
+   * @param {{ storage?: {getItem?: Function, setItem?: Function}|null }} [options]
    * @returns {boolean}
    */
-  setParams(params = {}) {
+  setParams(params = {}, { storage } = {}) {
     if (!params || typeof params !== 'object') return false;
     const hasType = Object.hasOwn(params, 'vesselTypeFilter');
     const hasParked = Object.hasOwn(params, 'hideParked');
@@ -610,7 +621,8 @@ const aisLiveVesselsLayer = {
     const hasHideNoDest = Object.hasOwn(params, 'hideNoDestination');
     const hasHideUnnamed = Object.hasOwn(params, 'hideUnnamed');
     const hasHideNoImo = Object.hasOwn(params, 'hideNoImo');
-    if (!hasType && !hasParked && !hasMinSpeed && !hasDestination && !hasHideNoDest && !hasHideUnnamed && !hasHideNoImo) {
+    const hasLastPos = Object.hasOwn(params, 'lastPos');
+    if (!hasType && !hasParked && !hasMinSpeed && !hasDestination && !hasHideNoDest && !hasHideUnnamed && !hasHideNoImo && !hasLastPos) {
       return true;
     }
 
@@ -663,6 +675,13 @@ const aisLiveVesselsLayer = {
       nextHideNoImo = hideNoImo;
     }
 
+    let nextLastPos = state.lastPos;
+    if (hasLastPos) {
+      const lastPos = normalizeAisLastPos(params.lastPos);
+      if (lastPos == null) return false;
+      nextLastPos = lastPos;
+    }
+
     if (
       nextType === state.typeFilter
       && nextParked === state.hideParked
@@ -671,6 +690,7 @@ const aisLiveVesselsLayer = {
       && nextHideNoDest === state.hideNoDestination
       && nextHideUnnamed === state.hideUnnamed
       && nextHideNoImo === state.hideNoImo
+      && nextLastPos === state.lastPos
     ) return true;
     state.typeFilter = nextType;
     state.hideParked = nextParked;
@@ -679,11 +699,13 @@ const aisLiveVesselsLayer = {
     state.hideNoDestination = nextHideNoDest;
     state.hideUnnamed = nextHideUnnamed;
     state.hideNoImo = nextHideNoImo;
+    state.lastPos = nextLastPos;
+    if (hasLastPos) writeAisLastPos(nextLastPos, storage);
     if (state.enabled && state.viewer) updateVisibility(true);
     return true;
   },
 
-  /** @returns {{ vesselTypeFilter: string, hideParked: boolean, minSpeed: string, destination: string, hideNoDestination: boolean, hideUnnamed: boolean, hideNoImo: boolean }} */
+  /** @returns {{ vesselTypeFilter: string, hideParked: boolean, minSpeed: string, destination: string, hideNoDestination: boolean, hideUnnamed: boolean, hideNoImo: boolean, lastPos: string }} */
   getParams() {
     return {
       vesselTypeFilter: state.typeFilter,
@@ -693,6 +715,7 @@ const aisLiveVesselsLayer = {
       hideNoDestination: state.hideNoDestination,
       hideUnnamed: state.hideUnnamed,
       hideNoImo: state.hideNoImo,
+      lastPos: state.lastPos,
     };
   },
 
@@ -705,6 +728,7 @@ const aisLiveVesselsLayer = {
         aisHideNoDestChipModel(state.hideNoDestination),
         aisHideUnnamedChipModel(state.hideUnnamed),
         aisHideNoImoChipModel(state.hideNoImo),
+        ...aisLastPosChipModels(state.lastPos),
       ],
     };
   },
@@ -946,6 +970,8 @@ const state = {
   hideUnnamed: DEFAULT_AIS_HIDE_UNNAMED,
   /** Client-only Hide no IMO. Re-applied on the already-fetched vessel list. */
   hideNoImo: DEFAULT_AIS_HIDE_NO_IMO,
+  /** Client-only last-position freshness. Re-applied on the already-fetched vessel list. */
+  lastPos: DEFAULT_AIS_LAST_POS,
 };
 
 /** Replace live AIS rows through the production reconciliation path (DEV only). */
@@ -1309,42 +1335,50 @@ function selectedVesselId() {
 
 function visibleVesselRecords() {
   const selectedId = selectedVesselId();
-  return filterVesselsByHideNoImo(
-    filterVesselsByHideUnnamed(
-      filterVesselsByHideNoDest(
-        filterVesselsByDestination(
-          filterVesselsByMinSpeed(
-            filterVesselsByParked(
-              filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
-              state.hideParked,
+  const now = _aisRuntime.now();
+  return filterVesselsByLastPos(
+    filterVesselsByHideNoImo(
+      filterVesselsByHideUnnamed(
+        filterVesselsByHideNoDest(
+          filterVesselsByDestination(
+            filterVesselsByMinSpeed(
+              filterVesselsByParked(
+                filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
+                state.hideParked,
+                selectedId,
+              ),
+              state.minSpeed,
               selectedId,
             ),
-            state.minSpeed,
+            state.destination,
             selectedId,
           ),
-          state.destination,
+          state.hideNoDestination,
           selectedId,
         ),
-        state.hideNoDestination,
+        state.hideUnnamed,
         selectedId,
       ),
-      state.hideUnnamed,
+      state.hideNoImo,
       selectedId,
     ),
-    state.hideNoImo,
+    state.lastPos,
     selectedId,
+    { now },
   );
 }
 
 function vesselTypeVisible(record) {
   const selectedId = selectedVesselId();
+  const now = _aisRuntime.now();
   return vesselMatchesTypeFilter(record, state.typeFilter, { selectedId })
     && vesselMatchesParkedFilter(record, state.hideParked, { selectedId })
     && vesselMatchesMinSpeedFilter(record, state.minSpeed, { selectedId })
     && vesselMatchesDestinationFilter(record, state.destination, { selectedId })
     && vesselMatchesHideNoDestFilter(record, state.hideNoDestination, { selectedId })
     && vesselMatchesHideUnnamedFilter(record, state.hideUnnamed, { selectedId })
-    && vesselMatchesHideNoImoFilter(record, state.hideNoImo, { selectedId });
+    && vesselMatchesHideNoImoFilter(record, state.hideNoImo, { selectedId })
+    && vesselMatchesLastPosFilter(record, state.lastPos, { selectedId, now });
 }
 
 function addRecordPrimitives(record, occluder) {
@@ -2292,6 +2326,7 @@ function resetState() {
   state.hideNoDestination = DEFAULT_AIS_HIDE_NO_DESTINATION;
   state.hideUnnamed = DEFAULT_AIS_HIDE_UNNAMED;
   state.hideNoImo = DEFAULT_AIS_HIDE_NO_IMO;
+  state.lastPos = DEFAULT_AIS_LAST_POS;
 }
 
 /**
