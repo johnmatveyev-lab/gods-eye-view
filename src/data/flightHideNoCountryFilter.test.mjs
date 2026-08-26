@@ -30,6 +30,7 @@ import flightsLayer, {
 } from './flights.js';
 import { setAltitudeBand } from './flightAltitudeBand.js';
 import { setHeadingSectors } from './inFlightFilters.js';
+import { normalizeAdsbLolAircraftState } from './adsbLolFallback.js';
 import {
   createDefaultLayerState,
   decodeLayerStateParams,
@@ -81,6 +82,7 @@ function resetHideNoCountryLayers() {
   setHeadingSectors('NESW');
   flightsLayer.setParams({
     hideNoCountry: false,
+    hideNoSpeed: false,
     hideNoHeading: false,
     hideNoCallsign: false,
     hideNoReg: false,
@@ -132,6 +134,8 @@ test('off keeps empty country', () => {
   for (const contact of [missing, empty, present, whitespace]) {
     assert.equal(passesHideNoCountryFilter({ ...contact, hideNoCountry: false }), true,
       'off keeps empty country');
+    assert.equal(passesHideNoCountryFilter({ ...contact, hideNoCountry: true }), true,
+      'QA 49: on fail-opens unpublished/empty and keeps a published country');
   }
 
   const chip = hideNoCountryChipModel(false);
@@ -142,62 +146,92 @@ test('off keeps empty country', () => {
   assert.deepEqual(hideNoCountryChipModel(true).params, { hideNoCountry: false });
 });
 
-test('on keeps "United States", drops empty', () => {
-  const missing = emptyBillboard();
-  const present = emptyBillboard();
+test('QA 49: Hide no country ON keeps unpublished/null originCountry; a published country still stays', () => {
+  const ual1416 = emptyBillboard();
+  const dal986 = emptyBillboard();
+  const swa1412 = emptyBillboard();
+  const published = emptyBillboard();
   const blank = emptyBillboard();
   const empty = emptyBillboard();
+  const ualState = normalizeAdsbLolAircraftState({
+    hex: 'aa1416', flight: 'UAL1416', lat: 30, lon: -97, alt_baro: 36000, gs: 450, track: 90,
+  }, 1000);
+  const dalState = normalizeAdsbLolAircraftState({
+    hex: 'aa0986', flight: 'DAL986', lat: 33, lon: -84, alt_baro: 34000, gs: 430, track: 80,
+  }, 1000);
+  const swaState = normalizeAdsbLolAircraftState({
+    hex: 'aa1412', flight: 'SWA1412', lat: 32, lon: -96, alt_baro: 32000, gs: 420, track: 270,
+  }, 1000);
+  assert.equal(ualState[2], null, 'commercial adapter never writes state[2]');
+  assert.equal(dalState[2], null);
+  assert.equal(swaState[2], null);
+  assert.equal(passesHideNoCountryFilter({ originCountry: ualState[2], hideNoCountry: true }), true);
+  assert.equal(passesHideNoCountryFilter({ originCountry: 'United States', hideNoCountry: true }), true);
+  assert.equal(originCountryFieldText(ualState[2]), '', 'do not invent a country');
+
   _setTrackedFlightRefreshStateForTest({
-    icao24: 'a1b2c3',
-    meta: { originCountry: null, callsign: 'UNK1', registration: 'N123AB', klass: 'airliner', onGround: false },
-    billboard: missing,
+    icao24: ualState[0],
+    meta: { originCountry: ualState[2], callsign: 'UAL1416', registration: 'N1416U', klass: 'airliner', onGround: false, velocity: 200 },
+    billboard: ual1416,
     billboardCollection: {},
     viewer: emptyViewer(),
     entity: {},
     tracked: false,
   });
   _addFlightTrackingCandidateForTest({
+    icao24: dalState[0],
+    meta: { originCountry: dalState[2], callsign: 'DAL986', registration: 'N986DL', klass: 'airliner', onGround: false, velocity: 200 },
+    billboard: dal986,
+  });
+  _addFlightTrackingCandidateForTest({
+    icao24: swaState[0],
+    meta: { originCountry: swaState[2], callsign: 'SWA1412', registration: 'N1412S', klass: 'airliner', onGround: false, velocity: 200 },
+    billboard: swa1412,
+  });
+  _addFlightTrackingCandidateForTest({
     icao24: 'usa001',
-    meta: { originCountry: 'United States', callsign: 'UAL100', registration: 'N100UA', klass: 'airliner', onGround: false },
-    billboard: present,
+    meta: { originCountry: 'United States', callsign: 'UAL100', registration: 'N100UA', klass: 'airliner', onGround: false, velocity: 200 },
+    billboard: published,
   });
   _addFlightTrackingCandidateForTest({
     icao24: 'ws0001',
-    meta: { originCountry: '   ', callsign: 'WS001', registration: 'N1WS', klass: 'airliner', onGround: false },
+    meta: { originCountry: '   ', callsign: 'WS001', registration: 'N1WS', klass: 'airliner', onGround: false, velocity: 200 },
     billboard: blank,
   });
   _addFlightTrackingCandidateForTest({
     icao24: 'empty01',
-    meta: { originCountry: '', callsign: 'EMP1', registration: 'N100UA', klass: 'airliner', onGround: false },
+    meta: { originCountry: '', callsign: 'EMP1', registration: 'N100UA', klass: 'airliner', onGround: false, velocity: 200 },
     billboard: empty,
   });
   try {
     assert.equal(flightsLayer.getParams().hideNoCountry, false);
-    assert.equal(missing.show, true);
-    assert.equal(present.show, true);
-    assert.equal(blank.show, true);
-    assert.equal(empty.show, true);
+    assert.equal(ual1416.show, true);
+    assert.equal(dal986.show, true);
+    assert.equal(swa1412.show, true);
+    assert.equal(published.show, true);
 
     assert.equal(flightsLayer.setParams({ hideNoCountry: true }), true);
     assert.equal(flightsLayer.getParams().hideNoCountry, true);
-    assert.equal(missing.show, false, 'missing originCountry hides');
-    assert.equal(present.show, true, 'United States stays');
-    assert.equal(blank.show, false, 'whitespace-only is empty');
-    assert.equal(empty.show, false, 'empty originCountry hides');
+    assert.equal(ual1416.show, true, 'QA 49: unpublished UAL1416 stays');
+    assert.equal(dal986.show, true, 'QA 49: unpublished DAL986 stays');
+    assert.equal(swa1412.show, true, 'QA 49: unpublished SWA1412 stays');
+    assert.equal(published.show, true, 'published United States stays');
+    assert.equal(blank.show, true, 'whitespace-only fail-opens');
+    assert.equal(empty.show, true, 'empty originCountry fail-opens');
 
     const extra = emptyBillboard();
     _addFlightTrackingCandidateForTest({
       icao24: 'hexnew',
-      meta: { klass: 'airliner', onGround: false },
+      meta: { klass: 'airliner', onGround: false, velocity: 200 },
       billboard: extra,
     });
     _applyOperatorContactVisibilityForTest();
     assert.equal(flightsLayer.getParams().hideNoCountry, true, 'refresh keeps the toggle');
-    assert.equal(extra.show, false);
-    assert.equal(present.show, true);
+    assert.equal(extra.show, true, 'QA 49: missing originCountry fail-opens on refresh');
+    assert.equal(published.show, true);
 
     flightsLayer.setParams({ hideNoCountry: false });
-    assert.equal(missing.show, true);
+    assert.equal(ual1416.show, true);
     assert.equal(blank.show, true);
     assert.equal(empty.show, true);
     assert.equal(extra.show, true);
@@ -232,12 +266,12 @@ test('selected id always kept', () => {
   try {
     flightsLayer.setParams({ hideNoCountry: true });
     assert.equal(selected.show, true, 'tracked empty-country contact stays');
-    assert.equal(otherEmpty.show, false);
-    assert.equal(present.show, true);
+    assert.equal(otherEmpty.show, true, 'QA 49: untracked unpublished country fail-opens');
+    assert.equal(present.show, true, 'published country stays');
 
     flightsLayer.setParams({ selectedFlightsTrackingId: null });
     _applyOperatorContactVisibilityForTest();
-    assert.equal(selected.show, false, 'untracked empty-country hides');
+    assert.equal(selected.show, true, 'QA 49: untracked unpublished country still stays');
     assert.equal(present.show, true);
   } finally {
     resetHideNoCountryLayers();
@@ -427,12 +461,12 @@ test('Hide no country ANDs with 95/166/188/203/214/222/227/234 and stays distinc
     });
     assert.equal(highCountry.show, true);
     assert.equal(lowCountry.show, true);
-    assert.equal(highEmpty.show, false, 'empty country hides while Identified only is off');
+    assert.equal(highEmpty.show, true, 'QA 49: unpublished country fail-opens while Identified only is off');
     assert.equal(parkedCountry.show, true);
     assert.equal(registrationOnly.show, true, 'country-bearing registration-only stays — not Identified only');
     assert.equal(emergencyCountry.show, true, 'country-bearing 7700 stays — Hide no country is not Emergencies only');
-    assert.equal(typedEmptyCountry.show, false, 'typed but empty country still hides');
-    assert.equal(headedEmptyCountry.show, false, 'headed but empty country still hides');
+    assert.equal(typedEmptyCountry.show, true, 'QA 49: typed unpublished country fail-opens');
+    assert.equal(headedEmptyCountry.show, true, 'QA 49: headed unpublished country fail-opens');
 
     flightsLayer.setParams({ airborneOnly: true });
     assert.equal(highCountry.show, true);
@@ -462,7 +496,7 @@ test('Hide no country ANDs with 95/166/188/203/214/222/227/234 and stays distinc
     flightsLayer.setParams({ showClimb: true, identifiedOnly: true });
     assert.equal(highCountry.show, true);
     assert.equal(registrationOnly.show, true, 'Identified only keeps country-bearing registration-only');
-    assert.equal(highEmpty.show, false, 'AND: Hide no country still drops empty country');
+    assert.equal(highEmpty.show, true, 'QA 49: Identified only + unpublished country still stays');
 
     flightsLayer.setParams({ hideNoCountry: false });
     assert.equal(highEmpty.show, true, 'Identified only keeps empty-country when Hide no country is off');
@@ -473,26 +507,26 @@ test('Hide no country ANDs with 95/166/188/203/214/222/227/234 and stays distinc
 
     flightsLayer.setParams({ emergenciesOnly: false, hideNoSquawk: true });
     assert.equal(highCountry.show, true, 'AND: country-bearing 1200 stays under Hide no squawk');
-    assert.equal(highEmpty.show, false, 'AND: empty country still hides');
+    assert.equal(highEmpty.show, true, 'QA 49: unpublished country stays under Hide no squawk');
 
     flightsLayer.setParams({ hideNoSquawk: false, hideNoType: true });
     assert.equal(highCountry.show, true, 'AND: country-bearing typed stays under Hide no type');
-    assert.equal(typedEmptyCountry.show, false, 'AND: typed empty-country still hides');
-    assert.equal(highEmpty.show, false);
+    assert.equal(typedEmptyCountry.show, true, 'QA 49: typed unpublished country stays under Hide no type');
+    assert.equal(highEmpty.show, true);
 
     flightsLayer.setParams({ hideNoType: false, hideNoReg: true });
     assert.equal(highCountry.show, true, 'AND: country-bearing registered stays under Hide no registration');
-    assert.equal(highEmpty.show, false);
+    assert.equal(highEmpty.show, true, 'QA 49: unpublished registered country stays');
 
     flightsLayer.setParams({ hideNoReg: false, hideNoCallsign: true });
     assert.equal(highCountry.show, true, 'AND: country-bearing callsigned stays under Hide no callsign');
     assert.equal(emptyCallsignCountry.show, false, 'AND: Hide no callsign still drops country-bearing empty-callsign');
-    assert.equal(highEmpty.show, false);
+    assert.equal(highEmpty.show, true, 'QA 49: unpublished callsigned country stays');
 
     flightsLayer.setParams({ hideNoCallsign: false, hideNoHeading: true });
     assert.equal(highCountry.show, true, 'AND: country-bearing headed stays under Hide no heading');
-    assert.equal(headedEmptyCountry.show, false, 'AND: headed empty-country still hides');
-    assert.equal(highEmpty.show, false);
+    assert.equal(headedEmptyCountry.show, true, 'QA 49: headed unpublished country stays');
+    assert.equal(highEmpty.show, true);
   } finally {
     resetHideNoCountryLayers();
   }
@@ -592,6 +626,9 @@ test('militaryFlights.js is unchanged', () => {
   assert.match(helper, /originCountry/);
   assert.match(helper, /meridian\.flightHideNoCountry/);
   assert.match(helper, /not written into the share URL/);
+  assert.match(helper, /fail-open/);
+  assert.match(helper, /Never invents a country/);
+  assert.doesNotMatch(adapter, /hideNoCountry|flightHideNoCountryFilter/);
 });
 
 test('legal: already-fetched originCountry only, Meridian title, MIT credit unchanged', () => {

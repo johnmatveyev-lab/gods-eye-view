@@ -266,7 +266,7 @@ test('both flight layers persist the band through existing layer options', () =>
   const military = readFileSync(path.join(ROOT, 'src/data/militaryFlights.js'), 'utf8');
   assert.match(flights, /speedMinKt: _speedMinKt/);
   assert.match(flights, /_applySpeedBandParams\(params\)/);
-  assert.match(flights, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher\]/);
+  assert.match(flights, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher\]/);
   assert.match(military, /speedMinKt: _speedMinKt/);
   assert.match(military, /_applySpeedBandParams\(params\)/);
 

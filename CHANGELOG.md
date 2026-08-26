@@ -7,6 +7,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no speed** toggle after Hide no
+  country. Default **off** keeps the current draw, including null,
+  missing, and non-finite `velocity`. **On** keeps a finite
+  `meta.velocity` (`0` stays — real parked / on-ground speed) and drops
+  missing, null, or non-finite velocity. Missing / null / non-finite fail
+  closed when on. The selected/tracked contact always stays. AND with
+  airborne-only, altitude, heading sectors, the fail-open speed-band
+  floor, vertical, Emergencies only, Identified only, hide-stale, class,
+  prefix, Hide no squawk, Hide no type, Hide no registration, Hide no
+  callsign, Hide no heading, and Hide no country. Distinct from the
+  fail-open speed-band floor, airborne-only, Hide no heading, Hide no
+  country, and AIS Hide no speed. Re-applies the already-fetched flight
+  payload — no extra fetch and no new `/api`. Preference persists as
+  `meridian.flightHideNoSpeed` (`1` / `0`; LayerStateCoordinator restore,
+  no share-URL write). Military flights and AIS are unchanged.
 - The hosted FIRES list has a client-only **Hide no version** filter on
   the already-fetched trailing-24h `/api/firms` roster. Default **off**
   keeps the current 50-row list, including empty or missing version.
@@ -621,6 +636,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Civil **Hide no country** fail-opens when `originCountry` is missing,
+  null, empty, or whitespace. The commercial adsb.lol adapter never
+  writes state index 2 (`normalizeAdsbLolAircraftState` always emits
+  `null`), so Plan 244's fail-closed matcher blanked the hosted civil
+  layer (UAL1416 / DAL986 / SWA1412 dropped). A published non-empty
+  country still stays when the chip is on. No invented country and no
+  adapter fabricate of `state[2]`. Hide no speed stays fail-closed on
+  missing / non-finite `velocity`. Military flights are unchanged.
 - Civil-flight altitude ingest no longer invents **10000 m** when baro
   altitude is missing. A finite geo altitude is persisted instead;
   missing both stores **null**. On-ground with neither still stores **0**.
