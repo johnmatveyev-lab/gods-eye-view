@@ -64,6 +64,10 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
     ?? finiteNumber(aircraft?.mag_heading);
   const publishedType = publishedText(aircraft?.t);
   const publishedReg = publishedText(aircraft?.r);
+  // Callsign slot is published `flight` only. Do not fall back to `r` —
+  // registration already lives on state[19]/r. Hide no callsign must hide
+  // unpublished / blank / whitespace flight even when a tail is present.
+  const publishedFlight = publishedText(aircraft?.flight);
 
   // OpenSky indices 0–17 stay as before. adsb.lol already publishes ICAO
   // type (`t`) and registration (`r`) on every row; keep them as extras
@@ -71,7 +75,7 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
   // waiting on adsbdb. Missing / empty t stays missing.
   const state = [
     hex,
-    String(aircraft?.flight || aircraft?.r || '').trim() || null,
+    publishedFlight,
     null,
     Math.max(0, nowSeconds - seenPosition),
     Math.max(0, nowSeconds - seen),
