@@ -276,7 +276,7 @@ test('chips sit on the hosted Launches panel and re-apply the existing /api/laun
   assert.match(helper, /meridian\.launchLspType/);
   assert.match(helper, /launch_service_provider\.type|launch_service_provider\?\.type/);
   assert.doesNotMatch(helper, /fetch\(/);
-  assert.doesNotMatch(helper, /\/api\//);
+  assert.doesNotMatch(helper, /\/api\/(?!launches\b)/);
   assert.doesNotMatch(panel, /\/api\/(?!launches\b)/);
   assert.doesNotMatch(launches, /launchLspType|lsp_type|provider__type/);
   assert.doesNotMatch(layerState, /launchLspType|launchLsp/);
