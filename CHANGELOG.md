@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Quakes list has client-only exclusive **All | &lt;500 km | &lt;100 km**
+  range-ceiling chips. Default **All** keeps 80 / 800 km events on the
+  current 50-row nearest/recent list. **&lt;500 km** keeps 80 / 400 km
+  and drops 800 km. **&lt;100 km** keeps 80 km and drops 400 km.
+  Missing origin or non-finite `distanceKm` stays visible. The selected
+  row always stays. AND with the Plan 208 magnitude floor, Plan 216
+  depth ceiling, and Plan 228 age ceiling. Distinct from the globe SID /
+  time / tsunami / felt / type / net / PAGER chips. Re-applies the
+  already-fetched USGS snapshot — no extra fetch and no new `/api`.
+  Preference persists as `meridian.quakeListRange`
+  (LayerStateCoordinator restore, no share-URL write).
 - FIRMS globe has a client-only **Hide no satellite** toggle after Hide no
   day/night. Default **off** keeps the current overlay, including empty and
   named satellite strings. **On** keeps a non-empty trimmed satellite
