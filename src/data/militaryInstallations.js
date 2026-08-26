@@ -40,6 +40,13 @@ import {
   readMilitaryOsmType,
   writeMilitaryOsmType,
 } from './militaryOsmTypeFilter.js';
+import {
+  DEFAULT_INSTALLATION_MAPPED_ONLY,
+  filterInstallationsByMapped,
+  normalizeInstallationMappedOnly,
+  readMilitaryMappedOnly,
+  writeMilitaryMappedOnly,
+} from './militaryMappedFilter.js';
 import { isSceneClickCaptured, registerPickOwner, unregisterPickOwner } from './pickRegistry.js';
 
 const LAYER_ID = 'military-installations';
@@ -105,6 +112,7 @@ const state = {
   footprintsOnly: DEFAULT_INSTALLATION_FOOTPRINTS_ONLY,
   namedOnly: DEFAULT_INSTALLATION_NAMED_ONLY,
   osmType: DEFAULT_INSTALLATION_OSM_TYPE,
+  mappedOnly: DEFAULT_INSTALLATION_MAPPED_ONLY,
 };
 
 function colorFor(record) {
@@ -259,17 +267,21 @@ function clearRendered() {
  * @returns {Array<object>} Records to render this paint.
  */
 function visibleRecords() {
-  return filterInstallationsByOsmType(
-    filterInstallationsByNamed(
-      filterInstallationsByFootprint(
-        filterInstallationsByClass(state.records, state.classFilter, state.selectedId),
-        state.footprintsOnly,
+  return filterInstallationsByMapped(
+    filterInstallationsByOsmType(
+      filterInstallationsByNamed(
+        filterInstallationsByFootprint(
+          filterInstallationsByClass(state.records, state.classFilter, state.selectedId),
+          state.footprintsOnly,
+          state.selectedId,
+        ),
+        state.namedOnly,
         state.selectedId,
       ),
-      state.namedOnly,
+      state.osmType,
       state.selectedId,
     ),
-    state.osmType,
+    state.mappedOnly,
     state.selectedId,
   );
 }
@@ -571,8 +583,10 @@ const militaryInstallationsLayer = {
     state.moveEndRemove = viewer.camera.moveEnd.addEventListener(scheduleLoad);
     installInteraction(viewer);
     // LayerStateCoordinator restore of class / footprints / named does not
-    // carry osmType (no share-URL write). Re-read meridian.milOsmType here.
+    // carry osmType or mappedOnly (no share-URL write). Re-read the local
+    // persist keys here.
     state.osmType = readMilitaryOsmType();
+    state.mappedOnly = readMilitaryMappedOnly();
   },
   enable() {
     state.enabled = true;
@@ -594,9 +608,9 @@ const militaryInstallationsLayer = {
     state.selectedId = null;
   },
   /**
-   * Class chips, Footprints only, Named only, and OSM-type chips re-filter
-   * in-memory records. Never hits Overpass or Places.
-   * @param {{ installationClassFilter?: unknown, footprintsOnly?: unknown, namedOnly?: unknown, osmType?: unknown }} [params]
+   * Class chips, Footprints only, Named only, OSM-type chips, and Mapped
+   * only re-filter in-memory records. Never hits Overpass or Places.
+   * @param {{ installationClassFilter?: unknown, footprintsOnly?: unknown, namedOnly?: unknown, osmType?: unknown, mappedOnly?: unknown }} [params]
    * @returns {boolean}
    */
   setParams(params = {}) {
@@ -605,7 +619,8 @@ const militaryInstallationsLayer = {
     const hasFootprints = Object.hasOwn(params, 'footprintsOnly');
     const hasNamed = Object.hasOwn(params, 'namedOnly');
     const hasOsmType = Object.hasOwn(params, 'osmType');
-    if (!hasClass && !hasFootprints && !hasNamed && !hasOsmType) return true;
+    const hasMapped = Object.hasOwn(params, 'mappedOnly');
+    if (!hasClass && !hasFootprints && !hasNamed && !hasOsmType && !hasMapped) return true;
 
     let nextClass = state.classFilter;
     if (hasClass) {
@@ -635,28 +650,39 @@ const militaryInstallationsLayer = {
       nextOsmType = type;
     }
 
+    let nextMapped = state.mappedOnly;
+    if (hasMapped) {
+      const only = normalizeInstallationMappedOnly(params.mappedOnly);
+      if (only == null) return false;
+      nextMapped = only;
+    }
+
     if (
       nextClass === state.classFilter
       && nextFootprints === state.footprintsOnly
       && nextNamed === state.namedOnly
       && nextOsmType === state.osmType
+      && nextMapped === state.mappedOnly
     ) return true;
     state.classFilter = nextClass;
     state.footprintsOnly = nextFootprints;
     state.namedOnly = nextNamed;
     state.osmType = nextOsmType;
+    state.mappedOnly = nextMapped;
     if (hasNamed) writeMilitaryNamedOnly(nextNamed);
     if (hasOsmType) writeMilitaryOsmType(nextOsmType);
+    if (hasMapped) writeMilitaryMappedOnly(nextMapped);
     if (state.enabled && state.dataSource) renderRecords();
     return true;
   },
-  /** @returns {{ installationClassFilter: string, footprintsOnly: boolean, namedOnly: boolean, osmType: string }} */
+  /** @returns {{ installationClassFilter: string, footprintsOnly: boolean, namedOnly: boolean, osmType: string, mappedOnly: boolean }} */
   getParams() {
     return {
       installationClassFilter: state.classFilter,
       footprintsOnly: state.footprintsOnly,
       namedOnly: state.namedOnly,
       osmType: state.osmType,
+      mappedOnly: state.mappedOnly,
     };
   },
   update() { return loadInstallations(); },
@@ -677,6 +703,7 @@ const militaryInstallationsLayer = {
     state.footprintsOnly = DEFAULT_INSTALLATION_FOOTPRINTS_ONLY;
     state.namedOnly = DEFAULT_INSTALLATION_NAMED_ONLY;
     state.osmType = DEFAULT_INSTALLATION_OSM_TYPE;
+    state.mappedOnly = DEFAULT_INSTALLATION_MAPPED_ONLY;
   },
   /**
    * Snapshot the current bbox payload. Does not fetch.
