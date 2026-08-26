@@ -91,7 +91,9 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         launch hide-unknown-site toggle
  *                         (`meridian.launchHideUnknownSite`), FIRMS TI5
  *                         brightness chips (`meridian.firmsBrightnessTi5`),
- *                         FIRMS scan-size chips (`meridian.firmsScan`).
+ *                         FIRMS scan-size chips (`meridian.firmsScan`),
+ *                         Quake list magnitude-floor chips
+ *                         (`meridian.quakeListMag`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
@@ -102,7 +104,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setLaunchSiteFilter` / `setLaunchOrbitFilter` /
  *                         `setLaunchTimeWindow` / `setLaunchWebcastOnly` /
  *                         `setLaunchProbabilityFilter` /
- *                         `setLaunchHideUnknownSite`,
+ *                         `setLaunchHideUnknownSite` /
+ *                         `setEarthquakeListMagFilter`,
  *                         which would persist a display choice nobody made.
  *
  * The two Context missions deliberately reuse `styleManager.setContextMode`, the

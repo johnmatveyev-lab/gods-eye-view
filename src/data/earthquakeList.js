@@ -3,6 +3,12 @@
  * already fetched. No new proxy.
  */
 
+import {
+  earthquakeListRowMatchesMagFloor,
+  getEarthquakeListMagFilter,
+  hydrateEarthquakeListMagFilter,
+} from './earthquakeListMagFilter.js';
+
 export const EARTHQUAKE_LIST_LIMIT = 50;
 export const EARTHQUAKE_LIST_UNAVAILABLE = 'UNAVAILABLE';
 export const EARTHQUAKE_LIST_SOURCE = 'USGS';
@@ -64,11 +70,16 @@ export function formatEarthquakeListRow(record) {
 
 /**
  * Cap to the ~50 most recent events, or the 50 nearest when an origin is given.
+ * List magnitude-floor chips (All | 5+ | 6+) apply before the cap.
  * @param {Array<object>|null|undefined} records
- * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number}} [options]
+ * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number, magFloor?: unknown}} [options]
  * @returns {Array<object>}
  */
-export function selectEarthquakeListRows(records, { origin = null, limit = EARTHQUAKE_LIST_LIMIT } = {}) {
+export function selectEarthquakeListRows(records, {
+  origin = null,
+  limit = EARTHQUAKE_LIST_LIMIT,
+  magFloor = getEarthquakeListMagFilter(),
+} = {}) {
   const cap = Math.max(0, Math.min(
     EARTHQUAKE_LIST_LIMIT,
     Math.floor(Number(limit) || 0),
@@ -81,6 +92,7 @@ export function selectEarthquakeListRows(records, { origin = null, limit = EARTH
   for (const record of records) {
     const row = formatEarthquakeListRow(record);
     if (!row) continue;
+    if (!earthquakeListRowMatchesMagFloor(row, magFloor)) continue;
     if (hasOrigin) {
       row.distanceKm = earthquakeDistanceKm({ lat: originLat, lon: originLon }, row);
     }
@@ -100,10 +112,10 @@ export function selectEarthquakeListRows(records, { origin = null, limit = EARTH
 
 /**
  * Sync list presentation. Failed or empty feed → unavailable, never a hang.
- * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null}} [input]
+ * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null, magFloor?: unknown}} [input]
  * @returns {{status: 'ready'|'unavailable', rows: Array<object>, message: string|null, source: string}}
  */
-export function presentEarthquakeList({ records, error, origin } = {}) {
+export function presentEarthquakeList({ records, error, origin, magFloor } = {}) {
   if (error) {
     return {
       status: 'unavailable',
@@ -112,7 +124,7 @@ export function presentEarthquakeList({ records, error, origin } = {}) {
       source: EARTHQUAKE_LIST_SOURCE,
     };
   }
-  const rows = selectEarthquakeListRows(records, { origin });
+  const rows = selectEarthquakeListRows(records, { origin, magFloor });
   if (!rows.length) {
     return {
       status: 'unavailable',
@@ -255,6 +267,7 @@ export function initEarthquakeListControl({
   onSelect,
 } = {}) {
   if (!button || !panel || !list) return null;
+  hydrateEarthquakeListMagFilter();
   let open = false;
 
   const refresh = () => {

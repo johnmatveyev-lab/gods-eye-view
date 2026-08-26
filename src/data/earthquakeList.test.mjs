@@ -1,4 +1,4 @@
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +16,11 @@ import {
   renderEarthquakeList,
   selectEarthquakeListRows,
 } from './earthquakeList.js';
+import { resetEarthquakeListMagFilterForTest } from './earthquakeListMagFilter.js';
+
+beforeEach(() => {
+  resetEarthquakeListMagFilterForTest();
+});
 import { createEarthquakesLayer } from './earthquakes.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -289,6 +294,10 @@ test('legal: USGS credit, Meridian title, MIT notice, no banned sources', () => 
   assert.match(html, /<title>Meridian<\/title>/);
   assert.match(html, /id="earthquake-list-toggle"/);
   assert.match(html, /id="earthquake-list-panel"/);
+  assert.match(html, /id="earthquake-list-mag-chips"/);
+  assert.match(html, /data-earthquake-list-mag="all"/);
+  assert.match(html, /data-earthquake-list-mag="5"/);
+  assert.match(html, /data-earthquake-list-mag="6"/);
   assert.match(html, /id="earthquake-depth-chips"/);
   assert.match(html, /data-earthquake-depth="shallow"/);
   assert.match(html, /id="earthquake-time-chips"/);
