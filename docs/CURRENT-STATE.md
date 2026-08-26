@@ -2,6 +2,18 @@
 
 Updated: August 26, 2026
 
+> **2026-08-26 — Dam list named-only toggle (plan 218)**
+> (`src/data/damsNamedFilter.js`). **Named only** chip on the dams
+> in-view list, next to Plan 205 All | 10+ MW | 100+ MW output-floor
+> chips. Default **off** is the current roster (including fallback
+> **Dam** rows). On hides already-bundled rows whose painted label is
+> empty, whitespace, or the exact **Dam** fallback. Named plants such as
+> Hoover Dam stay. Selected row stays. AND with the output-floor chips
+> after the floor. List/fly-to only — globe stems unchanged. Persists as
+> `meridian.damNamedOnly` only (not a share-link field).
+> LayerStateCoordinator restore re-reads the persist key on layer init.
+> Hidden when the dams layer is off. Client-only; no `/api`.
+
 > **2026-08-26 — Launches list mapped-only toggle (plan 215)**
 > (`src/data/launchListMappedFilter.js`). **Mapped only** chip on the hosted
 > Launches panel, after All | Commercial | Government LSP-type chips.
@@ -1867,7 +1879,7 @@ its criteria cannot be silently ignored.
 | Radio | Radio Browser (public-domain station directory) | `src/data/radio.js` | `/api/radio/stations`, `/api/radio/click/:uuid` | 45 min directory refresh |
 | Bikeshare 🚲 | GBFS (Lyft + BCycle); hosted picker of the existing allowlisted city list, last system persisted locally (not a layer-state filter) | `src/data/bikeshare.js` | `/api/gbfs` | 60s |
 | Datacenters ▣ | OSM extract (bundled) | `src/data/localLayers.js` | — | static |
-| Dams ▰ | OpenInfraMap/OSM extract (bundled) | `src/data/localLayers.js` | — | static |
+| Dams ▰ | OpenInfraMap/OSM extract (bundled) | `src/data/localLayers.js` | — | static. Hosted in-view list (`#dams-in-view`) reads the already-bundled OSM / ODbL snapshot (cap 50) and flies to a clicked plant. Exclusive list-only **All \| 10+ MW \| 100+ MW** chips (`#dams-output-chips`) raise that list floor on bundled `properties.output`; default All is the current roster. Missing / unparseable output stays. Persists as `meridian.damOutput` (local restore, not a share-link field). **Named only** (`#dams-named-chips`, default off) hides rows whose painted label is empty, whitespace, or the exact **Dam** fallback; named plants and the selected row stay. AND with the output-floor chips. Persists as `meridian.damNamedOnly` only (not a share-link field). Globe stems unchanged. |
 | Submarine Cables ◠ | Removed (CC BY-NC-SA); registered no-op | `src/data/telegeographySubmarineCables.js` | — | no-op |
 | FIRMS Active Fires ▲ | NASA FIRMS live (VIIRS ×3 NRT, trailing 24h) | `src/data/firmsHeatmap.js` | `/api/firms` (`FIRMS_MAP_KEY`) | 10 min (proxy TTL 30 min) |
 

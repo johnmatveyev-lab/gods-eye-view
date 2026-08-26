@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Named only** toggle next to the
+  Plan 205 **All | 10+ MW | 100+ MW** output-floor chips. Default **off**
+  keeps the current roster, including fallback **Dam** rows when OSM left
+  the plant unnamed. On hides already-bundled list rows whose painted
+  label is empty, whitespace, or the exact **Dam** fallback. Named plants
+  such as Hoover Dam stay. A selected row stays even if it would be
+  filtered. AND with the output-floor chips. List/fly-to only — globe
+  stems stay unchanged. No extra fetch and no `/api`. Preference persists
+  as `meridian.damNamedOnly` only (not a share-link field).
+  LayerStateCoordinator restore re-reads the stored toggle. Hidden with
+  the dams list when the layer is off. Distinct from Plan 186 military
+  Named only and Plan 193 datacenter hide-no-operator.
 - The hosted Launches panel has a client-only **Mapped only** toggle after the
   All | Commercial | Government LSP-type chips. Default **off** keeps the
   current list, including missions with no pad coords so they stay selectable.
