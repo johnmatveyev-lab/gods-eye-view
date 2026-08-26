@@ -38,6 +38,8 @@ import {
   getAwarenessNavigationTargets,
 } from './militaryAwarenessEngine.js';
 import { NAVIGATION_AUTHORITY_EVENT } from '../navigationPolicy.js';
+import { resetAwarenessIdentifiedForTest } from './awarenessIdentifiedFilter.js';
+import { resetAwarenessRangeForTest } from './awarenessRangeFilter.js';
 
 const militaryAwarenessSource = fs.readFileSync(
   new URL('./militaryAwareness.js', import.meta.url),
@@ -2697,10 +2699,12 @@ test('runtime listeners exist only while the awareness layer is enabled', () => 
 });
 
 test('awareness runtime parameters return a detached snapshot', () => {
+  resetAwarenessIdentifiedForTest();
+  resetAwarenessRangeForTest();
   militaryAwarenessLayer.setParams({ passive: false });
   const snapshot = militaryAwarenessLayer.getParams();
   militaryAwarenessLayer.setParams({ passive: true });
-  assert.deepEqual(snapshot, { passive: false, identifiedOnly: false });
+  assert.deepEqual(snapshot, { passive: false, identifiedOnly: false, range: 'all' });
 });
 
 test('Contacts refresh cadence is snappy while the camera moves and parked otherwise', () => {

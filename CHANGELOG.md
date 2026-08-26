@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Global Context has client-only exclusive **All | <50 km | <10 km** range
+  chips on the Contacts roster, next to Identified only. Default **All**
+  keeps the current 250 km window. **<50 km** drops 200 km contacts and
+  keeps 40 km. **<10 km** keeps 8 km and drops 40 km. Missing or
+  non-finite `distanceM` stays. The current subject always stays. AND with
+  Identified only. Chip changes re-filter already-fetched `getNearby`
+  records — no extra fetch and no `/api`. The 250 km ring
+  (`AWARENESS_RADIUS_M`) is unchanged. Preference persists as
+  `meridian.awarenessRange` (LayerStateCoordinator restore, no share-URL
+  write).
 - The hosted FIRES list has client-only exclusive **All | &lt;6 h | &lt;1 h**
   age-floor chips. Default **All** keeps 20 min / 3 h / 12 h on the current
   50-nearest ranking. **&lt;6 h** drops 12 h and keeps 3 h. **&lt;1 h**
