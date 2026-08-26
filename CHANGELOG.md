@@ -7,6 +7,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no scan** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps the current 50-row list, including missing / non-finite /
+  `scanKm<=0`. On is presence-only: hides those sentinels and keeps a
+  real scan (`scanKm > 0`, e.g. 1.0 km). This is not a scan-size
+  ceiling. A selected / tracked fire always stays. AND after Plan 210
+  list confidence, Plan 219 list FRP, Plan 225 list age, Plan 230 list
+  Hide no satellite, Plan 252 list Hide no sensor, Plan 256 list Hide
+  no version, Plan 260 list Hide no day/night, and Plan 266 list Hide
+  no acq, before the 50-row cap. Distinct from those list chips, the
+  globe scan-size ceiling (`meridian.firmsScan`), and globe Hide no
+  brightness (267). `getRowControls()` owns the list chip — index.html
+  / ui.js do not re-declare it. Preference persists as
+  `meridian.firmsListHideNoScan` (`'1'` / `'0'`; LayerStateCoordinator
+  restore, no share-URL write). No extra NASA fetch and no new `/api`.
+  NASA FIRMS acknowledgement is unchanged.
 - Civil flights have a client-only **Hide no vertical rate** toggle after
   Hide no geo altitude. Default **off** keeps the current draw, including
   null, missing, and non-finite `verticalRate` / `verticalRateMps`. **On**
