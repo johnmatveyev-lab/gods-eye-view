@@ -19,6 +19,11 @@ import {
   normalizeSpeedBand,
   speedUnitSuffix,
 } from './flightSpeedBand.js';
+import { stickyNumber } from './aircraftMeta.js';
+import flightsLayer, {
+  _addFlightTrackingCandidateForTest,
+  _clearFlightFilterFixturesForTest,
+} from './flights.js';
 import {
   createDefaultLayerState,
   decodeLayerStateParams,
@@ -74,6 +79,57 @@ test('missing or non-finite velocity stays visible', () => {
   assert.equal(contactMatchesSpeedBand({ id: 'n', velocity: Number.NaN }, band), true);
   assert.equal(contactMatchesSpeedBand({ id: 'n', velocity: Number.POSITIVE_INFINITY }, band), true);
   assert.equal(contactMatchesSpeedBand({ id: 'n' }, band), true);
+});
+
+test('missing velocity stays visible when a min speed chip is on; a finite 0 still fails a min band', () => {
+  _clearFlightFilterFixturesForTest();
+  try {
+    assert.equal(stickyNumber(null, undefined, null), null);
+    assert.equal(stickyNumber(0, undefined, null), 0, '0 is a real parked / on-ground speed');
+    const band = normalizeSpeedBand({ minKt: 50 });
+    assert.equal(contactMatchesSpeedBand({ id: 'n', velocity: null }, band), true,
+      'null velocity fail-opens');
+    assert.equal(contactMatchesSpeedBand({ id: 'n', velocity: 0 }, band), false,
+      'finite 0 fails a min band');
+    assert.equal(contactMatchesSpeedBand({ id: 'n', velocity: GA_MPS }, band), true);
+
+    const flightsSrc = readFileSync(path.join(ROOT, 'src/data/flights.js'), 'utf8');
+    assert.match(flightsSrc, /velocity: stickyNumber\(velocity, prevMeta\?\.velocity, null\)/);
+    assert.doesNotMatch(flightsSrc, /velocity: stickyNumber\(velocity, prevMeta\?\.velocity, 0\)/);
+    assert.match(flightsSrc, /verticalRate: stickyNumber\(vertical_rate, prevMeta\?\.verticalRate, null\)/);
+
+    const missingBb = { show: true };
+    const parkedZeroBb = { show: true };
+    const cruiseBb = { show: true };
+    _addFlightTrackingCandidateForTest({
+      icao24: 'missv1',
+      meta: { velocity: null, callsign: 'UNK1', onGround: false },
+      billboard: missingBb,
+    });
+    _addFlightTrackingCandidateForTest({
+      icao24: 'park00',
+      meta: { velocity: 0, callsign: 'N000', onGround: true },
+      billboard: parkedZeroBb,
+    });
+    _addFlightTrackingCandidateForTest({
+      icao24: 'ual100',
+      meta: { velocity: AIRLINER_MPS, callsign: 'UAL100', onGround: false },
+      billboard: cruiseBb,
+    });
+
+    assert.equal(flightsLayer.setParams({ speedMinKt: 50, speedMaxKt: null }), true);
+    assert.equal(missingBb.show, true, 'missing velocity stays when a min chip is on');
+    assert.equal(parkedZeroBb.show, false, 'finite 0 still fails a min band');
+    assert.equal(cruiseBb.show, true);
+
+    flightsLayer.setParams({ speedMinKt: null, speedMaxKt: null });
+    assert.equal(missingBb.show, true);
+    assert.equal(parkedZeroBb.show, true, 'clear restores parked 0');
+    assert.equal(cruiseBb.show, true);
+  } finally {
+    flightsLayer.setParams({ speedMinKt: null, speedMaxKt: null });
+    _clearFlightFilterFixturesForTest();
+  }
 });
 
 test('tracked or selected contact outside the band stays visible until untracked', () => {
@@ -210,7 +266,7 @@ test('both flight layers persist the band through existing layer options', () =>
   const military = readFileSync(path.join(ROOT, 'src/data/militaryFlights.js'), 'utf8');
   assert.match(flights, /speedMinKt: _speedMinKt/);
   assert.match(flights, /_applySpeedBandParams\(params\)/);
-  assert.match(flights, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher\]/);
+  assert.match(flights, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher\]/);
   assert.match(military, /speedMinKt: _speedMinKt/);
   assert.match(military, /_applySpeedBandParams\(params\)/);
 
