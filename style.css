@@ -6518,6 +6518,41 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   border-color: var(--glass-border-hover);
 }
 
+#dams-in-view .dams-river-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+#dams-in-view .dams-river-chips[hidden] {
+  display: none;
+}
+
+#dams-in-view .dams-river-chip {
+  padding: 3px 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+#dams-in-view .dams-river-chip.active {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+#dams-in-view .dams-river-chip:hover,
+#dams-in-view .dams-river-chip:focus-visible {
+  border-color: var(--glass-border-hover);
+}
+
 #dams-in-view .in-view-site-list-items {
   display: flex;
   flex-direction: column;

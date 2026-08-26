@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **River only** toggle next to the
+  Plan 224 **Operator only** chip, Plan 218 **Named only**, and Plan 205
+  **All | 10+ MW | 100+ MW** output-floor chips. Default **off** keeps the
+  current roster, including plants whose OSM river is missing. On hides
+  already-bundled list rows with an empty or whitespace river. A non-empty
+  `river` / `associated_river` / `river:name` (on the record, properties,
+  tags, or the existing `local-dams` context entity) stays, including
+  **Colorado**. A selected row stays even if it would be filtered. AND
+  with the output-floor chips, Named only, and Operator only. List/fly-to
+  only — globe stems stay unchanged. No extra fetch and no `/api`.
+  Preference persists as `meridian.damRiverOnly` only (not a share-link
+  field). LayerStateCoordinator restore re-reads the stored toggle.
+  Hidden with the dams list when the layer is off. Distinct from Plan 205
+  output-floor, Plan 218 Named only, and Plan 224 Operator only.
 - Global Context has a client-only **Aircraft only** toggle on the Contacts
   roster, next to Identified only and the All | &lt;50 km | &lt;10 km range
   chips. Default **off** keeps all four cohorts. **On** keeps flights +
