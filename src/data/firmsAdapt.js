@@ -33,6 +33,7 @@ export function adaptFirmsRecords(records) {
       brightnessTi5: finiteNumber(record.brightnessTi5),
       scanKm: finiteNumber(record.scanKm ?? record.scan),
       trackKm: finiteNumber(record.trackKm ?? record.track),
+      version: normalizeVersionField(record.version),
       night: daynight === 'N',
       daynight: daynight === 'N' || daynight === 'D' ? daynight : '',
       acqMs: parseAcquisitionMs(record.acqDate, record.acqTime, acqCache),
@@ -110,4 +111,10 @@ function clamp01(value) {
 function finiteNumber(value) {
   const number = Number(value);
   return Number.isFinite(number) ? number : 0;
+}
+
+/** Trimmed FIRMS product version; missing / non-string cells become ''. */
+function normalizeVersionField(value) {
+  if (value == null) return '';
+  return String(value).trim();
 }

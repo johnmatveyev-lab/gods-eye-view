@@ -42,6 +42,7 @@ test('fixture first row maps every field, categorical confidence preserved raw',
   assert.equal(first.track, 0.36); // track column kept (along-track pixel km)
   assert.equal(first.frp, 0.53);
   assert.equal(first.confidence, 'n'); // categorical, passed through untouched
+  assert.equal(first.version, '2.0NRT'); // product version kept for C2 NRT chips
   assert.equal(first.daynight, 'N');
   assert.equal(first.acqDate, '2026-07-16');
   assert.equal(first.acqTime, '1006'); // string, as-is

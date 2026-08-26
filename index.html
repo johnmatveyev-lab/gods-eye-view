@@ -1178,6 +1178,11 @@
         <button type="button" class="fires-sensor-chip" data-firms-track="0.5" aria-pressed="false" title="Hide detections at or above 0.5 km track (MODIS and wide-track VIIRS)">&lt;0.5km</button>
         <button type="button" class="fires-sensor-chip" data-firms-track="0.4" aria-pressed="false" title="Hide detections at or above 0.4 km track (keep near-nadir VIIRS)">&lt;0.4km</button>
       </div>
+      <div id="fires-version-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS version" hidden>
+        <button type="button" class="fires-sensor-chip active" data-firms-version="all" aria-pressed="true" title="Show every FIRMS product version">All</button>
+        <button type="button" class="fires-sensor-chip" data-firms-version="2.0NRT" aria-pressed="false" title="Show C2 NRT (2.0NRT) detections only">2.0NRT</button>
+        <button type="button" class="fires-sensor-chip" data-firms-version="other" aria-pressed="false" title="Show older or other FIRMS product versions (1.0NRT and missing)">Other</button>
+      </div>
       <div id="fires-list-conf-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS list confidence" hidden>
         <button type="button" class="fires-sensor-chip active" data-firms-list-conf="all" aria-pressed="true" title="Show every FIRMS list confidence bucket">All</button>
         <button type="button" class="fires-sensor-chip" data-firms-list-conf="high" aria-pressed="false" title="Keep high-confidence detections (≥0.75) on the FIRES list">High</button>

@@ -93,6 +93,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         brightness chips (`meridian.firmsBrightnessTi5`),
  *                         FIRMS scan-size chips (`meridian.firmsScan`),
  *                         FIRMS track-size chips (`meridian.firmsTrack`),
+ *                         FIRMS version chips (`meridian.firmsVersion`),
  *                         Quake list magnitude-floor chips
  *                         (`meridian.quakeListMag`),
  *                         dam output-floor chips (`meridian.damOutput`),

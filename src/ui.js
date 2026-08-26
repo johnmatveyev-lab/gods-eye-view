@@ -201,6 +201,9 @@ import {
   normalizeTrackCeiling,
 } from './data/firmsTrackFilter.js';
 import {
+  normalizeFirmsVersionFilter,
+} from './data/firmsVersionFilter.js';
+import {
   getFirmsListConf,
   hydrateFirmsListConf,
   normalizeFirmsListConf,
@@ -2892,6 +2895,7 @@ export class StyleManager {
     this._firmsBrightnessTi5Chips = document.getElementById('fires-brightness-ti5-chips');
     this._firmsScanChips = document.getElementById('fires-scan-chips');
     this._firmsTrackChips = document.getElementById('fires-track-chips');
+    this._firmsVersionChips = document.getElementById('fires-version-chips');
     this._firmsListConfChips = document.getElementById('fires-list-conf-chips');
     this._firmsListFrpChips = document.getElementById('fires-list-frp-chips');
     this._scenePanel = document.getElementById('scene-panel');
@@ -3447,6 +3451,7 @@ export class StyleManager {
     this._initFirmsBrightnessTi5Chips();
     this._initFirmsScanChips();
     this._initFirmsTrackChips();
+    this._initFirmsVersionChips();
     this._initFirmsListConfChips();
     this._initFirmsListFrpChips();
     this._initInstallationClassChips();
@@ -5606,6 +5611,7 @@ export class StyleManager {
           this._syncFirmsBrightnessTi5Chips();
           this._syncFirmsScanChips();
           this._syncFirmsTrackChips();
+          this._syncFirmsVersionChips();
           this._syncFirmsListConfChips();
           this._syncFirmsListFrpChips();
         }
@@ -12183,6 +12189,32 @@ export class StyleManager {
       this._syncFirmsTrackChips();
     });
     this._syncFirmsTrackChips();
+  }
+
+  _syncFirmsVersionChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsVersionChips) this._firmsVersionChips.hidden = !enabled;
+    const layer = this._dataManager?.layers?.get('local-firms')?.module;
+    const filter = normalizeFirmsVersionFilter(layer?.getParams?.()?.versionFilter);
+    const chips = this._firmsVersionChips?.querySelectorAll?.('[data-firms-version]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsVersion === filter;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsVersionChips() {
+    if (!this._firmsVersionChips) return;
+    this._firmsVersionChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-version]');
+      if (!chip || !this._firmsVersionChips.contains(chip)) return;
+      const next = normalizeFirmsVersionFilter(chip.dataset.firmsVersion);
+      this._dataManager?.setLayerParams?.('local-firms', { versionFilter: next }, { origin: 'user' });
+      this._syncFirmsVersionChips();
+    });
+    this._syncFirmsVersionChips();
   }
 
   _syncFirmsListConfChips() {
