@@ -32,8 +32,17 @@ import {
   passesAwarenessIdentifiedFilter,
   setAwarenessIdentifiedEnabled,
 } from './awarenessIdentifiedFilter.js';
+import {
+  awarenessRangeChipModels,
+  filterAwarenessRangeContacts,
+  getAwarenessRangeFilter,
+  hydrateAwarenessRangeFilter,
+  passesAwarenessRangeFilter,
+  setAwarenessRangeFilter,
+} from './awarenessRangeFilter.js';
 
 hydrateAwarenessIdentifiedEnabled();
+hydrateAwarenessRangeFilter();
 
 const AIRCRAFT_DEPENDENCIES = ['flights', 'military'];
 const DEFERRED_DEPENDENCIES = ['ais-live-vessels', 'military-installations'];
@@ -260,6 +269,12 @@ function ensurePanel() {
         });
         if (!state.results) hidePanel();
       }
+      if (action.dataset.awarenessAction === 'range') {
+        militaryAwarenessLayer.setParams({
+          range: action.dataset.awarenessRange,
+        });
+        if (!state.results) hidePanel();
+      }
       return;
     }
     const target = event.target.closest('button[data-awareness-layer][data-awareness-id]');
@@ -275,7 +290,7 @@ function ensurePanel() {
 
 function hidePanel() {
   if (state.panel) {
-    const markup = `${identifiedOnlyChipHtml()}<div class="military-awareness-standby">
+    const markup = `${awarenessFilterChipsHtml()}<div class="military-awareness-standby">
       <strong>${state.enabled ? 'CONTEXT READY' : 'GLOBAL CONTEXT OFF'}</strong>
       <span>${state.enabled ? 'SELECT A FLIGHT, VESSEL, OR MAPPED INSTALLATION' : 'ENABLE TO LOAD OBSERVED / MAPPED PROXIMITY'}</span>
     </div>`;
@@ -655,8 +670,12 @@ function isFlightLayer(layerId) {
 }
 
 function filterIdentifiedRoster(items, subject) {
-  return filterAwarenessIdentifiedContacts(items, {
+  const identified = filterAwarenessIdentifiedContacts(items, {
     identifiedOnly: getAwarenessIdentifiedEnabled(),
+    subjectId: subject?.id,
+  });
+  return filterAwarenessRangeContacts(identified, {
+    range: getAwarenessRangeFilter(),
     subjectId: subject?.id,
   });
 }
@@ -664,6 +683,9 @@ function filterIdentifiedRoster(items, subject) {
 function awarenessIdentifiedAllows(item, subject = state.subject) {
   return passesAwarenessIdentifiedFilter(item, {
     identifiedOnly: getAwarenessIdentifiedEnabled(),
+    subjectId: subject?.id,
+  }) && passesAwarenessRangeFilter(item, {
+    range: getAwarenessRangeFilter(),
     subjectId: subject?.id,
   });
 }
@@ -673,6 +695,17 @@ function identifiedOnlyChipHtml() {
   return `<div class="military-awareness-identified-chips" role="group" aria-label="${AWARENESS_IDENTIFIED_CHIP_LABEL}">
     <button type="button" class="military-awareness-identified-chip${on ? ' active' : ''}" data-awareness-action="identified-only" aria-pressed="${on ? 'true' : 'false'}" title="${AWARENESS_IDENTIFIED_CHIP_TITLE}">${AWARENESS_IDENTIFIED_CHIP_LABEL}</button>
   </div>`;
+}
+
+function rangeChipsHtml() {
+  const chips = awarenessRangeChipModels(getAwarenessRangeFilter()).map((chip) => (
+    `<button type="button" class="military-awareness-range-chip${chip.active ? ' active' : ''}" data-awareness-action="range" data-awareness-range="${escapeHtml(chip.id)}" aria-pressed="${chip.active ? 'true' : 'false'}" title="${escapeHtml(chip.title)}">${escapeHtml(chip.label)}</button>`
+  )).join('');
+  return `<div class="military-awareness-range-chips" role="group" aria-label="Range">${chips}</div>`;
+}
+
+function awarenessFilterChipsHtml() {
+  return `${identifiedOnlyChipHtml()}${rangeChipsHtml()}`;
 }
 
 function normalizeAircraftClass(value) {
@@ -716,6 +749,10 @@ function selectNavigationTargets(sourceCohorts, subject, visitedKeys, {
       subjectId: subject?.id,
     }));
   }
+  targets = targets.filter((target) => passesAwarenessRangeFilter(target.item, {
+    range: getAwarenessRangeFilter(),
+    subjectId: subject?.id,
+  }));
   return targets;
 }
 
@@ -981,7 +1018,12 @@ export function historySubjectSnapshot(subject, sourceItem = null) {
     || sourceItem?.type
     || subject?.aircraftClass
     || null;
-  return aircraftClass ? { ...subject, aircraftClass } : { ...subject };
+  const distanceRaw = sourceItem?.distanceM ?? sourceItem?.distance ?? subject?.distanceM;
+  const distanceM = Number(distanceRaw);
+  const extras = {};
+  if (aircraftClass) extras.aircraftClass = aircraftClass;
+  if (Number.isFinite(distanceM)) extras.distanceM = distanceM;
+  return Object.keys(extras).length ? { ...subject, ...extras } : { ...subject };
 }
 
 function historySourceItem(subject) {
@@ -1050,7 +1092,7 @@ function renderResults() {
   const panel = ensurePanel();
   const { subject, cohorts } = state.results;
   const markup = `<div class="military-awareness-subject">${escapeHtml(subject.label)} · ${formatAwarenessDistance(AWARENESS_RADIUS_M)} FLIGHT / VESSEL WINDOW</div>
-    ${identifiedOnlyChipHtml()}
+    ${awarenessFilterChipsHtml()}
     ${navigationControlsHtml()}
     ${cohorts.map(rowHtml).join('')}
     <p class="military-awareness-note">Open-source mapped/observed context. Missing broadcasts, unloaded map areas, or unmapped sites are not evidence of absence.</p>`;
@@ -1793,28 +1835,35 @@ const militaryAwarenessLayer = {
       const previous = getAwarenessIdentifiedEnabled();
       identifiedChanged = setAwarenessIdentifiedEnabled(params.identifiedOnly) !== previous;
     }
+    let rangeChanged = false;
+    if (params.range !== undefined) {
+      const previous = getAwarenessRangeFilter();
+      rangeChanged = setAwarenessRangeFilter(params.range) !== previous;
+    }
     let activation;
     if (typeof params.passive === 'boolean') {
       const wasPassive = state.passive;
       state.passive = params.passive;
       if (state.enabled && wasPassive && !state.passive) activation = activateOperationalContext();
-    } else if (typeof params.identifiedOnly !== 'boolean') {
+    } else if (typeof params.identifiedOnly !== 'boolean' && params.range === undefined) {
       return;
     }
-    if (identifiedChanged && state.enabled && state.subject) {
+    if ((identifiedChanged || rangeChanged) && state.enabled && state.subject) {
       refreshSelectedSubject(true);
     }
     return activation;
   },
-  /** @returns {{ passive: boolean, identifiedOnly: boolean }} Current runtime parameters. */
+  /** @returns {{ passive: boolean, identifiedOnly: boolean, range: string }} Current runtime parameters. */
   getParams() {
     return {
       passive: state.passive,
       identifiedOnly: getAwarenessIdentifiedEnabled(),
+      range: getAwarenessRangeFilter(),
     };
   },
   init(viewer) {
     hydrateAwarenessIdentifiedEnabled();
+    hydrateAwarenessRangeFilter();
     detachRuntimeListeners();
     state.unitsUnsubscribe?.();
     state.unitsUnsubscribe = subscribeDistanceUnit(() => {
