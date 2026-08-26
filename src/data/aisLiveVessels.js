@@ -118,6 +118,15 @@ import {
   vesselMatchesHideNoHeadingFilter,
   writeAisHideNoHeading,
 } from './aisHideNoHeadingFilter.js';
+import {
+  DEFAULT_AIS_HIDE_NO_TYPE,
+  aisHideNoTypeChipModel,
+  filterVesselsByHideNoType,
+  normalizeAisHideNoType,
+  readAisHideNoType,
+  vesselMatchesHideNoTypeFilter,
+  writeAisHideNoType,
+} from './aisHideNoTypeFilter.js';
 
 const FOCUS_EVIDENCE_DEV = import.meta.env?.DEV === true;
 
@@ -452,6 +461,7 @@ const aisLiveVesselsLayer = {
     state.viewer = viewer;
     state.lastPos = readAisLastPos();
     state.hideNoHeading = readAisHideNoHeading();
+    state.hideNoType = readAisHideNoType();
     ensureCollections(viewer);
     _vesselOverlayHost.setVisible(VESSEL_OVERLAY_SOURCE_ID, false);
     installInteraction(viewer);
@@ -616,9 +626,10 @@ const aisLiveVesselsLayer = {
 
   /**
    * Type chips, Hide parked, min-speed, destination, Hide no dest,
-   * Hide unnamed, Hide no IMO, last-position freshness, and Hide no
-   * heading re-filter in-memory vessels. Never hits `/api/ais-live`.
-   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown, minSpeed?: unknown, destination?: unknown, hideNoDestination?: unknown, hideUnnamed?: unknown, hideNoImo?: unknown, lastPos?: unknown, hideNoHeading?: unknown }} [params]
+   * Hide unnamed, Hide no IMO, last-position freshness, Hide no
+   * heading, and Hide no type re-filter in-memory vessels. Never hits
+   * `/api/ais-live`.
+   * @param {{ vesselTypeFilter?: unknown, hideParked?: unknown, minSpeed?: unknown, destination?: unknown, hideNoDestination?: unknown, hideUnnamed?: unknown, hideNoImo?: unknown, lastPos?: unknown, hideNoHeading?: unknown, hideNoType?: unknown }} [params]
    * @param {{ storage?: {getItem?: Function, setItem?: Function}|null }} [options]
    * @returns {boolean}
    */
@@ -633,7 +644,8 @@ const aisLiveVesselsLayer = {
     const hasHideNoImo = Object.hasOwn(params, 'hideNoImo');
     const hasLastPos = Object.hasOwn(params, 'lastPos');
     const hasHideNoHeading = Object.hasOwn(params, 'hideNoHeading');
-    if (!hasType && !hasParked && !hasMinSpeed && !hasDestination && !hasHideNoDest && !hasHideUnnamed && !hasHideNoImo && !hasLastPos && !hasHideNoHeading) {
+    const hasHideNoType = Object.hasOwn(params, 'hideNoType');
+    if (!hasType && !hasParked && !hasMinSpeed && !hasDestination && !hasHideNoDest && !hasHideUnnamed && !hasHideNoImo && !hasLastPos && !hasHideNoHeading && !hasHideNoType) {
       return true;
     }
 
@@ -700,6 +712,13 @@ const aisLiveVesselsLayer = {
       nextHideNoHeading = hideNoHeading;
     }
 
+    let nextHideNoType = state.hideNoType;
+    if (hasHideNoType) {
+      const hideNoType = normalizeAisHideNoType(params.hideNoType);
+      if (hideNoType == null) return false;
+      nextHideNoType = hideNoType;
+    }
+
     if (
       nextType === state.typeFilter
       && nextParked === state.hideParked
@@ -710,6 +729,7 @@ const aisLiveVesselsLayer = {
       && nextHideNoImo === state.hideNoImo
       && nextLastPos === state.lastPos
       && nextHideNoHeading === state.hideNoHeading
+      && nextHideNoType === state.hideNoType
     ) return true;
     state.typeFilter = nextType;
     state.hideParked = nextParked;
@@ -720,13 +740,15 @@ const aisLiveVesselsLayer = {
     state.hideNoImo = nextHideNoImo;
     state.lastPos = nextLastPos;
     state.hideNoHeading = nextHideNoHeading;
+    state.hideNoType = nextHideNoType;
     if (hasLastPos) writeAisLastPos(nextLastPos, storage);
     if (hasHideNoHeading) writeAisHideNoHeading(nextHideNoHeading, storage);
+    if (hasHideNoType) writeAisHideNoType(nextHideNoType, storage);
     if (state.enabled && state.viewer) updateVisibility(true);
     return true;
   },
 
-  /** @returns {{ vesselTypeFilter: string, hideParked: boolean, minSpeed: string, destination: string, hideNoDestination: boolean, hideUnnamed: boolean, hideNoImo: boolean, lastPos: string, hideNoHeading: boolean }} */
+  /** @returns {{ vesselTypeFilter: string, hideParked: boolean, minSpeed: string, destination: string, hideNoDestination: boolean, hideUnnamed: boolean, hideNoImo: boolean, lastPos: string, hideNoHeading: boolean, hideNoType: boolean }} */
   getParams() {
     return {
       vesselTypeFilter: state.typeFilter,
@@ -738,6 +760,7 @@ const aisLiveVesselsLayer = {
       hideNoImo: state.hideNoImo,
       lastPos: state.lastPos,
       hideNoHeading: state.hideNoHeading,
+      hideNoType: state.hideNoType,
     };
   },
 
@@ -752,6 +775,7 @@ const aisLiveVesselsLayer = {
         aisHideNoImoChipModel(state.hideNoImo),
         ...aisLastPosChipModels(state.lastPos),
         aisHideNoHeadingChipModel(state.hideNoHeading),
+        aisHideNoTypeChipModel(state.hideNoType),
       ],
     };
   },
@@ -997,6 +1021,8 @@ const state = {
   lastPos: DEFAULT_AIS_LAST_POS,
   /** Client-only Hide no heading. Re-applied on the already-fetched vessel list. */
   hideNoHeading: DEFAULT_AIS_HIDE_NO_HEADING,
+  /** Client-only Hide no type. Re-applied on the already-fetched vessel list. */
+  hideNoType: DEFAULT_AIS_HIDE_NO_TYPE,
 };
 
 /** Replace live AIS rows through the production reconciliation path (DEV only). */
@@ -1361,38 +1387,42 @@ function selectedVesselId() {
 function visibleVesselRecords() {
   const selectedId = selectedVesselId();
   const now = _aisRuntime.now();
-  return filterVesselsByHideNoHeading(
-    filterVesselsByLastPos(
-      filterVesselsByHideNoImo(
-        filterVesselsByHideUnnamed(
-          filterVesselsByHideNoDest(
-            filterVesselsByDestination(
-              filterVesselsByMinSpeed(
-                filterVesselsByParked(
-                  filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
-                  state.hideParked,
+  return filterVesselsByHideNoType(
+    filterVesselsByHideNoHeading(
+      filterVesselsByLastPos(
+        filterVesselsByHideNoImo(
+          filterVesselsByHideUnnamed(
+            filterVesselsByHideNoDest(
+              filterVesselsByDestination(
+                filterVesselsByMinSpeed(
+                  filterVesselsByParked(
+                    filterVesselsByType(state.vesselRecords, state.typeFilter, selectedId),
+                    state.hideParked,
+                    selectedId,
+                  ),
+                  state.minSpeed,
                   selectedId,
                 ),
-                state.minSpeed,
+                state.destination,
                 selectedId,
               ),
-              state.destination,
+              state.hideNoDestination,
               selectedId,
             ),
-            state.hideNoDestination,
+            state.hideUnnamed,
             selectedId,
           ),
-          state.hideUnnamed,
+          state.hideNoImo,
           selectedId,
         ),
-        state.hideNoImo,
+        state.lastPos,
         selectedId,
+        { now },
       ),
-      state.lastPos,
+      state.hideNoHeading,
       selectedId,
-      { now },
     ),
-    state.hideNoHeading,
+    state.hideNoType,
     selectedId,
   );
 }
@@ -1408,7 +1438,8 @@ function vesselTypeVisible(record) {
     && vesselMatchesHideUnnamedFilter(record, state.hideUnnamed, { selectedId })
     && vesselMatchesHideNoImoFilter(record, state.hideNoImo, { selectedId })
     && vesselMatchesLastPosFilter(record, state.lastPos, { selectedId, now })
-    && vesselMatchesHideNoHeadingFilter(record, state.hideNoHeading, { selectedId });
+    && vesselMatchesHideNoHeadingFilter(record, state.hideNoHeading, { selectedId })
+    && vesselMatchesHideNoTypeFilter(record, state.hideNoType, { selectedId });
 }
 
 function addRecordPrimitives(record, occluder) {
@@ -2358,6 +2389,7 @@ function resetState() {
   state.hideNoImo = DEFAULT_AIS_HIDE_NO_IMO;
   state.lastPos = DEFAULT_AIS_LAST_POS;
   state.hideNoHeading = DEFAULT_AIS_HIDE_NO_HEADING;
+  state.hideNoType = DEFAULT_AIS_HIDE_NO_TYPE;
 }
 
 /**

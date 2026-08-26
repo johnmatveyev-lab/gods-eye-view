@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has a client-only **Hide no type** toggle after the Plan 237 **Hide no
+  heading** chip. Default **off** keeps the current fleet, including empty
+  and missing type. **On** keeps a non-empty trimmed type (`type_specific
+  || type`; Cargo stays) and drops empty, whitespace, or missing type.
+  Missing / empty / whitespace-only fail closed when on. A selected
+  vessel stays if it passed the other filters. Chip changes re-filter
+  already-fetched AIS rows and AND with Tanker | Cargo | Passenger |
+  Fishing | Service | Other, Hide parked, min-speed, destination, Hide
+  no dest, Hide unnamed, Hide no IMO, last-pos freshness, and Hide no
+  heading — no extra AISStream fetch and no `/api`. Preference persists
+  as `meridian.aisHideNoType` (`1` / `0`; LayerStateCoordinator restore,
+  no share-URL write). Distinct from type-name chips (those pick a
+  class; this is presence-only), parked, min-speed, dest, unnamed, IMO,
+  last-pos, and heading.
 - FIRMS globe has a client-only **Hide no version** toggle after Hide no
   sensor. Default **off** keeps the current overlay, including empty and
   named product-version strings. **On** keeps a non-empty trimmed version
