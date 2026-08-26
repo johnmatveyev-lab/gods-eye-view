@@ -7,6 +7,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Output only** toggle next to the
+  Plan 240 **Wikipedia only** chip, Plan 229 **River only**, Plan 224
+  **Operator only**, Plan 218 **Named only**, and Plan 205
+  **All | 10+ MW | 100+ MW** output-floor chips. Default **off** keeps the
+  current 50-row roster, including plants whose OSM plant output is
+  missing. On hides already-bundled list rows whose
+  `plant:output:electricity` / `properties.output` is missing, empty, or
+  unparseable. A parseable MW value (120 MW stays) is kept. A selected
+  row stays even if it would be filtered, if it already passed the other
+  matchers. AND after the output-floor chips, Named only, Operator only,
+  River only, and Wikipedia only, before the 50-cap. Plan 205's fail-open
+  floor is unchanged. List/fly-to only — globe stems stay unchanged. No
+  extra fetch and no `/api`. Preference persists as
+  `meridian.damOutputOnly` only (`1` / `0`; not a share-link field).
+  LayerStateCoordinator restore re-reads the stored toggle. Hidden with
+  the dams list when the layer is off. Distinct from Plan 205
+  output-floor, Plan 218 Named only, Plan 224 Operator only, Plan 229
+  River only, Plan 240 Wikipedia only, and hide-ground.
 - Global Context has a client-only **Hide no track** toggle on the Contacts
   roster, next to Flights only. Default **off** keeps the current roster,
   including a civil flight with `track` null. **On** hides already-fetched
