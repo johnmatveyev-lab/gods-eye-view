@@ -7,6 +7,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no track** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps the current 50-row list, including missing / non-finite /
+  `trackKm<=0`. On is presence-only: hides those sentinels and keeps a
+  real track (`trackKm > 0`, e.g. 1.0 km). This is not a track-size
+  ceiling. A selected / tracked fire always stays. AND after Plan 210
+  list confidence, Plan 219 list FRP, Plan 225 list age, Plan 230 list
+  Hide no satellite, Plan 252 list Hide no sensor, Plan 256 list Hide
+  no version, Plan 260 list Hide no day/night, Plan 266 list Hide no
+  acq, and Plan 271 list Hide no scan, before the 50-row cap. Distinct
+  from those list chips, the globe track-size ceiling
+  (`meridian.firmsTrack`), and globe Hide no brightness (267).
+  `getRowControls()` owns the list chip — index.html / ui.js do not
+  re-declare it. Preference persists as
+  `meridian.firmsListHideNoTrack` (`'1'` / `'0'`; LayerStateCoordinator
+  restore, no share-URL write). No extra NASA fetch and no new `/api`.
+  NASA FIRMS acknowledgement is unchanged.
 - Dams in-view list has a client-only **Output only** toggle next to the
   Plan 240 **Wikipedia only** chip, Plan 229 **River only**, Plan 224
   **Operator only**, Plan 218 **Named only**, and Plan 205
