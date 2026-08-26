@@ -146,6 +146,14 @@ import {
   subscribeHideNoCategoryEnabled,
 } from './flightHideNoCategoryFilter.js';
 import {
+  getHideNoPositionTimeEnabled,
+  hideNoPositionTimeChipModel,
+  hydrateHideNoPositionTimeEnabled,
+  passesHideNoPositionTimeFilter,
+  setHideNoPositionTimeEnabled,
+  subscribeHideNoPositionTimeEnabled,
+} from './flightHideNoPositionTimeFilter.js';
+import {
   getHideNoVerticalRateEnabled,
   hideNoVerticalRateChipModel,
   hydrateHideNoVerticalRateEnabled,
@@ -583,6 +591,14 @@ function _hideNoCategoryMatcher(contact) {
   });
 }
 
+/** PLAN 294 — hide contacts whose positionEpochMs is missing / non-finite / ≤0. */
+function _hideNoPositionTimeMatcher(contact) {
+  return passesHideNoPositionTimeFilter({
+    positionEpochMs: contact?.positionEpochMs,
+    hideNoPositionTime: getHideNoPositionTimeEnabled(),
+  });
+}
+
 /** PLAN 268 — hide contacts whose verticalRate is not finite. 0 (level) stays. */
 function _hideNoVerticalRateMatcher(contact) {
   return passesHideNoVerticalRateFilter({
@@ -996,6 +1012,8 @@ hydrateHideNoLastContactEnabled();
 subscribeHideNoLastContactEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoCategoryEnabled();
 subscribeHideNoCategoryEnabled(_applyAltitudeBandVisibility);
+hydrateHideNoPositionTimeEnabled();
+subscribeHideNoPositionTimeEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoVerticalRateEnabled();
 subscribeHideNoVerticalRateEnabled(_applyAltitudeBandVisibility);
 
@@ -1041,7 +1059,7 @@ function _verticalRateAndMatcher(contact) {
 }
 
 /**
- * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-reg × hide-no-callsign × hide-no-heading × hide-no-country × hide-no-speed × hide-no-geo-altitude × hide-no-baro-altitude × hide-no-last-contact × hide-no-category × hide-no-vertical-rate).
+ * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-reg × hide-no-callsign × hide-no-heading × hide-no-country × hide-no-speed × hide-no-geo-altitude × hide-no-baro-altitude × hide-no-last-contact × hide-no-category × hide-no-position-time × hide-no-vertical-rate).
  * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
  * not here — counts stay honest.
  */
@@ -1050,7 +1068,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoVerticalRateMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoPositionTimeMatcher, _hideNoVerticalRateMatcher],
   });
 }
 
@@ -4403,6 +4421,7 @@ function _setFocusEvidenceAircraft(records = []) {
       wasAirborne: true,
       turnRateDps: 0,
       lastContactEpochMs: Date.now(),
+      positionEpochMs: Date.now(),
       rawLat: record.latitude ?? null,
       rawLon: record.longitude ?? null,
       cullPosition: null,
@@ -4483,7 +4502,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoVerticalRateMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoPositionTimeMatcher, _hideNoVerticalRateMatcher],
   });
 }
 
@@ -5018,6 +5037,14 @@ const flightsLayer = {
             prevMeta?.lastContactEpochMs,
             null,
           ),
+          // OpenSky time_position (state[3]) is the last known position
+          // epoch. Missing / non-finite / ≤0 stays null so Hide no
+          // position time can fail closed. Finite > 0 is stored as ms.
+          positionEpochMs: stickyNumber(
+            Number.isFinite(time_position) && time_position > 0 ? time_position * 1000 : null,
+            prevMeta?.positionEpochMs,
+            null,
+          ),
           // adsbdb enrichment — written by the enrichment callbacks, carried across polls.
           // This poll's adsb.lol extras (state[18]/t, state[19]/r) win when present.
           typeCode: stickyText(state[18] ?? state.t, prevMeta?.typeCode) || null,
@@ -5360,7 +5387,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, hideNoHeading?: boolean, hideNoCountry?: boolean, hideNoSpeed?: boolean, hideNoGeoAltitude?: boolean, hideNoBaroAltitude?: boolean, hideNoLastContact?: boolean, hideNoCategory?: boolean, hideNoVerticalRate?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, hideNoHeading?: boolean, hideNoCountry?: boolean, hideNoSpeed?: boolean, hideNoGeoAltitude?: boolean, hideNoBaroAltitude?: boolean, hideNoLastContact?: boolean, hideNoCategory?: boolean, hideNoPositionTime?: boolean, hideNoVerticalRate?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5477,6 +5504,10 @@ const flightsLayer = {
       setHideNoCategoryEnabled(params.hideNoCategory);
       _applyInFlightFilterVisibility();
     }
+    if (typeof params.hideNoPositionTime === 'boolean' && params.hideNoPositionTime !== getHideNoPositionTimeEnabled()) {
+      setHideNoPositionTimeEnabled(params.hideNoPositionTime);
+      _applyInFlightFilterVisibility();
+    }
     if (typeof params.hideNoVerticalRate === 'boolean' && params.hideNoVerticalRate !== getHideNoVerticalRateEnabled()) {
       setHideNoVerticalRateEnabled(params.hideNoVerticalRate);
       _applyInFlightFilterVisibility();
@@ -5523,6 +5554,7 @@ const flightsLayer = {
       hideNoBaroAltitude: getHideNoBaroAltitudeEnabled(),
       hideNoLastContact: getHideNoLastContactEnabled(),
       hideNoCategory: getHideNoCategoryEnabled(),
+      hideNoPositionTime: getHideNoPositionTimeEnabled(),
       hideNoVerticalRate: getHideNoVerticalRateEnabled(),
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
@@ -5555,6 +5587,7 @@ const flightsLayer = {
         hideNoBaroAltitudeChipModel(getHideNoBaroAltitudeEnabled()),
         hideNoLastContactChipModel(getHideNoLastContactEnabled()),
         hideNoCategoryChipModel(getHideNoCategoryEnabled()),
+        hideNoPositionTimeChipModel(getHideNoPositionTimeEnabled()),
         hideNoVerticalRateChipModel(getHideNoVerticalRateEnabled()),
       ],
       field: callsignPrefixRowField(),
