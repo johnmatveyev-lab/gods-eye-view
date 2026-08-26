@@ -409,6 +409,11 @@ import {
   writeDamNamedOnly,
 } from './data/damsNamedFilter.js';
 import {
+  normalizeDamOperatorOnly,
+  readDamOperatorOnly,
+  writeDamOperatorOnly,
+} from './data/damsOperatorFilter.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -2986,6 +2991,7 @@ export class StyleManager {
     this._installationListMappedChips = document.getElementById('installation-list-mapped-chips');
     this._damsOutputChips = document.getElementById('dams-output-chips');
     this._damsNamedChips = document.getElementById('dams-named-chips');
+    this._damsOperatorChips = document.getElementById('dams-operator-chips');
     this._aisTypeChips = document.getElementById('ais-type-chips');
     this._aisParkedChips = document.getElementById('ais-parked-chips');
     this._aisMinSpeedChips = document.getElementById('ais-min-speed-chips');
@@ -3447,6 +3453,7 @@ export class StyleManager {
     this._initDamsInViewList();
     this._initDamsOutputChips();
     this._initDamsNamedChip();
+    this._initDamsOperatorChip();
     this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
@@ -5568,6 +5575,7 @@ export class StyleManager {
     this._damsInViewList?.refresh();
     this._syncDamsOutputChips();
     this._syncDamsNamedChip();
+    this._syncDamsOperatorChip();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5584,6 +5592,7 @@ export class StyleManager {
             this._damsInViewList?.refresh();
             this._syncDamsOutputChips();
             this._syncDamsNamedChip();
+            this._syncDamsOperatorChip();
           }
         }
         if (change?.layerId === 'military-installations') {
@@ -11826,6 +11835,7 @@ export class StyleManager {
       getView: () => damsViewFromCamera(this.viewer?.camera, Cesium.Math),
       getOutputFloor: () => readDamOutputFloor(),
       getNamedOnly: () => readDamNamedOnly(),
+      getOperatorOnly: () => readDamOperatorOnly(),
       getSelectedId: () => {
         const entity = this.viewer?.selectedEntity;
         if (entity?.__localLayerId !== DAMS_LAYER_ID) return null;
@@ -11903,6 +11913,31 @@ export class StyleManager {
       this._damsInViewList?.refresh();
     });
     this._syncDamsNamedChip();
+  }
+
+  _syncDamsOperatorChip() {
+    const enabled = this._dataManager?.isEnabled?.(DAMS_LAYER_ID) === true;
+    if (this._damsOperatorChips) this._damsOperatorChips.hidden = !enabled;
+    const only = normalizeDamOperatorOnly(readDamOperatorOnly()) === true;
+    const chips = this._damsOperatorChips?.querySelectorAll?.('[data-dam-operator]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initDamsOperatorChip() {
+    if (!this._damsOperatorChips) return;
+    this._damsOperatorChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dam-operator]');
+      if (!chip || !this._damsOperatorChips.contains(chip)) return;
+      const current = normalizeDamOperatorOnly(readDamOperatorOnly()) === true;
+      writeDamOperatorOnly(!current);
+      this._syncDamsOperatorChip();
+      this._damsInViewList?.refresh();
+    });
+    this._syncDamsOperatorChip();
   }
 
   /**

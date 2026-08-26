@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Operator only** toggle next to the
+  Plan 218 **Named only** chip and the Plan 205 **All | 10+ MW | 100+ MW**
+  output-floor chips. Default **off** keeps the current roster, including
+  plants whose OSM operator is missing. On hides already-bundled list rows
+  with an empty or whitespace operator. A non-empty `operator` /
+  `operator:short` (on the record, properties, tags, or the existing
+  `local-dams` context entity) stays, including **Reclamation**. A selected
+  row stays even if it would be filtered. AND with the output-floor chips
+  and Named only. List/fly-to only — globe stems stay unchanged. No extra
+  fetch and no `/api`. Preference persists as `meridian.damOperatorOnly`
+  only (not a share-link field). LayerStateCoordinator restore re-reads
+  the stored toggle. Hidden with the dams list when the layer is off.
+  Distinct from Plan 205 output-floor, Plan 218 Named only, and Plan 193
+  datacenter hide-no-operator.
 - Hosted Quakes list has client-only exclusive **All | &lt;70 km | &lt;20 km**
   depth-ceiling chips. Default **All** keeps 15 / 80 / 400 km events on the
   current 50-row nearest/recent list. **&lt;70 km** drops 80 and 400 km.
