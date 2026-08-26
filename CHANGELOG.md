@@ -687,6 +687,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Civil **Hide no type** no longer drops adsb.lol contacts whose ICAO type
+  (`t`) and registration (`r`) were already on the wire (AAL2056 / A321,
+  JBU608 / A321, VTM304 / CRJ2). `normalizeAdsbLolAircraftState` persists
+  those fields on the normalized payload so this poll can write
+  `typeCode` / `registration` without waiting on adsbdb. Empty or missing
+  `t` still stays missing — Hide no type remains fail-closed then. Hide
+  no country's fail-open, type-missing→JET, and hide-ground are
+  unchanged. Distinct from hide-no-geo, hide-no-speed, hide-no-country,
+  and the Hide no type matcher. No extra fetch and no new `/api`.
 - Civil **Hide no country** fail-opens when `originCountry` is missing,
   null, empty, or whitespace. The commercial adsb.lol adapter never
   writes state index 2 (`normalizeAdsbLolAircraftState` always emits
