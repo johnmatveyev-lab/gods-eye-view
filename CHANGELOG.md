@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no version** toggle after Hide no
+  sensor. Default **off** keeps the current overlay, including empty and
+  named product-version strings. **On** keeps a non-empty trimmed version
+  (2.0NRT stays) and drops empty, whitespace, or missing version. The
+  selected fire always stays. Chip changes re-filter the already-fetched
+  `/api/firms` payload and AND with FRP, confidence, brightness, TI5, scan,
+  track, version-name, area, Hide no day/night, Hide no satellite, Hide no
+  sensor, Day | Night, age, sensor, and satellite-name chips — no extra
+  NASA fetch and no new `/api`. Preference persists as
+  `meridian.firmsHideNoVersion` (`1` / `0`; LayerStateCoordinator restore,
+  no share-URL write). Distinct from the Plan 217 version identity chips
+  (those pick a product; this is presence-only), Plan 204 scan, 211 track,
+  226 area, 233 hide no day/night, 238 hide no satellite, and 241 hide no
+  sensor. NASA FIRMS acknowledgement unchanged.
 - The hosted FIRES list has a client-only **Hide no satellite** filter on
   the already-fetched trailing-24h `/api/firms` roster. Default **off**
   keeps missing and present satellite/sensor. On hides empty or
