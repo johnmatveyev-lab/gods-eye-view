@@ -324,10 +324,14 @@ test('firmsList.js / firmsCsv.js / firmsAdapt.js are unchanged', () => {
   const list = readFileSync(path.join(ROOT, 'src/data/firmsList.js'), 'utf8');
   const csv = readFileSync(path.join(ROOT, 'src/data/firmsCsv.js'), 'utf8');
   const adapt = readFileSync(path.join(ROOT, 'src/data/firmsAdapt.js'), 'utf8');
-  for (const [name, source] of [['firmsList.js', list], ['firmsCsv.js', csv], ['firmsAdapt.js', adapt]]) {
+  for (const [name, source] of [['firmsCsv.js', csv], ['firmsAdapt.js', adapt]]) {
     assert.doesNotMatch(source, /hideNoAcq|firmsHideNoAcq|Hide no acq/, `${name} must stay off the hide path`);
     assert.doesNotMatch(source, /FIRMS_HIDE_NO_ACQ|fireMeetsHideNoAcq/, `${name} must stay off the hide path`);
   }
+  assert.doesNotMatch(list, /from '\.\/firmsHideNoAcqFilter\.js'/, 'firmsList.js must stay off the globe hide path');
+  assert.doesNotMatch(list, /meridian\.firmsHideNoAcq'/, 'firmsList.js must stay off the globe hide path');
+  assert.doesNotMatch(list, /FIRMS_HIDE_NO_ACQ[^_]/, 'firmsList.js must stay off the globe hide path');
+  assert.doesNotMatch(list, /fireMeetsHideNoAcq\(/, 'firmsList.js must stay off the globe hide path');
   const [adaptedDated] = adaptFirmsRecords([rawFire(AUSTIN.lat, AUSTIN.lon, 12, 340, 'h')]);
   assert.equal(fireHasAcquisitionTime(adaptedDated), true);
   assert.equal(fireMeetsHideNoAcq(adaptedDated, true), true);
@@ -469,7 +473,7 @@ test('FIRMS row exposes Hide no acq from getRowControls() without a new /api', (
   assert.doesNotMatch(heatmap, /\/api\/firms\/acq\/hide/);
   assert.doesNotMatch(layerState, /hideNoAcq|firmsHideNoAcq/);
   assert.doesNotMatch(firstRun, /writeFirmsHideNoAcq\(/);
-  assert.doesNotMatch(list, /hideNoAcq|firmsHideNoAcq/);
+  assert.doesNotMatch(list, /from '\.\/firmsHideNoAcqFilter\.js'|meridian\.firmsHideNoAcq'|FIRMS_HIDE_NO_ACQ[^_]|fireMeetsHideNoAcq\(/);
   assert.doesNotMatch(csv, /hideNoAcq|firmsHideNoAcq/);
   assert.doesNotMatch(adapt, /hideNoAcq|firmsHideNoAcq/);
   assert.doesNotMatch(html, /hide-no-acq|firmsHideNoAcq/);
