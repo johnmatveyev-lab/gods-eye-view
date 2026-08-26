@@ -45,6 +45,14 @@ import {
   setFirmsListHideNoVersion,
   subscribeFirmsListHideNoVersion,
 } from './firmsListHideNoVersionFilter.js';
+import {
+  fireMeetsListHideNoDaynight,
+  firmsListHideNoDaynightChipModel,
+  getFirmsListHideNoDaynight,
+  hydrateFirmsListHideNoDaynight,
+  setFirmsListHideNoDaynight,
+  subscribeFirmsListHideNoDaynight,
+} from './firmsListHideNoDaynightFilter.js';
 
 export {
   firmsListHideNoSatChipModel,
@@ -55,6 +63,10 @@ export {
   getFirmsListHideNoVersion,
   hydrateFirmsListHideNoVersion,
   setFirmsListHideNoVersion,
+  firmsListHideNoDaynightChipModel,
+  getFirmsListHideNoDaynight,
+  hydrateFirmsListHideNoDaynight,
+  setFirmsListHideNoDaynight,
 };
 
 /** Hosted list ceiling: nearest detections to the current camera. */
@@ -80,10 +92,10 @@ export const FIRMS_ACKNOWLEDGEMENT =
 /**
  * Rank fires by great-circle distance to the camera and cap the list.
  * List-confidence, list-FRP, list-age, Hide no satellite, Hide no
- * sensor, and list version-presence AND before the cap so High /
- * 100+ MW / <1 h / labeled detections can fill the 50 rows from
- * farther detections. A selected fire always stays.
- * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *, acqMs?: *, satellite?: *, sensor?: *, version?: *}>} fires
+ * sensor, list version-presence, and list daynight-presence AND before
+ * the cap so High / 100+ MW / <1 h / labeled detections can fill the
+ * 50 rows from farther detections. A selected fire always stays.
+ * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *, acqMs?: *, satellite?: *, sensor?: *, version?: *, daynight?: *}>} fires
  * @param {{lat?: number, lon?: number}|null} origin
  * @param {number} [limit=FIRMS_LIST_LIMIT]
  * @param {string} [listConf]
@@ -94,6 +106,7 @@ export const FIRMS_ACKNOWLEDGEMENT =
  * @param {boolean} [hideNoSat]
  * @param {boolean} [hideNoSensor]
  * @param {boolean} [listHideNoVersion]
+ * @param {boolean} [listHideNoDaynight]
  * @returns {Array<object>}
  */
 export function listNearestFires(
@@ -108,6 +121,7 @@ export function listNearestFires(
   hideNoSat,
   hideNoSensor,
   listHideNoVersion,
+  listHideNoDaynight,
 ) {
   if (!Array.isArray(fires)) return [];
   const originLat = Number(origin?.lat);
@@ -120,6 +134,7 @@ export function listNearestFires(
   const hideSat = hideNoSat === undefined ? getFirmsListHideNoSat() : hideNoSat;
   const hideSensor = hideNoSensor === undefined ? getFirmsListHideNoSensor() : hideNoSensor;
   const hideVersion = listHideNoVersion === undefined ? getFirmsListHideNoVersion() : listHideNoVersion;
+  const hideDaynight = listHideNoDaynight === undefined ? getFirmsListHideNoDaynight() : listHideNoDaynight;
   const selected = selectedId === undefined ? getFirmsListSelectedId() : selectedId;
   const selectedKey = selected == null || selected === '' ? '' : String(selected);
   const ranked = [];
@@ -135,6 +150,7 @@ export function listNearestFires(
     if (!isSelected && !fireMeetsListHideNoSat(fire, hideSat, { selectedId: selectedKey })) continue;
     if (!isSelected && !fireMeetsListHideNoSensor(fire, hideSensor, { selectedId: selectedKey })) continue;
     if (!isSelected && !fireMeetsListHideNoVersion(fire, hideVersion, { selectedId: selectedKey })) continue;
+    if (!isSelected && !fireMeetsListHideNoDaynight(fire, hideDaynight, { selectedId: selectedKey })) continue;
     const distanceKm = hasOrigin ? greatCircleKm(originLat, originLon, lat, lon) : Number.POSITIVE_INFINITY;
     ranked.push({
       ...fire,
@@ -203,6 +219,7 @@ export function resolveFireListView({
   hideNoSat,
   hideNoSensor,
   listHideNoVersion,
+  listHideNoDaynight,
 } = {}) {
   const acknowledgement = FIRMS_ACKNOWLEDGEMENT;
   if (keyRequired) {
@@ -226,6 +243,7 @@ export function resolveFireListView({
     hideNoSat,
     hideNoSensor,
     listHideNoVersion,
+    listHideNoDaynight,
   );
   if (!nearest.length) {
     return { status: 'unavailable', copy: FIRMS_LIST_EMPTY_COPY, rows: [], acknowledgement };
@@ -240,16 +258,17 @@ export function resolveFireListView({
 
 /**
  * Hosted FIRES list chips. Confidence / FRP / age stay in the HTML row
- * from Plans 210 / 219 / 225; Hide no satellite, Hide no sensor, and
- * list version-presence are owned here so index.html / ui.js do not
- * re-declare them.
- * @returns {{hideNoSat: object, hideNoSensor: object, listHideNoVersion: object}}
+ * from Plans 210 / 219 / 225; Hide no satellite, Hide no sensor, list
+ * version-presence, and list daynight-presence are owned here so
+ * index.html / ui.js do not re-declare them.
+ * @returns {{hideNoSat: object, hideNoSensor: object, listHideNoVersion: object, listHideNoDaynight: object}}
  */
 export function getRowControls() {
   return {
     hideNoSat: firmsListHideNoSatChipModel(getFirmsListHideNoSat()),
     hideNoSensor: firmsListHideNoSensorChipModel(getFirmsListHideNoSensor()),
     listHideNoVersion: firmsListHideNoVersionChipModel(getFirmsListHideNoVersion()),
+    listHideNoDaynight: firmsListHideNoDaynightChipModel(getFirmsListHideNoDaynight()),
   };
 }
 
@@ -507,6 +526,100 @@ export function attachFirmsListHideNoVersion(panel, onChange) {
   const unsubscribe = subscribeFirmsListHideNoVersion(() => {
     syncFirmsListHideNoVersionChip(
       panel?.querySelector?.('#fires-list-version-chips')
+      || panel?.querySelector?.('#fires-list-sensor-chips')
+      || panel?.querySelector?.('#fires-list-sat-chips')
+      || panel,
+    );
+    if (typeof onChange === 'function') onChange();
+  });
+  const detachDaynight = attachFirmsListHideNoDaynight(panel, onChange);
+  return () => {
+    detachDaynight();
+    unsubscribe();
+    unmount();
+  };
+}
+
+function createHideNoDaynightChipElement(model, make) {
+  const button = make('button');
+  button.type = 'button';
+  button.className = `fires-sensor-chip${model.active ? ' active' : ''}`;
+  button.dataset.firmsListHideNoDaynight = model.active ? '1' : '0';
+  button.textContent = model.label;
+  if (model.title) button.title = model.title;
+  button.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  return button;
+}
+
+function syncFirmsListHideNoDaynightChip(root) {
+  if (!root?.querySelectorAll) return;
+  const model = getRowControls().listHideNoDaynight;
+  const chips = root.querySelectorAll('[data-firms-list-hide-no-daynight]');
+  for (const chip of chips) {
+    chip.classList?.toggle?.('active', model.active === true);
+    chip.dataset.firmsListHideNoDaynight = model.active ? '1' : '0';
+    chip.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  }
+}
+
+/**
+ * Inject list daynight-presence next to the existing list chips.
+ * No-ops on the stub panels used by unit tests (no querySelector).
+ * @param {{querySelector?: Function, appendChild?: Function}|null} panel
+ * @returns {() => void}
+ */
+function mountFirmsListHideNoDaynightChip(panel) {
+  if (typeof panel?.querySelector !== 'function') return () => {};
+  let root = panel.querySelector('#fires-list-sat-chips')
+    || panel.querySelector('#fires-list-sensor-chips')
+    || panel.querySelector('#fires-list-version-chips')
+    || panel.querySelector('#fires-list-daynight-chips');
+  const make = globalThis.document?.createElement?.bind(globalThis.document);
+  if (!root && typeof make === 'function') {
+    root = make('div');
+    root.id = 'fires-list-daynight-chips';
+    root.className = 'fires-sensor-chips';
+    root.setAttribute('role', 'group');
+    root.setAttribute('aria-label', 'Hide listed detections with no daynight flag');
+    const after = panel.querySelector('#fires-list-age-chips');
+    if (typeof after?.insertAdjacentElement === 'function') {
+      after.insertAdjacentElement('afterend', root);
+    } else {
+      const header = panel.querySelector('.fires-panel-inner') || panel;
+      header.appendChild?.(root);
+    }
+  }
+  if (!root) return () => {};
+  if (typeof make === 'function' && !root.querySelector?.('[data-firms-list-hide-no-daynight]')) {
+    const node = createHideNoDaynightChipElement(getRowControls().listHideNoDaynight, make);
+    root.appendChild?.(node);
+  }
+  const onClick = (event) => {
+    const chip = event.target?.closest?.('[data-firms-list-hide-no-daynight]');
+    if (!chip || (typeof root.contains === 'function' && !root.contains(chip))) return;
+    setFirmsListHideNoDaynight(getRowControls().listHideNoDaynight.params.firmsListHideNoDaynight);
+    syncFirmsListHideNoDaynightChip(root);
+  };
+  root.addEventListener?.('click', onClick);
+  syncFirmsListHideNoDaynightChip(root);
+  return () => {
+    root.removeEventListener?.('click', onClick);
+  };
+}
+
+/**
+ * Hydrate, mount, and subscribe list daynight-presence on the FIRES panel.
+ * @param {{querySelector?: Function}|null} panel
+ * @param {() => void} [onChange]
+ * @returns {() => void}
+ */
+export function attachFirmsListHideNoDaynight(panel, onChange) {
+  hydrateFirmsListHideNoDaynight();
+  const unmount = mountFirmsListHideNoDaynightChip(panel);
+  const unsubscribe = subscribeFirmsListHideNoDaynight(() => {
+    syncFirmsListHideNoDaynightChip(
+      panel?.querySelector?.('#fires-list-daynight-chips')
+      || panel?.querySelector?.('#fires-list-version-chips')
       || panel?.querySelector?.('#fires-list-sensor-chips')
       || panel?.querySelector?.('#fires-list-sat-chips')
       || panel,

@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no day/night** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps the current 50-row list, including empty or missing daynight.
+  On keeps `daynight === 'D'` or `'N'`. Empty, whitespace, or missing
+  daynight fails closed. A selected fire always stays. AND after Plan
+  210 list confidence, Plan 219 list FRP, Plan 225 list age, Plan 230
+  list Hide no satellite, Plan 252 list Hide no sensor, and Plan 256
+  list Hide no version, before the 50-row cap. Distinct from those list
+  chips and globe Hide no day/night (233, `meridian.firmsHideNoDaynight`
+  on firmsHeatmap.js). `getRowControls()` owns the list chip —
+  index.html / ui.js do not re-declare it. Preference persists as
+  `meridian.firmsListHideNoDaynight` (`'1'` / `'0'`;
+  LayerStateCoordinator restore, no share-URL write). No extra NASA
+  fetch and no new `/api`. NASA FIRMS acknowledgement is unchanged.
 - AIS has a client-only **Hide no last pos** toggle after the Plan 254 **Hide
   no speed** chip. Default **off** keeps the current fleet, including vessels
   missing both last-position timestamps. **On** keeps a finite
