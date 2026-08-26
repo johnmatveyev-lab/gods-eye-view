@@ -33,6 +33,22 @@ test('category fallback (flights layer path — OpenSky extended int)', () => {
   assert.equal(classifyAircraft({ category: 2 }), 'light');
   assert.equal(classifyAircraft({ category: 9 }), 'glider');
   assert.equal(classifyAircraft({ category: 4 }), 'airliner');
+  assert.equal(classifyAircraft({ category: 3 }), 'airliner');
+  assert.equal(classifyAircraft({ category: 5 }), 'airliner');
+});
+
+test('OpenSky category 12 ultralight maps to light, not airliner', () => {
+  assert.equal(classifyAircraft({ typeCode: null, category: 12 }), 'light');
+  assert.equal(classifyAircraft({ category: 12 }), 'light');
+  // typeCode still wins over category, including cat 12
+  assert.equal(classifyAircraft({ typeCode: 'F16', category: 12 }), 'fastjet');
+  assert.equal(classifyAircraft({ typeCode: 'C172', category: 12 }), 'light');
+  // unfilled categories stay on the airliner default
+  assert.equal(classifyAircraft({ typeCode: null, category: 0 }), 'airliner');
+  assert.equal(classifyAircraft({ typeCode: null, category: 1 }), 'airliner');
+  assert.equal(classifyAircraft({ typeCode: null, category: 10 }), 'airliner');
+  assert.equal(classifyAircraft({ typeCode: null, category: 11 }), 'airliner');
+  assert.equal(classifyAircraft({ typeCode: null, category: 14 }), 'airliner');
 });
 
 test('ADS-B emitter string categories', () => {

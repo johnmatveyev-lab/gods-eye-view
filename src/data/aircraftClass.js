@@ -85,6 +85,7 @@ const OPENSKY_CATEGORY = {
   7: 'fastjet',    // High performance (>5g, >400 kt)
   8: 'helicopter', // Rotorcraft
   9: 'glider',
+  12: 'light',     // Ultralight / hang-glider / paraglider
 };
 
 /** ADS-B emitter-category string → class. */
