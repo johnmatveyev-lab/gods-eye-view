@@ -1,9 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import {
   normalizeAdsbLolAircraftState,
   normalizeAdsbLolPointResponse,
 } from './adsbLolFallback.js';
+import { passesHideNoTypeFilter } from './flightHideNoTypeFilter.js';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 test('normalizes adsb.lol units into an OpenSky-compatible state vector', () => {
   const state = normalizeAdsbLolAircraftState({
@@ -99,6 +105,16 @@ test('persists adsb.lol t and r on the normalized payload; missing t stays missi
   }, 1000);
   assert.equal(crj2.t, 'CRJ2');
   assert.equal(crj2.r, 'XA-VCX');
+
+  // Existing Hide no type matcher — not rewritten. A published t stays;
+  // a missing t still fail-closes.
+  assert.equal(passesHideNoTypeFilter({ typeCode: aal2056.t, hideNoType: true }), true);
+  assert.equal(passesHideNoTypeFilter({ typeCode: crj2.t, hideNoType: true }), true);
+  assert.equal(passesHideNoTypeFilter({ typeCode: missingType.t, hideNoType: true }), false);
+  assert.equal(passesHideNoTypeFilter({ typeCode: emptyType.t, hideNoType: true }), false);
+  const helper = readFileSync(path.join(ROOT, 'src/data/flightHideNoTypeFilter.js'), 'utf8');
+  assert.match(helper, /typeCodeFieldText/);
+  assert.doesNotMatch(readFileSync(path.join(ROOT, 'src/data/adsbLolFallback.js'), 'utf8'), /typeCode/);
 });
 
 test('keeps grounded fallback contacts and rejects rows without positions', () => {
