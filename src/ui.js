@@ -222,6 +222,10 @@ import { normalizeInstallationNamedOnly } from './data/militaryNamedFilter.js';
 import { normalizeInstallationOsmType } from './data/militaryOsmTypeFilter.js';
 import { normalizeInstallationMappedOnly } from './data/militaryMappedFilter.js';
 import {
+  readSitesMappedOnly,
+  writeSitesMappedOnly,
+} from './data/installationListMappedFilter.js';
+import {
   toggleVesselTypeFilter,
   vesselTypeFilterFlags,
 } from './data/vesselTypeFilter.js';
@@ -2954,6 +2958,7 @@ export class StyleManager {
     this._installationNamedChips = document.getElementById('installation-named-chips');
     this._installationOsmTypeChips = document.getElementById('installation-osm-type-chips');
     this._installationMappedChips = document.getElementById('installation-mapped-chips');
+    this._installationListMappedChips = document.getElementById('installation-list-mapped-chips');
     this._damsOutputChips = document.getElementById('dams-output-chips');
     this._aisTypeChips = document.getElementById('ais-type-chips');
     this._aisParkedChips = document.getElementById('ais-parked-chips');
@@ -3429,6 +3434,7 @@ export class StyleManager {
     this._initInstallationNamedChip();
     this._initInstallationOsmTypeChips();
     this._initInstallationMappedChip();
+    this._initInstallationListMappedChip();
     this._initAisTypeChips();
     this._initAisParkedChip();
     this._initAisMinSpeedChips();
@@ -5519,6 +5525,7 @@ export class StyleManager {
     this._syncInstallationNamedChip();
     this._syncInstallationOsmTypeChips();
     this._syncInstallationMappedChip();
+    this._syncInstallationListMappedChip();
     this._syncAisTypeChips();
     this._syncAisParkedChip();
     this._syncAisMinSpeedChips();
@@ -5552,6 +5559,7 @@ export class StyleManager {
           this._syncInstallationNamedChip();
           this._syncInstallationOsmTypeChips();
           this._syncInstallationMappedChip();
+          this._syncInstallationListMappedChip();
           if (this._installationsListOpen) this._syncInstallationsViewportList();
         }
         if (change?.layerId === 'earthquakes') {
@@ -12270,6 +12278,31 @@ export class StyleManager {
       if (this._installationsListOpen) this._syncInstallationsViewportList();
     });
     this._syncInstallationMappedChip();
+  }
+
+  _syncInstallationListMappedChip() {
+    const enabled = this._dataManager?.isEnabled?.('military-installations') === true;
+    if (this._installationListMappedChips) this._installationListMappedChips.hidden = !enabled;
+    const only = readSitesMappedOnly() === true;
+    const chips = this._installationListMappedChips?.querySelectorAll?.('[data-installation-list-mapped]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initInstallationListMappedChip() {
+    if (!this._installationListMappedChips) return;
+    this._installationListMappedChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-installation-list-mapped]');
+      if (!chip || !this._installationListMappedChips.contains(chip)) return;
+      const current = readSitesMappedOnly() === true;
+      writeSitesMappedOnly(!current);
+      this._syncInstallationListMappedChip();
+      if (this._installationsListOpen) this._syncInstallationsViewportList();
+    });
+    this._syncInstallationListMappedChip();
   }
 
   _syncAisTypeChips() {
