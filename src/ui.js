@@ -479,6 +479,11 @@ import {
   setDatacenterListDatedOnly,
 } from './data/datacenterListDatedOnlyFilter.js';
 import {
+  getDatacenterListOwnerOnly,
+  hydrateDatacenterListOwnerOnly,
+  setDatacenterListOwnerOnly,
+} from './data/datacenterListOwnerOnlyFilter.js';
+import {
   DAMS_LAYER_ID,
   bindDamsInViewList,
   damFlyDestination,
@@ -3113,6 +3118,7 @@ export class StyleManager {
     this._datacenterNamedChips = document.getElementById('datacenter-named-chips');
     this._datacenterWebsiteChips = document.getElementById('datacenter-website-chips');
     this._datacenterDatedChips = document.getElementById('datacenter-dated-chips');
+    this._datacenterOwnerChips = document.getElementById('datacenter-owner-chips');
     this._damsOutputChips = document.getElementById('dams-output-chips');
     this._damsNamedChips = document.getElementById('dams-named-chips');
     this._damsOperatorChips = document.getElementById('dams-operator-chips');
@@ -3590,6 +3596,7 @@ export class StyleManager {
     this._initDatacenterNamedChip();
     this._initDatacenterWebsiteChip();
     this._initDatacenterDatedChip();
+    this._initDatacenterOwnerChip();
     this._initClearSelectedLayersButton();
     this._initRestoreLiveLayersButton();
     this._initHomeViewButton();
@@ -5734,6 +5741,7 @@ export class StyleManager {
     this._syncDatacenterNamedChip();
     this._syncDatacenterWebsiteChip();
     this._syncDatacenterDatedChip();
+    this._syncDatacenterOwnerChip();
     this._damsInViewList?.refresh();
     this._syncDamsOutputChips();
     this._syncDamsNamedChip();
@@ -5759,6 +5767,7 @@ export class StyleManager {
             this._syncDatacenterNamedChip();
             this._syncDatacenterWebsiteChip();
             this._syncDatacenterDatedChip();
+            this._syncDatacenterOwnerChip();
           }
           if (change?.layerId === DAMS_LAYER_ID) {
             this._damsInViewList?.refresh();
@@ -14032,17 +14041,20 @@ export class StyleManager {
     const items = document.getElementById('datacenter-in-view-items');
     const count = document.getElementById('datacenter-in-view-count');
     // LayerStateCoordinator restore is enabled-only for local-datacenters and
-    // does not carry dcOperator / dcNamedOnly / dcWebsiteOnly / dcDatedOnly
-    // (no share-URL write). Re-read meridian.dcOperator, meridian.dcNamedOnly,
-    // meridian.dcWebsiteOnly, and meridian.dcDatedOnly.
+    // does not carry dcOperator / dcNamedOnly / dcWebsiteOnly / dcDatedOnly /
+    // dcOwnerOnly (no share-URL write). Re-read meridian.dcOperator,
+    // meridian.dcNamedOnly, meridian.dcWebsiteOnly, meridian.dcDatedOnly,
+    // and meridian.dcOwnerOnly.
     hydrateDatacenterListOperator();
     hydrateDatacenterListNamedOnly();
     hydrateDatacenterListWebsiteOnly();
     hydrateDatacenterListDatedOnly();
+    hydrateDatacenterListOwnerOnly();
     this._datacenterOperatorChips = document.getElementById('datacenter-operator-chips');
     this._datacenterNamedChips = document.getElementById('datacenter-named-chips');
     this._datacenterWebsiteChips = document.getElementById('datacenter-website-chips');
     this._datacenterDatedChips = document.getElementById('datacenter-dated-chips');
+    this._datacenterOwnerChips = document.getElementById('datacenter-owner-chips');
     this._datacenterInViewList = bindDatacenterInViewList({
       root,
       items,
@@ -14172,6 +14184,30 @@ export class StyleManager {
       this._datacenterInViewList?.refresh();
     });
     this._syncDatacenterDatedChip();
+  }
+
+  _syncDatacenterOwnerChip() {
+    const enabled = this._dataManager?.isEnabled?.(DATACENTER_LAYER_ID) === true;
+    if (this._datacenterOwnerChips) this._datacenterOwnerChips.hidden = !enabled;
+    const only = getDatacenterListOwnerOnly() === true;
+    const chips = this._datacenterOwnerChips?.querySelectorAll?.('[data-dc-owner]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initDatacenterOwnerChip() {
+    if (!this._datacenterOwnerChips) return;
+    this._datacenterOwnerChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dc-owner]');
+      if (!chip || !this._datacenterOwnerChips.contains(chip)) return;
+      setDatacenterListOwnerOnly(!getDatacenterListOwnerOnly());
+      this._syncDatacenterOwnerChip();
+      this._datacenterInViewList?.refresh();
+    });
+    this._syncDatacenterOwnerChip();
   }
 
   /** Wire fullscreen on the document root so #cesium-credits stays painted. */
