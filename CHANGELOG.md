@@ -759,6 +759,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Civil **Hide no heading** no longer drops adsb.lol contacts whose
+  `true_heading` / `mag_heading` were already on the wire (AA0013 / 180,
+  9999 / 270) when `track` is missing. `normalizeAdsbLolAircraftState`
+  persists a finite `true_heading` (fallback `mag_heading`) into the
+  track slot (state[10]). Observer `dir` is not used. Empty or missing
+  heading still stays missing — Hide no heading remains fail-closed then.
+  Distinct from QA 50 t/r persist, QA 49/255 country fail-open, Plan 203
+  persist-null, Plan 234 Hide no heading matcher, and hide-ground. No
+  extra fetch and no new `/api`.
 - Civil **Hide no type** no longer drops adsb.lol contacts whose ICAO type
   (`t`) and registration (`r`) were already on the wire (AAL2056 / A321,
   JBU608 / A321, VTM304 / CRJ2). `normalizeAdsbLolAircraftState` persists

@@ -8,6 +8,7 @@ import {
   normalizeAdsbLolPointResponse,
 } from './adsbLolFallback.js';
 import { passesHideNoTypeFilter } from './flightHideNoTypeFilter.js';
+import { passesHideNoHeadingFilter } from './flightHideNoHeadingFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -115,6 +116,86 @@ test('persists adsb.lol t and r on the normalized payload; missing t stays missi
   const helper = readFileSync(path.join(ROOT, 'src/data/flightHideNoTypeFilter.js'), 'utf8');
   assert.match(helper, /typeCodeFieldText/);
   assert.doesNotMatch(readFileSync(path.join(ROOT, 'src/data/adsbLolFallback.js'), 'utf8'), /typeCode/);
+});
+
+test('persists adsb.lol true_heading / mag_heading into the track slot; dir is unused', () => {
+  const aa0013 = normalizeAdsbLolAircraftState({
+    hex: 'ac8577',
+    flight: 'AA0013',
+    lat: 30.25,
+    lon: -97.75,
+    alt_baro: 36000,
+    gs: 420,
+    track: null,
+    true_heading: 180,
+    dir: 45,
+  }, 1000);
+  assert.equal(aa0013[10], 180, 'missing track + true_heading 180 keeps 180');
+
+  const wire = JSON.parse(JSON.stringify({
+    time: 1000,
+    states: [aa0013],
+  }));
+  assert.equal(wire.states[0][10], 180, 'heading survives JSON for the /api/opensky wire');
+
+  const westMag = normalizeAdsbLolAircraftState({
+    hex: 'a733e6',
+    flight: '9999',
+    lat: 30.25,
+    lon: -97.75,
+    alt_baro: 8000,
+    gs: 180,
+    track: null,
+    mag_heading: 270,
+    dir: 90,
+  }, 1000);
+  assert.equal(westMag[10], 270, 'missing track + mag_heading 270 keeps 270');
+  assert.equal(JSON.parse(JSON.stringify(westMag))[10], 270);
+
+  const publishedTrack = normalizeAdsbLolAircraftState({
+    hex: 'abc123',
+    flight: 'UAL1',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+    track: 90,
+    true_heading: 180,
+    mag_heading: 270,
+    dir: 45,
+  }, 1000);
+  assert.equal(publishedTrack[10], 90, 'published track wins; true_heading ignored');
+
+  const missingHeading = normalizeAdsbLolAircraftState({
+    hex: 'def456',
+    flight: 'UNK1',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+    track: null,
+    dir: 123,
+  }, 1000);
+  assert.equal(missingHeading[10], null, 'missing track + missing headings stays missing');
+
+  const dirOnly = normalizeAdsbLolAircraftState({
+    hex: 'fedcba',
+    flight: 'DIR1',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+    dir: 45,
+  }, 1000);
+  assert.equal(dirOnly[10], null, 'dir is never written as heading');
+
+  // Existing Hide no heading matcher — not rewritten. A persisted heading
+  // stays; a missing heading still fail-closes.
+  assert.equal(passesHideNoHeadingFilter({ true_track: aa0013[10], hideNoHeading: true }), true);
+  assert.equal(passesHideNoHeadingFilter({ true_track: westMag[10], hideNoHeading: true }), true);
+  assert.equal(passesHideNoHeadingFilter({ true_track: missingHeading[10], hideNoHeading: true }), false);
+  assert.equal(passesHideNoHeadingFilter({ true_track: dirOnly[10], hideNoHeading: true }), false);
+
+  const adapter = readFileSync(path.join(ROOT, 'src/data/adsbLolFallback.js'), 'utf8');
+  assert.doesNotMatch(adapter, /aircraft\?\.dir/);
+  assert.doesNotMatch(adapter, /hideNoHeading|hide-no-heading|flightHideNoHeadingFilter/);
 });
 
 test('keeps grounded fallback contacts and rejects rows without positions', () => {
