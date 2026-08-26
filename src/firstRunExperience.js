@@ -104,7 +104,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         FIRMS list confidence chips (`meridian.firmsListConf`),
  *                         launch list mapped-only toggle
  *                         (`meridian.launchListMappedOnly`),
- *                         FIRMS list FRP-floor chips (`meridian.firmsListFrp`).
+ *                         FIRMS list FRP-floor chips (`meridian.firmsListFrp`),
+ *                         FIRMS list age-floor chips (`meridian.firmsListAge`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
@@ -119,6 +120,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setEarthquakeListMagFilter` /
  *                         `setEarthquakeListDepthFilter` /
  *                         `setFirmsListConf` / `setFirmsListFrp` /
+ *                         `setFirmsListAge` /
  *                         `writeLaunchListMappedOnly`,
  *                         which would persist a display choice nobody made.
  *
