@@ -76,6 +76,15 @@ import {
   passesAwarenessMilitaryFilter,
   setAwarenessMilitaryOnlyEnabled,
 } from './awarenessMilitaryFilter.js';
+import {
+  AWARENESS_FLIGHTS_CHIP_LABEL,
+  AWARENESS_FLIGHTS_CHIP_TITLE,
+  filterAwarenessFlightsContacts,
+  getAwarenessFlightsOnlyEnabled,
+  hydrateAwarenessFlightsOnlyEnabled,
+  passesAwarenessFlightsFilter,
+  setAwarenessFlightsOnlyEnabled,
+} from './awarenessFlightsFilter.js';
 
 hydrateAwarenessIdentifiedEnabled();
 hydrateAwarenessRangeFilter();
@@ -83,6 +92,7 @@ hydrateAwarenessAircraftOnlyEnabled();
 hydrateAwarenessVesselsOnlyEnabled();
 hydrateAwarenessSitesOnlyEnabled();
 hydrateAwarenessMilitaryOnlyEnabled();
+hydrateAwarenessFlightsOnlyEnabled();
 
 const AIRCRAFT_DEPENDENCIES = ['flights', 'military'];
 const DEFERRED_DEPENDENCIES = ['ais-live-vessels', 'military-installations'];
@@ -336,6 +346,12 @@ function ensurePanel() {
       if (action.dataset.awarenessAction === 'military-only') {
         militaryAwarenessLayer.setParams({
           militaryOnly: !getAwarenessMilitaryOnlyEnabled(),
+        });
+        if (!state.results) hidePanel();
+      }
+      if (action.dataset.awarenessAction === 'flights-only') {
+        militaryAwarenessLayer.setParams({
+          flightsOnly: !getAwarenessFlightsOnlyEnabled(),
         });
         if (!state.results) hidePanel();
       }
@@ -760,8 +776,12 @@ function filterIdentifiedRoster(items, subject, layerId) {
     sitesOnly: getAwarenessSitesOnlyEnabled(),
     subjectId: subject?.id,
   });
-  return filterAwarenessMilitaryContacts(sites, {
+  const military = filterAwarenessMilitaryContacts(sites, {
     militaryOnly: getAwarenessMilitaryOnlyEnabled(),
+    subjectId: subject?.id,
+  });
+  return filterAwarenessFlightsContacts(military, {
+    flightsOnly: getAwarenessFlightsOnlyEnabled(),
     subjectId: subject?.id,
   });
 }
@@ -784,6 +804,9 @@ function awarenessIdentifiedAllows(item, subject = state.subject) {
     subjectId: subject?.id,
   }) && passesAwarenessMilitaryFilter(item, {
     militaryOnly: getAwarenessMilitaryOnlyEnabled(),
+    subjectId: subject?.id,
+  }) && passesAwarenessFlightsFilter(item, {
+    flightsOnly: getAwarenessFlightsOnlyEnabled(),
     subjectId: subject?.id,
   });
 }
@@ -823,6 +846,13 @@ function militaryOnlyChipHtml() {
   </div>`;
 }
 
+function flightsOnlyChipHtml() {
+  const on = getAwarenessFlightsOnlyEnabled() === true;
+  return `<div class="military-awareness-vessels-chips" role="group" aria-label="${AWARENESS_FLIGHTS_CHIP_LABEL}">
+    <button type="button" class="military-awareness-vessels-chip${on ? ' active' : ''}" data-awareness-action="flights-only" aria-pressed="${on ? 'true' : 'false'}" title="${AWARENESS_FLIGHTS_CHIP_TITLE}">${AWARENESS_FLIGHTS_CHIP_LABEL}</button>
+  </div>`;
+}
+
 function rangeChipsHtml() {
   const chips = awarenessRangeChipModels(getAwarenessRangeFilter()).map((chip) => (
     `<button type="button" class="military-awareness-range-chip${chip.active ? ' active' : ''}" data-awareness-action="range" data-awareness-range="${escapeHtml(chip.id)}" aria-pressed="${chip.active ? 'true' : 'false'}" title="${escapeHtml(chip.title)}">${escapeHtml(chip.label)}</button>`
@@ -831,7 +861,7 @@ function rangeChipsHtml() {
 }
 
 function awarenessFilterChipsHtml() {
-  return `${identifiedOnlyChipHtml()}${aircraftOnlyChipHtml()}${vesselsOnlyChipHtml()}${sitesOnlyChipHtml()}${militaryOnlyChipHtml()}${rangeChipsHtml()}`;
+  return `${identifiedOnlyChipHtml()}${aircraftOnlyChipHtml()}${vesselsOnlyChipHtml()}${sitesOnlyChipHtml()}${militaryOnlyChipHtml()}${flightsOnlyChipHtml()}${rangeChipsHtml()}`;
 }
 
 function normalizeAircraftClass(value) {
@@ -905,6 +935,13 @@ function selectNavigationTargets(sourceCohorts, subject, visitedKeys, {
     layerId: target.item?.layerId || target.layerId,
   }, {
     militaryOnly: getAwarenessMilitaryOnlyEnabled(),
+    subjectId: subject?.id,
+  }));
+  targets = targets.filter((target) => passesAwarenessFlightsFilter({
+    ...target.item,
+    layerId: target.item?.layerId || target.layerId,
+  }, {
+    flightsOnly: getAwarenessFlightsOnlyEnabled(),
     subjectId: subject?.id,
   }));
   return targets;
@@ -2018,6 +2055,11 @@ const militaryAwarenessLayer = {
       const previous = getAwarenessMilitaryOnlyEnabled();
       militaryChanged = setAwarenessMilitaryOnlyEnabled(params.militaryOnly) !== previous;
     }
+    let flightsChanged = false;
+    if (typeof params.flightsOnly === 'boolean') {
+      const previous = getAwarenessFlightsOnlyEnabled();
+      flightsChanged = setAwarenessFlightsOnlyEnabled(params.flightsOnly) !== previous;
+    }
     let activation;
     if (typeof params.passive === 'boolean') {
       const wasPassive = state.passive;
@@ -2030,15 +2072,16 @@ const militaryAwarenessLayer = {
       && typeof params.vesselsOnly !== 'boolean'
       && typeof params.sitesOnly !== 'boolean'
       && typeof params.militaryOnly !== 'boolean'
+      && typeof params.flightsOnly !== 'boolean'
     ) {
       return;
     }
-    if ((identifiedChanged || rangeChanged || aircraftChanged || vesselsChanged || sitesChanged || militaryChanged) && state.enabled && state.subject) {
+    if ((identifiedChanged || rangeChanged || aircraftChanged || vesselsChanged || sitesChanged || militaryChanged || flightsChanged) && state.enabled && state.subject) {
       refreshSelectedSubject(true);
     }
     return activation;
   },
-  /** @returns {{ passive: boolean, identifiedOnly: boolean, range: string, aircraftOnly: boolean, vesselsOnly: boolean, sitesOnly: boolean, militaryOnly: boolean }} Current runtime parameters. */
+  /** @returns {{ passive: boolean, identifiedOnly: boolean, range: string, aircraftOnly: boolean, vesselsOnly: boolean, sitesOnly: boolean, militaryOnly: boolean, flightsOnly: boolean }} Current runtime parameters. */
   getParams() {
     return {
       passive: state.passive,
@@ -2048,6 +2091,7 @@ const militaryAwarenessLayer = {
       vesselsOnly: getAwarenessVesselsOnlyEnabled(),
       sitesOnly: getAwarenessSitesOnlyEnabled(),
       militaryOnly: getAwarenessMilitaryOnlyEnabled(),
+      flightsOnly: getAwarenessFlightsOnlyEnabled(),
     };
   },
   init(viewer) {
@@ -2057,6 +2101,7 @@ const militaryAwarenessLayer = {
     hydrateAwarenessVesselsOnlyEnabled();
     hydrateAwarenessSitesOnlyEnabled();
     hydrateAwarenessMilitaryOnlyEnabled();
+    hydrateAwarenessFlightsOnlyEnabled();
     detachRuntimeListeners();
     state.unitsUnsubscribe?.();
     state.unitsUnsubscribe = subscribeDistanceUnit(() => {
