@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has a client-only **Hide no last pos** toggle after the Plan 254 **Hide
+  no speed** chip. Default **off** keeps the current fleet, including vessels
+  missing both last-position timestamps. **On** keeps a finite
+  `lastPositionEpoch` or a parseable `lastPositionUtc` and drops rows missing
+  both. Both missing fail closed when on. A selected vessel stays if it
+  passed the other filters. Chip changes re-filter already-fetched AIS rows
+  and AND with Tanker | Cargo | Passenger | Fishing | Service | Other, Hide
+  parked, min-speed, destination, Hide no dest, Hide unnamed, Hide no IMO,
+  last-pos freshness, Hide no heading, Hide no type, and Hide no speed — no
+  extra AISStream fetch and no `/api`. Preference persists as
+  `meridian.aisHideNoLastPos` (`1` / `0`; LayerStateCoordinator restore, no
+  share-URL write). Distinct from Plan 200 last-pos freshness (fail-open
+  when both timestamps are missing), Hide no speed, Hide no heading, and
+  Hide no type: this is presence-only.
 - The hosted Launches panel has a client-only **Hide no vehicle** toggle after
   Hide no time. Default **off** keeps the current list, including missing /
   empty vehicle. **On** keeps a non-empty trimmed `vehicle` (Falcon 9 stays);
