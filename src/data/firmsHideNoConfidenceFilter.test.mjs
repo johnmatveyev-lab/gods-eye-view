@@ -306,13 +306,15 @@ test('Persist flip survives reload', () => {
   }
 });
 
-test('firmsList.js / firmsCsv.js / firmsAdapt.js are unchanged', () => {
+test('firmsList.js / firmsCsv.js / firmsAdapt.js stay off the globe hide path', () => {
   const list = readFileSync(path.join(ROOT, 'src/data/firmsList.js'), 'utf8');
   const csv = readFileSync(path.join(ROOT, 'src/data/firmsCsv.js'), 'utf8');
   const adapt = readFileSync(path.join(ROOT, 'src/data/firmsAdapt.js'), 'utf8');
   for (const [name, source] of [['firmsList.js', list], ['firmsCsv.js', csv], ['firmsAdapt.js', adapt]]) {
-    assert.doesNotMatch(source, /hideNoConfidence|firmsHideNoConfidence|Hide no confidence/, `${name} must stay off the hide path`);
-    assert.doesNotMatch(source, /FIRMS_HIDE_NO_CONFIDENCE|fireMeetsHideNoConfidence/, `${name} must stay off the hide path`);
+    assert.doesNotMatch(source, /from '\.\/firmsHideNoConfidenceFilter\.js'/, `${name} must stay off the globe hide path`);
+    assert.doesNotMatch(source, /meridian\.firmsHideNoConfidence'/, `${name} must stay off the globe hide path`);
+    assert.doesNotMatch(source, /FIRMS_HIDE_NO_CONFIDENCE[^_]/, `${name} must stay off the globe hide path`);
+    assert.doesNotMatch(source, /fireMeetsHideNoConfidence\(/, `${name} must stay off the globe hide path`);
   }
   const [adaptedHigh] = adaptFirmsRecords([rawFire(AUSTIN.lat, AUSTIN.lon, 12, 340, 'h')]);
   assert.equal(fireHasFiniteConfidence(adaptedHigh), true);
@@ -440,7 +442,7 @@ test('FIRMS row exposes Hide no confidence from getRowControls() without a new /
   assert.doesNotMatch(heatmap, /\/api\/firms\/confidence\/hide/);
   assert.doesNotMatch(layerState, /hideNoConfidence|firmsHideNoConfidence/);
   assert.doesNotMatch(firstRun, /writeFirmsHideNoConfidence\(/);
-  assert.doesNotMatch(list, /hideNoConfidence|firmsHideNoConfidence/);
+  assert.doesNotMatch(list, /from '\.\/firmsHideNoConfidenceFilter\.js'|meridian\.firmsHideNoConfidence'|FIRMS_HIDE_NO_CONFIDENCE[^_]|fireMeetsHideNoConfidence\(/);
   assert.doesNotMatch(csv, /hideNoConfidence|firmsHideNoConfidence/);
   assert.doesNotMatch(adapt, /hideNoConfidence|firmsHideNoConfidence/);
   assert.doesNotMatch(html, /hide-no-confidence|firmsHideNoConfidence/);

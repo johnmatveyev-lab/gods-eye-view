@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no confidence** filter
+  on the already-fetched trailing-24h `/api/firms` roster. Default
+  **off** keeps missing / null / non-finite confidence. On hides those
+  sentinels and keeps a rated confidence (**0 stays**). AND after Hide
+  no FRP, before the 50-row cap. Distinct from the list confidence
+  floor (`meridian.firmsListConf`) and globe Hide no confidence
+  (`meridian.firmsHideNoConfidence`). `getRowControls()` owns the chip.
+  Preference persists as `meridian.firmsListHideNoConfidence`
+  (`'1'` / `'0'`; no share-URL write). No extra NASA fetch. NASA FIRMS
+  acknowledgement is unchanged.
 - Datacenters in-view list has a client-only **Website only** toggle next
   to Named only. Default **off** keeps the current in-view OSM list,
   including missing, empty, and whitespace website tags. **On** is
