@@ -31,6 +31,7 @@ export function adaptFirmsRecords(records) {
       confidence: normalizeConfidence(record.confidence),
       brightness: finiteNumber(record.brightness),
       brightnessTi5: finiteNumber(record.brightnessTi5),
+      scanKm: finiteNumber(record.scanKm ?? record.scan),
       night: daynight === 'N',
       daynight: daynight === 'N' || daynight === 'D' ? daynight : '',
       acqMs: parseAcquisitionMs(record.acqDate, record.acqTime, acqCache),

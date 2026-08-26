@@ -52,7 +52,7 @@ export function isLikelyCsv(text) {
  *
  * @param {string} text - Raw CSV payload.
  * @returns {?Array<{lat: number, lon: number, frp: number, confidence: string|number,
- *   brightness: number, brightnessTi5: number, daynight: string, acqDate: string,
+ *   brightness: number, brightnessTi5: number, scan: number, daynight: string, acqDate: string,
  *   acqTime: string, satellite: string, instrument: string}>} Records, or null for non-CSV.
  */
 export function parseFirmsCsv(text) {
@@ -71,6 +71,7 @@ export function parseFirmsCsv(text) {
   const iConfidence = col.get('confidence');
   const iBrightness = col.get('bright_ti4') ?? col.get('brightness');
   const iBrightnessTi5 = col.get('bright_ti5') ?? col.get('bright_t31');
+  const iScan = col.get('scan');
   const iDaynight = col.get('daynight');
   const iAcqDate = col.get('acq_date');
   const iAcqTime = col.get('acq_time');
@@ -96,6 +97,7 @@ export function parseFirmsCsv(text) {
       confidence: cell(parts, iConfidence),
       brightness: finiteOrZero(parts[iBrightness]),
       brightnessTi5: finiteOrZero(parts[iBrightnessTi5]),
+      scan: finiteOrZero(parts[iScan]),
       daynight: cell(parts, iDaynight),
       acqDate: cell(parts, iAcqDate),
       acqTime: cell(parts, iAcqTime), // NOT zero-padded — kept verbatim
