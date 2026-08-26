@@ -579,7 +579,7 @@ test('FIRMS panel exposes All | <0.5km | <0.4km track chips and hides them when 
     panel[0].indexOf('id="fires-track-chips"') < panel[0].indexOf('id="fires-list-meta"'),
     'track chips sit on the FIRES panel above the list meta',
   );
-  assert.match(panel[0], /We acknowledge the use of data and\/or imagery from NASA's Fire Information for Resource Management System/);
+  assert.match(html, /We acknowledge the use of data and\/or imagery from NASA's Fire Information for Resource Management System \(FIRMS\)/);
   assert.match(ui, /data-firms-track/);
   assert.match(ui, /trackCeiling/);
   assert.match(ui, /isEnabled\?\.\('local-firms'\)/);
