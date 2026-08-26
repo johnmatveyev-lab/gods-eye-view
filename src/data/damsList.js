@@ -4,10 +4,11 @@
  * Reads the already-loaded `local-dams` payload (bundled OSM / ODbL
  * snapshot). Does not fetch and does not touch datacenters or installations.
  * Plan 205 output-floor chips, Plan 218 Named only, Plan 224
- * Operator only, Plan 229 River only, and Plan 240 Wikipedia only
- * filter this list only — globe stems stay. Named only ANDs after
- * the output floor; Operator only ANDs after Named only; River only
- * ANDs after Operator only; Wikipedia only ANDs after River only.
+ * Operator only, Plan 229 River only, Plan 240 Wikipedia only, and
+ * Plan 249 Output only filter this list only — globe stems stay.
+ * Named only ANDs after the output floor; Operator only ANDs after
+ * Named only; River only ANDs after Operator only; Wikipedia only
+ * ANDs after River only; Output only ANDs after Wikipedia only.
  */
 
 import {
@@ -35,6 +36,11 @@ import {
   damMatchesWikiFilter,
   readDamWikiOnly,
 } from './damsWikiFilter.js';
+import {
+  DEFAULT_DAM_OUTPUT_ONLY,
+  damMatchesOutputOnlyFilter,
+  readDamOutputOnly,
+} from './damsOutputOnlyFilter.js';
 
 export const DAMS_LAYER_ID = 'local-dams';
 export const DAMS_LIST_CAP = 50;
@@ -99,6 +105,7 @@ export function damDistanceKm(lat1, lon1, lat2, lon2) {
  * @param {unknown} [options.operatorOnly] Operator only toggle. Default off.
  * @param {unknown} [options.riverOnly] River only toggle. Default off.
  * @param {unknown} [options.wikiOnly] Wikipedia only toggle. Default off.
+ * @param {unknown} [options.outputOnly] Output only toggle. Default off.
  * @param {string|null} [options.selectedId] Selected list / globe row stays.
  * @returns {Array<{id: string, label: string, latitude: number, longitude: number, distanceKm: number}>}
  */
@@ -112,6 +119,7 @@ export function listDamsInView({
   operatorOnly = DEFAULT_DAM_OPERATOR_ONLY,
   riverOnly = DEFAULT_DAM_RIVER_ONLY,
   wikiOnly = DEFAULT_DAM_WIKI_ONLY,
+  outputOnly = DEFAULT_DAM_OUTPUT_ONLY,
   selectedId = null,
 } = {}) {
   if (!enabled) return [];
@@ -136,6 +144,7 @@ export function listDamsInView({
     if (!damMatchesOperatorFilter(record, operatorOnly, { selectedId })) continue;
     if (!damMatchesRiverFilter(record, riverOnly, { selectedId })) continue;
     if (!damMatchesWikiFilter(record, wikiOnly, { selectedId })) continue;
+    if (!damMatchesOutputOnlyFilter(record, outputOnly, { selectedId })) continue;
     listed.push({
       id,
       label,
@@ -217,6 +226,7 @@ export function renderDamsInViewList(items, count, sites) {
  * @param {() => unknown} [options.getOperatorOnly] Persist / chip toggle. Defaults to `meridian.damOperatorOnly`.
  * @param {() => unknown} [options.getRiverOnly] Persist / chip toggle. Defaults to `meridian.damRiverOnly`.
  * @param {() => unknown} [options.getWikiOnly] Persist / chip toggle. Defaults to `meridian.damWikiOnly`.
+ * @param {() => unknown} [options.getOutputOnly] Persist / chip toggle. Defaults to `meridian.damOutputOnly`.
  * @param {() => string|null} [options.getSelectedId] Globe / list selection. Always stays.
  * @param {(site: object) => boolean|void} options.flyTo
  * @returns {{refresh: Function, destroy: Function, sites: () => Array<object>}|null}
@@ -233,6 +243,7 @@ export function bindDamsInViewList({
   getOperatorOnly,
   getRiverOnly,
   getWikiOnly,
+  getOutputOnly,
   getSelectedId,
   flyTo,
 } = {}) {
@@ -265,6 +276,9 @@ export function bindDamsInViewList({
       wikiOnly: typeof getWikiOnly === 'function'
         ? getWikiOnly()
         : readDamWikiOnly(),
+      outputOnly: typeof getOutputOnly === 'function'
+        ? getOutputOnly()
+        : readDamOutputOnly(),
       selectedId: hostSelected || selectedId,
     });
     root.hidden = !enabled;
