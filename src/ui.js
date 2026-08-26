@@ -319,6 +319,10 @@ import {
   readLaunchListHideNoTime,
   writeLaunchListHideNoTime,
 } from './data/launchListTimeFilter.js';
+import {
+  readLaunchListHideNoVehicle,
+  writeLaunchListHideNoVehicle,
+} from './data/launchListVehicleFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   getEarthquakeListAgeFilter,
@@ -3147,6 +3151,7 @@ export class StyleManager {
     this._launchesPanelProviderChips = document.getElementById('launches-panel-provider-chips');
     this._launchesPanelSiteChips = document.getElementById('launches-panel-site-chips');
     this._launchesPanelTimeChips = document.getElementById('launches-panel-time-chips');
+    this._launchesPanelVehicleChips = document.getElementById('launches-panel-vehicle-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
     this._launchesPanelPayload = null;
@@ -11786,6 +11791,7 @@ export class StyleManager {
     this._syncLaunchesPanelProviderChip();
     this._syncLaunchesPanelSiteChip();
     this._syncLaunchesPanelTimeChip();
+    this._syncLaunchesPanelVehicleChip();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11830,6 +11836,13 @@ export class StyleManager {
       if (!chip || !this._launchesPanelTimeChips.contains(chip)) return;
       writeLaunchListHideNoTime(readLaunchListHideNoTime() !== true);
       this._syncLaunchesPanelTimeChip();
+      this._reapplyLaunchesPanelLspType();
+    });
+    this._launchesPanelVehicleChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-list-hide-no-vehicle]');
+      if (!chip || !this._launchesPanelVehicleChips.contains(chip)) return;
+      writeLaunchListHideNoVehicle(readLaunchListHideNoVehicle() !== true);
+      this._syncLaunchesPanelVehicleChip();
       this._reapplyLaunchesPanelLspType();
     });
   }
@@ -11896,6 +11909,16 @@ export class StyleManager {
     }
   }
 
+  _syncLaunchesPanelVehicleChip() {
+    const hide = readLaunchListHideNoVehicle() === true;
+    const chips = this._launchesPanelVehicleChips?.querySelectorAll?.('[data-launch-list-hide-no-vehicle]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', hide);
+      chip.setAttribute('aria-pressed', String(hide));
+    }
+  }
+
   _reapplyLaunchesPanelLspType() {
     if (this._launchesPanelPayload == null) return;
     const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter(), {
@@ -11905,6 +11928,7 @@ export class StyleManager {
       hideNoProvider: readLaunchListHideNoProvider(),
       hideNoSite: readLaunchListHideNoSite(),
       hideNoTime: readLaunchListHideNoTime(),
+      hideNoVehicle: readLaunchListHideNoVehicle(),
     });
     this._launchesPanelRows = rows;
     this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
@@ -11951,6 +11975,7 @@ export class StyleManager {
       hideNoProvider: readLaunchListHideNoProvider(),
       hideNoSite: readLaunchListHideNoSite(),
       hideNoTime: readLaunchListHideNoTime(),
+      hideNoVehicle: readLaunchListHideNoVehicle(),
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
     this._launchesPanelPayload = presentation.payload ?? null;
