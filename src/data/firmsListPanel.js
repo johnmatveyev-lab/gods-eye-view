@@ -6,7 +6,12 @@
  */
 
 import * as Cesium from 'cesium';
-import { FIRMS_ACKNOWLEDGEMENT, FIRMS_LIST_ENABLE_COPY, resolveFireListView } from './firmsList.js';
+import {
+  FIRMS_ACKNOWLEDGEMENT,
+  FIRMS_LIST_ENABLE_COPY,
+  attachFirmsListHideNoSat,
+  resolveFireListView,
+} from './firmsList.js';
 import {
   getFirmsListConf,
   hydrateFirmsListConf,
@@ -54,6 +59,7 @@ export function attachFirmsListPanel({
   hydrateFirmsListConf();
   hydrateFirmsListFrp();
   hydrateFirmsListAge();
+  const satChips = () => root.querySelector('#fires-list-sat-chips');
 
   function firmsModule() {
     return dataManager?.layers?.get('local-firms')?.module || null;
@@ -109,6 +115,8 @@ export function attachFirmsListPanel({
     syncListConfChips(enabled);
     syncListFrpChips(enabled);
     syncListAgeChips(enabled);
+    const hideNoSatChips = satChips();
+    if (hideNoSatChips) hideNoSatChips.hidden = enabled !== true;
     const view = typeof layer?.getFireListView === 'function'
       ? layer.getFireListView({ camera: cameraOrigin() })
       : resolveFireListView({
@@ -188,6 +196,7 @@ export function attachFirmsListPanel({
   const unsubscribeConf = subscribeFirmsListConf(() => render());
   const unsubscribeFrp = subscribeFirmsListFrp(() => render());
   const unsubscribeAge = subscribeFirmsListAge(() => render());
+  const detachHideNoSat = attachFirmsListHideNoSat(root, () => render());
   const removeMoveEnd = viewer?.camera?.moveEnd?.addEventListener?.(() => {
     if (dataManager?.isEnabled?.('local-firms')) render();
   });
@@ -203,6 +212,7 @@ export function attachFirmsListPanel({
     unsubscribeConf();
     unsubscribeFrp();
     unsubscribeAge();
+    detachHideNoSat();
     if (typeof removeMoveEnd === 'function') removeMoveEnd();
   };
 }

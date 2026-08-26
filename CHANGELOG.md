@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no satellite** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps missing and present satellite/sensor. On hides empty or
+  whitespace `satelliteShortName(satellite)` and `sensor` after trim.
+  A labeled satellite such as N20, or a filled sensor such as VIIRS,
+  stays. A selected fire always stays. AND with Plan 210 list confidence,
+  Plan 219 list FRP, and Plan 225 list age, before the 50-row cap.
+  Distinct from globe satellite chips (163), globe Hide no satellite
+  (238), and globe Hide no sensor (241). `getRowControls()` owns the
+  list chip — index.html / ui.js do not re-declare it. Preference
+  persists as `meridian.firmsListHideNoSat` (`'1'` / `'0'`;
+  LayerStateCoordinator restore, no share-URL write). No extra NASA fetch
+  and no new `/api`. NASA FIRMS acknowledgement is unchanged.
 - Hosted Sites list has client-only exclusive **All | Airfield | Naval**
   class chips after the Plan 235 OSM-type chips. Default **All** keeps the
   current 50-row viewport list, including range and military_land.
