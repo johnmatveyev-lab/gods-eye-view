@@ -7,6 +7,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has a client-only **Hide no speed** toggle after the Plan 246 **Hide no
+  type** chip. Default **off** keeps the current fleet, including null,
+  missing, and non-finite speed. **On** keeps a finite speed (0 stays —
+  parked, not missing) and drops null, missing, or non-finite speed.
+  Missing / non-finite fail closed when on. A selected vessel stays if
+  it passed the other filters. Chip changes re-filter already-fetched
+  AIS rows and AND with Tanker | Cargo | Passenger | Fishing | Service |
+  Other, Hide parked, min-speed (All | 5+ | 10+ still fail-open on
+  missing), destination, Hide no dest, Hide unnamed, Hide no IMO,
+  last-pos freshness, Hide no heading, and Hide no type — no extra
+  AISStream fetch and no `/api`. Preference persists as
+  `meridian.aisHideNoSpeed` (`1` / `0`; LayerStateCoordinator restore,
+  no share-URL write). Distinct from type-name chips, parked
+  (`speed === 0`), the fail-open min-speed floor, dest, unnamed, IMO,
+  last-pos, heading, and hide-no-type: this is presence-only, not a
+  floor.
 - The hosted Launches panel has a client-only **Hide no time** toggle after
   Hide no site. Default **off** keeps the current list (ISO times and
   null / missing `launchTime`). **On** keeps a non-empty parseable
