@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Global Context has a client-only **Military only** toggle on the Contacts
+  roster, next to Sites only. Default **off** keeps all four cohorts.
+  **On** keeps `military` (military flights) and drops civil flights, AIS,
+  and sites from the already-fetched `getNearby` roster and NEXT walk.
+  The current subject always stays, even when it is civil / AIS / site.
+  Missing `layerId` stays. AND with Identified only, the range chips,
+  Aircraft only, Vessels only, and Sites only — combining exclusive
+  only-toggles typically leaves only the subject. Chip changes re-filter
+  already-fetched records — no extra fetch and no `/api`. The 250 km
+  ring (`AWARENESS_RADIUS_M`) is unchanged. Preference persists as
+  `meridian.awarenessMilitaryOnly` (`1` / `0`; LayerStateCoordinator
+  restore, no share-URL write). Distinct from Aircraft only, which keeps
+  civil + military flights and drops AIS + sites.
 - Civil flights have a client-only **Hide no geo altitude** toggle after
   Hide no speed. Default **off** keeps the current draw, including null,
   missing, and non-finite `geoAltitudeM`. **On** keeps a finite
