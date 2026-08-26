@@ -14,7 +14,7 @@
  * On drops rows whose provider is missing / empty / whitespace after
  * trim. Named providers such as SpaceX stay. A selected id stays.
  * Distinct from Plan 207 LSP-type chips, Plan 215 mapped-only,
- * Plan 223 status chips, and Plan 181 hide-unknown-site (not hide-ground).
+ * Plan 223 status chips, and Plan 181 hide-unknown-site.
  */
 
 export const DEFAULT_LAUNCH_LIST_HIDE_NO_PROVIDER = false;

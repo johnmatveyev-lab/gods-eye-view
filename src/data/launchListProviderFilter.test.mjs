@@ -401,7 +401,8 @@ test('chip sits on the hosted Launches panel and re-applies the existing /api/la
   assert.doesNotMatch(hideSite, /meridian\.launchListHideNoProvider|launchListProviderFilter/);
 
   assert.equal(existsSync(path.join(ROOT, 'api/launches/provider.js')), false);
-  assert.doesNotMatch(helper, /earthquakes\.js|weather HUD|radio\.js|flights\.js|cctv\.js|hide-ground/);
+  assert.doesNotMatch(helper, /earthquakes\.js|weather HUD|radio\.js|flights\.js|cctv\.js/);
+  assert.doesNotMatch(helper, /hideUnknownSite|launchHideUnknownSite|meridian\.launchHideUnknownSite/);
   assert.match(license, /Copyright \(c\) 2026 Bilawal Sidhu/);
   assert.match(readme, /# Meridian/);
   assert.doesNotMatch(readme, /quantum-earth/);
