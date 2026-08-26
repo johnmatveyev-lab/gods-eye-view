@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Hide no country** toggle
+  after Hide no probability. Default **off** keeps the current list,
+  including no-country rows. **On** keeps rows whose copied `country`
+  is a non-empty trimmed name (`pad.country.name`, else
+  `pad.location.country.name`); missing / whitespace drop. A selected
+  row always stays if it passed the other filters. AND after Plan 289
+  Hide no probability. Re-filters the already-fetched `/api/launches`
+  roster — no extra LL2 fetch and no new `/api`. Preference persists as
+  `meridian.launchListHideNoCountry` (`1` / `0`; LayerStateCoordinator
+  restore, no share-URL write). This is a leftover presence filter, not
+  a country-name chip and not Hide no site (`pad.name` /
+  `location.name`).
 - Civil flights have a client-only **Hide no position time** toggle next to
   Hide no category. Default **off** keeps the current draw, including
   missing / non-finite / ≤0 `time_position` (`positionEpochMs`). **On**

@@ -22,6 +22,8 @@
  * empty, or whitespace.
  * Hide no probability then drops rows whose copied probability is
  * missing, null, or non-finite. Finite 0 stays.
+ * Hide no country then drops rows whose copied country is missing,
+ * empty, or whitespace.
  */
 
 import {
@@ -66,6 +68,11 @@ import {
   filterLaunchListByProbability,
 } from './launchListProbabilityFilter.js';
 import {
+  DEFAULT_LAUNCH_LIST_HIDE_NO_COUNTRY,
+  filterLaunchListByCountry,
+  launchListCountryName,
+} from './launchListCountryFilter.js';
+import {
   DEFAULT_LAUNCH_LIST_STATUS_FILTER,
   filterLaunchListByStatus,
 } from './launchListStatusFilter.js';
@@ -85,6 +92,7 @@ export const LAUNCHES_PANEL_ORBIT_CHIPS_ID = 'launches-panel-orbit-chips';
 export const LAUNCHES_PANEL_WEBCAST_CHIPS_ID = 'launches-panel-webcast-chips';
 export const LAUNCHES_PANEL_MISSION_CHIPS_ID = 'launches-panel-mission-chips';
 export const LAUNCHES_PANEL_PROBABILITY_CHIPS_ID = 'launches-panel-probability-chips';
+export const LAUNCHES_PANEL_COUNTRY_CHIPS_ID = 'launches-panel-country-chips';
 /** Same feed the globe layer already uses. Do not invent another route. */
 export const LAUNCHES_FEED_URL = '/api/launches';
 /** Same close-pad range Space Missions already uses for pad focus. */
@@ -162,10 +170,11 @@ function compactLaunchLabel(name, maxLength = 27) {
  * missing / false webcast. Hide no mission then drops missing /
  * empty / whitespace mission. Hide no probability then drops
  * missing / null / non-finite probability. Finite 0 stays.
+ * Hide no country then drops missing / empty / whitespace country.
  * A selected id always stays.
  * @param {object|Array|null} payload `{results:[…]}` or a launch array.
  * @param {unknown} [filter]
- * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown, hideNoSite?: unknown, hideNoTime?: unknown, hideNoVehicle?: unknown, hideNoOrbit?: unknown, webcastOnly?: unknown, hideNoMission?: unknown, hideNoProbability?: unknown}} [options]
+ * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown, hideNoSite?: unknown, hideNoTime?: unknown, hideNoVehicle?: unknown, hideNoOrbit?: unknown, webcastOnly?: unknown, hideNoMission?: unknown, hideNoProbability?: unknown, hideNoCountry?: unknown}} [options]
  * @returns {Array<object>}
  */
 export function launchesPanelRows(
@@ -183,6 +192,7 @@ export function launchesPanelRows(
     webcastOnly = DEFAULT_LAUNCH_LIST_WEBCAST_ONLY,
     hideNoMission = DEFAULT_LAUNCH_LIST_HIDE_NO_MISSION,
     hideNoProbability = DEFAULT_LAUNCH_LIST_HIDE_NO_PROBABILITY,
+    hideNoCountry = DEFAULT_LAUNCH_LIST_HIDE_NO_COUNTRY,
   } = {},
 ) {
   const launches = Array.isArray(payload) ? payload : payload?.results;
@@ -207,47 +217,52 @@ export function launchesPanelRows(
         || launch.mission_name
         || null,
       probability: Number.isFinite(launch.probability) ? launch.probability : null,
+      country: launchListCountryName(launch) || null,
       webcast: launchListRowHasWebcast(launch),
       lat: coords.lat,
       lon: coords.lon,
       source: launch?.source || 'Launch Library 2',
     };
   });
-  return filterLaunchListByProbability(
-    filterLaunchListByMission(
-      filterLaunchListByWebcast(
-        filterLaunchListByOrbit(
-          filterLaunchListByVehicle(
-            filterLaunchListByTime(
-              filterLaunchListBySite(
-                filterLaunchListByProvider(
-                  filterLaunchListByStatus(
-                    filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
-                    statusFilter,
+  return filterLaunchListByCountry(
+    filterLaunchListByProbability(
+      filterLaunchListByMission(
+        filterLaunchListByWebcast(
+          filterLaunchListByOrbit(
+            filterLaunchListByVehicle(
+              filterLaunchListByTime(
+                filterLaunchListBySite(
+                  filterLaunchListByProvider(
+                    filterLaunchListByStatus(
+                      filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
+                      statusFilter,
+                      selectedId,
+                    ),
+                    hideNoProvider,
                     selectedId,
                   ),
-                  hideNoProvider,
+                  hideNoSite,
                   selectedId,
                 ),
-                hideNoSite,
+                hideNoTime,
                 selectedId,
               ),
-              hideNoTime,
+              hideNoVehicle,
               selectedId,
             ),
-            hideNoVehicle,
+            hideNoOrbit,
             selectedId,
           ),
-          hideNoOrbit,
+          webcastOnly,
           selectedId,
         ),
-        webcastOnly,
+        hideNoMission,
         selectedId,
       ),
-      hideNoMission,
+      hideNoProbability,
       selectedId,
     ),
-    hideNoProbability,
+    hideNoCountry,
     selectedId,
   );
 }
@@ -340,6 +355,7 @@ export function launchesPanelLoadingPresentation() {
  * @param {unknown} [input.webcastOnly]
  * @param {unknown} [input.hideNoMission]
  * @param {unknown} [input.hideNoProbability]
+ * @param {unknown} [input.hideNoCountry]
  * @returns {Promise<object>}
  */
 export async function loadLaunchesPanelPayload({
@@ -358,6 +374,7 @@ export async function loadLaunchesPanelPayload({
   webcastOnly = DEFAULT_LAUNCH_LIST_WEBCAST_ONLY,
   hideNoMission = DEFAULT_LAUNCH_LIST_HIDE_NO_MISSION,
   hideNoProbability = DEFAULT_LAUNCH_LIST_HIDE_NO_PROBABILITY,
+  hideNoCountry = DEFAULT_LAUNCH_LIST_HIDE_NO_COUNTRY,
 } = {}) {
   try {
     const response = await fetchImpl(url);
@@ -375,6 +392,7 @@ export async function loadLaunchesPanelPayload({
       webcastOnly,
       hideNoMission,
       hideNoProbability,
+      hideNoCountry,
     });
     return {
       ...launchesPanelEmptyPresentation({ available: true, items: rows, payload }),
@@ -394,6 +412,7 @@ export async function loadLaunchesPanelPayload({
         webcastOnly,
         hideNoMission,
         hideNoProbability,
+        hideNoCountry,
       });
       if (rows.length) {
         return {
