@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no country** toggle after Hide no
+  heading. Default **off** keeps the current draw, including empty and
+  missing `originCountry`. On keeps a non-empty trimmed country
+  (United States stays) and drops empty, whitespace, or missing country.
+  The selected/tracked contact always stays. AND with airborne-only,
+  altitude, heading sectors, speed, vertical, Emergencies only, Identified
+  only, hide-stale, class, prefix, Hide no squawk, Hide no type, Hide no
+  registration, Hide no callsign, and Hide no heading. Distinct from
+  Identified only, Hide no squawk, Hide no type, Hide no registration,
+  Hide no callsign, and Hide no heading. Re-applies the already-fetched
+  flight payload — no extra fetch and no new `/api`. Preference persists as
+  `meridian.flightHideNoCountry` (LayerStateCoordinator restore, no
+  share-URL write). Military flights are unchanged.
 - Hosted Sites list has a client-only **Footprints only** toggle after
   the Plan 243 class chips. Default **off** keeps the current 50-row
   viewport list, including null / empty footprint. **On** keeps a
@@ -526,6 +539,12 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Fixed
 
+- Civil-flight altitude ingest no longer invents **10000 m** when baro
+  altitude is missing. A finite geo altitude is persisted instead;
+  missing both stores **null**. On-ground with neither still stores **0**.
+  Same sticky-null pattern as velocity and track. Altitude chips stay
+  fail-closed on null (`lt10k` / `gt30k` hide). No extra fetch and no new
+  `/api`. Military flights are unchanged.
 - Mapped Installations now keep Overpass ways that arrive as `geometry`
   rings with no `center` (Austin Camp Mabry and the other geom-only
   barracks). `pointFrom` derives the display pin from the ring so
