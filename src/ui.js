@@ -457,6 +457,11 @@ import {
   writeDamRiverOnly,
 } from './data/damsRiverFilter.js';
 import {
+  normalizeDamWikiOnly,
+  readDamWikiOnly,
+  writeDamWikiOnly,
+} from './data/damsWikiFilter.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -3040,6 +3045,7 @@ export class StyleManager {
     this._damsNamedChips = document.getElementById('dams-named-chips');
     this._damsOperatorChips = document.getElementById('dams-operator-chips');
     this._damsRiverChips = document.getElementById('dams-river-chips');
+    this._damsWikiChips = document.getElementById('dams-wiki-chips');
     this._aisTypeChips = document.getElementById('ais-type-chips');
     this._aisParkedChips = document.getElementById('ais-parked-chips');
     this._aisMinSpeedChips = document.getElementById('ais-min-speed-chips');
@@ -3508,6 +3514,7 @@ export class StyleManager {
     this._initDamsNamedChip();
     this._initDamsOperatorChip();
     this._initDamsRiverChip();
+    this._initDamsWikiChip();
     this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
@@ -5637,6 +5644,7 @@ export class StyleManager {
     this._syncDamsNamedChip();
     this._syncDamsOperatorChip();
     this._syncDamsRiverChip();
+    this._syncDamsWikiChip();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5655,6 +5663,7 @@ export class StyleManager {
             this._syncDamsNamedChip();
             this._syncDamsOperatorChip();
             this._syncDamsRiverChip();
+            this._syncDamsWikiChip();
           }
         }
         if (change?.layerId === 'military-installations') {
@@ -11968,6 +11977,7 @@ export class StyleManager {
       getNamedOnly: () => readDamNamedOnly(),
       getOperatorOnly: () => readDamOperatorOnly(),
       getRiverOnly: () => readDamRiverOnly(),
+      getWikiOnly: () => readDamWikiOnly(),
       getSelectedId: () => {
         const entity = this.viewer?.selectedEntity;
         if (entity?.__localLayerId !== DAMS_LAYER_ID) return null;
@@ -12095,6 +12105,31 @@ export class StyleManager {
       this._damsInViewList?.refresh();
     });
     this._syncDamsRiverChip();
+  }
+
+  _syncDamsWikiChip() {
+    const enabled = this._dataManager?.isEnabled?.(DAMS_LAYER_ID) === true;
+    if (this._damsWikiChips) this._damsWikiChips.hidden = !enabled;
+    const only = normalizeDamWikiOnly(readDamWikiOnly()) === true;
+    const chips = this._damsWikiChips?.querySelectorAll?.('[data-dam-wiki]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initDamsWikiChip() {
+    if (!this._damsWikiChips) return;
+    this._damsWikiChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dam-wiki]');
+      if (!chip || !this._damsWikiChips.contains(chip)) return;
+      const current = normalizeDamWikiOnly(readDamWikiOnly()) === true;
+      writeDamWikiOnly(!current);
+      this._syncDamsWikiChip();
+      this._damsInViewList?.refresh();
+    });
+    this._syncDamsWikiChip();
   }
 
   /**

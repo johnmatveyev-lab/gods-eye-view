@@ -7,6 +7,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Wikipedia only** toggle next to the
+  Plan 229 **River only** chip, Plan 224 **Operator only**, Plan 218
+  **Named only**, and Plan 205 **All | 10+ MW | 100+ MW** output-floor
+  chips. Default **off** keeps the current 50-row roster, including plants
+  whose OSM wikipedia and wikidata tags are missing. On hides already-bundled
+  list rows with empty or whitespace wikipedia AND wikidata. A non-empty
+  `wikipedia` or `wikidata` (on the record, properties, tags, or the existing
+  `local-dams` context entity) stays. A selected row stays even if it would
+  be filtered. AND after the output-floor chips, Named only, Operator only,
+  and River only, before the 50-cap. List/fly-to only — globe stems stay
+  unchanged. No extra fetch and no `/api`. Preference persists as
+  `meridian.damWikiOnly` only (`1` / `0`; not a share-link field).
+  LayerStateCoordinator restore re-reads the stored toggle. Hidden with
+  the dams list when the layer is off. Distinct from Plan 205 output-floor,
+  Plan 218 Named only, Plan 224 Operator only, Plan 229 River only, and
+  hide-ground.
 - The hosted Launches panel has a client-only **Hide no site** toggle after
   Hide no provider. Default **off** keeps the current list (named pads and
   Unknown launch site). **On** keeps a non-empty `launchSite` that is not
