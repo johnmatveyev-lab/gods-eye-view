@@ -207,6 +207,12 @@ import {
   setFirmsListConf,
 } from './data/firmsListConfFilter.js';
 import {
+  getFirmsListFrp,
+  hydrateFirmsListFrp,
+  normalizeFirmsListFrp,
+  setFirmsListFrp,
+} from './data/firmsListFrpFilter.js';
+import {
   firmsSensorFilterFlags,
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
@@ -2887,6 +2893,7 @@ export class StyleManager {
     this._firmsScanChips = document.getElementById('fires-scan-chips');
     this._firmsTrackChips = document.getElementById('fires-track-chips');
     this._firmsListConfChips = document.getElementById('fires-list-conf-chips');
+    this._firmsListFrpChips = document.getElementById('fires-list-frp-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -3441,6 +3448,7 @@ export class StyleManager {
     this._initFirmsScanChips();
     this._initFirmsTrackChips();
     this._initFirmsListConfChips();
+    this._initFirmsListFrpChips();
     this._initInstallationClassChips();
     this._initInstallationFootprintChip();
     this._initInstallationNamedChip();
@@ -5599,6 +5607,7 @@ export class StyleManager {
           this._syncFirmsScanChips();
           this._syncFirmsTrackChips();
           this._syncFirmsListConfChips();
+          this._syncFirmsListFrpChips();
         }
         if (change?.layerId === 'ais-live-vessels') {
           this._syncAisTypeChips();
@@ -12199,6 +12208,31 @@ export class StyleManager {
       this._syncFirmsListConfChips();
     });
     this._syncFirmsListConfChips();
+  }
+
+  _syncFirmsListFrpChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsListFrpChips) this._firmsListFrpChips.hidden = !enabled;
+    const current = getFirmsListFrp();
+    const chips = this._firmsListFrpChips?.querySelectorAll?.('[data-firms-list-frp]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsListFrp === current;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsListFrpChips() {
+    hydrateFirmsListFrp();
+    if (!this._firmsListFrpChips) return;
+    this._firmsListFrpChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-list-frp]');
+      if (!chip || !this._firmsListFrpChips.contains(chip)) return;
+      setFirmsListFrp(normalizeFirmsListFrp(chip.dataset.firmsListFrp));
+      this._syncFirmsListFrpChips();
+    });
+    this._syncFirmsListFrpChips();
   }
 
   _syncInstallationClassChips() {

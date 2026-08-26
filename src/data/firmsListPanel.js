@@ -13,6 +13,13 @@ import {
   setFirmsListConf,
   subscribeFirmsListConf,
 } from './firmsListConfFilter.js';
+import {
+  getFirmsListFrp,
+  hydrateFirmsListFrp,
+  setFirmsListFrp,
+  setFirmsListSelectedId,
+  subscribeFirmsListFrp,
+} from './firmsListFrpFilter.js';
 
 /**
  * Bind the FIRES panel to the live FIRMS layer and camera.
@@ -35,8 +42,10 @@ export function attachFirmsListPanel({
   const meta = root.querySelector('#fires-list-meta');
   const ack = root.querySelector('#fires-list-ack');
   const confChips = root.querySelector('#fires-list-conf-chips');
+  const frpChips = root.querySelector('#fires-list-frp-chips');
   let openedForEnable = false;
   hydrateFirmsListConf();
+  hydrateFirmsListFrp();
 
   function firmsModule() {
     return dataManager?.layers?.get('local-firms')?.module || null;
@@ -64,10 +73,22 @@ export function attachFirmsListPanel({
     }
   }
 
+  function syncListFrpChips(enabled) {
+    if (!frpChips) return;
+    frpChips.hidden = enabled !== true;
+    const current = getFirmsListFrp();
+    for (const chip of frpChips.querySelectorAll('[data-firms-list-frp]')) {
+      const active = chip.dataset.firmsListFrp === current;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
   function render() {
     const layer = firmsModule();
     const enabled = dataManager?.isEnabled?.('local-firms') === true;
     syncListConfChips(enabled);
+    syncListFrpChips(enabled);
     const view = typeof layer?.getFireListView === 'function'
       ? layer.getFireListView({ camera: cameraOrigin() })
       : resolveFireListView({
@@ -101,6 +122,7 @@ export function attachFirmsListPanel({
   function onListClick(event) {
     const button = event.target?.closest?.('[data-fire-id]');
     if (!button) return;
+    setFirmsListSelectedId(button.dataset.fireId);
     firmsModule()?.focusFireByKey?.(button.dataset.fireId);
   }
 
@@ -108,6 +130,13 @@ export function attachFirmsListPanel({
     const chip = event.target?.closest?.('[data-firms-list-conf]');
     if (!chip || !confChips?.contains(chip)) return;
     setFirmsListConf(chip.dataset.firmsListConf);
+    render();
+  }
+
+  function onFrpChipClick(event) {
+    const chip = event.target?.closest?.('[data-firms-list-frp]');
+    if (!chip || !frpChips?.contains(chip)) return;
+    setFirmsListFrp(chip.dataset.firmsListFrp);
     render();
   }
 
@@ -124,10 +153,12 @@ export function attachFirmsListPanel({
 
   list?.addEventListener('click', onListClick);
   confChips?.addEventListener('click', onConfChipClick);
+  frpChips?.addEventListener('click', onFrpChipClick);
   const unsubscribe = typeof dataManager?.subscribe === 'function'
     ? dataManager.subscribe(onLayerChange)
     : null;
   const unsubscribeConf = subscribeFirmsListConf(() => render());
+  const unsubscribeFrp = subscribeFirmsListFrp(() => render());
   const removeMoveEnd = viewer?.camera?.moveEnd?.addEventListener?.(() => {
     if (dataManager?.isEnabled?.('local-firms')) render();
   });
@@ -137,8 +168,10 @@ export function attachFirmsListPanel({
   return () => {
     list?.removeEventListener('click', onListClick);
     confChips?.removeEventListener('click', onConfChipClick);
+    frpChips?.removeEventListener('click', onFrpChipClick);
     unsubscribe?.();
     unsubscribeConf();
+    unsubscribeFrp();
     if (typeof removeMoveEnd === 'function') removeMoveEnd();
   };
 }

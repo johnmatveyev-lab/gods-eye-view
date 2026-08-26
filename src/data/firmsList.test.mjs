@@ -15,9 +15,11 @@ import {
   resolveFireListView,
 } from './firmsList.js';
 import { resetFirmsListConfForTest } from './firmsListConfFilter.js';
+import { resetFirmsListFrpForTest } from './firmsListFrpFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 resetFirmsListConfForTest();
+resetFirmsListFrpForTest();
 const NOW = Date.UTC(2026, 6, 17, 4, 0);
 
 function fire(overrides = {}) {

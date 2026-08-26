@@ -12,6 +12,11 @@ import {
   fireMeetsListConf,
   getFirmsListConf,
 } from './firmsListConfFilter.js';
+import {
+  fireMeetsListFrp,
+  getFirmsListFrp,
+  getFirmsListSelectedId,
+} from './firmsListFrpFilter.js';
 
 /** Hosted list ceiling: nearest detections to the current camera. */
 export const FIRMS_LIST_LIMIT = 50;
@@ -35,38 +40,58 @@ export const FIRMS_ACKNOWLEDGEMENT =
 
 /**
  * Rank fires by great-circle distance to the camera and cap the list.
- * List-confidence chips apply before the cap so High / Nominal+ can fill
- * the 50 rows from farther detections.
- * @param {?Array<{lat?: number, lon?: number, confidence?: *}>} fires
+ * List-confidence and list-FRP chips AND before the cap so High / 100+ MW
+ * can fill the 50 rows from farther detections. A selected fire always stays.
+ * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *}>} fires
  * @param {{lat?: number, lon?: number}|null} origin
  * @param {number} [limit=FIRMS_LIST_LIMIT]
  * @param {string} [listConf]
+ * @param {string} [listFrp]
+ * @param {string|null} [selectedId]
  * @returns {Array<object>}
  */
-export function listNearestFires(fires, origin, limit = FIRMS_LIST_LIMIT, listConf) {
+export function listNearestFires(
+  fires,
+  origin,
+  limit = FIRMS_LIST_LIMIT,
+  listConf,
+  listFrp,
+  selectedId,
+) {
   if (!Array.isArray(fires)) return [];
   const originLat = Number(origin?.lat);
   const originLon = Number(origin?.lon);
   const hasOrigin = Number.isFinite(originLat) && Number.isFinite(originLon);
   const cap = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : FIRMS_LIST_LIMIT;
   const conf = listConf === undefined ? getFirmsListConf() : listConf;
+  const frp = listFrp === undefined ? getFirmsListFrp() : listFrp;
+  const selected = selectedId === undefined ? getFirmsListSelectedId() : selectedId;
+  const selectedKey = selected == null || selected === '' ? '' : String(selected);
   const ranked = [];
   for (const fire of fires) {
     const lat = Number(fire?.lat);
     const lon = Number(fire?.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-    if (!fireMeetsListConf(fire, conf)) continue;
+    const id = fire?.id || fireDetectionKey(fire);
+    const isSelected = Boolean(selectedKey) && String(id) === selectedKey;
+    if (!isSelected && !fireMeetsListConf(fire, conf)) continue;
+    if (!isSelected && !fireMeetsListFrp(fire, frp, { selectedId: selectedKey })) continue;
     const distanceKm = hasOrigin ? greatCircleKm(originLat, originLon, lat, lon) : Number.POSITIVE_INFINITY;
     ranked.push({
       ...fire,
-      id: fireDetectionKey(fire),
+      id,
       lat,
       lon,
       distanceKm,
     });
   }
   ranked.sort((a, b) => a.distanceKm - b.distanceKm || b.frp - a.frp);
-  return ranked.slice(0, cap);
+  const capped = ranked.slice(0, cap);
+  if (!selectedKey) return capped;
+  if (capped.some((row) => String(row.id) === selectedKey)) return capped;
+  const kept = ranked.find((row) => String(row.id) === selectedKey);
+  if (!kept) return capped;
+  return [kept, ...capped].slice(0, Math.max(cap, 1));
 }
 
 /**
@@ -113,6 +138,8 @@ export function resolveFireListView({
   camera = null,
   now = Date.now(),
   listConf,
+  listFrp,
+  selectedId,
 } = {}) {
   const acknowledgement = FIRMS_ACKNOWLEDGEMENT;
   if (keyRequired) {
@@ -124,7 +151,7 @@ export function resolveFireListView({
   if (loading && (!Array.isArray(fires) || fires.length === 0)) {
     return { status: 'loading', copy: FIRMS_LIST_LOADING_COPY, rows: [], acknowledgement };
   }
-  const nearest = listNearestFires(fires, camera, FIRMS_LIST_LIMIT, listConf);
+  const nearest = listNearestFires(fires, camera, FIRMS_LIST_LIMIT, listConf, listFrp, selectedId);
   if (!nearest.length) {
     return { status: 'unavailable', copy: FIRMS_LIST_EMPTY_COPY, rows: [], acknowledgement };
   }

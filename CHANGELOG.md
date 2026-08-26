@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has client-only exclusive **All | 10+ MW | 100+ MW**
+  FRP-floor chips. Default **All** keeps 1 / 10 / 100 MW on the current
+  50-nearest ranking. **10+ MW** drops 1 MW. **100+ MW** keeps 100 and
+  drops 10. Missing or non-finite FRP stays visible. A selected fire
+  always stays. Chips AND with Plan 210 list confidence and apply before
+  the 50-row cap on the already-fetched `/api/firms` snapshot — no extra
+  NASA fetch and no new `/api`. Distinct from the globe FRP 10 / 50 / 100
+  chips. Preference persists as `meridian.firmsListFrp`
+  (LayerStateCoordinator restore, no share-URL write). NASA FIRMS
+  acknowledgement is unchanged.
 - Dams in-view list has a client-only **Named only** toggle next to the
   Plan 205 **All | 10+ MW | 100+ MW** output-floor chips. Default **off**
   keeps the current roster, including fallback **Dam** rows when OSM left
