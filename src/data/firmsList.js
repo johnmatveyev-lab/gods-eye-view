@@ -6,6 +6,12 @@
 
 import { greatCircleKm } from './routePlausible.js';
 import { fireDetectionKey, satelliteShortName } from './firmsLabels.js';
+import {
+  FIRMS_LIST_CONF_HIGH_MIN,
+  FIRMS_LIST_CONF_NOMINAL_MIN,
+  fireMeetsListConf,
+  getFirmsListConf,
+} from './firmsListConfFilter.js';
 
 /** Hosted list ceiling: nearest detections to the current camera. */
 export const FIRMS_LIST_LIMIT = 50;
@@ -29,22 +35,27 @@ export const FIRMS_ACKNOWLEDGEMENT =
 
 /**
  * Rank fires by great-circle distance to the camera and cap the list.
- * @param {?Array<{lat?: number, lon?: number}>} fires
+ * List-confidence chips apply before the cap so High / Nominal+ can fill
+ * the 50 rows from farther detections.
+ * @param {?Array<{lat?: number, lon?: number, confidence?: *}>} fires
  * @param {{lat?: number, lon?: number}|null} origin
  * @param {number} [limit=FIRMS_LIST_LIMIT]
+ * @param {string} [listConf]
  * @returns {Array<object>}
  */
-export function listNearestFires(fires, origin, limit = FIRMS_LIST_LIMIT) {
+export function listNearestFires(fires, origin, limit = FIRMS_LIST_LIMIT, listConf) {
   if (!Array.isArray(fires)) return [];
   const originLat = Number(origin?.lat);
   const originLon = Number(origin?.lon);
   const hasOrigin = Number.isFinite(originLat) && Number.isFinite(originLon);
   const cap = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : FIRMS_LIST_LIMIT;
+  const conf = listConf === undefined ? getFirmsListConf() : listConf;
   const ranked = [];
   for (const fire of fires) {
     const lat = Number(fire?.lat);
     const lon = Number(fire?.lon);
     if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+    if (!fireMeetsListConf(fire, conf)) continue;
     const distanceKm = hasOrigin ? greatCircleKm(originLat, originLon, lat, lon) : Number.POSITIVE_INFINITY;
     ranked.push({
       ...fire,
@@ -101,6 +112,7 @@ export function resolveFireListView({
   fires = [],
   camera = null,
   now = Date.now(),
+  listConf,
 } = {}) {
   const acknowledgement = FIRMS_ACKNOWLEDGEMENT;
   if (keyRequired) {
@@ -112,7 +124,7 @@ export function resolveFireListView({
   if (loading && (!Array.isArray(fires) || fires.length === 0)) {
     return { status: 'loading', copy: FIRMS_LIST_LOADING_COPY, rows: [], acknowledgement };
   }
-  const nearest = listNearestFires(fires, camera);
+  const nearest = listNearestFires(fires, camera, FIRMS_LIST_LIMIT, listConf);
   if (!nearest.length) {
     return { status: 'unavailable', copy: FIRMS_LIST_EMPTY_COPY, rows: [], acknowledgement };
   }
@@ -147,7 +159,7 @@ function formatDistanceKm(distanceKm) {
 
 function confidenceBucket(confidence) {
   const value = Number(confidence);
-  if (value >= 0.75) return 'high';
-  if (value >= 0.45) return 'nominal';
+  if (value >= FIRMS_LIST_CONF_HIGH_MIN) return 'high';
+  if (value >= FIRMS_LIST_CONF_NOMINAL_MIN) return 'nominal';
   return 'low';
 }

@@ -7,6 +7,12 @@
 
 import * as Cesium from 'cesium';
 import { FIRMS_ACKNOWLEDGEMENT, FIRMS_LIST_ENABLE_COPY, resolveFireListView } from './firmsList.js';
+import {
+  getFirmsListConf,
+  hydrateFirmsListConf,
+  setFirmsListConf,
+  subscribeFirmsListConf,
+} from './firmsListConfFilter.js';
 
 /**
  * Bind the FIRES panel to the live FIRMS layer and camera.
@@ -28,7 +34,9 @@ export function attachFirmsListPanel({
   const list = root.querySelector('#fires-list');
   const meta = root.querySelector('#fires-list-meta');
   const ack = root.querySelector('#fires-list-ack');
+  const confChips = root.querySelector('#fires-list-conf-chips');
   let openedForEnable = false;
+  hydrateFirmsListConf();
 
   function firmsModule() {
     return dataManager?.layers?.get('local-firms')?.module || null;
@@ -45,9 +53,21 @@ export function attachFirmsListPanel({
     };
   }
 
+  function syncListConfChips(enabled) {
+    if (!confChips) return;
+    confChips.hidden = enabled !== true;
+    const current = getFirmsListConf();
+    for (const chip of confChips.querySelectorAll('[data-firms-list-conf]')) {
+      const active = chip.dataset.firmsListConf === current;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
   function render() {
     const layer = firmsModule();
     const enabled = dataManager?.isEnabled?.('local-firms') === true;
+    syncListConfChips(enabled);
     const view = typeof layer?.getFireListView === 'function'
       ? layer.getFireListView({ camera: cameraOrigin() })
       : resolveFireListView({
@@ -84,6 +104,13 @@ export function attachFirmsListPanel({
     firmsModule()?.focusFireByKey?.(button.dataset.fireId);
   }
 
+  function onConfChipClick(event) {
+    const chip = event.target?.closest?.('[data-firms-list-conf]');
+    if (!chip || !confChips?.contains(chip)) return;
+    setFirmsListConf(chip.dataset.firmsListConf);
+    render();
+  }
+
   function onLayerChange(change) {
     render();
     if (change?.layerId && change.layerId !== 'local-firms') return;
@@ -96,9 +123,11 @@ export function attachFirmsListPanel({
   }
 
   list?.addEventListener('click', onListClick);
+  confChips?.addEventListener('click', onConfChipClick);
   const unsubscribe = typeof dataManager?.subscribe === 'function'
     ? dataManager.subscribe(onLayerChange)
     : null;
+  const unsubscribeConf = subscribeFirmsListConf(() => render());
   const removeMoveEnd = viewer?.camera?.moveEnd?.addEventListener?.(() => {
     if (dataManager?.isEnabled?.('local-firms')) render();
   });
@@ -107,7 +136,9 @@ export function attachFirmsListPanel({
 
   return () => {
     list?.removeEventListener('click', onListClick);
+    confChips?.removeEventListener('click', onConfChipClick);
     unsubscribe?.();
+    unsubscribeConf();
     if (typeof removeMoveEnd === 'function') removeMoveEnd();
   };
 }

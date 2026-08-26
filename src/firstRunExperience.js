@@ -95,7 +95,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         FIRMS track-size chips (`meridian.firmsTrack`),
  *                         Quake list magnitude-floor chips
  *                         (`meridian.quakeListMag`),
- *                         dam output-floor chips (`meridian.damOutput`).
+ *                         dam output-floor chips (`meridian.damOutput`),
+ *                         FIRMS list confidence chips (`meridian.firmsListConf`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
@@ -107,7 +108,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setLaunchTimeWindow` / `setLaunchWebcastOnly` /
  *                         `setLaunchProbabilityFilter` /
  *                         `setLaunchHideUnknownSite` /
- *                         `setEarthquakeListMagFilter`,
+ *                         `setEarthquakeListMagFilter` /
+ *                         `setFirmsListConf`,
  *                         which would persist a display choice nobody made.
  *
  * The two Context missions deliberately reuse `styleManager.setContextMode`, the

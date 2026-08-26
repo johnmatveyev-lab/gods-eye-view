@@ -201,6 +201,12 @@ import {
   normalizeTrackCeiling,
 } from './data/firmsTrackFilter.js';
 import {
+  getFirmsListConf,
+  hydrateFirmsListConf,
+  normalizeFirmsListConf,
+  setFirmsListConf,
+} from './data/firmsListConfFilter.js';
+import {
   firmsSensorFilterFlags,
   toggleFirmsSensor,
 } from './data/firmsSensorFilter.js';
@@ -2867,6 +2873,7 @@ export class StyleManager {
     this._firmsBrightnessTi5Chips = document.getElementById('fires-brightness-ti5-chips');
     this._firmsScanChips = document.getElementById('fires-scan-chips');
     this._firmsTrackChips = document.getElementById('fires-track-chips');
+    this._firmsListConfChips = document.getElementById('fires-list-conf-chips');
     this._scenePanel = document.getElementById('scene-panel');
     this._cctvPanel = document.getElementById('cctv-panel');
     this._radioPanel = document.getElementById('radio-panel');
@@ -3416,6 +3423,7 @@ export class StyleManager {
     this._initFirmsBrightnessTi5Chips();
     this._initFirmsScanChips();
     this._initFirmsTrackChips();
+    this._initFirmsListConfChips();
     this._initInstallationClassChips();
     this._initInstallationFootprintChip();
     this._initInstallationNamedChip();
@@ -5568,6 +5576,7 @@ export class StyleManager {
           this._syncFirmsBrightnessTi5Chips();
           this._syncFirmsScanChips();
           this._syncFirmsTrackChips();
+          this._syncFirmsListConfChips();
         }
         if (change?.layerId === 'ais-live-vessels') {
           this._syncAisTypeChips();
@@ -12088,6 +12097,31 @@ export class StyleManager {
       this._syncFirmsTrackChips();
     });
     this._syncFirmsTrackChips();
+  }
+
+  _syncFirmsListConfChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsListConfChips) this._firmsListConfChips.hidden = !enabled;
+    const current = getFirmsListConf();
+    const chips = this._firmsListConfChips?.querySelectorAll?.('[data-firms-list-conf]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsListConf === current;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsListConfChips() {
+    hydrateFirmsListConf();
+    if (!this._firmsListConfChips) return;
+    this._firmsListConfChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-list-conf]');
+      if (!chip || !this._firmsListConfChips.contains(chip)) return;
+      setFirmsListConf(normalizeFirmsListConf(chip.dataset.firmsListConf));
+      this._syncFirmsListConfChips();
+    });
+    this._syncFirmsListConfChips();
   }
 
   _syncInstallationClassChips() {
