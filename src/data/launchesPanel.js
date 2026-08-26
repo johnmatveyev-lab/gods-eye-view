@@ -8,6 +8,8 @@
  * Mapped only then hides rows missing finite pad lat/lon.
  * Exclusive All | Go | TBD chips then re-filter the copied `status` name.
  * Hide no provider then drops rows whose copied provider is missing.
+ * Hide no site then drops rows whose copied launchSite is empty or the
+ * Unknown launch site fallback.
  */
 
 import {
@@ -23,6 +25,10 @@ import {
   filterLaunchListByProvider,
 } from './launchListProviderFilter.js';
 import {
+  DEFAULT_LAUNCH_LIST_HIDE_NO_SITE,
+  filterLaunchListBySite,
+} from './launchListSiteFilter.js';
+import {
   DEFAULT_LAUNCH_LIST_STATUS_FILTER,
   filterLaunchListByStatus,
 } from './launchListStatusFilter.js';
@@ -35,6 +41,7 @@ export const LAUNCHES_PANEL_LSP_CHIPS_ID = 'launches-panel-lsp-chips';
 export const LAUNCHES_PANEL_MAPPED_CHIPS_ID = 'launches-panel-mapped-chips';
 export const LAUNCHES_PANEL_STATUS_CHIPS_ID = 'launches-panel-status-chips';
 export const LAUNCHES_PANEL_PROVIDER_CHIPS_ID = 'launches-panel-provider-chips';
+export const LAUNCHES_PANEL_SITE_CHIPS_ID = 'launches-panel-site-chips';
 /** Same feed the globe layer already uses. Do not invent another route. */
 export const LAUNCHES_FEED_URL = '/api/launches';
 /** Same close-pad range Space Missions already uses for pad focus. */
@@ -104,10 +111,11 @@ function compactLaunchLabel(name, maxLength = 27) {
  * Mapped only then drops rows missing finite pad coords; off keeps
  * those rows selectable. Exclusive All | Go | TBD chips then re-filter
  * the copied `status` name. Hide no provider then drops rows whose
- * copied provider is missing / empty / whitespace. A selected id always stays.
+ * copied provider is missing / empty / whitespace. Hide no site then
+ * drops empty / whitespace / Unknown launch site. A selected id always stays.
  * @param {object|Array|null} payload `{results:[…]}` or a launch array.
  * @param {unknown} [filter]
- * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown}} [options]
+ * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown, hideNoSite?: unknown}} [options]
  * @returns {Array<object>}
  */
 export function launchesPanelRows(
@@ -118,6 +126,7 @@ export function launchesPanelRows(
     selectedId = null,
     statusFilter = DEFAULT_LAUNCH_LIST_STATUS_FILTER,
     hideNoProvider = DEFAULT_LAUNCH_LIST_HIDE_NO_PROVIDER,
+    hideNoSite = DEFAULT_LAUNCH_LIST_HIDE_NO_SITE,
   } = {},
 ) {
   const launches = Array.isArray(payload) ? payload : payload?.results;
@@ -139,13 +148,17 @@ export function launchesPanelRows(
       source: launch?.source || 'Launch Library 2',
     };
   });
-  return filterLaunchListByProvider(
-    filterLaunchListByStatus(
-      filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
-      statusFilter,
+  return filterLaunchListBySite(
+    filterLaunchListByProvider(
+      filterLaunchListByStatus(
+        filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
+        statusFilter,
+        selectedId,
+      ),
+      hideNoProvider,
       selectedId,
     ),
-    hideNoProvider,
+    hideNoSite,
     selectedId,
   );
 }
@@ -231,6 +244,7 @@ export function launchesPanelLoadingPresentation() {
  * @param {string|null} [input.selectedId]
  * @param {unknown} [input.statusFilter]
  * @param {unknown} [input.hideNoProvider]
+ * @param {unknown} [input.hideNoSite]
  * @returns {Promise<object>}
  */
 export async function loadLaunchesPanelPayload({
@@ -242,6 +256,7 @@ export async function loadLaunchesPanelPayload({
   selectedId = null,
   statusFilter = DEFAULT_LAUNCH_LIST_STATUS_FILTER,
   hideNoProvider = DEFAULT_LAUNCH_LIST_HIDE_NO_PROVIDER,
+  hideNoSite = DEFAULT_LAUNCH_LIST_HIDE_NO_SITE,
 } = {}) {
   try {
     const response = await fetchImpl(url);
@@ -252,6 +267,7 @@ export async function loadLaunchesPanelPayload({
       selectedId,
       statusFilter,
       hideNoProvider,
+      hideNoSite,
     });
     return {
       ...launchesPanelEmptyPresentation({ available: true, items: rows, payload }),
@@ -264,6 +280,7 @@ export async function loadLaunchesPanelPayload({
         selectedId,
         statusFilter,
         hideNoProvider,
+        hideNoSite,
       });
       if (rows.length) {
         return {
