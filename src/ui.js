@@ -493,6 +493,11 @@ import {
   writeDamOutputOnly,
 } from './data/damsOutputOnlyFilter.js';
 import {
+  normalizeDamDatedOnly,
+  readDamDatedOnly,
+  writeDamDatedOnly,
+} from './data/damsDatedOnlyFilter.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -3080,6 +3085,7 @@ export class StyleManager {
     this._damsRiverChips = document.getElementById('dams-river-chips');
     this._damsWikiChips = document.getElementById('dams-wiki-chips');
     this._damsOutputOnlyChips = document.getElementById('dams-output-only-chips');
+    this._damsDatedOnlyChips = document.getElementById('dams-dated-only-chips');
     this._aisTypeChips = document.getElementById('ais-type-chips');
     this._aisParkedChips = document.getElementById('ais-parked-chips');
     this._aisMinSpeedChips = document.getElementById('ais-min-speed-chips');
@@ -3556,6 +3562,7 @@ export class StyleManager {
     this._initDamsRiverChip();
     this._initDamsWikiChip();
     this._initDamsOutputOnlyChip();
+    this._initDamsDatedOnlyChip();
     this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
@@ -5689,6 +5696,7 @@ export class StyleManager {
     this._syncDamsRiverChip();
     this._syncDamsWikiChip();
     this._syncDamsOutputOnlyChip();
+    this._syncDamsDatedOnlyChip();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5711,6 +5719,7 @@ export class StyleManager {
             this._syncDamsRiverChip();
             this._syncDamsWikiChip();
             this._syncDamsOutputOnlyChip();
+            this._syncDamsDatedOnlyChip();
           }
         }
         if (change?.layerId === 'military-installations') {
@@ -12106,6 +12115,7 @@ export class StyleManager {
       getRiverOnly: () => readDamRiverOnly(),
       getWikiOnly: () => readDamWikiOnly(),
       getOutputOnly: () => readDamOutputOnly(),
+      getDatedOnly: () => readDamDatedOnly(),
       getSelectedId: () => {
         const entity = this.viewer?.selectedEntity;
         if (entity?.__localLayerId !== DAMS_LAYER_ID) return null;
@@ -12283,6 +12293,31 @@ export class StyleManager {
       this._damsInViewList?.refresh();
     });
     this._syncDamsOutputOnlyChip();
+  }
+
+  _syncDamsDatedOnlyChip() {
+    const enabled = this._dataManager?.isEnabled?.(DAMS_LAYER_ID) === true;
+    if (this._damsDatedOnlyChips) this._damsDatedOnlyChips.hidden = !enabled;
+    const only = normalizeDamDatedOnly(readDamDatedOnly()) === true;
+    const chips = this._damsDatedOnlyChips?.querySelectorAll?.('[data-dam-dated-only]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initDamsDatedOnlyChip() {
+    if (!this._damsDatedOnlyChips) return;
+    this._damsDatedOnlyChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dam-dated-only]');
+      if (!chip || !this._damsDatedOnlyChips.contains(chip)) return;
+      const current = normalizeDamDatedOnly(readDamDatedOnly()) === true;
+      writeDamDatedOnly(!current);
+      this._syncDamsDatedOnlyChip();
+      this._damsInViewList?.refresh();
+    });
+    this._syncDamsDatedOnlyChip();
   }
 
   /**
