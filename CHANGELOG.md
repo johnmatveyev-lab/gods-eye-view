@@ -7,6 +7,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no type name** toggle next to
+  Hide no type. Default **off** keeps the current draw, including
+  missing / null / empty / whitespace `typeName`. **On** hides those and
+  keeps a published name such as "Boeing 737-800". After QA 50, `typeCode`
+  often arrives this poll from adsb.lol `t` while `typeName` stays
+  unpublished until adsbdb returns — typeCode present + typeName missing
+  still hides when this chip is on. This is presence-only, not a typeCode,
+  identified-only, category, position-time, or hide-ground chip. The
+  selected/tracked contact always stays. AND with Hide no type (214),
+  Identified only (188), Hide no reg (222), Hide no callsign (227), Hide
+  no category (284), Hide no position time (294), and the rest. Distinct
+  from those and from hide-ground. Uses the already-written adsbdb
+  `typeName` field — no extra fetch and no new `/api`. Preference
+  persists as `meridian.flightHideNoTypeName` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Military flights
+  and AIS are unchanged. OpenSky stays disabled.
 - Dams in-view list has a client-only **Website only** toggle next to
   **Method only**. Default **off** keeps the current roster, including
   plants with no OSM website. On hides missing / empty / whitespace-only
