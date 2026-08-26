@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Datacenters in-view list has a client-only **Website only** toggle next
+  to Named only. Default **off** keeps the current in-view OSM list,
+  including missing, empty, and whitespace website tags. **On** is
+  presence-only: it hides those unlinked rows and keeps a tagged site
+  such as Equinix ST4. The selected id always stays when it already
+  passed the other matchers. AND with Plan 206 operator chips and Plan
+  270 Named only. Chip changes re-filter the already-bundled OSM / ODbL
+  snapshot via `getListPayload()` and do not touch globe stems — no
+  Overpass, no extra fetch, and no `/api`. Preference persists as
+  `meridian.dcWebsiteOnly` (`1` / `0`; LayerStateCoordinator restore, no
+  share-URL write). Distinct from Plan 193 Hide no operator, Plan 206
+  operator chips, and Plan 270 Named only.
 - FIRMS globe has a client-only **Hide no track** toggle after Hide no
   FRP. Default **off** keeps the current overlay, including missing /
   non-finite / `trackKm<=0`. **On** keeps `trackKm > 0` and drops those

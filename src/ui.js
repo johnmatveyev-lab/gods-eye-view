@@ -461,6 +461,11 @@ import {
   setDatacenterListNamedOnly,
 } from './data/datacenterListNamedFilter.js';
 import {
+  getDatacenterListWebsiteOnly,
+  hydrateDatacenterListWebsiteOnly,
+  setDatacenterListWebsiteOnly,
+} from './data/datacenterListWebsiteFilter.js';
+import {
   DAMS_LAYER_ID,
   bindDamsInViewList,
   damFlyDestination,
@@ -3083,6 +3088,7 @@ export class StyleManager {
     this._installationListOsmChips = document.getElementById('installation-list-osm-chips');
     this._datacenterOperatorChips = document.getElementById('datacenter-operator-chips');
     this._datacenterNamedChips = document.getElementById('datacenter-named-chips');
+    this._datacenterWebsiteChips = document.getElementById('datacenter-website-chips');
     this._damsOutputChips = document.getElementById('dams-output-chips');
     this._damsNamedChips = document.getElementById('dams-named-chips');
     this._damsOperatorChips = document.getElementById('dams-operator-chips');
@@ -3554,6 +3560,7 @@ export class StyleManager {
     this._initDatacenterInViewList();
     this._initDatacenterOperatorChips();
     this._initDatacenterNamedChip();
+    this._initDatacenterWebsiteChip();
     this._initClearSelectedLayersButton();
     this._initRestoreLiveLayersButton();
     this._initHomeViewButton();
@@ -5694,6 +5701,7 @@ export class StyleManager {
     this._datacenterInViewList?.refresh();
     this._syncDatacenterOperatorChips();
     this._syncDatacenterNamedChip();
+    this._syncDatacenterWebsiteChip();
     this._damsInViewList?.refresh();
     this._syncDamsOutputChips();
     this._syncDamsNamedChip();
@@ -5715,6 +5723,7 @@ export class StyleManager {
             this._datacenterInViewList?.refresh();
             this._syncDatacenterOperatorChips();
             this._syncDatacenterNamedChip();
+            this._syncDatacenterWebsiteChip();
           }
           if (change?.layerId === DAMS_LAYER_ID) {
             this._damsInViewList?.refresh();
@@ -13894,12 +13903,15 @@ export class StyleManager {
     const items = document.getElementById('datacenter-in-view-items');
     const count = document.getElementById('datacenter-in-view-count');
     // LayerStateCoordinator restore is enabled-only for local-datacenters and
-    // does not carry dcOperator / dcNamedOnly (no share-URL write). Re-read
-    // meridian.dcOperator and meridian.dcNamedOnly.
+    // does not carry dcOperator / dcNamedOnly / dcWebsiteOnly (no share-URL
+    // write). Re-read meridian.dcOperator, meridian.dcNamedOnly, and
+    // meridian.dcWebsiteOnly.
     hydrateDatacenterListOperator();
     hydrateDatacenterListNamedOnly();
+    hydrateDatacenterListWebsiteOnly();
     this._datacenterOperatorChips = document.getElementById('datacenter-operator-chips');
     this._datacenterNamedChips = document.getElementById('datacenter-named-chips');
+    this._datacenterWebsiteChips = document.getElementById('datacenter-website-chips');
     this._datacenterInViewList = bindDatacenterInViewList({
       root,
       items,
@@ -13981,6 +13993,30 @@ export class StyleManager {
       this._datacenterInViewList?.refresh();
     });
     this._syncDatacenterNamedChip();
+  }
+
+  _syncDatacenterWebsiteChip() {
+    const enabled = this._dataManager?.isEnabled?.(DATACENTER_LAYER_ID) === true;
+    if (this._datacenterWebsiteChips) this._datacenterWebsiteChips.hidden = !enabled;
+    const only = getDatacenterListWebsiteOnly() === true;
+    const chips = this._datacenterWebsiteChips?.querySelectorAll?.('[data-dc-website]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initDatacenterWebsiteChip() {
+    if (!this._datacenterWebsiteChips) return;
+    this._datacenterWebsiteChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dc-website]');
+      if (!chip || !this._datacenterWebsiteChips.contains(chip)) return;
+      setDatacenterListWebsiteOnly(!getDatacenterListWebsiteOnly());
+      this._syncDatacenterWebsiteChip();
+      this._datacenterInViewList?.refresh();
+    });
+    this._syncDatacenterWebsiteChip();
   }
 
   /** Wire fullscreen on the document root so #cesium-credits stays painted. */

@@ -8600,6 +8600,41 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
   border-color: var(--glass-border-hover);
 }
 
+#datacenter-in-view .datacenter-website-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 8px;
+}
+
+#datacenter-in-view .datacenter-website-chips[hidden] {
+  display: none;
+}
+
+#datacenter-in-view .datacenter-website-chip {
+  padding: 3px 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+#datacenter-in-view .datacenter-website-chip.active {
+  border-color: var(--glass-border-hover);
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+}
+
+#datacenter-in-view .datacenter-website-chip:hover,
+#datacenter-in-view .datacenter-website-chip:focus-visible {
+  border-color: var(--glass-border-hover);
+}
+
 #datacenter-in-view .in-view-site-list-items {
   display: flex;
   flex-direction: column;
