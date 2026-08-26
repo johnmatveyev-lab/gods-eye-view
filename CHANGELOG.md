@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Hide no program** toggle
+  after Hide no country. Default **off** keeps the current list,
+  including no-program rows. **On** keeps rows whose copied `program`
+  is a non-empty trimmed name (first published `program.name` on the
+  already-fetched `/api/launches` payload); missing / empty array /
+  whitespace drop. A selected row always stays if it passed the other
+  filters. AND after Plan 295 Hide no country. Re-filters the
+  already-fetched `/api/launches` roster — no extra LL2 fetch and no
+  new `/api`. Preference persists as `meridian.launchListHideNoProgram`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write). This
+  is a leftover presence filter, not a program-name chip and not Hide
+  no mission (`mission.name`).
 - Datacenters in-view list has a client-only **Owner only** toggle after
   Dated only. Default **off** keeps the current in-view OSM list,
   including missing, empty, and whitespace `owner`. **On** hides those
