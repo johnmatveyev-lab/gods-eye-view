@@ -90,6 +90,14 @@ import {
   subscribeHideNoCallsignEnabled,
 } from './flightHideNoCallsignFilter.js';
 import {
+  getHideNoHeadingEnabled,
+  hideNoHeadingChipModel,
+  hydrateHideNoHeadingEnabled,
+  passesHideNoHeadingFilter,
+  setHideNoHeadingEnabled,
+  subscribeHideNoHeadingEnabled,
+} from './flightHideNoHeadingFilter.js';
+import {
   aircraftMatchesAltitudeBand,
   getAltitudeBand,
   hydrateAltitudeBand,
@@ -459,6 +467,14 @@ function _hideNoCallsignMatcher(contact) {
   return passesHideNoCallsignFilter({
     callsign: contact?.callsign,
     hideNoCallsign: getHideNoCallsignEnabled(),
+  });
+}
+
+/** PLAN 234 — hide contacts whose true_track is not finite. 0 (north) stays. */
+function _hideNoHeadingMatcher(contact) {
+  return passesHideNoHeadingFilter({
+    true_track: contact?.true_track,
+    hideNoHeading: getHideNoHeadingEnabled(),
   });
 }
 
@@ -852,6 +868,8 @@ hydrateHideNoRegEnabled();
 subscribeHideNoRegEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoCallsignEnabled();
 subscribeHideNoCallsignEnabled(_applyAltitudeBandVisibility);
+hydrateHideNoHeadingEnabled();
+subscribeHideNoHeadingEnabled(_applyAltitudeBandVisibility);
 
 /** Whether this contact is inside the current flights altitude band. */
 function _inAltitudeBand(icao24, info = _flightData.get(icao24)) {
@@ -895,7 +913,7 @@ function _verticalRateAndMatcher(contact) {
 }
 
 /**
- * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-reg × hide-no-callsign).
+ * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-reg × hide-no-callsign × hide-no-heading).
  * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
  * not here — counts stay honest.
  */
@@ -904,7 +922,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher],
   });
 }
 
@@ -4337,7 +4355,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher],
   });
 }
 
@@ -5208,7 +5226,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, hideNoHeading?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5297,6 +5315,10 @@ const flightsLayer = {
       setHideNoCallsignEnabled(params.hideNoCallsign);
       _applyInFlightFilterVisibility();
     }
+    if (typeof params.hideNoHeading === 'boolean' && params.hideNoHeading !== getHideNoHeadingEnabled()) {
+      setHideNoHeadingEnabled(params.hideNoHeading);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -5332,6 +5354,7 @@ const flightsLayer = {
       hideNoType: getHideNoTypeEnabled(),
       hideNoReg: getHideNoRegEnabled(),
       hideNoCallsign: getHideNoCallsignEnabled(),
+      hideNoHeading: getHideNoHeadingEnabled(),
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),
@@ -5356,6 +5379,7 @@ const flightsLayer = {
         hideNoTypeChipModel(getHideNoTypeEnabled()),
         hideNoRegChipModel(getHideNoRegEnabled()),
         hideNoCallsignChipModel(getHideNoCallsignEnabled()),
+        hideNoHeadingChipModel(getHideNoHeadingEnabled()),
       ],
       field: callsignPrefixRowField(),
     };
