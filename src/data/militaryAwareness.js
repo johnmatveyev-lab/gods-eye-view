@@ -67,12 +67,22 @@ import {
   passesAwarenessSitesFilter,
   setAwarenessSitesOnlyEnabled,
 } from './awarenessSitesFilter.js';
+import {
+  AWARENESS_MILITARY_CHIP_LABEL,
+  AWARENESS_MILITARY_CHIP_TITLE,
+  filterAwarenessMilitaryContacts,
+  getAwarenessMilitaryOnlyEnabled,
+  hydrateAwarenessMilitaryOnlyEnabled,
+  passesAwarenessMilitaryFilter,
+  setAwarenessMilitaryOnlyEnabled,
+} from './awarenessMilitaryFilter.js';
 
 hydrateAwarenessIdentifiedEnabled();
 hydrateAwarenessRangeFilter();
 hydrateAwarenessAircraftOnlyEnabled();
 hydrateAwarenessVesselsOnlyEnabled();
 hydrateAwarenessSitesOnlyEnabled();
+hydrateAwarenessMilitaryOnlyEnabled();
 
 const AIRCRAFT_DEPENDENCIES = ['flights', 'military'];
 const DEFERRED_DEPENDENCIES = ['ais-live-vessels', 'military-installations'];
@@ -320,6 +330,12 @@ function ensurePanel() {
       if (action.dataset.awarenessAction === 'sites-only') {
         militaryAwarenessLayer.setParams({
           sitesOnly: !getAwarenessSitesOnlyEnabled(),
+        });
+        if (!state.results) hidePanel();
+      }
+      if (action.dataset.awarenessAction === 'military-only') {
+        militaryAwarenessLayer.setParams({
+          militaryOnly: !getAwarenessMilitaryOnlyEnabled(),
         });
         if (!state.results) hidePanel();
       }
@@ -740,8 +756,12 @@ function filterIdentifiedRoster(items, subject, layerId) {
     vesselsOnly: getAwarenessVesselsOnlyEnabled(),
     subjectId: subject?.id,
   });
-  return filterAwarenessSitesContacts(vessels, {
+  const sites = filterAwarenessSitesContacts(vessels, {
     sitesOnly: getAwarenessSitesOnlyEnabled(),
+    subjectId: subject?.id,
+  });
+  return filterAwarenessMilitaryContacts(sites, {
+    militaryOnly: getAwarenessMilitaryOnlyEnabled(),
     subjectId: subject?.id,
   });
 }
@@ -761,6 +781,9 @@ function awarenessIdentifiedAllows(item, subject = state.subject) {
     subjectId: subject?.id,
   }) && passesAwarenessSitesFilter(item, {
     sitesOnly: getAwarenessSitesOnlyEnabled(),
+    subjectId: subject?.id,
+  }) && passesAwarenessMilitaryFilter(item, {
+    militaryOnly: getAwarenessMilitaryOnlyEnabled(),
     subjectId: subject?.id,
   });
 }
@@ -793,6 +816,13 @@ function sitesOnlyChipHtml() {
   </div>`;
 }
 
+function militaryOnlyChipHtml() {
+  const on = getAwarenessMilitaryOnlyEnabled() === true;
+  return `<div class="military-awareness-vessels-chips" role="group" aria-label="${AWARENESS_MILITARY_CHIP_LABEL}">
+    <button type="button" class="military-awareness-vessels-chip${on ? ' active' : ''}" data-awareness-action="military-only" aria-pressed="${on ? 'true' : 'false'}" title="${AWARENESS_MILITARY_CHIP_TITLE}">${AWARENESS_MILITARY_CHIP_LABEL}</button>
+  </div>`;
+}
+
 function rangeChipsHtml() {
   const chips = awarenessRangeChipModels(getAwarenessRangeFilter()).map((chip) => (
     `<button type="button" class="military-awareness-range-chip${chip.active ? ' active' : ''}" data-awareness-action="range" data-awareness-range="${escapeHtml(chip.id)}" aria-pressed="${chip.active ? 'true' : 'false'}" title="${escapeHtml(chip.title)}">${escapeHtml(chip.label)}</button>`
@@ -801,7 +831,7 @@ function rangeChipsHtml() {
 }
 
 function awarenessFilterChipsHtml() {
-  return `${identifiedOnlyChipHtml()}${aircraftOnlyChipHtml()}${vesselsOnlyChipHtml()}${sitesOnlyChipHtml()}${rangeChipsHtml()}`;
+  return `${identifiedOnlyChipHtml()}${aircraftOnlyChipHtml()}${vesselsOnlyChipHtml()}${sitesOnlyChipHtml()}${militaryOnlyChipHtml()}${rangeChipsHtml()}`;
 }
 
 function normalizeAircraftClass(value) {
@@ -868,6 +898,13 @@ function selectNavigationTargets(sourceCohorts, subject, visitedKeys, {
     layerId: target.item?.layerId || target.layerId,
   }, {
     sitesOnly: getAwarenessSitesOnlyEnabled(),
+    subjectId: subject?.id,
+  }));
+  targets = targets.filter((target) => passesAwarenessMilitaryFilter({
+    ...target.item,
+    layerId: target.item?.layerId || target.layerId,
+  }, {
+    militaryOnly: getAwarenessMilitaryOnlyEnabled(),
     subjectId: subject?.id,
   }));
   return targets;
@@ -1976,6 +2013,11 @@ const militaryAwarenessLayer = {
       const previous = getAwarenessSitesOnlyEnabled();
       sitesChanged = setAwarenessSitesOnlyEnabled(params.sitesOnly) !== previous;
     }
+    let militaryChanged = false;
+    if (typeof params.militaryOnly === 'boolean') {
+      const previous = getAwarenessMilitaryOnlyEnabled();
+      militaryChanged = setAwarenessMilitaryOnlyEnabled(params.militaryOnly) !== previous;
+    }
     let activation;
     if (typeof params.passive === 'boolean') {
       const wasPassive = state.passive;
@@ -1987,15 +2029,16 @@ const militaryAwarenessLayer = {
       && typeof params.aircraftOnly !== 'boolean'
       && typeof params.vesselsOnly !== 'boolean'
       && typeof params.sitesOnly !== 'boolean'
+      && typeof params.militaryOnly !== 'boolean'
     ) {
       return;
     }
-    if ((identifiedChanged || rangeChanged || aircraftChanged || vesselsChanged || sitesChanged) && state.enabled && state.subject) {
+    if ((identifiedChanged || rangeChanged || aircraftChanged || vesselsChanged || sitesChanged || militaryChanged) && state.enabled && state.subject) {
       refreshSelectedSubject(true);
     }
     return activation;
   },
-  /** @returns {{ passive: boolean, identifiedOnly: boolean, range: string, aircraftOnly: boolean, vesselsOnly: boolean, sitesOnly: boolean }} Current runtime parameters. */
+  /** @returns {{ passive: boolean, identifiedOnly: boolean, range: string, aircraftOnly: boolean, vesselsOnly: boolean, sitesOnly: boolean, militaryOnly: boolean }} Current runtime parameters. */
   getParams() {
     return {
       passive: state.passive,
@@ -2004,6 +2047,7 @@ const militaryAwarenessLayer = {
       aircraftOnly: getAwarenessAircraftOnlyEnabled(),
       vesselsOnly: getAwarenessVesselsOnlyEnabled(),
       sitesOnly: getAwarenessSitesOnlyEnabled(),
+      militaryOnly: getAwarenessMilitaryOnlyEnabled(),
     };
   },
   init(viewer) {
@@ -2012,6 +2056,7 @@ const militaryAwarenessLayer = {
     hydrateAwarenessAircraftOnlyEnabled();
     hydrateAwarenessVesselsOnlyEnabled();
     hydrateAwarenessSitesOnlyEnabled();
+    hydrateAwarenessMilitaryOnlyEnabled();
     detachRuntimeListeners();
     state.unitsUnsubscribe?.();
     state.unitsUnsubscribe = subscribeDistanceUnit(() => {

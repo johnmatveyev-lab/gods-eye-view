@@ -43,6 +43,7 @@ import { resetAwarenessRangeForTest } from './awarenessRangeFilter.js';
 import { resetAwarenessAircraftOnlyForTest } from './awarenessAircraftFilter.js';
 import { resetAwarenessVesselsOnlyForTest } from './awarenessVesselsFilter.js';
 import { resetAwarenessSitesOnlyForTest } from './awarenessSitesFilter.js';
+import { resetAwarenessMilitaryOnlyForTest } from './awarenessMilitaryFilter.js';
 
 const militaryAwarenessSource = fs.readFileSync(
   new URL('./militaryAwareness.js', import.meta.url),
@@ -2707,6 +2708,7 @@ test('awareness runtime parameters return a detached snapshot', () => {
   resetAwarenessAircraftOnlyForTest();
   resetAwarenessVesselsOnlyForTest();
   resetAwarenessSitesOnlyForTest();
+  resetAwarenessMilitaryOnlyForTest();
   militaryAwarenessLayer.setParams({ passive: false });
   const snapshot = militaryAwarenessLayer.getParams();
   militaryAwarenessLayer.setParams({ passive: true });
@@ -2717,6 +2719,7 @@ test('awareness runtime parameters return a detached snapshot', () => {
     aircraftOnly: false,
     vesselsOnly: false,
     sitesOnly: false,
+    militaryOnly: false,
   });
 });
 
