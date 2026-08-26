@@ -2934,7 +2934,8 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-vehicle-chips,
 #launches-panel .launches-panel-orbit-chips,
 #launches-panel .launches-panel-webcast-chips,
-#launches-panel .launches-panel-mission-chips {
+#launches-panel .launches-panel-mission-chips,
+#launches-panel .launches-panel-probability-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -2950,7 +2951,8 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-vehicle-chip,
 #launches-panel .launches-panel-orbit-chip,
 #launches-panel .launches-panel-webcast-chip,
-#launches-panel .launches-panel-mission-chip {
+#launches-panel .launches-panel-mission-chip,
+#launches-panel .launches-panel-probability-chip {
   padding: 2px 7px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 8px;
@@ -2981,7 +2983,9 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-webcast-chip:hover,
 #launches-panel .launches-panel-webcast-chip:focus-visible,
 #launches-panel .launches-panel-mission-chip:hover,
-#launches-panel .launches-panel-mission-chip:focus-visible {
+#launches-panel .launches-panel-mission-chip:focus-visible,
+#launches-panel .launches-panel-probability-chip:hover,
+#launches-panel .launches-panel-probability-chip:focus-visible {
   color: #d7f7f7;
   border-color: rgba(34, 230, 230, .42);
   outline: none;
@@ -3006,7 +3010,9 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-webcast-chip.active,
 #launches-panel .launches-panel-webcast-chip[aria-pressed="true"],
 #launches-panel .launches-panel-mission-chip.active,
-#launches-panel .launches-panel-mission-chip[aria-pressed="true"] {
+#launches-panel .launches-panel-mission-chip[aria-pressed="true"],
+#launches-panel .launches-panel-probability-chip.active,
+#launches-panel .launches-panel-probability-chip[aria-pressed="true"] {
   color: #22e6e6;
   border-color: #22e6e6;
   background: rgba(34, 230, 230, .12);

@@ -335,6 +335,10 @@ import {
   readLaunchListHideNoMission,
   writeLaunchListHideNoMission,
 } from './data/launchListMissionFilter.js';
+import {
+  readLaunchListHideNoProbability,
+  writeLaunchListHideNoProbability,
+} from './data/launchListProbabilityFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   getEarthquakeListAgeFilter,
@@ -3197,6 +3201,7 @@ export class StyleManager {
     this._launchesPanelOrbitChips = document.getElementById('launches-panel-orbit-chips');
     this._launchesPanelWebcastChips = document.getElementById('launches-panel-webcast-chips');
     this._launchesPanelMissionChips = document.getElementById('launches-panel-mission-chips');
+    this._launchesPanelProbabilityChips = document.getElementById('launches-panel-probability-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
     this._launchesPanelPayload = null;
@@ -11855,6 +11860,7 @@ export class StyleManager {
     this._syncLaunchesPanelOrbitChip();
     this._syncLaunchesPanelWebcastChip();
     this._syncLaunchesPanelMissionChip();
+    this._syncLaunchesPanelProbabilityChip();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11927,6 +11933,13 @@ export class StyleManager {
       if (!chip || !this._launchesPanelMissionChips.contains(chip)) return;
       writeLaunchListHideNoMission(readLaunchListHideNoMission() !== true);
       this._syncLaunchesPanelMissionChip();
+      this._reapplyLaunchesPanelLspType();
+    });
+    this._launchesPanelProbabilityChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-list-hide-no-probability]');
+      if (!chip || !this._launchesPanelProbabilityChips.contains(chip)) return;
+      writeLaunchListHideNoProbability(readLaunchListHideNoProbability() !== true);
+      this._syncLaunchesPanelProbabilityChip();
       this._reapplyLaunchesPanelLspType();
     });
   }
@@ -12033,6 +12046,16 @@ export class StyleManager {
     }
   }
 
+  _syncLaunchesPanelProbabilityChip() {
+    const hide = readLaunchListHideNoProbability() === true;
+    const chips = this._launchesPanelProbabilityChips?.querySelectorAll?.('[data-launch-list-hide-no-probability]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', hide);
+      chip.setAttribute('aria-pressed', String(hide));
+    }
+  }
+
   _reapplyLaunchesPanelLspType() {
     if (this._launchesPanelPayload == null) return;
     const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter(), {
@@ -12046,6 +12069,7 @@ export class StyleManager {
       hideNoOrbit: readLaunchListHideNoOrbit(),
       webcastOnly: readLaunchListWebcastOnly(),
       hideNoMission: readLaunchListHideNoMission(),
+      hideNoProbability: readLaunchListHideNoProbability(),
     });
     this._launchesPanelRows = rows;
     this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
@@ -12096,6 +12120,7 @@ export class StyleManager {
       hideNoOrbit: readLaunchListHideNoOrbit(),
       webcastOnly: readLaunchListWebcastOnly(),
       hideNoMission: readLaunchListHideNoMission(),
+      hideNoProbability: readLaunchListHideNoProbability(),
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
     this._launchesPanelPayload = presentation.payload ?? null;

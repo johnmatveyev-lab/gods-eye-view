@@ -129,6 +129,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         (`meridian.launchListWebcastOnly`),
  *                         launch list hide-no-mission toggle
  *                         (`meridian.launchListHideNoMission`),
+ *                         launch list hide-no-probability toggle
+ *                         (`meridian.launchListHideNoProbability`),
  *                         FIRMS list FRP-floor chips (`meridian.firmsListFrp`),
  *                         FIRMS list age-floor chips (`meridian.firmsListAge`),
  *                         Context Identified only (`meridian.awarenessIdentified`),
@@ -162,6 +164,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `writeLaunchListHideNoOrbit` /
  *                         `writeLaunchListWebcastOnly` /
  *                         `writeLaunchListHideNoMission` /
+ *                         `writeLaunchListHideNoProbability` /
  *                         `setAwarenessIdentifiedEnabled` /
  *                         `setAwarenessRangeFilter` /
  *                         `setAwarenessAircraftOnlyEnabled` /

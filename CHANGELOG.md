@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Hide no probability** toggle
+  after Hide no mission. Default **off** keeps the current list, including
+  no-probability rows. **On** keeps rows whose copied `probability` is
+  finite (`Number.isFinite`; 0 stays as a real 0% go chance); missing /
+  null / non-finite drop. A selected row always stays if it passed the
+  other filters. AND after Plan 283 Hide no mission. Re-filters the
+  already-fetched `/api/launches` roster — no extra LL2 fetch and no
+  new `/api`. Preference persists as
+  `meridian.launchListHideNoProbability` (`1` / `0`; LayerStateCoordinator
+  restore, no share-URL write). This is a leftover presence filter, not
+  a 50+ / 80+ floor.
 - Civil flights have a client-only **Hide no category** toggle next to
   Hide no last contact. Default **off** keeps the current draw, including
   missing / non-finite / 0 (ADS-B "no information") `category`. **On**
