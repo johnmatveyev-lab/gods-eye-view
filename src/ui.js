@@ -248,6 +248,11 @@ import {
   writeSitesNamedOnly,
 } from './data/installationListNamedFilter.js';
 import {
+  normalizeSitesListOsmType,
+  readSitesListOsmType,
+  writeSitesListOsmType,
+} from './data/installationListOsmFilter.js';
+import {
   toggleVesselTypeFilter,
   vesselTypeFilterFlags,
 } from './data/vesselTypeFilter.js';
@@ -3012,6 +3017,7 @@ export class StyleManager {
     this._installationMappedChips = document.getElementById('installation-mapped-chips');
     this._installationListMappedChips = document.getElementById('installation-list-mapped-chips');
     this._installationListNamedChips = document.getElementById('installation-list-named-chips');
+    this._installationListOsmChips = document.getElementById('installation-list-osm-chips');
     this._damsOutputChips = document.getElementById('dams-output-chips');
     this._damsNamedChips = document.getElementById('dams-named-chips');
     this._damsOperatorChips = document.getElementById('dams-operator-chips');
@@ -3501,6 +3507,7 @@ export class StyleManager {
     this._initInstallationMappedChip();
     this._initInstallationListMappedChip();
     this._initInstallationListNamedChip();
+    this._initInstallationListOsmChips();
     this._initAisTypeChips();
     this._initAisParkedChip();
     this._initAisMinSpeedChips();
@@ -5593,6 +5600,7 @@ export class StyleManager {
     this._syncInstallationMappedChip();
     this._syncInstallationListMappedChip();
     this._syncInstallationListNamedChip();
+    this._syncInstallationListOsmChips();
     this._syncAisTypeChips();
     this._syncAisParkedChip();
     this._syncAisMinSpeedChips();
@@ -5632,6 +5640,7 @@ export class StyleManager {
           this._syncInstallationMappedChip();
           this._syncInstallationListMappedChip();
           this._syncInstallationListNamedChip();
+          this._syncInstallationListOsmChips();
           if (this._installationsListOpen) this._syncInstallationsViewportList();
         }
         if (change?.layerId === 'earthquakes') {
@@ -12612,6 +12621,33 @@ export class StyleManager {
       if (this._installationsListOpen) this._syncInstallationsViewportList();
     });
     this._syncInstallationListNamedChip();
+  }
+
+  _syncInstallationListOsmChips() {
+    const enabled = this._dataManager?.isEnabled?.('military-installations') === true;
+    if (this._installationListOsmChips) this._installationListOsmChips.hidden = !enabled;
+    const floor = readSitesListOsmType();
+    const chips = this._installationListOsmChips?.querySelectorAll?.('[data-installation-list-osm]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.installationListOsm === floor;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initInstallationListOsmChips() {
+    if (!this._installationListOsmChips) return;
+    this._installationListOsmChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-installation-list-osm]');
+      if (!chip || !this._installationListOsmChips.contains(chip)) return;
+      const next = normalizeSitesListOsmType(chip.dataset.installationListOsm);
+      if (next == null) return;
+      writeSitesListOsmType(next);
+      this._syncInstallationListOsmChips();
+      if (this._installationsListOpen) this._syncInstallationsViewportList();
+    });
+    this._syncInstallationListOsmChips();
   }
 
   _syncAisTypeChips() {

@@ -237,6 +237,11 @@
         <div class="installation-list-named-chips" id="installation-list-named-chips" role="group" aria-label="Named only (list)" hidden>
           <button type="button" class="installation-list-named-chip" data-installation-list-named="only" aria-pressed="false" title="Hide unnamed class-fallback sites from this list">Named only</button>
         </div>
+        <div class="installation-list-osm-chips" id="installation-list-osm-chips" role="group" aria-label="OSM type (list)" hidden>
+          <button type="button" class="installation-list-osm-chip active" data-installation-list-osm="all" aria-pressed="true" title="Show every listed site regardless of OSM primitive">All</button>
+          <button type="button" class="installation-list-osm-chip" data-installation-list-osm="node" aria-pressed="false" title="Show OSM point nodes in this list">Node</button>
+          <button type="button" class="installation-list-osm-chip" data-installation-list-osm="way" aria-pressed="false" title="Show OSM ways and relations in this list">Way</button>
+        </div>
       </div>
       <output data-installations-list-count>—</output>
     </div>
