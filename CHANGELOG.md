@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Quakes list has a client-only **Hide no depth** toggle after the
+  Plan 242 Hide no place chip. Default **off** keeps the current 50-row
+  nearest/recent list, including null / missing depth. **On** keeps a
+  finite `depthKm` (12 km stays) and drops missing, null, or non-finite
+  depth. Missing / null / non-finite fail closed when on. The selected
+  row always stays. Distinct from the Plan 216 fail-open depth ceiling.
+  AND after the Plan 208 magnitude floor, Plan 216 depth ceiling, Plan
+  228 age ceiling, Plan 236 range ceiling, and Plan 242 Hide no place,
+  before the 50-row cap. Place is a USGS region string, never a person
+  name. Re-applies the already-fetched USGS snapshot — no extra fetch
+  and no new `/api`. Preference persists as
+  `meridian.quakeListHideNoDepth` (`1` / `0`; LayerStateCoordinator
+  restore, no share-URL write).
 - AIS has a client-only **Hide no type** toggle after the Plan 237 **Hide no
   heading** chip. Default **off** keeps the current fleet, including empty
   and missing type. **On** keeps a non-empty trimmed type (`type_specific
