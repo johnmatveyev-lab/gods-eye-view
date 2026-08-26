@@ -7,6 +7,24 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no vertical rate** toggle after
+  Hide no geo altitude. Default **off** keeps the current draw, including
+  null, missing, and non-finite `verticalRate` / `verticalRateMps`. **On**
+  keeps a finite rate (`0` stays — real level flight; `±5` m/s stays) and
+  drops missing, null, or non-finite vertical rate. Missing / null /
+  non-finite fail closed when on. This is presence-only, not a
+  climb/level/descent chip. The selected/tracked contact always stays.
+  AND with airborne-only, altitude, heading sectors, the fail-open
+  speed-band floor, Plan 97 climb / level / descent, Emergencies only,
+  Identified only, hide-stale, class, prefix, Hide no squawk, Hide no
+  type, Hide no registration, Hide no callsign, Hide no heading, Hide no
+  country, Hide no speed, and Hide no geo altitude. Distinct from Plan 97
+  (fail-open when the rate is missing), Hide no geo altitude, Hide no
+  speed, and airborne-only / hide-ground. Re-applies the already-fetched
+  flight payload — no extra fetch and no new `/api`. Preference persists
+  as `meridian.flightHideNoVerticalRate` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Military flights
+  and AIS are unchanged.
 - Global Context has a client-only **Flights only** toggle on the Contacts
   roster, next to Military only. Default **off** keeps all four cohorts.
   **On** keeps `flights` (civil ADS-B) and drops military flights, AIS,
