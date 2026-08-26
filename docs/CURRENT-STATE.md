@@ -2,6 +2,18 @@
 
 Updated: August 25, 2026
 
+> **2026-08-25 — military named-only toggle (plan 186)** (`src/data/militaryNamedFilter.js`).
+> **Named only** chip on the Mapped Sites list, next to class chips and
+> Footprints only. Default **off** is the current named + class-labeled
+> view. On hides records whose `hasName` is false (`tags.name` /
+> `name:en` empty after trim; class fallback is not a name). Places
+> search rows stay. Selected installation stays. AND with Airfield |
+> Naval | Range | Land | Places and Footprints only. Re-applies from
+> in-memory OSM/Places records — no extra fetch. Persists as
+> `meridian.militaryNamedOnly` and `military-installations.namedOnly`
+> (`i.n.1`). Hidden when the installations layer is off. Viewport
+> refresh keeps the toggle. Client-only; no `/api`.
+
 > **2026-08-25 — AIS hide no IMO (plan 189)** (`src/data/aisHideNoImoFilter.js`).
 > **Hide no IMO** next to Hide unnamed, default **off**. Filters already-
 > fetched AISStream rows by `imo` (`String(row.imo || '')`). On hides
@@ -1810,7 +1822,7 @@ its criteria cannot be silently ignored.
 | Live Flights ✈️ | adsb.lol 250 nm regional snapshot (OpenSky disabled) | `src/data/flights.js` | `/api/opensky` (adsb.lol compatibility path) | 30s |
 | Military Flights 🎖️ | adsb.lol /v2/mil | `src/data/militaryFlights.js` | `/api/adsblol/mil` | 15s |
 | Live AIS Vessels 🚢 | AISStream websocket | `src/data/aisLiveVessels.js` | `/api/ais-live` | 60s (+800ms visibility pass) |
-| Mapped Installations ⌖ | OpenStreetMap mapped context; on-demand Google Maps Places supplement | `src/data/militaryInstallations.js` | `/api/military-installations`, `/api/google/text-search` | viewport-driven + user search; while unavailable, auto-retry 30 s → 240 s backoff. Sites list class chips Airfield / Naval / Range / Land / Places (default all on) re-filter the in-memory viewport by `record.class`; missing/unknown class and the selected installation stay. Persists on `military-installations` (`i.k.*`). Footprints only (default off) hides pins with no usable `footprint` ring; selected stays. AND with class chips. Persists as `footprintsOnly` (`i.f.1`). |
+| Mapped Installations ⌖ | OpenStreetMap mapped context; on-demand Google Maps Places supplement | `src/data/militaryInstallations.js` | `/api/military-installations`, `/api/google/text-search` | viewport-driven + user search; while unavailable, auto-retry 30 s → 240 s backoff. Sites list class chips Airfield / Naval / Range / Land / Places (default all on) re-filter the in-memory viewport by `record.class`; missing/unknown class and the selected installation stay. Persists on `military-installations` (`i.k.*`). Footprints only (default off) hides pins with no usable `footprint` ring; selected stays. AND with class chips. Persists as `footprintsOnly` (`i.f.1`). Named only (default off) hides records with `hasName === false` (class-labeled OSM ways); Places rows and the selected installation stay. AND with class chips and Footprints only. Persists as `meridian.militaryNamedOnly` and `namedOnly` (`i.n.1`). |
 | Earthquakes | USGS | `src/data/earthquakes.js` | — | 60s. Operator floor chips 2.5+ / 4.0+ / 5.0+ / 6.0+ (default 2.5+), 1h / 6h / 24h chips (default 24h; 24h matches the current all_day view), Shallow / Intermediate / Deep chips (default all on; same &lt;70 / 70–300 / ≥300 km buckets as disc color), a Tsunami only toggle (default off; `properties.tsunami === 1`, selected event stays), a Reviewed only toggle (default off; `properties.status === 'reviewed'`, selected event stays), a Felt only toggle (default off; `Number(properties.felt) &gt; 0`, selected event stays), Quake / Explosion / Quarry / Other type chips (default all on; `properties.type`, quarry/quarry blast share Quarry, missing/ice quake/other is Other, selected event stays), US / AK / CI / NC / Other network chips (default all on; `properties.net`, missing/unknown/rare nets are Other, selected event stays), and Green / Yellow / Orange / Red / None PAGER chips (default all on; `properties.alert`, missing/null is None, selected event stays) re-filter the last `all_day` GeoJSON in memory. Hosted Quakes list (`#earthquake-list-toggle`) reads this same filtered payload (cap 50) and flies to a clicked event. Failed/empty feed is UNAVAILABLE. |
 | Satellites | CelesTrak | `src/data/satellites.js` | `/api/celestrak` (hosted `api/celestrak/[...group].js`) | 120s. Operator period chips All / &lt;100m / &lt;128m (default All) re-filter the in-memory catalog by `orbitalPeriodSeconds(satrec) / 60`; missing/non-finite period and the tracked satellite stay. Persists as `meridian.satPeriod`. Operator inclination chips Eq / Mid / Polar (default all on) re-filter by `satrec.inclo` converted from radians: Eq &lt; 30°, Mid 30–80°, Polar ≥ 80°; missing/non-finite inclination and the tracked satellite stay. Persists as `meridian.satInclination`. Operator eccentricity chips All / &lt;0.01 / &lt;0.05 (default All) re-filter by `satrec.ecco` (unitless 0–1); missing/non-finite eccentricity and the tracked satellite stay. Persists as `meridian.satEccentricity`. Operator launch-year chips All / 2020s / 2010s / older (default All) re-filter by `satrec.intldesg` (57–99 → 1900s, else 2000s); missing/unparseable designators and the tracked satellite stay. Persists as `meridian.satLaunchYear`. AND with Core\|Dense, class chips, POINTS, ORBITS, period, inclination, and eccentricity. |
 | Space Missions (30d) | Launch Library 2 + CelesTrak | `src/data/rocketLaunches.js` | `/api/launches` + `/api/celestrak/active` | 5 min |

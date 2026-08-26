@@ -51,6 +51,9 @@ test('an unnamed feature reads as its class, never as a raw OSM id', () => {
     assert.doesNotMatch(record.name, /\d/, `label must carry no OSM id: ${record.name}`);
     assert.doesNotMatch(record.name, /[()]/, `label must carry no id parenthetical: ${record.name}`);
   }
+  for (const record of result.records) {
+    assert.equal(record.hasName, false, `class fallback is not a real name: ${record.name}`);
+  }
   // The id is not lost — attribution and the details panel still resolve it.
   assert.equal(result.records[0].id, 'osm:way:10981656305');
   assert.deepEqual(result.records[0].sources, [
@@ -64,6 +67,7 @@ test('a real OSM name always wins over the class label', () => {
     { type: 'way', id: 2, center: { lat: 30.1, lon: -97.1 }, tags: { military: 'airfield', 'name:en': 'Bergstrom' } },
   ] });
   assert.deepEqual(result.records.map((record) => record.name), ['Camp Swift', 'Bergstrom']);
+  assert.deepEqual(result.records.map((record) => record.hasName), [true, true]);
 });
 
 test('an unmapped class title-cases instead of leaking an underscored tag', () => {
