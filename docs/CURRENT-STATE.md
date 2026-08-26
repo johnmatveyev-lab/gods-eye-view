@@ -1885,9 +1885,14 @@ its criteria cannot be silently ignored.
 
 The left-stack **FIRES** panel lists up to 50 detections nearest the camera
 from that same trailing-24h `fires[]` payload and flies to a row with the
-existing world-focus helper. Keyless 503 / empty feed shows unavailable copy
-and does not fetch NASA from the client. The required FIRMS acknowledgement
-stays on the panel. Traffic Live/Sim is independent.
+existing world-focus helper. Exclusive list-only **All | High | Nominal+**
+confidence chips and **All | 10+ MW | 100+ MW** FRP-floor chips filter that
+snapshot before the cap (AND together; missing values stay; a selected fire
+always stays). They are distinct from the globe confidence and FRP chips and
+persist as `meridian.firmsListConf` / `meridian.firmsListFrp` only — not
+share-URL fields. Keyless 503 / empty feed shows unavailable copy and does
+not fetch NASA from the client. The required FIRMS acknowledgement stays on
+the panel. Traffic Live/Sim is independent.
 
 `src/data/militaryAwareness.js` remains registered internally as the Contacts
 coordinator, but it is not a user-visible Data Layers entry. Its visible entry
