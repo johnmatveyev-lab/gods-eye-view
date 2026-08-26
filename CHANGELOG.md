@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no sensor** toggle after Hide no
+  satellite. Default **off** keeps the current overlay, including empty and
+  named sensor strings. **On** keeps a non-empty trimmed sensor
+  (VIIRS stays) and drops empty, whitespace, or missing sensor. The
+  selected fire always stays. Chip changes re-filter the already-fetched
+  `/api/firms` payload and AND with FRP, confidence, brightness, TI5, scan,
+  track, version, area, Hide no day/night, Hide no satellite, Day | Night,
+  age, sensor, and satellite-name chips — no extra NASA fetch and no new
+  `/api`. Preference persists as `meridian.firmsHideNoSensor` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Distinct from the
+  sensor identity chips, Plan 204 scan, 211 track, 217 version, 226 area,
+  233 hide no day/night, and 238 hide no satellite. NASA FIRMS
+  acknowledgement unchanged.
 - Civil flights have a client-only **Hide no heading** toggle after Hide no
   callsign. Default **off** keeps the current draw, including missing heading
   plus 0 (north) and 270. On drops already-fetched contacts whose
