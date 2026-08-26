@@ -6,6 +6,7 @@
  * Exclusive All | Commercial | Government chips re-filter
  * `launch_service_provider.type` on that already-fetched payload.
  * Mapped only then hides rows missing finite pad lat/lon.
+ * Exclusive All | Go | TBD chips then re-filter the copied `status` name.
  */
 
 import {
@@ -16,6 +17,10 @@ import {
   DEFAULT_LAUNCH_LIST_MAPPED_ONLY,
   filterLaunchListByMappedOnly,
 } from './launchListMappedFilter.js';
+import {
+  DEFAULT_LAUNCH_LIST_STATUS_FILTER,
+  filterLaunchListByStatus,
+} from './launchListStatusFilter.js';
 
 export const LAUNCHES_PANEL_ID = 'launches-panel';
 export const LAUNCHES_PANEL_TOGGLE_ID = 'launches-panel-toggle';
@@ -23,6 +28,7 @@ export const LAUNCHES_PANEL_LIST_ID = 'launches-panel-list';
 export const LAUNCHES_PANEL_COUNT_ID = 'launches-panel-count';
 export const LAUNCHES_PANEL_LSP_CHIPS_ID = 'launches-panel-lsp-chips';
 export const LAUNCHES_PANEL_MAPPED_CHIPS_ID = 'launches-panel-mapped-chips';
+export const LAUNCHES_PANEL_STATUS_CHIPS_ID = 'launches-panel-status-chips';
 /** Same feed the globe layer already uses. Do not invent another route. */
 export const LAUNCHES_FEED_URL = '/api/launches';
 /** Same close-pad range Space Missions already uses for pad focus. */
@@ -90,10 +96,11 @@ function compactLaunchLabel(name, maxLength = 27) {
  * Exclusive LSP-type chips re-filter `launch_service_provider.type`
  * without another fetch. All leaves the current list unchanged.
  * Mapped only then drops rows missing finite pad coords; off keeps
- * those rows selectable. A selected id always stays.
+ * those rows selectable. Exclusive All | Go | TBD chips then re-filter
+ * the copied `status` name. A selected id always stays.
  * @param {object|Array|null} payload `{results:[…]}` or a launch array.
  * @param {unknown} [filter]
- * @param {{mappedOnly?: unknown, selectedId?: string|null}} [options]
+ * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown}} [options]
  * @returns {Array<object>}
  */
 export function launchesPanelRows(
@@ -102,6 +109,7 @@ export function launchesPanelRows(
   {
     mappedOnly = DEFAULT_LAUNCH_LIST_MAPPED_ONLY,
     selectedId = null,
+    statusFilter = DEFAULT_LAUNCH_LIST_STATUS_FILTER,
   } = {},
 ) {
   const launches = Array.isArray(payload) ? payload : payload?.results;
@@ -123,7 +131,11 @@ export function launchesPanelRows(
       source: launch?.source || 'Launch Library 2',
     };
   });
-  return filterLaunchListByMappedOnly(rows, mappedOnly, selectedId);
+  return filterLaunchListByStatus(
+    filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
+    statusFilter,
+    selectedId,
+  );
 }
 
 /**
@@ -205,6 +217,7 @@ export function launchesPanelLoadingPresentation() {
  * @param {unknown} [input.filter]
  * @param {unknown} [input.mappedOnly]
  * @param {string|null} [input.selectedId]
+ * @param {unknown} [input.statusFilter]
  * @returns {Promise<object>}
  */
 export async function loadLaunchesPanelPayload({
@@ -214,19 +227,20 @@ export async function loadLaunchesPanelPayload({
   filter = DEFAULT_LAUNCH_LSP_TYPE_FILTER,
   mappedOnly = DEFAULT_LAUNCH_LIST_MAPPED_ONLY,
   selectedId = null,
+  statusFilter = DEFAULT_LAUNCH_LIST_STATUS_FILTER,
 } = {}) {
   try {
     const response = await fetchImpl(url);
     if (!response?.ok) throw new Error(`HTTP ${response?.status || 0}`);
     const payload = await response.json();
-    const rows = launchesPanelRows(payload, filter, { mappedOnly, selectedId });
+    const rows = launchesPanelRows(payload, filter, { mappedOnly, selectedId, statusFilter });
     return {
       ...launchesPanelEmptyPresentation({ available: true, items: rows, payload }),
       payload,
     };
   } catch {
     if (cachedPayload != null && isLaunchesPayload(cachedPayload)) {
-      const rows = launchesPanelRows(cachedPayload, filter, { mappedOnly, selectedId });
+      const rows = launchesPanelRows(cachedPayload, filter, { mappedOnly, selectedId, statusFilter });
       if (rows.length) {
         return {
           ...launchesPanelEmptyPresentation({ available: true, items: rows, payload: cachedPayload }),

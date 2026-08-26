@@ -253,6 +253,11 @@
           <div class="launches-panel-mapped-chips" id="launches-panel-mapped-chips" role="group" aria-label="Mapped only">
             <button type="button" class="launches-panel-mapped-chip" data-launch-list-mapped="only" aria-pressed="false" title="Hide missions without a flyable pad">Mapped only</button>
           </div>
+          <div class="launches-panel-status-chips" id="launches-panel-status-chips" role="group" aria-label="Launch status">
+            <button type="button" class="launches-panel-status-chip active" data-launch-list-status="all" aria-pressed="true" title="Show every mission regardless of launch status">All</button>
+            <button type="button" class="launches-panel-status-chip" data-launch-list-status="go" aria-pressed="false" title="Show only missions with a Go status">Go</button>
+            <button type="button" class="launches-panel-status-chip" data-launch-list-status="tbd" aria-pressed="false" title="Show only missions with a TBD or TBC status">TBD</button>
+          </div>
         </div>
         <output id="launches-panel-count">—</output>
       </div>

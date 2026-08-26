@@ -288,6 +288,13 @@ import {
   readLaunchListMappedOnly,
   writeLaunchListMappedOnly,
 } from './data/launchListMappedFilter.js';
+import {
+  getLaunchListStatusFilter,
+  hydrateLaunchListStatusFilter,
+  normalizeLaunchListStatusFilter,
+  setLaunchListStatusFilter,
+  subscribeLaunchListStatusFilter,
+} from './data/launchListStatusFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   getEarthquakeListDepthFilter,
@@ -3092,12 +3099,14 @@ export class StyleManager {
     this._launchesPanelCount = document.getElementById('launches-panel-count');
     this._launchesPanelLspChips = document.getElementById('launches-panel-lsp-chips');
     this._launchesPanelMappedChips = document.getElementById('launches-panel-mapped-chips');
+    this._launchesPanelStatusChips = document.getElementById('launches-panel-status-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
     this._launchesPanelPayload = null;
     this._launchesPanelSelectedId = null;
     this._launchesPanelLoadToken = 0;
     this._unsubLaunchLspType = null;
+    this._unsubLaunchListStatus = null;
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._stopTrackingBtn = document.getElementById('stop-tracking');
     this._earthquakeListToggle = document.getElementById('earthquake-list-toggle');
@@ -11702,9 +11711,15 @@ export class StyleManager {
       this._syncLaunchesPanelLspChips();
       this._reapplyLaunchesPanelLspType();
     });
+    this._unsubLaunchListStatus = subscribeLaunchListStatusFilter(() => {
+      this._syncLaunchesPanelStatusChips();
+      this._reapplyLaunchesPanelLspType();
+    });
     hydrateLaunchLspTypeFilter();
+    hydrateLaunchListStatusFilter();
     this._syncLaunchesPanelLspChips();
     this._syncLaunchesPanelMappedChip();
+    this._syncLaunchesPanelStatusChips();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11724,6 +11739,11 @@ export class StyleManager {
       writeLaunchListMappedOnly(readLaunchListMappedOnly() !== true);
       this._syncLaunchesPanelMappedChip();
       this._reapplyLaunchesPanelLspType();
+    });
+    this._launchesPanelStatusChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-list-status]');
+      if (!chip || !this._launchesPanelStatusChips.contains(chip)) return;
+      setLaunchListStatusFilter(normalizeLaunchListStatusFilter(chip.dataset.launchListStatus));
     });
   }
 
@@ -11748,11 +11768,23 @@ export class StyleManager {
     }
   }
 
+  _syncLaunchesPanelStatusChips() {
+    const current = getLaunchListStatusFilter();
+    const chips = this._launchesPanelStatusChips?.querySelectorAll?.('[data-launch-list-status]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.launchListStatus === current;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
   _reapplyLaunchesPanelLspType() {
     if (this._launchesPanelPayload == null) return;
     const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter(), {
       mappedOnly: readLaunchListMappedOnly(),
       selectedId: this._launchesPanelSelectedId,
+      statusFilter: getLaunchListStatusFilter(),
     });
     this._launchesPanelRows = rows;
     this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
@@ -11795,6 +11827,7 @@ export class StyleManager {
       filter: getLaunchLspTypeFilter(),
       mappedOnly: readLaunchListMappedOnly(),
       selectedId: this._launchesPanelSelectedId,
+      statusFilter: getLaunchListStatusFilter(),
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
     this._launchesPanelPayload = presentation.payload ?? null;
@@ -14100,6 +14133,8 @@ export class StyleManager {
     this._launchesPanelLoadToken += 1;
     this._unsubLaunchLspType?.();
     this._unsubLaunchLspType = null;
+    this._unsubLaunchListStatus?.();
+    this._unsubLaunchListStatus = null;
     this._launchesPanelPayload = null;
     this._damsListMoveEndRemove?.();
     this._damsListMoveEndRemove = null;

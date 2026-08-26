@@ -104,6 +104,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         FIRMS list confidence chips (`meridian.firmsListConf`),
  *                         launch list mapped-only toggle
  *                         (`meridian.launchListMappedOnly`),
+ *                         launch list status chips
+ *                         (`meridian.launchListStatus`),
  *                         FIRMS list FRP-floor chips (`meridian.firmsListFrp`),
  *                         FIRMS list age-floor chips (`meridian.firmsListAge`),
  *                         Context Identified only (`meridian.awarenessIdentified`),
@@ -124,6 +126,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setFirmsListConf` / `setFirmsListFrp` /
  *                         `setFirmsListAge` /
  *                         `writeLaunchListMappedOnly` /
+ *                         `setLaunchListStatusFilter` /
+ *                         `writeLaunchListStatusFilter` /
  *                         `setAwarenessIdentifiedEnabled` /
  *                         `setAwarenessRangeFilter`,
  *                         which would persist a display choice nobody made.
