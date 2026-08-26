@@ -66,6 +66,14 @@ import {
   subscribeHideNoSquawkEnabled,
 } from './flightHideNoSquawkFilter.js';
 import {
+  getHideNoTypeEnabled,
+  hideNoTypeChipModel,
+  hydrateHideNoTypeEnabled,
+  passesHideNoTypeFilter,
+  setHideNoTypeEnabled,
+  subscribeHideNoTypeEnabled,
+} from './flightHideNoTypeFilter.js';
+import {
   aircraftMatchesAltitudeBand,
   getAltitudeBand,
   hydrateAltitudeBand,
@@ -411,6 +419,14 @@ function _hideNoSquawkMatcher(contact) {
   return passesHideNoSquawkFilter({
     squawk: contact?.squawk,
     hideNoSquawk: getHideNoSquawkEnabled(),
+  });
+}
+
+/** PLAN 214 — hide contacts that never carry an adsbdb typeCode. */
+function _hideNoTypeMatcher(contact) {
+  return passesHideNoTypeFilter({
+    typeCode: contact?.typeCode,
+    hideNoType: getHideNoTypeEnabled(),
   });
 }
 
@@ -798,6 +814,8 @@ hydrateIdentifiedOnlyEnabled();
 subscribeIdentifiedOnlyEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoSquawkEnabled();
 subscribeHideNoSquawkEnabled(_applyAltitudeBandVisibility);
+hydrateHideNoTypeEnabled();
+subscribeHideNoTypeEnabled(_applyAltitudeBandVisibility);
 
 /** Whether this contact is inside the current flights altitude band. */
 function _inAltitudeBand(icao24, info = _flightData.get(icao24)) {
@@ -841,7 +859,7 @@ function _verticalRateAndMatcher(contact) {
 }
 
 /**
- * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk).
+ * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type).
  * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
  * not here — counts stay honest.
  */
@@ -850,7 +868,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher],
   });
 }
 
@@ -4283,7 +4301,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher],
   });
 }
 
@@ -5151,7 +5169,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5228,6 +5246,10 @@ const flightsLayer = {
       setHideNoSquawkEnabled(params.hideNoSquawk);
       _applyInFlightFilterVisibility();
     }
+    if (typeof params.hideNoType === 'boolean' && params.hideNoType !== getHideNoTypeEnabled()) {
+      setHideNoTypeEnabled(params.hideNoType);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -5260,6 +5282,7 @@ const flightsLayer = {
       emergenciesOnly: _emergenciesOnly,
       identifiedOnly: getIdentifiedOnlyEnabled(),
       hideNoSquawk: getHideNoSquawkEnabled(),
+      hideNoType: getHideNoTypeEnabled(),
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),
@@ -5281,6 +5304,7 @@ const flightsLayer = {
         emergenciesOnlyChipModel(_emergenciesOnly),
         identifiedOnlyChipModel(getIdentifiedOnlyEnabled()),
         hideNoSquawkChipModel(getHideNoSquawkEnabled()),
+        hideNoTypeChipModel(getHideNoTypeEnabled()),
       ],
       field: callsignPrefixRowField(),
     };
