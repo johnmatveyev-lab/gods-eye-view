@@ -14,8 +14,12 @@ import {
   fireMeetsListConf,
   firmsListConfChipModels,
   firmsListConfThreshold,
+  getFirmsListConf,
+  hydrateFirmsListConf,
   normalizeFirmsListConf,
   readFirmsListConf,
+  resetFirmsListConfForTest,
+  setFirmsListConf,
   writeFirmsListConf,
 } from './firmsListConfFilter.js';
 import {
@@ -29,6 +33,8 @@ import {
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const NOW = Date.UTC(2026, 6, 17, 4, 0);
 const ORIGIN = { lat: 30.27, lon: -97.74 };
+
+resetFirmsListConfForTest();
 
 function fire(overrides = {}) {
   return {
@@ -136,48 +142,40 @@ test('formatFireListRow buckets reuse the High / Nominal+ thresholds', () => {
 });
 
 test('flip persist survives reload and All is the default', () => {
+  resetFirmsListConfForTest();
   const storage = memoryStorage();
   assert.equal(FIRMS_LIST_CONF_STORAGE_KEY, 'meridian.firmsListConf');
   assert.equal(readFirmsListConf(storage), DEFAULT_FIRMS_LIST_CONF);
-  assert.equal(writeFirmsListConf('high', storage), 'high');
+  assert.equal(setFirmsListConf('high', { storage }), 'high');
   assert.equal(storage.getItem(FIRMS_LIST_CONF_STORAGE_KEY), 'high');
+  assert.equal(getFirmsListConf(), 'high');
   assert.equal(readFirmsListConf(memoryStorage(storage.snapshot())), 'high');
-  assert.equal(writeFirmsListConf('nominal', storage), 'nominal');
-  assert.equal(readFirmsListConf(memoryStorage(storage.snapshot())), 'nominal');
-  writeFirmsListConf('all', storage);
-  assert.equal(readFirmsListConf(memoryStorage(storage.snapshot())), 'all');
-  assert.equal(storage.snapshot()['meridian.firmsScan'], undefined);
-  assert.equal(Object.keys(storage.snapshot()).join(','), FIRMS_LIST_CONF_STORAGE_KEY);
 
-  const originalStorage = globalThis.localStorage;
-  const session = memoryStorage();
-  Object.defineProperty(globalThis, 'localStorage', {
-    configurable: true,
-    get: () => session,
-  });
-  try {
-    writeFirmsListConf('high');
-    const reloaded = memoryStorage(session.snapshot());
-    Object.defineProperty(globalThis, 'localStorage', {
-      configurable: true,
-      get: () => reloaded,
-    });
-    const rows = listNearestFires([
-      fire({ confidence: 0.3 }),
-      fire({ index: 1, lat: 31, confidence: 0.9 }),
-    ], ORIGIN);
-    assert.equal(readFirmsListConf(), 'high');
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].confidence, 0.9);
-  } finally {
-    if (originalStorage === undefined) delete globalThis.localStorage;
-    else {
-      Object.defineProperty(globalThis, 'localStorage', {
-        configurable: true,
-        value: originalStorage,
-      });
-    }
-  }
+  resetFirmsListConfForTest();
+  assert.equal(getFirmsListConf(), DEFAULT_FIRMS_LIST_CONF);
+  assert.equal(hydrateFirmsListConf(storage), 'high');
+  assert.equal(getFirmsListConf(), 'high');
+
+  setFirmsListConf('nominal', { storage });
+  resetFirmsListConfForTest();
+  assert.equal(hydrateFirmsListConf(memoryStorage(storage.snapshot())), 'nominal');
+  writeFirmsListConf(DEFAULT_FIRMS_LIST_CONF, storage);
+  resetFirmsListConfForTest();
+  assert.equal(hydrateFirmsListConf(storage), 'all');
+  assert.equal(storage.snapshot()['meridian.firmsScan'], undefined);
+
+  resetFirmsListConfForTest();
+  setFirmsListConf('high', { storage });
+  resetFirmsListConfForTest();
+  hydrateFirmsListConf(storage);
+  const rows = listNearestFires([
+    fire({ confidence: 0.3 }),
+    fire({ index: 1, lat: 31, confidence: 0.9 }),
+  ], ORIGIN);
+  assert.equal(getFirmsListConf(), 'high');
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].confidence, 0.9);
+  resetFirmsListConfForTest();
 });
 
 test('exclusive chips are All | High | Nominal+ and only one is active', () => {
@@ -240,22 +238,28 @@ test('FIRES list chips sit on the list panel and stay off the globe / share-URL 
     'list confidence chips sit after the 204 scan chips',
   );
   assert.ok(
+    markup[0].indexOf('id="fires-track-chips"') < markup[0].indexOf('id="fires-list-conf-chips"'),
+    'list confidence chips sit after the 211 track chips',
+  );
+  assert.ok(
     markup[0].indexOf('id="fires-list-conf-chips"') < markup[0].indexOf('id="fires-list-meta"'),
     'list confidence chips sit on the FIRES panel above the list meta',
   );
   assert.match(markup[0], /NASA's Fire Information for Resource Management System \(FIRMS\)/);
   assert.match(ui, /data-firms-list-conf/);
-  assert.match(ui, /writeFirmsListConf|readFirmsListConf/);
+  assert.match(ui, /setFirmsListConf/);
+  assert.match(ui, /hydrateFirmsListConf/);
   assert.doesNotMatch(ui, /setLayerParams\?\.\('local-firms', \{[^}]*firmsListConf/);
-  assert.match(panel, /writeFirmsListConf|readFirmsListConf/);
-  assert.match(list, /fireMeetsListConf|readFirmsListConf/);
+  assert.match(panel, /setFirmsListConf|hydrateFirmsListConf/);
+  assert.match(list, /fireMeetsListConf|getFirmsListConf/);
   assert.doesNotMatch(heatmap, /firmsListConf|listConf|FIRMS_LIST_CONF/);
   assert.doesNotMatch(adapt, /firmsListConf|listConf/);
   assert.doesNotMatch(csv, /firmsListConf|listConf/);
   assert.doesNotMatch(layerState, /firmsListConf|listConf/);
   assert.match(layerState, /confidenceFloor[\s\S]*'0\.5'[\s\S]*'0\.8'/);
   assert.match(firstRun, /meridian\.firmsListConf/);
-  assert.doesNotMatch(firstRun, /writeFirmsListConf/);
+  assert.doesNotMatch(firstRun, /writeFirmsListConf|hydrateFirmsListConf/);
+  assert.match(firstRun, /setFirmsListConf/);
   assert.doesNotMatch(list, /firms\.modaps\.eosdis\.nasa\.gov/);
   assert.doesNotMatch(list, /from '\.\/firmsHeatmap\.js'|from '\.\/firmsAdapt\.js'|from '\.\/firmsCsv\.js'/);
   assert.equal(existsSync(path.join(ROOT, 'api/firms/listConf.js')), false);

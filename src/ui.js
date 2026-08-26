@@ -201,9 +201,10 @@ import {
   normalizeTrackCeiling,
 } from './data/firmsTrackFilter.js';
 import {
+  getFirmsListConf,
+  hydrateFirmsListConf,
   normalizeFirmsListConf,
-  readFirmsListConf,
-  writeFirmsListConf,
+  setFirmsListConf,
 } from './data/firmsListConfFilter.js';
 import {
   firmsSensorFilterFlags,
@@ -12101,7 +12102,7 @@ export class StyleManager {
   _syncFirmsListConfChips() {
     const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
     if (this._firmsListConfChips) this._firmsListConfChips.hidden = !enabled;
-    const current = readFirmsListConf();
+    const current = getFirmsListConf();
     const chips = this._firmsListConfChips?.querySelectorAll?.('[data-firms-list-conf]');
     if (!chips) return;
     for (const chip of chips) {
@@ -12112,11 +12113,12 @@ export class StyleManager {
   }
 
   _initFirmsListConfChips() {
+    hydrateFirmsListConf();
     if (!this._firmsListConfChips) return;
     this._firmsListConfChips.addEventListener('click', (event) => {
       const chip = event.target?.closest?.('[data-firms-list-conf]');
       if (!chip || !this._firmsListConfChips.contains(chip)) return;
-      writeFirmsListConf(normalizeFirmsListConf(chip.dataset.firmsListConf));
+      setFirmsListConf(normalizeFirmsListConf(chip.dataset.firmsListConf));
       this._syncFirmsListConfChips();
     });
     this._syncFirmsListConfChips();

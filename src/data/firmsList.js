@@ -10,7 +10,7 @@ import {
   FIRMS_LIST_CONF_HIGH_MIN,
   FIRMS_LIST_CONF_NOMINAL_MIN,
   fireMeetsListConf,
-  readFirmsListConf,
+  getFirmsListConf,
 } from './firmsListConfFilter.js';
 
 /** Hosted list ceiling: nearest detections to the current camera. */
@@ -49,7 +49,7 @@ export function listNearestFires(fires, origin, limit = FIRMS_LIST_LIMIT, listCo
   const originLon = Number(origin?.lon);
   const hasOrigin = Number.isFinite(originLat) && Number.isFinite(originLon);
   const cap = Number.isFinite(limit) ? Math.max(0, Math.floor(limit)) : FIRMS_LIST_LIMIT;
-  const conf = listConf === undefined ? readFirmsListConf() : listConf;
+  const conf = listConf === undefined ? getFirmsListConf() : listConf;
   const ranked = [];
   for (const fire of fires) {
     const lat = Number(fire?.lat);

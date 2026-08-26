@@ -8,8 +8,10 @@
 import * as Cesium from 'cesium';
 import { FIRMS_ACKNOWLEDGEMENT, FIRMS_LIST_ENABLE_COPY, resolveFireListView } from './firmsList.js';
 import {
-  readFirmsListConf,
-  writeFirmsListConf,
+  getFirmsListConf,
+  hydrateFirmsListConf,
+  setFirmsListConf,
+  subscribeFirmsListConf,
 } from './firmsListConfFilter.js';
 
 /**
@@ -34,6 +36,7 @@ export function attachFirmsListPanel({
   const ack = root.querySelector('#fires-list-ack');
   const confChips = root.querySelector('#fires-list-conf-chips');
   let openedForEnable = false;
+  hydrateFirmsListConf();
 
   function firmsModule() {
     return dataManager?.layers?.get('local-firms')?.module || null;
@@ -53,7 +56,7 @@ export function attachFirmsListPanel({
   function syncListConfChips(enabled) {
     if (!confChips) return;
     confChips.hidden = enabled !== true;
-    const current = readFirmsListConf();
+    const current = getFirmsListConf();
     for (const chip of confChips.querySelectorAll('[data-firms-list-conf]')) {
       const active = chip.dataset.firmsListConf === current;
       chip.classList.toggle('active', active);
@@ -104,7 +107,7 @@ export function attachFirmsListPanel({
   function onConfChipClick(event) {
     const chip = event.target?.closest?.('[data-firms-list-conf]');
     if (!chip || !confChips?.contains(chip)) return;
-    writeFirmsListConf(chip.dataset.firmsListConf);
+    setFirmsListConf(chip.dataset.firmsListConf);
     render();
   }
 
@@ -124,6 +127,7 @@ export function attachFirmsListPanel({
   const unsubscribe = typeof dataManager?.subscribe === 'function'
     ? dataManager.subscribe(onLayerChange)
     : null;
+  const unsubscribeConf = subscribeFirmsListConf(() => render());
   const removeMoveEnd = viewer?.camera?.moveEnd?.addEventListener?.(() => {
     if (dataManager?.isEnabled?.('local-firms')) render();
   });
@@ -134,6 +138,7 @@ export function attachFirmsListPanel({
     list?.removeEventListener('click', onListClick);
     confChips?.removeEventListener('click', onConfChipClick);
     unsubscribe?.();
+    unsubscribeConf();
     if (typeof removeMoveEnd === 'function') removeMoveEnd();
   };
 }

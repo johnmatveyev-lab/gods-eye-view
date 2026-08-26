@@ -14,8 +14,10 @@ import {
   listNearestFires,
   resolveFireListView,
 } from './firmsList.js';
+import { resetFirmsListConfForTest } from './firmsListConfFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+resetFirmsListConfForTest();
 const NOW = Date.UTC(2026, 6, 17, 4, 0);
 
 function fire(overrides = {}) {
