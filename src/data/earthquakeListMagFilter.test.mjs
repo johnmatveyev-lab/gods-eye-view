@@ -1,9 +1,10 @@
-import { test } from 'node:test';
+import { beforeEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
+import { resetEarthquakeListDepthFilterForTest } from './earthquakeListDepthFilter.js';
 import {
   EARTHQUAKE_LIST_LIMIT,
   selectEarthquakeListRows,
@@ -89,6 +90,11 @@ function crowdOutRecords() {
   }));
   return [...small, M4, M5, M6, M7];
 }
+
+beforeEach(() => {
+  resetEarthquakeListMagFilterForTest();
+  resetEarthquakeListDepthFilterForTest();
+});
 
 test('All keeps the current 50-row list', () => {
   resetEarthquakeListMagFilterForTest();

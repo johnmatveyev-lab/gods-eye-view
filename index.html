@@ -271,6 +271,11 @@
           <button type="button" class="earthquake-list-mag-chip" data-earthquake-list-mag="5" aria-pressed="false" title="Hide listed earthquakes below magnitude 5">5+</button>
           <button type="button" class="earthquake-list-mag-chip" data-earthquake-list-mag="6" aria-pressed="false" title="Hide listed earthquakes below magnitude 6">6+</button>
         </div>
+        <div class="earthquake-list-depth-chips" id="earthquake-list-depth-chips" role="group" aria-label="Quake list depth ceiling">
+          <button type="button" class="earthquake-list-depth-chip active" data-earthquake-list-depth="all" aria-pressed="true" title="Show every listed earthquake regardless of depth">All</button>
+          <button type="button" class="earthquake-list-depth-chip" data-earthquake-list-depth="70" aria-pressed="false" title="Hide listed earthquakes 70 km deep and deeper">&lt;70 km</button>
+          <button type="button" class="earthquake-list-depth-chip" data-earthquake-list-depth="20" aria-pressed="false" title="Hide listed earthquakes 20 km deep and deeper">&lt;20 km</button>
+        </div>
         <div class="earthquake-time-chips" id="earthquake-time-chips" role="group" aria-label="Earthquake time window">
           <button type="button" class="earthquake-time-chip" data-earthquake-time="1" aria-pressed="false" title="Show earthquakes from the last 1 hour">1h</button>
           <button type="button" class="earthquake-time-chip" data-earthquake-time="6" aria-pressed="false" title="Show earthquakes from the last 6 hours">6h</button>

@@ -96,6 +96,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         FIRMS version chips (`meridian.firmsVersion`),
  *                         Quake list magnitude-floor chips
  *                         (`meridian.quakeListMag`),
+ *                         Quake list depth-ceiling chips
+ *                         (`meridian.quakeListDepth`),
  *                         dam output-floor chips (`meridian.damOutput`),
  *                         dam Named only toggle (`meridian.damNamedOnly`),
  *                         FIRMS list confidence chips (`meridian.firmsListConf`),
@@ -114,6 +116,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setLaunchProbabilityFilter` /
  *                         `setLaunchHideUnknownSite` /
  *                         `setEarthquakeListMagFilter` /
+ *                         `setEarthquakeListDepthFilter` /
  *                         `setFirmsListConf` / `setFirmsListFrp` /
  *                         `writeLaunchListMappedOnly`,
  *                         which would persist a display choice nobody made.

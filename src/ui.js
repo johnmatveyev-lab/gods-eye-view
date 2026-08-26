@@ -284,6 +284,11 @@ import {
 } from './data/launchListMappedFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
+  getEarthquakeListDepthFilter,
+  hydrateEarthquakeListDepthFilter,
+  setEarthquakeListDepthFilter,
+} from './data/earthquakeListDepthFilter.js';
+import {
   getEarthquakeListMagFilter,
   hydrateEarthquakeListMagFilter,
   setEarthquakeListMagFilter,
@@ -3095,6 +3100,7 @@ export class StyleManager {
     this._earthquakeTypeChips = document.getElementById('earthquake-type-chips');
     this._earthquakeNetworkChips = document.getElementById('earthquake-network-chips');
     this._earthquakeListMagChips = document.getElementById('earthquake-list-mag-chips');
+    this._earthquakeListDepthChips = document.getElementById('earthquake-list-depth-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -5600,6 +5606,7 @@ export class StyleManager {
           this._syncEarthquakeTypeChips();
           this._syncEarthquakeNetworkChips();
           this._syncEarthquakeListMagChips();
+          this._syncEarthquakeListDepthChips();
         }
         if (change?.layerId === 'satellites') {
           syncIssPassReadout({ recompute: true });
@@ -12880,6 +12887,30 @@ export class StyleManager {
     this._syncEarthquakeListMagChips();
   }
 
+  _syncEarthquakeListDepthChips() {
+    const ceiling = getEarthquakeListDepthFilter();
+    const chips = this._earthquakeListDepthChips?.querySelectorAll?.('[data-earthquake-list-depth]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.earthquakeListDepth === ceiling;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initEarthquakeListDepthChips() {
+    hydrateEarthquakeListDepthFilter();
+    if (!this._earthquakeListDepthChips) return;
+    this._earthquakeListDepthChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-list-depth]');
+      if (!chip || !this._earthquakeListDepthChips.contains(chip)) return;
+      setEarthquakeListDepthFilter(chip.dataset.earthquakeListDepth);
+      this._syncEarthquakeListDepthChips();
+      this._earthquakeListControl?.refresh();
+    });
+    this._syncEarthquakeListDepthChips();
+  }
+
   _initEarthquakeListControl() {
     this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
@@ -12890,6 +12921,7 @@ export class StyleManager {
     this._initEarthquakeTypeChips();
     this._initEarthquakeNetworkChips();
     this._initEarthquakeListMagChips();
+    this._initEarthquakeListDepthChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,
       panel: this._earthquakeListPanel,
@@ -12902,6 +12934,10 @@ export class StyleManager {
       getError: () => {
         const layer = this._dataManager?.layers?.get('earthquakes')?.module;
         return layer?.getStats?.()?.error || null;
+      },
+      getSelectedId: () => {
+        const layer = this._dataManager?.layers?.get('earthquakes')?.module;
+        return layer?.getParams?.()?.selectedId ?? null;
       },
       onSelect: (row) => {
         if (row?.id) {
