@@ -1156,6 +1156,11 @@
           <strong>DATACENTERS IN VIEW</strong>
           <output id="datacenter-in-view-count" aria-live="polite">0</output>
         </div>
+        <div class="datacenter-operator-chips" id="datacenter-operator-chips" role="group" aria-label="Datacenter operator">
+          <button type="button" class="datacenter-operator-chip active" data-dc-operator="all" aria-pressed="true" title="Show every datacenter in view">All</button>
+          <button type="button" class="datacenter-operator-chip" data-dc-operator="aws" aria-pressed="false" title="Show Amazon Web Services datacenters">AWS</button>
+          <button type="button" class="datacenter-operator-chip" data-dc-operator="equinix" aria-pressed="false" title="Show Equinix datacenters">Equinix</button>
+        </div>
         <div id="datacenter-in-view-items" class="in-view-site-list-items" role="list"></div>
         <p class="in-view-site-list-credit">© OpenStreetMap contributors</p>
       </div>

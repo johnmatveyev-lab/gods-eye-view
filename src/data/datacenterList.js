@@ -6,6 +6,12 @@
  * mapped installations or FIRMS.
  */
 
+import {
+  DEFAULT_DATACENTER_LIST_OPERATOR,
+  datacenterMatchesListOperator,
+  getDatacenterListOperator,
+} from './datacenterListOperatorFilter.js';
+
 export const DATACENTER_LAYER_ID = 'local-datacenters';
 export const DATACENTER_LIST_CAP = 50;
 /** Same height the stem click already uses in `localGeojson.js`. */
@@ -64,6 +70,7 @@ export function datacenterDistanceKm(lat1, lon1, lat2, lon2) {
  * @param {Array<object>} options.records Payload from `getListPayload()`.
  * @param {{west?: number, south?: number, east?: number, north?: number, centerLat?: number, centerLon?: number}|null} [options.view]
  * @param {number} [options.cap]
+ * @param {unknown} [options.operatorFilter] Exclusive All | AWS | Equinix chip.
  * @returns {Array<{id: string, label: string, latitude: number, longitude: number, distanceKm: number}>}
  */
 export function listDatacentersInView({
@@ -71,6 +78,7 @@ export function listDatacentersInView({
   records,
   view = null,
   cap = DATACENTER_LIST_CAP,
+  operatorFilter = DEFAULT_DATACENTER_LIST_OPERATOR,
 } = {}) {
   if (!enabled) return [];
   if (!Array.isArray(records) || records.length === 0) return [];
@@ -84,6 +92,7 @@ export function listDatacentersInView({
 
   for (const record of records) {
     if (record?.visible === false) continue;
+    if (!datacenterMatchesListOperator(record, operatorFilter)) continue;
     const latitude = Number(record?.latitude);
     const longitude = Number(record?.longitude);
     if (!pointInViewBounds(latitude, longitude, view)) continue;
@@ -187,6 +196,7 @@ export function bindDatacenterInViewList({
       enabled,
       records: getRecords() || [],
       view: typeof getView === 'function' ? getView() : null,
+      operatorFilter: getDatacenterListOperator(),
     });
     root.hidden = !enabled;
     renderDatacenterInViewList(items, count, current);

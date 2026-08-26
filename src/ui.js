@@ -439,6 +439,11 @@ import {
   viewFromCamera,
 } from './data/datacenterList.js';
 import {
+  getDatacenterListOperator,
+  hydrateDatacenterListOperator,
+  setDatacenterListOperator,
+} from './data/datacenterListOperatorFilter.js';
+import {
   DAMS_LAYER_ID,
   bindDamsInViewList,
   damFlyDestination,
@@ -3049,6 +3054,7 @@ export class StyleManager {
     this._installationListMappedChips = document.getElementById('installation-list-mapped-chips');
     this._installationListNamedChips = document.getElementById('installation-list-named-chips');
     this._installationListOsmChips = document.getElementById('installation-list-osm-chips');
+    this._datacenterOperatorChips = document.getElementById('datacenter-operator-chips');
     this._damsOutputChips = document.getElementById('dams-output-chips');
     this._damsNamedChips = document.getElementById('dams-named-chips');
     this._damsOperatorChips = document.getElementById('dams-operator-chips');
@@ -3513,6 +3519,7 @@ export class StyleManager {
     this._initMeasureButton();
     this._initFullscreenButton();
     this._initDatacenterInViewList();
+    this._initDatacenterOperatorChips();
     this._initClearSelectedLayersButton();
     this._initRestoreLiveLayersButton();
     this._initHomeViewButton();
@@ -5649,6 +5656,7 @@ export class StyleManager {
     this._syncAisHideUnnamedChip();
     this._syncAisHideNoImoChip();
     this._datacenterInViewList?.refresh();
+    this._syncDatacenterOperatorChips();
     this._damsInViewList?.refresh();
     this._syncDamsOutputChips();
     this._syncDamsNamedChip();
@@ -5666,6 +5674,7 @@ export class StyleManager {
           this._handleContextLayerChange(change);
           if (change?.layerId === DATACENTER_LAYER_ID) {
             this._datacenterInViewList?.refresh();
+            this._syncDatacenterOperatorChips();
           }
           if (change?.layerId === DAMS_LAYER_ID) {
             this._damsInViewList?.refresh();
@@ -13730,6 +13739,10 @@ export class StyleManager {
     const root = document.getElementById('datacenter-in-view');
     const items = document.getElementById('datacenter-in-view-items');
     const count = document.getElementById('datacenter-in-view-count');
+    // LayerStateCoordinator restore is enabled-only for local-datacenters and
+    // does not carry dcOperator (no share-URL write). Re-read meridian.dcOperator.
+    hydrateDatacenterListOperator();
+    this._datacenterOperatorChips = document.getElementById('datacenter-operator-chips');
     this._datacenterInViewList = bindDatacenterInViewList({
       root,
       items,
@@ -13762,6 +13775,31 @@ export class StyleManager {
     this._datacenterListMoveEndRemove = this.viewer?.camera?.moveEnd?.addEventListener?.(() => {
       this._datacenterInViewList?.refresh();
     });
+  }
+
+  _syncDatacenterOperatorChips() {
+    const enabled = this._dataManager?.isEnabled?.(DATACENTER_LAYER_ID) === true;
+    if (this._datacenterOperatorChips) this._datacenterOperatorChips.hidden = !enabled;
+    const floor = getDatacenterListOperator();
+    const chips = this._datacenterOperatorChips?.querySelectorAll?.('[data-dc-operator]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.dcOperator === floor;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initDatacenterOperatorChips() {
+    if (!this._datacenterOperatorChips) return;
+    this._datacenterOperatorChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dc-operator]');
+      if (!chip || !this._datacenterOperatorChips.contains(chip)) return;
+      setDatacenterListOperator(chip.dataset.dcOperator);
+      this._syncDatacenterOperatorChips();
+      this._datacenterInViewList?.refresh();
+    });
+    this._syncDatacenterOperatorChips();
   }
 
   /** Wire fullscreen on the document root so #cesium-credits stays painted. */
