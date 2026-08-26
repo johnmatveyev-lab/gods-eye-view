@@ -229,7 +229,7 @@ test('FIRES list chips sit on the list panel and stay off the globe / share-URL 
   const csv = readFileSync(path.join(ROOT, 'src/data/firmsCsv.js'), 'utf8');
   const layerState = readFileSync(path.join(ROOT, 'src/data/layerState.js'), 'utf8');
   const firstRun = readFileSync(path.join(ROOT, 'src/firstRunExperience.js'), 'utf8');
-  const markup = html.match(/<div id="fires-panel"[\s\S]*?<p id="fires-list-ack"/);
+  const markup = html.match(/<div id="fires-panel"[\s\S]*?<p id="fires-list-ack"[\s\S]*?<\/p>/);
   assert.ok(markup, 'fires-panel markup is missing');
   assert.match(markup[0], /id="fires-list-conf-chips"/);
   assert.match(markup[0], /data-firms-list-conf="all"[^>]*>All</);
