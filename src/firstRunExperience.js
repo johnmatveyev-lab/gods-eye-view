@@ -117,6 +117,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         (`meridian.launchListHideNoProvider`),
  *                         launch list hide-no-site toggle
  *                         (`meridian.launchListHideNoSite`),
+ *                         launch list hide-no-time toggle
+ *                         (`meridian.launchListHideNoTime`),
  *                         FIRMS list FRP-floor chips (`meridian.firmsListFrp`),
  *                         FIRMS list age-floor chips (`meridian.firmsListAge`),
  *                         Context Identified only (`meridian.awarenessIdentified`),

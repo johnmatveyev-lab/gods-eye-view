@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Hide no time** toggle after
+  Hide no site. Default **off** keeps the current list (ISO times and
+  null / missing `launchTime`). **On** keeps a non-empty parseable
+  `launchTime` (ISO stays); missing / null / unparseable drop. A selected
+  row always stays if it passed the other filters. AND with Plan 207
+  LSP-type, Plan 215 Mapped only, Plan 223 All | Go | TBD status, Plan
+  232 Hide no provider, and Plan 239 Hide no site. Re-filters the
+  already-fetched `/api/launches` roster — no extra LL2 fetch and no
+  new `/api`. Preference persists as `meridian.launchListHideNoTime`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write).
 - The hosted FIRES list has a client-only **Hide no sensor** filter on
   the already-fetched trailing-24h `/api/firms` roster. Default **off**
   keeps the current 50-row list, including empty or missing sensor.
