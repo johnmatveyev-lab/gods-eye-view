@@ -350,11 +350,12 @@ test('version chips AND with FRP / confidence / brightness / scan / track / day-
     harness.layer.setParams({ sensors: 'V' });
     assert.equal(harness.layer.getParams().versionFilter, '2.0NRT', 'sibling chips must not overwrite version');
     assert.equal(harness.layer.getStats().count, 1);
-    assert.deepEqual(harness.layer.getAnalystRecords().map((row) => row.version), ['2.0NRT']);
+    assert.deepEqual(harness.layer.getAnalystRecords().map((row) => row.frp), [140]);
     assert.equal(harness.fetchCount, 1);
 
     harness.layer.setParams({ versionFilter: 'other' });
-    assert.equal(harness.layer.getStats().count, 0, 'Other plus the AND floors drops the remaining C2 row');
+    assert.equal(harness.layer.getStats().count, 1, 'Other plus the AND floors keeps the 140 MW 1.0NRT row');
+    assert.deepEqual(harness.layer.getAnalystRecords().map((row) => row.frp), [140]);
   } finally {
     harness.cleanup();
   }
