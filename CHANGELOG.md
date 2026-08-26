@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Sites list has a client-only **Footprints only** toggle after
+  the Plan 243 class chips. Default **off** keeps the current 50-row
+  viewport list, including null / empty footprint. **On** keeps a
+  non-empty footprint array (a ring stays). Missing / null / empty fail
+  closed. The selected / tracked record always stays if it already
+  passed the other list filters. AND with Plan 209 Mapped only, Plan
+  220 Named only, Plan 235 OSM-type, and Plan 243 class. Distinct from
+  Plan 165 globe Footprints only. Re-applies the already-fetched
+  viewport payload — no extra fetch and no new `/api`. Preference
+  persists as `meridian.sitesListFootprintsOnly` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write).
 - Hosted Quakes list has a client-only **Hide no depth** toggle after the
   Plan 242 Hide no place chip. Default **off** keeps the current 50-row
   nearest/recent list, including null / missing depth. **On** keeps a

@@ -26,6 +26,15 @@ import {
   sitesListClassChipModels,
   subscribeSitesListClassFilter,
 } from './installationListClassFilter.js';
+import {
+  filterViewportSitesListFootprint,
+  getSitesListFootprintsOnlyFilter,
+  hydrateSitesListFootprintsOnlyFilter,
+  readSitesListFootprintsPref,
+  setSitesListFootprintsOnlyFilter,
+  sitesListFootprintsOnlyChipModel,
+  subscribeSitesListFootprintsOnlyFilter,
+} from './installationListFootprintFilter.js';
 
 export const INSTALLATION_VIEWPORT_LIST_TOGGLE_ID = 'installations-list-toggle';
 export const INSTALLATION_VIEWPORT_LIST_PANEL_ID = 'installations-viewport-list';
@@ -49,8 +58,9 @@ export function nextInstallationListOpen(currentlyOpen) {
  * The list-only Named only chip then drops class-fallback rows when on.
  * The list-only OSM-type chips then keep All, Node, or Way+relation.
  * The list-only class chips then keep All, Airfield, or Naval.
+ * The list-only Footprints only chip then drops pin-only rows when on.
  * @param {Array<object>|null|undefined} records Layer `getViewportRecords()` snapshot.
- * @param {{cap?: number, listMappedPref?: unknown, listNamedPref?: unknown, listOsmPref?: unknown, listClassPref?: unknown, selectedId?: string|null}} [options]
+ * @param {{cap?: number, listMappedPref?: unknown, listNamedPref?: unknown, listOsmPref?: unknown, listClassPref?: unknown, listFootprintsPref?: unknown, selectedId?: string|null}} [options]
  * @returns {Array<{id: string, name: string, type: string, latitude: number, longitude: number}>}
  */
 export function listViewportInstallations(records, options = {}) {
@@ -62,13 +72,15 @@ export function listViewportInstallations(records, options = {}) {
     listNamedPref = readSitesListNamedPref(),
     listOsmPref = readSitesListOsmPref(),
     listClassPref = getSitesListClassFilter(),
+    listFootprintsPref = getSitesListFootprintsOnlyFilter(),
     selectedId = null,
   } = options;
   const limit = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : INSTALLATION_VIEWPORT_LIST_CAP;
   const mapped = filterViewportSitesList(records, listMappedPref);
   const named = filterViewportSitesListNamed(mapped, listNamedPref);
   const osm = filterViewportSitesListOsm(named, listOsmPref, selectedId);
-  const source = filterViewportSitesListClass(osm, listClassPref, selectedId);
+  const classified = filterViewportSitesListClass(osm, listClassPref, selectedId);
+  const source = filterViewportSitesListFootprint(classified, listFootprintsPref, selectedId);
   if (!source.length || limit === 0) return [];
   const rows = [];
   for (const record of source) {
@@ -112,31 +124,43 @@ export function flyToInstallationFromList(layer, id) {
 }
 
 /**
- * Hosted Sites list class chips. Mapped / named / OSM stay in the HTML
- * row from Plans 209 / 220 / 235; class chips are owned here so
- * index.html / ui.js do not re-declare them.
+ * Hosted Sites list class chips and Footprints only. Mapped / named /
+ * OSM stay in the HTML row from Plans 209 / 220 / 235; class and
+ * Footprints only are owned here so index.html / ui.js do not
+ * re-declare them.
  * @returns {{chips: Array<object>}}
  */
 export function getRowControls() {
   return {
-    chips: sitesListClassChipModels(getSitesListClassFilter()),
+    chips: [
+      ...sitesListClassChipModels(getSitesListClassFilter()),
+      sitesListFootprintsOnlyChipModel(getSitesListFootprintsOnlyFilter()),
+    ],
   };
 }
 
-/** @returns {{listClass: 'all'|'airfield'|'naval'}} */
+/** @returns {{listClass: 'all'|'airfield'|'naval', listFootprintsOnly: boolean}} */
 export function getParams() {
-  return { listClass: getSitesListClassFilter() };
+  return {
+    listClass: getSitesListClassFilter(),
+    listFootprintsOnly: getSitesListFootprintsOnlyFilter(),
+  };
 }
 
 /**
- * Apply list-only class chips. Persistence stays on meridian.sitesListClass.
- * @param {{listClass?: unknown}|null|undefined} [params]
+ * Apply list-only class chips and Footprints only. Persistence stays on
+ * meridian.sitesListClass and meridian.sitesListFootprintsOnly.
+ * @param {{listClass?: unknown, listFootprintsOnly?: unknown}|null|undefined} [params]
  * @returns {boolean}
  */
 export function setParams(params = {}) {
   if (!params || typeof params !== 'object') return false;
-  if (!Object.hasOwn(params, 'listClass')) return true;
-  setSitesListClassFilter(params.listClass);
+  if (Object.hasOwn(params, 'listClass')) {
+    setSitesListClassFilter(params.listClass);
+  }
+  if (Object.hasOwn(params, 'listFootprintsOnly')) {
+    setSitesListFootprintsOnlyFilter(params.listFootprintsOnly);
+  }
   return true;
 }
 
@@ -146,6 +170,11 @@ export {
   readSitesListClassPref,
   setSitesListClassFilter,
   subscribeSitesListClassFilter,
+  getSitesListFootprintsOnlyFilter,
+  hydrateSitesListFootprintsOnlyFilter,
+  readSitesListFootprintsPref,
+  setSitesListFootprintsOnlyFilter,
+  subscribeSitesListFootprintsOnlyFilter,
 };
 
 let lastListRecords = [];
@@ -155,6 +184,19 @@ let lastPanel = null;
 let classChipsHydrated = false;
 let classChipsMounted = false;
 let classChipsSubscribed = false;
+let footprintChipHydrated = false;
+let footprintChipMounted = false;
+let footprintChipSubscribed = false;
+
+function classChipModelsFromControls() {
+  return getRowControls().chips.filter((chip) => chip.params?.listClass != null);
+}
+
+function footprintsChipFromControls() {
+  return getRowControls().chips.find((chip) => (
+    chip.params && Object.hasOwn(chip.params, 'listFootprintsOnly')
+  ));
+}
 
 function paintInstallationListRows(panel, rows) {
   if (!panel) return;
@@ -186,7 +228,7 @@ function syncSitesListClassChips(panel) {
     ? panel
     : panel?.querySelector?.('#installation-list-class-chips');
   if (!root?.querySelectorAll) return;
-  const models = getRowControls().chips;
+  const models = classChipModelsFromControls();
   const chips = root.querySelectorAll('[data-installation-list-class]');
   for (const chip of chips) {
     const active = models.some((model) => (
@@ -229,7 +271,7 @@ function mountSitesListClassChips(panel) {
   }
   if (!root) return false;
   if (typeof make === 'function' && !root.querySelector?.('[data-installation-list-class]')) {
-    const nodes = getRowControls().chips.map((model) => createClassChipElement(model, make));
+    const nodes = classChipModelsFromControls().map((model) => createClassChipElement(model, make));
     if (typeof root.replaceChildren === 'function') root.replaceChildren(...nodes);
     else {
       for (const node of nodes) root.appendChild?.(node);
@@ -273,6 +315,109 @@ function bindSitesListClassChips(panel) {
     }
   });
   classChipsSubscribed = true;
+}
+
+function createFootprintChipElement(model, make) {
+  const button = make('button');
+  button.type = 'button';
+  button.className = `installation-list-osm-chip${model.active ? ' active' : ''}`;
+  button.dataset.installationListFootprints = 'only';
+  button.textContent = model.label;
+  if (model.title) button.title = model.title;
+  button.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  return button;
+}
+
+function syncSitesListFootprintChip(panel) {
+  const root = panel?.id === 'installation-list-footprint-chips'
+    ? panel
+    : panel?.querySelector?.('#installation-list-footprint-chips');
+  if (!root?.querySelectorAll) return;
+  const model = footprintsChipFromControls();
+  const chips = root.querySelectorAll('[data-installation-list-footprints]');
+  for (const chip of chips) {
+    chip.classList?.toggle?.('active', model?.active === true);
+    chip.setAttribute?.('aria-pressed', model?.active === true ? 'true' : 'false');
+  }
+  const klass = panel?.querySelector?.('#installation-list-class-chips')
+    || root.previousElementSibling;
+  if (klass?.id === 'installation-list-class-chips') {
+    root.hidden = klass.hidden === true;
+  }
+}
+
+/**
+ * Inject Footprints only after the existing list class chips.
+ * No-ops on the stub panels used by unit tests (no querySelector).
+ * @param {{querySelector?: Function, appendChild?: Function}|null} panel
+ * @returns {boolean}
+ */
+function mountSitesListFootprintChip(panel) {
+  if (typeof panel?.querySelector !== 'function') return false;
+  let root = panel.querySelector('#installation-list-footprint-chips');
+  const make = globalThis.document?.createElement?.bind(globalThis.document);
+  if (!root && typeof make === 'function') {
+    root = make('div');
+    root.id = 'installation-list-footprint-chips';
+    root.className = 'installation-list-osm-chips';
+    root.setAttribute('role', 'group');
+    root.setAttribute('aria-label', 'Footprints only (list)');
+    const after = panel.querySelector('#installation-list-class-chips')
+      || panel.querySelector('#installation-list-osm-chips');
+    if (typeof after?.insertAdjacentElement === 'function') {
+      after.insertAdjacentElement('afterend', root);
+    } else {
+      const header = panel.querySelector('.installations-viewport-list-header > div') || panel;
+      header.appendChild?.(root);
+    }
+    root.hidden = after?.hidden === true;
+  }
+  if (!root) return false;
+  const model = footprintsChipFromControls();
+  if (typeof make === 'function' && model && !root.querySelector?.('[data-installation-list-footprints]')) {
+    const node = createFootprintChipElement(model, make);
+    if (typeof root.replaceChildren === 'function') root.replaceChildren(node);
+    else root.appendChild?.(node);
+  }
+  if (root.dataset.sitesListFootprintsBound === '1') {
+    syncSitesListFootprintChip(panel);
+    return true;
+  }
+  const onClick = (event) => {
+    const chip = event.target?.closest?.('[data-installation-list-footprints]');
+    if (!chip || (typeof root.contains === 'function' && !root.contains(chip))) return;
+    const next = footprintsChipFromControls()?.params?.listFootprintsOnly;
+    setSitesListFootprintsOnlyFilter(next);
+    syncSitesListFootprintChip(panel);
+  };
+  root.addEventListener?.('click', onClick);
+  root.dataset.sitesListFootprintsBound = '1';
+  syncSitesListFootprintChip(panel);
+  return true;
+}
+
+function bindSitesListFootprintChip(panel) {
+  if (!footprintChipHydrated) {
+    hydrateSitesListFootprintsOnlyFilter();
+    footprintChipHydrated = true;
+  }
+  if (!footprintChipMounted) {
+    footprintChipMounted = mountSitesListFootprintChip(panel);
+  } else {
+    syncSitesListFootprintChip(panel);
+  }
+  if (footprintChipSubscribed) return;
+  subscribeSitesListFootprintsOnlyFilter(() => {
+    syncSitesListFootprintChip(lastPanel);
+    if (lastOpen && typeof lastPanel?.querySelector === 'function'
+      && lastPanel.querySelector('[data-installations-list]')) {
+      paintInstallationListRows(
+        lastPanel,
+        listViewportInstallations(lastListRecords, { selectedId: lastSelectedId }),
+      );
+    }
+  });
+  footprintChipSubscribed = true;
 }
 
 function escapeHtml(value) {
@@ -319,6 +464,7 @@ export function applyInstallationViewportList({
   lastOpen = showing;
   lastPanel = panel;
   bindSitesListClassChips(panel);
+  bindSitesListFootprintChip(panel);
   if (toggle) {
     toggle.setAttribute('aria-pressed', showing ? 'true' : 'false');
     toggle.classList.toggle('active', showing);
@@ -332,3 +478,5 @@ export function applyInstallationViewportList({
 
 hydrateSitesListClassFilter();
 classChipsHydrated = true;
+hydrateSitesListFootprintsOnlyFilter();
+footprintChipHydrated = true;

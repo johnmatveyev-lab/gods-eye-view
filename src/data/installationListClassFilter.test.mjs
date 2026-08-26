@@ -29,6 +29,7 @@ import {
 import { filterInstallationsByMappedOnly } from './installationListMappedFilter.js';
 import { filterInstallationsByNamedOnly } from './installationListNamedFilter.js';
 import { filterInstallationsByListOsmType } from './installationListOsmFilter.js';
+import { resetSitesListFootprintsOnlyFilterForTest } from './installationListFootprintFilter.js';
 import {
   getParams,
   getRowControls,
@@ -128,10 +129,12 @@ const MIXED = Object.freeze([
 
 beforeEach(() => {
   resetSitesListClassFilterForTest();
+  resetSitesListFootprintsOnlyFilterForTest();
 });
 
 afterEach(() => {
   resetSitesListClassFilterForTest();
+  resetSitesListFootprintsOnlyFilterForTest();
 });
 
 test('All keeps airfield / naval_base / range / military_land', () => {
@@ -452,9 +455,10 @@ test('getRowControls owns All | Airfield | Naval after OSM-type', () => {
   assert.equal(models.find((chip) => chip.params.listClass === 'naval').active, true);
 
   const chips = getRowControls().chips;
-  assert.deepEqual(chips.map((chip) => chip.label), ['All', 'Airfield', 'Naval']);
-  assert.equal(chips.filter((chip) => chip.active).length, 1);
+  assert.deepEqual(chips.map((chip) => chip.label), ['All', 'Airfield', 'Naval', 'Footprints only']);
+  assert.equal(chips.filter((chip) => chip.params?.listClass && chip.active).length, 1);
   assert.equal(chips.find((chip) => chip.params.listClass === 'all').active, true);
+  assert.equal(chips.find((chip) => chip.label === 'Footprints only').active, false);
 
   assert.equal(getParams().listClass, 'all');
   assert.equal(setParams({ listClass: 'airfield' }), true);
