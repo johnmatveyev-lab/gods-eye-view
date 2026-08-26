@@ -204,6 +204,9 @@ import {
   normalizeFirmsVersionFilter,
 } from './data/firmsVersionFilter.js';
 import {
+  normalizeAreaCeiling,
+} from './data/firmsAreaFilter.js';
+import {
   getFirmsListConf,
   hydrateFirmsListConf,
   normalizeFirmsListConf,
@@ -2912,6 +2915,7 @@ export class StyleManager {
     this._firmsScanChips = document.getElementById('fires-scan-chips');
     this._firmsTrackChips = document.getElementById('fires-track-chips');
     this._firmsVersionChips = document.getElementById('fires-version-chips');
+    this._firmsAreaChips = document.getElementById('fires-area-chips');
     this._firmsListConfChips = document.getElementById('fires-list-conf-chips');
     this._firmsListFrpChips = document.getElementById('fires-list-frp-chips');
     this._firmsListAgeChips = document.getElementById('fires-list-age-chips');
@@ -3472,6 +3476,7 @@ export class StyleManager {
     this._initFirmsScanChips();
     this._initFirmsTrackChips();
     this._initFirmsVersionChips();
+    this._initFirmsAreaChips();
     this._initFirmsListConfChips();
     this._initFirmsListFrpChips();
     this._initFirmsListAgeChips();
@@ -5636,6 +5641,7 @@ export class StyleManager {
           this._syncFirmsScanChips();
           this._syncFirmsTrackChips();
           this._syncFirmsVersionChips();
+          this._syncFirmsAreaChips();
           this._syncFirmsListConfChips();
           this._syncFirmsListFrpChips();
           this._syncFirmsListAgeChips();
@@ -12266,6 +12272,32 @@ export class StyleManager {
       this._syncFirmsVersionChips();
     });
     this._syncFirmsVersionChips();
+  }
+
+  _syncFirmsAreaChips() {
+    const enabled = this._dataManager?.isEnabled?.('local-firms') === true;
+    if (this._firmsAreaChips) this._firmsAreaChips.hidden = !enabled;
+    const layer = this._dataManager?.layers?.get('local-firms')?.module;
+    const ceiling = normalizeAreaCeiling(layer?.getParams?.()?.areaCeiling);
+    const chips = this._firmsAreaChips?.querySelectorAll?.('[data-firms-area]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.firmsArea === ceiling;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initFirmsAreaChips() {
+    if (!this._firmsAreaChips) return;
+    this._firmsAreaChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-firms-area]');
+      if (!chip || !this._firmsAreaChips.contains(chip)) return;
+      const next = normalizeAreaCeiling(chip.dataset.firmsArea);
+      this._dataManager?.setLayerParams?.('local-firms', { areaCeiling: next }, { origin: 'user' });
+      this._syncFirmsAreaChips();
+    });
+    this._syncFirmsAreaChips();
   }
 
   _syncFirmsListConfChips() {

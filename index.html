@@ -1191,6 +1191,11 @@
         <button type="button" class="fires-sensor-chip" data-firms-version="2.0NRT" aria-pressed="false" title="Show C2 NRT (2.0NRT) detections only">2.0NRT</button>
         <button type="button" class="fires-sensor-chip" data-firms-version="other" aria-pressed="false" title="Show older or other FIRMS product versions (1.0NRT and missing)">Other</button>
       </div>
+      <div id="fires-area-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS pixel area" hidden>
+        <button type="button" class="fires-sensor-chip active" data-firms-area="all" aria-pressed="true" title="Show every FIRMS detection pixel area">All</button>
+        <button type="button" class="fires-sensor-chip" data-firms-area="2" aria-pressed="false" title="Hide detections at or above 2 km² (scan × track); drop 2×2 km edge-of-swath pixels">&lt;2 km²</button>
+        <button type="button" class="fires-sensor-chip" data-firms-area="1" aria-pressed="false" title="Hide detections at or above 1 km² (scan × track); keep near-nadir 0.4×0.4 km pixels">&lt;1 km²</button>
+      </div>
       <div id="fires-list-conf-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS list confidence" hidden>
         <button type="button" class="fires-sensor-chip active" data-firms-list-conf="all" aria-pressed="true" title="Show every FIRMS list confidence bucket">All</button>
         <button type="button" class="fires-sensor-chip" data-firms-list-conf="high" aria-pressed="false" title="Keep high-confidence detections (≥0.75) on the FIRES list">High</button>

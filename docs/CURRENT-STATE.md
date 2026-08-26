@@ -2,6 +2,20 @@
 
 Updated: August 26, 2026
 
+> **2026-08-26 — FIRMS pixel-area ceiling chips (plan 226)**
+> (`src/data/firmsAreaFilter.js`). Exclusive **All | <2 km² | <1 km²**
+> chips on the FIRMS globe row, after Plan 217 version chips. Area is
+> `scanKm × trackKm` on the already-adapted fire. Default **All** is the
+> current overlay (0.4×0.4 / 1×1 / 2×2 stay). **<2 km²** keeps 1×1 and
+> drops 2×2. **<1 km²** keeps 0.4×0.4 and drops 1×1. Missing / non-finite
+> scan or track stays. Selected fire stays. AND with Plan 204 scan, 211
+> track, 217 version, and existing FRP / confidence / age / sensor /
+> satellite floors. Re-applies from the already-fetched `/api/firms`
+> payload — no extra NASA fetch. Persists as `meridian.firmsArea` only
+> (not a share-link field). LayerStateCoordinator restore re-reads the
+> persist key on layer init. Hidden when the FIRMS layer is off.
+> Client-only; no `/api`. Distinct from 204/211/217 and 155/192.
+
 > **2026-08-26 — Dam list operator-only toggle (plan 224)**
 > (`src/data/damsOperatorFilter.js`). **Operator only** chip on the dams
 > in-view list, next to Plan 218 Named only and Plan 205 All | 10+ MW |
