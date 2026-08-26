@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Hide no site** toggle after
+  Hide no provider. Default **off** keeps the current list (named pads and
+  Unknown launch site). **On** keeps a non-empty `launchSite` that is not
+  the Unknown launch site fallback; empty / whitespace / Unknown launch
+  site drop. Missing site fails closed. A selected row always stays if it
+  passed the other filters. AND with Plan 207 LSP-type, Plan 215 Mapped
+  only, Plan 223 All | Go | TBD status, and Plan 232 Hide no provider.
+  List only — globe Plan 181 hide-unknown-site is unchanged. Re-filters
+  the already-fetched `/api/launches` roster — no extra LL2 fetch and no
+  new `/api`. Preference persists as `meridian.launchListHideNoSite`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write).
 - Hosted Quakes list has a client-only **Hide no place** toggle after the
   Plan 236 range-ceiling chips. Default **off** keeps the current 50-row
   nearest/recent list, including named USGS places and the UNAVAILABLE
