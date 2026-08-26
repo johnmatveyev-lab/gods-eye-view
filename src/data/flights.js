@@ -98,6 +98,14 @@ import {
   subscribeHideNoHeadingEnabled,
 } from './flightHideNoHeadingFilter.js';
 import {
+  getHideNoCountryEnabled,
+  hideNoCountryChipModel,
+  hydrateHideNoCountryEnabled,
+  passesHideNoCountryFilter,
+  setHideNoCountryEnabled,
+  subscribeHideNoCountryEnabled,
+} from './flightHideNoCountryFilter.js';
+import {
   aircraftMatchesAltitudeBand,
   getAltitudeBand,
   hydrateAltitudeBand,
@@ -114,7 +122,7 @@ import {
   horizonOccluder,
   cameraPoseSignature,
 } from './iconOrientation.js';
-import { stickyText, stickyNumber } from './aircraftMeta.js';
+import { persistAviationAltitudeM, stickyText, stickyNumber } from './aircraftMeta.js';
 import {
   callsignMatchesPrefixes,
   callsignPrefixRowField,
@@ -475,6 +483,14 @@ function _hideNoHeadingMatcher(contact) {
   return passesHideNoHeadingFilter({
     true_track: contact?.true_track,
     hideNoHeading: getHideNoHeadingEnabled(),
+  });
+}
+
+/** PLAN 244 — hide contacts that never publish an originCountry. */
+function _hideNoCountryMatcher(contact) {
+  return passesHideNoCountryFilter({
+    originCountry: contact?.originCountry,
+    hideNoCountry: getHideNoCountryEnabled(),
   });
 }
 
@@ -870,6 +886,8 @@ hydrateHideNoCallsignEnabled();
 subscribeHideNoCallsignEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoHeadingEnabled();
 subscribeHideNoHeadingEnabled(_applyAltitudeBandVisibility);
+hydrateHideNoCountryEnabled();
+subscribeHideNoCountryEnabled(_applyAltitudeBandVisibility);
 
 /** Whether this contact is inside the current flights altitude band. */
 function _inAltitudeBand(icao24, info = _flightData.get(icao24)) {
@@ -913,7 +931,7 @@ function _verticalRateAndMatcher(contact) {
 }
 
 /**
- * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-reg × hide-no-callsign × hide-no-heading).
+ * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-reg × hide-no-callsign × hide-no-heading × hide-no-country).
  * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
  * not here — counts stay honest.
  */
@@ -922,7 +940,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher],
   });
 }
 
@@ -4355,7 +4373,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher],
   });
 }
 
@@ -4711,18 +4729,23 @@ const flightsLayer = {
         // regressing to the ICAO hex / a 0° (north) heading. Bounded by the
         // MISSING_POLL_LIMIT eviction below, which deletes the whole entry.
         const prevMeta = _flightData.get(icao24);
-        // Grounded planes with no baro reading sit at 0 m, not the 10 km
-        // airborne default (a parked plane must never float).
+        // Aviation altitude: finite baro (index 7), else finite geo
+        // (index 13), else null. Same sticky-null pattern as velocity
+        // and track — never invent 10000. Grounded with neither stays 0
+        // (a parked plane must never float).
         // NOTE (height-datum fix): `alt` stays the AVIATION field — the sticky
-        // barometric/MSL altitude read by labels (FL/altitude readout),
+        // altitude read by labels (FL/altitude readout),
         // route-plausibility, and follow-camera range heuristics. It is
         // NEVER overwritten or renamed. Where the aircraft actually RENDERS
         // on the ellipsoidal globe is a SEPARATE value (renderAltitudeM,
-        // below) — geo_altitude when OpenSky reports it (already WGS84
+        // below) — geo_altitude when the feed reports it (already WGS84
         // ellipsoidal), else baro+geoid as a visual fallback, else ground
         // surface when parked. `Cartesian3.fromDegrees` gets renderAltitudeM,
         // never `alt` directly.
-        const alt = stickyNumber(baro_alt, prevMeta?.altitude, onGround ? 0 : 10000);
+        const alt = persistAviationAltitudeM(baro_alt, geo_alt, {
+          previous: prevMeta?.altitude,
+          onGround,
+        });
 
         // geoid undulation N: cached per-aircraft (negligible drift — see
         // task brief) once the geoid grid has loaded; unavailable pre-load
@@ -5226,7 +5249,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, hideNoHeading?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, hideNoHeading?: boolean, hideNoCountry?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5319,6 +5342,10 @@ const flightsLayer = {
       setHideNoHeadingEnabled(params.hideNoHeading);
       _applyInFlightFilterVisibility();
     }
+    if (typeof params.hideNoCountry === 'boolean' && params.hideNoCountry !== getHideNoCountryEnabled()) {
+      setHideNoCountryEnabled(params.hideNoCountry);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -5355,6 +5382,7 @@ const flightsLayer = {
       hideNoReg: getHideNoRegEnabled(),
       hideNoCallsign: getHideNoCallsignEnabled(),
       hideNoHeading: getHideNoHeadingEnabled(),
+      hideNoCountry: getHideNoCountryEnabled(),
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),
@@ -5380,6 +5408,7 @@ const flightsLayer = {
         hideNoRegChipModel(getHideNoRegEnabled()),
         hideNoCallsignChipModel(getHideNoCallsignEnabled()),
         hideNoHeadingChipModel(getHideNoHeadingEnabled()),
+        hideNoCountryChipModel(getHideNoCountryEnabled()),
       ],
       field: callsignPrefixRowField(),
     };
