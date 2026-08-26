@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Datacenters in-view list has client-only exclusive **All | AWS | Equinix**
+  chips. Default **All** matches the current in-view OSM list. **AWS** keeps
+  rows whose `operator:short` or `operator` is AWS / Amazon / Amazon Web
+  Services (case-insensitive). **Equinix** keeps Equinix rows. Missing
+  operator stays on All and drops on AWS / Equinix. Chip changes re-filter
+  the already-bundled OSM / ODbL snapshot and do not touch globe stems —
+  no extra GeoJSON fetch and no `/api`. Preference persists as
+  `meridian.dcOperator` only (not a share-link field). Hidden when the
+  Datacenters layer is off. Distinct from Plan 193 Hide no operator
+  (`meridian.datacenterHideNoOperator`).
 - Global Context has a client-only **Military only** toggle on the Contacts
   roster, next to Sites only. Default **off** keeps all four cohorts.
   **On** keeps `military` (military flights) and drops civil flights, AIS,

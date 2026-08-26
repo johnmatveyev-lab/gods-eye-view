@@ -125,7 +125,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         FIRMS list age-floor chips (`meridian.firmsListAge`),
  *                         Context Identified only (`meridian.awarenessIdentified`),
  *                         Context range chips (`meridian.awarenessRange`),
- *                         Context Aircraft only (`meridian.awarenessAircraftOnly`).
+ *                         Context Aircraft only (`meridian.awarenessAircraftOnly`),
+ *                         datacenter operator chips (`meridian.dcOperator`).
  *                         All are defaults or separate durable prefs the
  *                         visitor did not choose here.
  *                         In particular nothing calls `_setModels3dEnabled` /
@@ -150,7 +151,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `writeLaunchListHideNoVehicle` /
  *                         `setAwarenessIdentifiedEnabled` /
  *                         `setAwarenessRangeFilter` /
- *                         `setAwarenessAircraftOnlyEnabled`,
+ *                         `setAwarenessAircraftOnlyEnabled` /
+ *                         `setDatacenterListOperator`,
  *                         which would persist a display choice nobody made.
  *
  * The two Context missions deliberately reuse `styleManager.setContextMode`, the
