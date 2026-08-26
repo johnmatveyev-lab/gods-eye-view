@@ -269,6 +269,10 @@ import {
   setLaunchLspTypeFilter,
   subscribeLaunchLspTypeFilter,
 } from './data/launchLspTypeFilter.js';
+import {
+  readLaunchListMappedOnly,
+  writeLaunchListMappedOnly,
+} from './data/launchListMappedFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   getEarthquakeListMagFilter,
@@ -3052,6 +3056,7 @@ export class StyleManager {
     this._launchesPanelList = document.getElementById('launches-panel-list');
     this._launchesPanelCount = document.getElementById('launches-panel-count');
     this._launchesPanelLspChips = document.getElementById('launches-panel-lsp-chips');
+    this._launchesPanelMappedChips = document.getElementById('launches-panel-mapped-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
     this._launchesPanelPayload = null;
@@ -11650,6 +11655,7 @@ export class StyleManager {
     });
     hydrateLaunchLspTypeFilter();
     this._syncLaunchesPanelLspChips();
+    this._syncLaunchesPanelMappedChip();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11662,6 +11668,13 @@ export class StyleManager {
       const chip = event.target?.closest?.('[data-launch-lsp-type]');
       if (!chip || !this._launchesPanelLspChips.contains(chip)) return;
       setLaunchLspTypeFilter(normalizeLaunchLspTypeFilter(chip.dataset.launchLspType));
+    });
+    this._launchesPanelMappedChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-list-mapped]');
+      if (!chip || !this._launchesPanelMappedChips.contains(chip)) return;
+      writeLaunchListMappedOnly(readLaunchListMappedOnly() !== true);
+      this._syncLaunchesPanelMappedChip();
+      this._reapplyLaunchesPanelLspType();
     });
   }
 
@@ -11676,9 +11689,22 @@ export class StyleManager {
     }
   }
 
+  _syncLaunchesPanelMappedChip() {
+    const only = readLaunchListMappedOnly() === true;
+    const chips = this._launchesPanelMappedChips?.querySelectorAll?.('[data-launch-list-mapped]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
   _reapplyLaunchesPanelLspType() {
     if (this._launchesPanelPayload == null) return;
-    const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter());
+    const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter(), {
+      mappedOnly: readLaunchListMappedOnly(),
+      selectedId: this._launchesPanelSelectedId,
+    });
     this._launchesPanelRows = rows;
     this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
       available: true,
@@ -11718,6 +11744,8 @@ export class StyleManager {
     const presentation = await loadLaunchesPanelPayload({
       cachedPayload: rocketLaunchesLayer.getPayload?.() || null,
       filter: getLaunchLspTypeFilter(),
+      mappedOnly: readLaunchListMappedOnly(),
+      selectedId: this._launchesPanelSelectedId,
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
     this._launchesPanelPayload = presentation.payload ?? null;

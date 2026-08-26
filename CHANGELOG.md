@@ -7,6 +7,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Mapped only** toggle after the
+  All | Commercial | Government LSP-type chips. Default **off** keeps the
+  current list, including missions with no pad coords so they stay selectable.
+  On hides already-fetched rows missing finite pad lat/lon. A selected row
+  always stays. AND with Plan 207 LSP-type chips. List only — globe Space
+  Missions markers are unchanged. No extra fetch and no `/api`. Preference
+  persists as `meridian.launchListMappedOnly` only (not a share-link field).
+  LayerStateCoordinator restore re-reads the persist key.
 - The hosted Sites list has a client-only **Mapped only** toggle after the
   globe chips (class, Footprints only, Named only, OSM type, Mapped only).
   Default **off** keeps the current 50-row list. On drops already-fetched
