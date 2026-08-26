@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Datacenters in-view list has a client-only **Owner only** toggle after
+  Dated only. Default **off** keeps the current in-view OSM list,
+  including missing, empty, and whitespace `owner`. **On** hides those
+  no-owner rows and keeps a published owner. A named operator-only row
+  with empty owner hides when on. The selected id always stays when it
+  already passed the other matchers. AND with Plan 206 operator chips,
+  Plan 270 Named only, Plan 285 Website only, and Plan 291 Dated only.
+  List/fly-to only — globe stems stay. Preference persists as
+  `meridian.dcOwnerOnly` (`1` / `0`; no share-URL write). Distinct from
+  Plan 193, Plan 206, Plan 270, Plan 285, and Plan 291.
 - Civil flights have a client-only **Hide no type name** toggle next to
   Hide no type. Default **off** keeps the current draw, including
   missing / null / empty / whitespace `typeName`. **On** hides those and
