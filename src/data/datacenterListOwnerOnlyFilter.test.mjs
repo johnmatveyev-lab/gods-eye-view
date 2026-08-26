@@ -428,9 +428,9 @@ test('AND with Named only / Website only / Dated only / 206', () => {
     ownerOnly: true,
   });
   assert.deepEqual(allOwned.map((site) => site.id).sort(), [
-    GENERIC_OWNED.id,
     OWNED_AWS.id,
     OWNED_EQUINIX.id,
+    GENERIC_OWNED.id,
   ]);
 
   const equinixNamedWebsiteDatedOwner = listDatacentersInView({
