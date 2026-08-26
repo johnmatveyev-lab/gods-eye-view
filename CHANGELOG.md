@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no version** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps the current 50-row list, including empty or missing version.
+  On keeps a non-empty trimmed `version` (C6.1 stays). Missing, empty,
+  or whitespace-only version fails closed. A selected fire always stays.
+  AND after Plan 210 list confidence, Plan 219 list FRP, Plan 225 list
+  age, Plan 230 list Hide no satellite, and Plan 252 list Hide no
+  sensor, before the 50-row cap. Distinct from those list chips, globe
+  version chips (217), and globe Hide no version (245).
+  `getRowControls()` owns the list chip — index.html / ui.js do not
+  re-declare it. Preference persists as `meridian.firmsListHideNoVersion`
+  (`'1'` / `'0'`; LayerStateCoordinator restore, no share-URL write).
+  No extra NASA fetch and no new `/api`. NASA FIRMS acknowledgement is
+  unchanged.
 - Global Context has a client-only **Vessels only** toggle on the Contacts
   roster, next to Aircraft only and the All | &lt;50 km | &lt;10 km range
   chips. Default **off** keeps all four cohorts. **On** keeps
