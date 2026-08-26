@@ -4926,10 +4926,11 @@ const flightsLayer = {
             prevMeta?.lastContactEpochMs,
             null,
           ),
-          // adsbdb enrichment — written by the enrichment callbacks, carried across polls:
-          typeCode: prevMeta?.typeCode ?? null,
+          // adsbdb enrichment — written by the enrichment callbacks, carried across polls.
+          // This poll's adsb.lol extras (state[18]/t, state[19]/r) win when present.
+          typeCode: stickyText(state[18] ?? state.t, prevMeta?.typeCode) || null,
           typeName: prevMeta?.typeName ?? null,
-          registration: prevMeta?.registration ?? null,
+          registration: stickyText(state[19] ?? state.r, prevMeta?.registration) || null,
           airline: prevMeta?.airline ?? null,
           route: prevMeta?.route ?? null,
           // The RAW poll fix lat/lon (this tick's OpenSky state-vector

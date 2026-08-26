@@ -8,6 +8,13 @@ function finiteNumber(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+/** Trimmed wire text. Empty / missing / whitespace stays missing — never invent. */
+function publishedText(value) {
+  if (value === null || value === undefined) return null;
+  const text = String(value).trim();
+  return text || null;
+}
+
 function emitterCategory(value) {
   const category = String(value || '').trim().toUpperCase();
   const categories = {
@@ -49,8 +56,14 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
   const groundSpeedKnots = finiteNumber(aircraft?.gs);
   const verticalRateFpm = finiteNumber(aircraft?.baro_rate) ?? finiteNumber(aircraft?.geom_rate);
   const track = finiteNumber(aircraft?.track);
+  const publishedType = publishedText(aircraft?.t);
+  const publishedReg = publishedText(aircraft?.r);
 
-  return [
+  // OpenSky indices 0–17 stay as before. adsb.lol already publishes ICAO
+  // type (`t`) and registration (`r`) on every row; keep them as extras
+  // (indices 18/19 + named t/r) so this poll can write them without
+  // waiting on adsbdb. Missing / empty t stays missing.
+  const state = [
     hex,
     String(aircraft?.flight || aircraft?.r || '').trim() || null,
     null,
@@ -69,7 +82,12 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
     aircraft?.spi === 1,
     0,
     emitterCategory(aircraft?.category),
+    publishedType,
+    publishedReg,
   ];
+  state.t = publishedType;
+  state.r = publishedReg;
+  return state;
 }
 
 /**
