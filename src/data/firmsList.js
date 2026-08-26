@@ -61,6 +61,14 @@ import {
   setFirmsListHideNoAcq,
   subscribeFirmsListHideNoAcq,
 } from './firmsListHideNoAcqFilter.js';
+import {
+  fireMeetsListHideNoScan,
+  firmsListHideNoScanChipModel,
+  getFirmsListHideNoScan,
+  hydrateFirmsListHideNoScan,
+  setFirmsListHideNoScan,
+  subscribeFirmsListHideNoScan,
+} from './firmsListHideNoScanFilter.js';
 
 export {
   firmsListHideNoSatChipModel,
@@ -79,6 +87,10 @@ export {
   getFirmsListHideNoAcq,
   hydrateFirmsListHideNoAcq,
   setFirmsListHideNoAcq,
+  firmsListHideNoScanChipModel,
+  getFirmsListHideNoScan,
+  hydrateFirmsListHideNoScan,
+  setFirmsListHideNoScan,
 };
 
 /** Hosted list ceiling: nearest detections to the current camera. */
@@ -104,11 +116,11 @@ export const FIRMS_ACKNOWLEDGEMENT =
 /**
  * Rank fires by great-circle distance to the camera and cap the list.
  * List-confidence, list-FRP, list-age, Hide no satellite, Hide no
- * sensor, list version-presence, list daynight-presence, and list
- * acq-presence AND before the cap so High / 100+ MW / <1 h / labeled
- * detections can fill the 50 rows from farther detections. A selected
- * fire always stays.
- * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *, acqMs?: *, satellite?: *, sensor?: *, version?: *, daynight?: *}>} fires
+ * sensor, list version-presence, list daynight-presence, list
+ * acq-presence, and list scan-presence AND before the cap so High /
+ * 100+ MW / <1 h / labeled detections can fill the 50 rows from
+ * farther detections. A selected fire always stays.
+ * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *, acqMs?: *, satellite?: *, sensor?: *, version?: *, daynight?: *, scanKm?: *}>} fires
  * @param {{lat?: number, lon?: number}|null} origin
  * @param {number} [limit=FIRMS_LIST_LIMIT]
  * @param {string} [listConf]
@@ -121,6 +133,7 @@ export const FIRMS_ACKNOWLEDGEMENT =
  * @param {boolean} [listHideNoVersion]
  * @param {boolean} [listHideNoDaynight]
  * @param {boolean} [listHideNoAcq]
+ * @param {boolean} [listHideNoScan]
  * @returns {Array<object>}
  */
 export function listNearestFires(
@@ -137,6 +150,7 @@ export function listNearestFires(
   listHideNoVersion,
   listHideNoDaynight,
   listHideNoAcq,
+  listHideNoScan,
 ) {
   if (!Array.isArray(fires)) return [];
   const originLat = Number(origin?.lat);
@@ -151,6 +165,7 @@ export function listNearestFires(
   const hideVersion = listHideNoVersion === undefined ? getFirmsListHideNoVersion() : listHideNoVersion;
   const hideDaynight = listHideNoDaynight === undefined ? getFirmsListHideNoDaynight() : listHideNoDaynight;
   const hideAcq = listHideNoAcq === undefined ? getFirmsListHideNoAcq() : listHideNoAcq;
+  const hideScan = listHideNoScan === undefined ? getFirmsListHideNoScan() : listHideNoScan;
   const selected = selectedId === undefined ? getFirmsListSelectedId() : selectedId;
   const selectedKey = selected == null || selected === '' ? '' : String(selected);
   const ranked = [];
@@ -168,6 +183,7 @@ export function listNearestFires(
     if (!isSelected && !fireMeetsListHideNoVersion(fire, hideVersion, { selectedId: selectedKey })) continue;
     if (!isSelected && !fireMeetsListHideNoDaynight(fire, hideDaynight, { selectedId: selectedKey })) continue;
     if (!isSelected && !fireMeetsListHideNoAcq(fire, hideAcq, { selectedId: selectedKey })) continue;
+    if (!isSelected && !fireMeetsListHideNoScan(fire, hideScan, { selectedId: selectedKey })) continue;
     const distanceKm = hasOrigin ? greatCircleKm(originLat, originLon, lat, lon) : Number.POSITIVE_INFINITY;
     ranked.push({
       ...fire,
@@ -238,6 +254,7 @@ export function resolveFireListView({
   listHideNoVersion,
   listHideNoDaynight,
   listHideNoAcq,
+  listHideNoScan,
 } = {}) {
   const acknowledgement = FIRMS_ACKNOWLEDGEMENT;
   if (keyRequired) {
@@ -263,6 +280,7 @@ export function resolveFireListView({
     listHideNoVersion,
     listHideNoDaynight,
     listHideNoAcq,
+    listHideNoScan,
   );
   if (!nearest.length) {
     return { status: 'unavailable', copy: FIRMS_LIST_EMPTY_COPY, rows: [], acknowledgement };
@@ -278,9 +296,10 @@ export function resolveFireListView({
 /**
  * Hosted FIRES list chips. Confidence / FRP / age stay in the HTML row
  * from Plans 210 / 219 / 225; Hide no satellite, Hide no sensor, list
- * version-presence, list daynight-presence, and list acq-presence are
- * owned here so index.html / ui.js do not re-declare them.
- * @returns {{hideNoSat: object, hideNoSensor: object, listHideNoVersion: object, listHideNoDaynight: object, listHideNoAcq: object}}
+ * version-presence, list daynight-presence, list acq-presence, and list
+ * scan-presence are owned here so index.html / ui.js do not re-declare
+ * them.
+ * @returns {{hideNoSat: object, hideNoSensor: object, listHideNoVersion: object, listHideNoDaynight: object, listHideNoAcq: object, listHideNoScan: object}}
  */
 export function getRowControls() {
   return {
@@ -289,6 +308,7 @@ export function getRowControls() {
     listHideNoVersion: firmsListHideNoVersionChipModel(getFirmsListHideNoVersion()),
     listHideNoDaynight: firmsListHideNoDaynightChipModel(getFirmsListHideNoDaynight()),
     listHideNoAcq: firmsListHideNoAcqChipModel(getFirmsListHideNoAcq()),
+    listHideNoScan: firmsListHideNoScanChipModel(getFirmsListHideNoScan()),
   };
 }
 
@@ -734,6 +754,104 @@ export function attachFirmsListHideNoAcq(panel, onChange) {
   const unsubscribe = subscribeFirmsListHideNoAcq(() => {
     syncFirmsListHideNoAcqChip(
       panel?.querySelector?.('#fires-list-acq-chips')
+      || panel?.querySelector?.('#fires-list-daynight-chips')
+      || panel?.querySelector?.('#fires-list-version-chips')
+      || panel?.querySelector?.('#fires-list-sensor-chips')
+      || panel?.querySelector?.('#fires-list-sat-chips')
+      || panel,
+    );
+    if (typeof onChange === 'function') onChange();
+  });
+  const detachScan = attachFirmsListHideNoScan(panel, onChange);
+  return () => {
+    detachScan();
+    unsubscribe();
+    unmount();
+  };
+}
+
+function createHideNoScanChipElement(model, make) {
+  const button = make('button');
+  button.type = 'button';
+  button.className = `fires-sensor-chip${model.active ? ' active' : ''}`;
+  button.dataset.firmsListHideNoScan = model.active ? '1' : '0';
+  button.textContent = model.label;
+  if (model.title) button.title = model.title;
+  button.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  return button;
+}
+
+function syncFirmsListHideNoScanChip(root) {
+  if (!root?.querySelectorAll) return;
+  const model = getRowControls().listHideNoScan;
+  const chips = root.querySelectorAll('[data-firms-list-hide-no-scan]');
+  for (const chip of chips) {
+    chip.classList?.toggle?.('active', model.active === true);
+    chip.dataset.firmsListHideNoScan = model.active ? '1' : '0';
+    chip.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  }
+}
+
+/**
+ * Inject list scan-presence next to Hide no acq.
+ * No-ops on the stub panels used by unit tests (no querySelector).
+ * @param {{querySelector?: Function, appendChild?: Function}|null} panel
+ * @returns {() => void}
+ */
+function mountFirmsListHideNoScanChip(panel) {
+  if (typeof panel?.querySelector !== 'function') return () => {};
+  let root = panel.querySelector('#fires-list-sat-chips')
+    || panel.querySelector('#fires-list-sensor-chips')
+    || panel.querySelector('#fires-list-version-chips')
+    || panel.querySelector('#fires-list-daynight-chips')
+    || panel.querySelector('#fires-list-acq-chips')
+    || panel.querySelector('#fires-list-scan-chips');
+  const make = globalThis.document?.createElement?.bind(globalThis.document);
+  if (!root && typeof make === 'function') {
+    root = make('div');
+    root.id = 'fires-list-scan-chips';
+    root.className = 'fires-sensor-chips';
+    root.setAttribute('role', 'group');
+    root.setAttribute('aria-label', 'Hide listed detections with no scan size');
+    const after = panel.querySelector('#fires-list-age-chips');
+    if (typeof after?.insertAdjacentElement === 'function') {
+      after.insertAdjacentElement('afterend', root);
+    } else {
+      const header = panel.querySelector('.fires-panel-inner') || panel;
+      header.appendChild?.(root);
+    }
+  }
+  if (!root) return () => {};
+  if (typeof make === 'function' && !root.querySelector?.('[data-firms-list-hide-no-scan]')) {
+    const node = createHideNoScanChipElement(getRowControls().listHideNoScan, make);
+    root.appendChild?.(node);
+  }
+  const onClick = (event) => {
+    const chip = event.target?.closest?.('[data-firms-list-hide-no-scan]');
+    if (!chip || (typeof root.contains === 'function' && !root.contains(chip))) return;
+    setFirmsListHideNoScan(getRowControls().listHideNoScan.params.firmsListHideNoScan);
+    syncFirmsListHideNoScanChip(root);
+  };
+  root.addEventListener?.('click', onClick);
+  syncFirmsListHideNoScanChip(root);
+  return () => {
+    root.removeEventListener?.('click', onClick);
+  };
+}
+
+/**
+ * Hydrate, mount, and subscribe list scan-presence on the FIRES panel.
+ * @param {{querySelector?: Function}|null} panel
+ * @param {() => void} [onChange]
+ * @returns {() => void}
+ */
+export function attachFirmsListHideNoScan(panel, onChange) {
+  hydrateFirmsListHideNoScan();
+  const unmount = mountFirmsListHideNoScanChip(panel);
+  const unsubscribe = subscribeFirmsListHideNoScan(() => {
+    syncFirmsListHideNoScanChip(
+      panel?.querySelector?.('#fires-list-scan-chips')
+      || panel?.querySelector?.('#fires-list-acq-chips')
       || panel?.querySelector?.('#fires-list-daynight-chips')
       || panel?.querySelector?.('#fires-list-version-chips')
       || panel?.querySelector?.('#fires-list-sensor-chips')
