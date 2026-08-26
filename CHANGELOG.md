@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Global Context has a client-only **Vessels only** toggle on the Contacts
+  roster, next to Aircraft only and the All | &lt;50 km | &lt;10 km range
+  chips. Default **off** keeps all four cohorts. **On** keeps
+  `ais-live-vessels` and drops flights and mapped sites from the
+  already-fetched `getNearby` roster and NEXT walk. The current subject
+  always stays. Missing `layerId` stays. AND with Identified only, the
+  range chips, and Aircraft only — combining Vessels only and Aircraft
+  only typically leaves only the subject. Chip changes re-filter
+  already-fetched records — no extra fetch and no `/api`. The 250 km
+  ring (`AWARENESS_RADIUS_M`) is unchanged. Preference persists as
+  `meridian.awarenessVesselsOnly` (`1` / `0`; LayerStateCoordinator
+  restore, no share-URL write). Distinct from Aircraft only, which drops
+  AIS + sites and keeps flights + military.
 - AIS has a client-only **Hide no speed** toggle after the Plan 246 **Hide no
   type** chip. Default **off** keeps the current fleet, including null,
   missing, and non-finite speed. **On** keeps a finite speed (0 stays —
