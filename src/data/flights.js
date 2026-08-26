@@ -98,6 +98,14 @@ import {
   subscribeHideNoCallsignEnabled,
 } from './flightHideNoCallsignFilter.js';
 import {
+  getHideNoAirlineEnabled,
+  hideNoAirlineChipModel,
+  hydrateHideNoAirlineEnabled,
+  passesHideNoAirlineFilter,
+  setHideNoAirlineEnabled,
+  subscribeHideNoAirlineEnabled,
+} from './flightHideNoAirlineFilter.js';
+import {
   getHideNoHeadingEnabled,
   hideNoHeadingChipModel,
   hydrateHideNoHeadingEnabled,
@@ -547,6 +555,14 @@ function _hideNoCallsignMatcher(contact) {
   return passesHideNoCallsignFilter({
     callsign: contact?.callsign,
     hideNoCallsign: getHideNoCallsignEnabled(),
+  });
+}
+
+/** PLAN 303 leftover — hide contacts that never carry an adsbdb airline. */
+function _hideNoAirlineMatcher(contact) {
+  return passesHideNoAirlineFilter({
+    airline: contact?.airline,
+    hideNoAirline: getHideNoAirlineEnabled(),
   });
 }
 
@@ -1016,6 +1032,8 @@ hydrateHideNoRegEnabled();
 subscribeHideNoRegEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoCallsignEnabled();
 subscribeHideNoCallsignEnabled(_applyAltitudeBandVisibility);
+hydrateHideNoAirlineEnabled();
+subscribeHideNoAirlineEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoHeadingEnabled();
 subscribeHideNoHeadingEnabled(_applyAltitudeBandVisibility);
 hydrateHideNoCountryEnabled();
@@ -1077,7 +1095,7 @@ function _verticalRateAndMatcher(contact) {
 }
 
 /**
- * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-type-name × hide-no-reg × hide-no-callsign × hide-no-heading × hide-no-country × hide-no-speed × hide-no-geo-altitude × hide-no-baro-altitude × hide-no-last-contact × hide-no-category × hide-no-position-time × hide-no-vertical-rate).
+ * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk × hide-no-type × hide-no-type-name × hide-no-reg × hide-no-callsign × hide-no-airline × hide-no-heading × hide-no-country × hide-no-speed × hide-no-geo-altitude × hide-no-baro-altitude × hide-no-last-contact × hide-no-category × hide-no-position-time × hide-no-vertical-rate).
  * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
  * not here — counts stay honest.
  */
@@ -1086,7 +1104,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoTypeNameMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoPositionTimeMatcher, _hideNoVerticalRateMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoTypeNameMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoAirlineMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoPositionTimeMatcher, _hideNoVerticalRateMatcher],
   });
 }
 
@@ -4520,7 +4538,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoTypeNameMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoPositionTimeMatcher, _hideNoVerticalRateMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher, _hideNoTypeMatcher, _hideNoTypeNameMatcher, _hideNoRegMatcher, _hideNoCallsignMatcher, _hideNoAirlineMatcher, _hideNoHeadingMatcher, _hideNoCountryMatcher, _hideNoSpeedMatcher, _hideNoGeoAltitudeMatcher, _hideNoBaroAltitudeMatcher, _hideNoLastContactMatcher, _hideNoCategoryMatcher, _hideNoPositionTimeMatcher, _hideNoVerticalRateMatcher],
   });
 }
 
@@ -5405,7 +5423,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoTypeName?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, hideNoHeading?: boolean, hideNoCountry?: boolean, hideNoSpeed?: boolean, hideNoGeoAltitude?: boolean, hideNoBaroAltitude?: boolean, hideNoLastContact?: boolean, hideNoCategory?: boolean, hideNoPositionTime?: boolean, hideNoVerticalRate?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, hideNoType?: boolean, hideNoTypeName?: boolean, hideNoReg?: boolean, hideNoCallsign?: boolean, hideNoAirline?: boolean, hideNoHeading?: boolean, hideNoCountry?: boolean, hideNoSpeed?: boolean, hideNoGeoAltitude?: boolean, hideNoBaroAltitude?: boolean, hideNoLastContact?: boolean, hideNoCategory?: boolean, hideNoPositionTime?: boolean, hideNoVerticalRate?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5498,6 +5516,10 @@ const flightsLayer = {
       setHideNoCallsignEnabled(params.hideNoCallsign);
       _applyInFlightFilterVisibility();
     }
+    if (typeof params.hideNoAirline === 'boolean' && params.hideNoAirline !== getHideNoAirlineEnabled()) {
+      setHideNoAirlineEnabled(params.hideNoAirline);
+      _applyInFlightFilterVisibility();
+    }
     if (typeof params.hideNoHeading === 'boolean' && params.hideNoHeading !== getHideNoHeadingEnabled()) {
       setHideNoHeadingEnabled(params.hideNoHeading);
       _applyInFlightFilterVisibility();
@@ -5570,6 +5592,7 @@ const flightsLayer = {
       hideNoTypeName: getHideNoTypeNameEnabled(),
       hideNoReg: getHideNoRegEnabled(),
       hideNoCallsign: getHideNoCallsignEnabled(),
+      hideNoAirline: getHideNoAirlineEnabled(),
       hideNoHeading: getHideNoHeadingEnabled(),
       hideNoCountry: getHideNoCountryEnabled(),
       hideNoSpeed: getHideNoSpeedEnabled(),
@@ -5604,6 +5627,7 @@ const flightsLayer = {
         hideNoTypeNameChipModel(getHideNoTypeNameEnabled()),
         hideNoRegChipModel(getHideNoRegEnabled()),
         hideNoCallsignChipModel(getHideNoCallsignEnabled()),
+        hideNoAirlineChipModel(getHideNoAirlineEnabled()),
         hideNoHeadingChipModel(getHideNoHeadingEnabled()),
         hideNoCountryChipModel(getHideNoCountryEnabled()),
         hideNoSpeedChipModel(getHideNoSpeedEnabled()),
