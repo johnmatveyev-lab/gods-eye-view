@@ -18,6 +18,14 @@ import {
   getEarthquakeListMagFilter,
   hydrateEarthquakeListMagFilter,
 } from './earthquakeListMagFilter.js';
+import {
+  earthquakeListRangeChipModels,
+  earthquakeListRowMatchesRangeCeiling,
+  getEarthquakeListRangeFilter,
+  hydrateEarthquakeListRangeFilter,
+  setEarthquakeListRangeFilter,
+  subscribeEarthquakeListRangeFilter,
+} from './earthquakeListRangeFilter.js';
 
 export const EARTHQUAKE_LIST_LIMIT = 50;
 export const EARTHQUAKE_LIST_UNAVAILABLE = 'UNAVAILABLE';
@@ -82,11 +90,11 @@ export function formatEarthquakeListRow(record) {
 /**
  * Cap to the ~50 most recent events, or the 50 nearest when an origin is given.
  * List magnitude-floor chips (All | 5+ | 6+), depth-ceiling chips
- * (All | <70 km | <20 km), and age-ceiling chips (All | <6 h | <1 h)
- * AND before the cap. The selected row stays through the depth and
- * age ceilings.
+ * (All | <70 km | <20 km), age-ceiling chips (All | <6 h | <1 h),
+ * and range-ceiling chips (All | <500 km | <100 km) AND before the
+ * cap. The selected row stays through the depth, age, and range ceilings.
  * @param {Array<object>|null|undefined} records
- * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, selectedId?: string|null, now?: number}} [options]
+ * @param {{origin?: {lat?: number, lon?: number}|null, limit?: number, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, rangeCeiling?: unknown, selectedId?: string|null, now?: number}} [options]
  * @returns {Array<object>}
  */
 export function selectEarthquakeListRows(records, {
@@ -95,6 +103,7 @@ export function selectEarthquakeListRows(records, {
   magFloor = getEarthquakeListMagFilter(),
   depthCeiling = getEarthquakeListDepthFilter(),
   ageCeiling = getEarthquakeListAgeFilter(),
+  rangeCeiling = getEarthquakeListRangeFilter(),
   selectedId = null,
   now = Date.now(),
 } = {}) {
@@ -116,6 +125,9 @@ export function selectEarthquakeListRows(records, {
     if (hasOrigin) {
       row.distanceKm = earthquakeDistanceKm({ lat: originLat, lon: originLon }, row);
     }
+    if (!earthquakeListRowMatchesRangeCeiling(row, rangeCeiling, { selectedId, hasOrigin })) {
+      continue;
+    }
     rows.push(row);
   }
   rows.sort((a, b) => {
@@ -132,10 +144,10 @@ export function selectEarthquakeListRows(records, {
 
 /**
  * Sync list presentation. Failed or empty feed → unavailable, never a hang.
- * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, selectedId?: string|null, now?: number}} [input]
+ * @param {{records?: Array<object>, error?: unknown, origin?: {lat?: number, lon?: number}|null, magFloor?: unknown, depthCeiling?: unknown, ageCeiling?: unknown, rangeCeiling?: unknown, selectedId?: string|null, now?: number}} [input]
  * @returns {{status: 'ready'|'unavailable', rows: Array<object>, message: string|null, source: string}}
  */
-export function presentEarthquakeList({ records, error, origin, magFloor, depthCeiling, ageCeiling, selectedId, now } = {}) {
+export function presentEarthquakeList({ records, error, origin, magFloor, depthCeiling, ageCeiling, rangeCeiling, selectedId, now } = {}) {
   if (error) {
     return {
       status: 'unavailable',
@@ -144,7 +156,9 @@ export function presentEarthquakeList({ records, error, origin, magFloor, depthC
       source: EARTHQUAKE_LIST_SOURCE,
     };
   }
-  const rows = selectEarthquakeListRows(records, { origin, magFloor, depthCeiling, ageCeiling, selectedId, now });
+  const rows = selectEarthquakeListRows(records, {
+    origin, magFloor, depthCeiling, ageCeiling, rangeCeiling, selectedId, now,
+  });
   if (!rows.length) {
     return {
       status: 'unavailable',
@@ -269,6 +283,94 @@ export function renderEarthquakeList(container, presentation, {
 }
 
 /**
+ * Hosted Quakes list chips. Mag / depth / age stay in the HTML row
+ * from Plans 208 / 216 / 228; range chips are owned here so
+ * index.html / ui.js do not re-declare them.
+ * @returns {{chips: Array<object>}}
+ */
+export function getRowControls() {
+  return {
+    chips: earthquakeListRangeChipModels(getEarthquakeListRangeFilter()).map((chip) => ({
+      id: `range-${chip.id}`,
+      label: chip.label,
+      title: chip.title,
+      active: chip.active === true,
+      group: 'Range',
+      params: { rangeCeiling: chip.id },
+    })),
+  };
+}
+
+function createRangeChipElement(model, make) {
+  const button = make('button');
+  button.type = 'button';
+  button.className = `earthquake-list-age-chip${model.active ? ' active' : ''}`;
+  button.dataset.earthquakeListRange = model.params.rangeCeiling;
+  button.textContent = model.label;
+  if (model.title) button.title = model.title;
+  button.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  return button;
+}
+
+function syncEarthquakeListRangeChips(root) {
+  if (!root?.querySelectorAll) return;
+  const models = getRowControls().chips;
+  const chips = root.querySelectorAll('[data-earthquake-list-range]');
+  for (const chip of chips) {
+    const active = models.some((model) => (
+      model.params.rangeCeiling === chip.dataset.earthquakeListRange && model.active
+    ));
+    chip.classList?.toggle?.('active', active);
+    chip.setAttribute?.('aria-pressed', active ? 'true' : 'false');
+  }
+}
+
+/**
+ * Inject All | <500 km | <100 km next to the existing list chips.
+ * No-ops on the stub panels used by unit tests (no querySelector).
+ * @param {{querySelector?: Function, appendChild?: Function}|null} panel
+ * @returns {() => void}
+ */
+function mountEarthquakeListRangeChips(panel) {
+  if (typeof panel?.querySelector !== 'function') return () => {};
+  let root = panel.querySelector('#earthquake-list-range-chips');
+  const make = globalThis.document?.createElement?.bind(globalThis.document);
+  if (!root && typeof make === 'function') {
+    root = make('div');
+    root.id = 'earthquake-list-range-chips';
+    root.className = 'earthquake-list-age-chips';
+    root.setAttribute('role', 'group');
+    root.setAttribute('aria-label', 'Quake list range ceiling');
+    const after = panel.querySelector('#earthquake-list-age-chips');
+    if (typeof after?.insertAdjacentElement === 'function') {
+      after.insertAdjacentElement('afterend', root);
+    } else {
+      const header = panel.querySelector('.earthquake-list-header > div') || panel;
+      header.appendChild?.(root);
+    }
+  }
+  if (!root) return () => {};
+  if (typeof make === 'function' && !root.querySelector?.('[data-earthquake-list-range]')) {
+    const nodes = getRowControls().chips.map((model) => createRangeChipElement(model, make));
+    if (typeof root.replaceChildren === 'function') root.replaceChildren(...nodes);
+    else {
+      for (const node of nodes) root.appendChild?.(node);
+    }
+  }
+  const onClick = (event) => {
+    const chip = event.target?.closest?.('[data-earthquake-list-range]');
+    if (!chip || (typeof root.contains === 'function' && !root.contains(chip))) return;
+    setEarthquakeListRangeFilter(chip.dataset.earthquakeListRange);
+    syncEarthquakeListRangeChips(root);
+  };
+  root.addEventListener?.('click', onClick);
+  syncEarthquakeListRangeChips(root);
+  return () => {
+    root.removeEventListener?.('click', onClick);
+  };
+}
+
+/**
  * Bind the hosted Quakes chrome to the existing USGS layer snapshot.
  * Opening never awaits a fetch — empty/fail paints UNAVAILABLE immediately.
  * @param {object} options
@@ -291,6 +393,8 @@ export function initEarthquakeListControl({
   hydrateEarthquakeListMagFilter();
   hydrateEarthquakeListDepthFilter();
   hydrateEarthquakeListAgeFilter();
+  hydrateEarthquakeListRangeFilter();
+  const unmountRangeChips = mountEarthquakeListRangeChips(panel);
   let open = false;
 
   const refresh = () => {
@@ -331,6 +435,10 @@ export function initEarthquakeListControl({
     setOpen(!open);
   };
   button.addEventListener('click', onToggle);
+  const unsubscribeRange = subscribeEarthquakeListRangeFilter(() => {
+    syncEarthquakeListRangeChips(panel.querySelector?.('#earthquake-list-range-chips') || panel);
+    if (open) refresh();
+  });
   setOpen(false);
 
   return {
@@ -339,6 +447,8 @@ export function initEarthquakeListControl({
     setOpen,
     destroy() {
       button.removeEventListener?.('click', onToggle);
+      unsubscribeRange();
+      unmountRangeChips();
       open = false;
     },
   };
