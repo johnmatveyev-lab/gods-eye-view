@@ -10,6 +10,7 @@ import {
 import { passesHideNoTypeFilter } from './flightHideNoTypeFilter.js';
 import { passesHideNoHeadingFilter } from './flightHideNoHeadingFilter.js';
 import { passesHideNoCallsignFilter } from './flightHideNoCallsignFilter.js';
+import { passesHideNoSpeedFilter } from './flightHideNoSpeedFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -281,6 +282,79 @@ test('persists published flight only in the callsign slot; r stays on registrati
   const adapter = readFileSync(path.join(ROOT, 'src/data/adsbLolFallback.js'), 'utf8');
   assert.doesNotMatch(adapter, /flight \|\| aircraft\?\.r/);
   assert.doesNotMatch(adapter, /hideNoCallsign|hide-no-callsign|flightHideNoCallsignFilter/);
+});
+
+test('persists adsb.lol tas / ias into the velocity slot when gs is missing', () => {
+  const publishedGs = normalizeAdsbLolAircraftState({
+    hex: 'a1b2c3',
+    flight: 'UAL123',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+    gs: 200,
+    tas: 420,
+    ias: 180,
+  }, 1000);
+  assert.ok(Math.abs(publishedGs[9] - 102.8888) < 0.001, 'gs 200 keeps gs (converted)');
+
+  const tasOnly = normalizeAdsbLolAircraftState({
+    hex: 'ac8577',
+    flight: 'AA0013',
+    lat: 30.25,
+    lon: -97.75,
+    alt_baro: 36000,
+    tas: 420,
+  }, 1000);
+  assert.ok(Math.abs(tasOnly[9] - (420 * 0.514444)) < 0.001, 'missing gs + tas 420 keeps tas × 0.514444');
+
+  const wire = JSON.parse(JSON.stringify({
+    time: 1000,
+    states: [tasOnly],
+  }));
+  assert.ok(Math.abs(wire.states[0][9] - (420 * 0.514444)) < 0.001, 'velocity survives JSON for the /api/opensky wire');
+
+  const iasOnly = normalizeAdsbLolAircraftState({
+    hex: 'a733e6',
+    flight: '9999',
+    lat: 30.25,
+    lon: -97.75,
+    alt_baro: 8000,
+    ias: 180,
+  }, 1000);
+  assert.ok(Math.abs(iasOnly[9] - (180 * 0.514444)) < 0.001, 'missing gs + ias 180 keeps ias converted');
+  assert.ok(Math.abs(JSON.parse(JSON.stringify(iasOnly))[9] - (180 * 0.514444)) < 0.001);
+
+  const tasOverIas = normalizeAdsbLolAircraftState({
+    hex: 'abc123',
+    flight: 'UAL1',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+    tas: 420,
+    ias: 180,
+  }, 1000);
+  assert.ok(Math.abs(tasOverIas[9] - (420 * 0.514444)) < 0.001, 'missing gs + tas wins over ias');
+
+  const missingSpeed = normalizeAdsbLolAircraftState({
+    hex: 'def456',
+    flight: 'UNK1',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+  }, 1000);
+  assert.equal(missingSpeed[9], null, 'missing gs/tas/ias stays null — never 0');
+
+  // Existing Hide no speed matcher — not rewritten. A persisted velocity
+  // stays; a missing velocity still fail-closes. Off (default draw) still
+  // passes when gs is present.
+  assert.equal(passesHideNoSpeedFilter({ velocity: publishedGs[9], hideNoSpeed: true }), true);
+  assert.equal(passesHideNoSpeedFilter({ velocity: tasOnly[9], hideNoSpeed: true }), true);
+  assert.equal(passesHideNoSpeedFilter({ velocity: iasOnly[9], hideNoSpeed: true }), true);
+  assert.equal(passesHideNoSpeedFilter({ velocity: missingSpeed[9], hideNoSpeed: true }), false);
+  assert.equal(passesHideNoSpeedFilter({ velocity: publishedGs[9] }), true, 'default draw unchanged when gs is present');
+
+  const adapter = readFileSync(path.join(ROOT, 'src/data/adsbLolFallback.js'), 'utf8');
+  assert.doesNotMatch(adapter, /hideNoSpeed|hide-no-speed|flightHideNoSpeedFilter/);
 });
 
 test('keeps grounded fallback contacts and rejects rows without positions', () => {

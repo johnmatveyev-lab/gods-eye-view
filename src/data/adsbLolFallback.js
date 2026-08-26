@@ -53,7 +53,13 @@ export function normalizeAdsbLolAircraftState(aircraft, nowSeconds) {
   const onGround = aircraft?.alt_baro === 'ground';
   const barometricFeet = onGround ? null : finiteNumber(aircraft?.alt_baro);
   const geometricFeet = finiteNumber(aircraft?.alt_geom);
-  const groundSpeedKnots = finiteNumber(aircraft?.gs);
+  // Prefer published gs. When gs is missing / non-finite, persist a
+  // finite tas (fallback ias) into the velocity slot so Hide no speed
+  // can keep contacts that already publish true/indicated airspeed.
+  // Missing all three stays null — never invent 0.
+  const groundSpeedKnots = finiteNumber(aircraft?.gs)
+    ?? finiteNumber(aircraft?.tas)
+    ?? finiteNumber(aircraft?.ias);
   const verticalRateFpm = finiteNumber(aircraft?.baro_rate) ?? finiteNumber(aircraft?.geom_rate);
   // Prefer published track. When track is missing / non-finite, persist a
   // finite true_heading (fallback mag_heading) into the track slot so
