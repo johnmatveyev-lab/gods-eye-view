@@ -184,6 +184,15 @@ import {
   readFirmsHideNoFrp,
   writeFirmsHideNoFrp,
 } from './firmsHideNoFrpFilter.js';
+import {
+  DEFAULT_FIRMS_HIDE_NO_TRACK,
+  filterFiresByHideNoTrack,
+  fireMeetsHideNoTrack,
+  firmsHideNoTrackChipModel,
+  normalizeFirmsHideNoTrack,
+  readFirmsHideNoTrack,
+  writeFirmsHideNoTrack,
+} from './firmsHideNoTrackFilter.js';
 import { fireAnchorHeight, warmFireAnchorFloors } from './fireAnchors.js';
 import { horizonOccluder } from './iconOrientation.js';
 import {
@@ -408,6 +417,14 @@ export {
   normalizeFirmsHideNoFrp,
 };
 
+export {
+  DEFAULT_FIRMS_HIDE_NO_TRACK,
+  filterFiresByHideNoTrack,
+  fireMeetsHideNoTrack,
+  firmsHideNoTrackChipModel,
+  normalizeFirmsHideNoTrack,
+};
+
 /**
  * Whether one detection clears the confidence floor. Missing / non-finite
  * confidence stays visible so an unknown VIIRS/MODIS value is never dropped.
@@ -580,6 +597,7 @@ export function createFirmsHeatmapLayer({
   let _hideNoBrightness = readFirmsHideNoBrightness();
   let _hideNoScan = readFirmsHideNoScan();
   let _hideNoFrp = readFirmsHideNoFrp();
+  let _hideNoTrack = readFirmsHideNoTrack();
   let _showDay = true;
   let _showNight = true;
   let _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
@@ -727,6 +745,7 @@ export function createFirmsHeatmapLayer({
       _hideNoBrightness = DEFAULT_FIRMS_HIDE_NO_BRIGHTNESS;
       _hideNoScan = DEFAULT_FIRMS_HIDE_NO_SCAN;
       _hideNoFrp = DEFAULT_FIRMS_HIDE_NO_FRP;
+      _hideNoTrack = DEFAULT_FIRMS_HIDE_NO_TRACK;
       _showDay = true;
       _showNight = true;
       _ageWindow = DEFAULT_FIRMS_AGE_WINDOW;
@@ -896,8 +915,8 @@ export function createFirmsHeatmapLayer({
      * FIRMS floors for the data-panel chips. Re-filters in-memory `_fires`
      * — never hits /api/firms. Age, FRP, confidence, brightness, TI5
      * brightness, scan size, track size, product version, pixel area,
-     * Hide no day/night, Hide no satellite, Hide no sensor, Hide no version, Hide no confidence, Hide no acq, Hide no brightness, Hide no scan, Hide no FRP, Day | Night, sensor, and satellite chips AND.
-     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, brightnessFloor?: string|number, brightnessTi5Floor?: string|number, scanCeiling?: string|number, trackCeiling?: string|number, versionFilter?: string, areaCeiling?: string|number, hideNoDaynight?: boolean, hideNoSatellite?: boolean, hideNoSensor?: boolean, hideNoVersion?: boolean, hideNoConfidence?: boolean, hideNoAcq?: boolean, hideNoBrightness?: boolean, hideNoScan?: boolean, hideNoFrp?: boolean, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown, satelliteFilter?: unknown }} [params]
+     * Hide no day/night, Hide no satellite, Hide no sensor, Hide no version, Hide no confidence, Hide no acq, Hide no brightness, Hide no scan, Hide no FRP, Hide no track, Day | Night, sensor, and satellite chips AND.
+     * @param {{ frpFloor?: string|number, confidenceFloor?: string|number, brightnessFloor?: string|number, brightnessTi5Floor?: string|number, scanCeiling?: string|number, trackCeiling?: string|number, versionFilter?: string, areaCeiling?: string|number, hideNoDaynight?: boolean, hideNoSatellite?: boolean, hideNoSensor?: boolean, hideNoVersion?: boolean, hideNoConfidence?: boolean, hideNoAcq?: boolean, hideNoBrightness?: boolean, hideNoScan?: boolean, hideNoFrp?: boolean, hideNoTrack?: boolean, showDay?: boolean, showNight?: boolean, ageWindow?: string|number, sensors?: unknown, satelliteFilter?: unknown }} [params]
      * @returns {boolean}
      */
     setParams(params = {}) {
@@ -919,12 +938,13 @@ export function createFirmsHeatmapLayer({
       const hasHideNoBrightness = Object.hasOwn(params, 'hideNoBrightness');
       const hasHideNoScan = Object.hasOwn(params, 'hideNoScan');
       const hasHideNoFrp = Object.hasOwn(params, 'hideNoFrp');
+      const hasHideNoTrack = Object.hasOwn(params, 'hideNoTrack');
       const hasDay = Object.hasOwn(params, 'showDay');
       const hasNight = Object.hasOwn(params, 'showNight');
       const hasAge = Object.hasOwn(params, 'ageWindow');
       const hasSensors = Object.hasOwn(params, 'sensors');
       const hasSatellite = Object.hasOwn(params, 'satelliteFilter');
-      if (!hasFrp && !hasConf && !hasBright && !hasBrightTi5 && !hasScan && !hasTrack && !hasVersion && !hasArea && !hasHideNoDaynight && !hasHideNoSatellite && !hasHideNoSensor && !hasHideNoVersion && !hasHideNoConfidence && !hasHideNoAcq && !hasHideNoBrightness && !hasHideNoScan && !hasHideNoFrp && !hasDay && !hasNight && !hasAge && !hasSensors && !hasSatellite) return true;
+      if (!hasFrp && !hasConf && !hasBright && !hasBrightTi5 && !hasScan && !hasTrack && !hasVersion && !hasArea && !hasHideNoDaynight && !hasHideNoSatellite && !hasHideNoSensor && !hasHideNoVersion && !hasHideNoConfidence && !hasHideNoAcq && !hasHideNoBrightness && !hasHideNoScan && !hasHideNoFrp && !hasHideNoTrack && !hasDay && !hasNight && !hasAge && !hasSensors && !hasSatellite) return true;
       if (hasSensors && normalizeFirmsSensorFilter(params.sensors) == null) return false;
       if (hasSatellite && normalizeFirmsSatelliteFilter(params.satelliteFilter) == null) return false;
       return applyVisibleFloors({
@@ -945,6 +965,7 @@ export function createFirmsHeatmapLayer({
         hideNoBrightness: hasHideNoBrightness ? params.hideNoBrightness : undefined,
         hideNoScan: hasHideNoScan ? params.hideNoScan : undefined,
         hideNoFrp: hasHideNoFrp ? params.hideNoFrp : undefined,
+        hideNoTrack: hasHideNoTrack ? params.hideNoTrack : undefined,
         showDay: hasDay ? params.showDay : undefined,
         showNight: hasNight ? params.showNight : undefined,
         ageWindow: hasAge ? params.ageWindow : undefined,
@@ -972,6 +993,7 @@ export function createFirmsHeatmapLayer({
      *   hideNoBrightness: boolean,
      *   hideNoScan: boolean,
      *   hideNoFrp: boolean,
+     *   hideNoTrack: boolean,
      *   showDay: boolean,
      *   showNight: boolean,
      *   ageWindow: '6'|'12'|'24',
@@ -998,6 +1020,7 @@ export function createFirmsHeatmapLayer({
         hideNoBrightness: _hideNoBrightness,
         hideNoScan: _hideNoScan,
         hideNoFrp: _hideNoFrp,
+        hideNoTrack: _hideNoTrack,
         showDay: _showDay,
         showNight: _showNight,
         ageWindow: _ageWindow,
@@ -1043,6 +1066,7 @@ export function createFirmsHeatmapLayer({
           firmsHideNoBrightnessChipModel(_hideNoBrightness),
           firmsHideNoScanChipModel(_hideNoScan),
           firmsHideNoFrpChipModel(_hideNoFrp),
+          firmsHideNoTrackChipModel(_hideNoTrack),
           ...FIRMS_AGE_WINDOW_CHIPS.map((chip) => ({
             id: `age-${chip.id}`,
             label: chip.label,
@@ -1158,7 +1182,8 @@ export function createFirmsHeatmapLayer({
   /** Rebuild the operator-filtered FRP-sorted index from last-good `_fires`. */
   function applyVisibleIndex() {
     const selectedId = selectedFireId();
-    const visible = filterFiresByHideNoFrp(
+    const visible = filterFiresByHideNoTrack(
+      filterFiresByHideNoFrp(
       filterFiresByHideNoScan(
       filterFiresByHideNoBrightness(
         filterFiresByHideNoAcq(
@@ -1230,6 +1255,9 @@ export function createFirmsHeatmapLayer({
       ),
       _hideNoFrp,
       selectedId,
+      ),
+      _hideNoTrack,
+      selectedId,
     );
     _firesByFrp = visible.sort((a, b) => b.frp - a.frp);
     _count = visible.length;
@@ -1243,7 +1271,7 @@ export function createFirmsHeatmapLayer({
     return null;
   }
 
-  /** True when the detection clears FRP, confidence, brightness, TI5, scan, track, version, area, Hide no day/night, Hide no satellite, Hide no sensor, Hide no version, Hide no confidence, Hide no acq, Hide no brightness, Hide no scan, Hide no FRP, Day | Night, age, sensor, and satellite. */
+  /** True when the detection clears FRP, confidence, brightness, TI5, scan, track, version, area, Hide no day/night, Hide no satellite, Hide no sensor, Hide no version, Hide no confidence, Hide no acq, Hide no brightness, Hide no scan, Hide no FRP, Hide no track, Day | Night, age, sensor, and satellite. */
   function fireMeetsVisibleFloors(fire) {
     const minMw = frpFloorThresholdMw(_frpFloor);
     if (minMw > 0 && Number(fire?.frp || 0) < minMw) return false;
@@ -1263,6 +1291,7 @@ export function createFirmsHeatmapLayer({
     if (!fireMeetsHideNoBrightness(fire, _hideNoBrightness, { selectedId: selectedFireId() })) return false;
     if (!fireMeetsHideNoScan(fire, _hideNoScan, { selectedId: selectedFireId() })) return false;
     if (!fireMeetsHideNoFrp(fire, _hideNoFrp, { selectedId: selectedFireId() })) return false;
+    if (!fireMeetsHideNoTrack(fire, _hideNoTrack, { selectedId: selectedFireId() })) return false;
     if (!fireMeetsDayNight(fire, { showDay: _showDay, showNight: _showNight })) return false;
     if (!fireMeetsAgeWindow(fire, _ageWindow, Date.now())) return false;
     if (!fireMatchesFirmsSensorFilter(fire, _sensors)) return false;
@@ -1271,9 +1300,9 @@ export function createFirmsHeatmapLayer({
 
   /**
    * Change FRP, confidence, brightness, TI5 brightness, scan size, track size,
-   * product version, pixel area, Hide no day/night, Hide no satellite, Hide no sensor, Hide no version, Hide no confidence, Hide no acq, Hide no brightness, Hide no scan, Hide no FRP, Day | Night, age, sensor,
+   * product version, pixel area, Hide no day/night, Hide no satellite, Hide no sensor, Hide no version, Hide no confidence, Hide no acq, Hide no brightness, Hide no scan, Hide no FRP, Hide no track, Day | Night, age, sensor,
    * and/or satellite and re-render from memory. Never fetches.
-   * @param {{ frpFloor?: *, confidenceFloor?: *, brightnessFloor?: *, brightnessTi5Floor?: *, scanCeiling?: *, trackCeiling?: *, versionFilter?: *, areaCeiling?: *, hideNoDaynight?: *, hideNoSatellite?: *, hideNoSensor?: *, hideNoVersion?: *, hideNoConfidence?: *, hideNoAcq?: *, hideNoBrightness?: *, hideNoScan?: *, hideNoFrp?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: *, satelliteFilter?: * }} next
+   * @param {{ frpFloor?: *, confidenceFloor?: *, brightnessFloor?: *, brightnessTi5Floor?: *, scanCeiling?: *, trackCeiling?: *, versionFilter?: *, areaCeiling?: *, hideNoDaynight?: *, hideNoSatellite?: *, hideNoSensor?: *, hideNoVersion?: *, hideNoConfidence?: *, hideNoAcq?: *, hideNoBrightness?: *, hideNoScan?: *, hideNoFrp?: *, hideNoTrack?: *, showDay?: *, showNight?: *, ageWindow?: *, sensors?: *, satelliteFilter?: * }} next
    * @returns {boolean}
    */
   function applyVisibleFloors(next = {}) {
@@ -1362,6 +1391,11 @@ export function createFirmsHeatmapLayer({
       const hide = writeFirmsHideNoFrp(next.hideNoFrp);
       if (hide !== _hideNoFrp) changed = true;
       _hideNoFrp = hide;
+    }
+    if (next.hideNoTrack !== undefined) {
+      const hide = writeFirmsHideNoTrack(next.hideNoTrack);
+      if (hide !== _hideNoTrack) changed = true;
+      _hideNoTrack = hide;
     }
     if (next.showDay !== undefined) {
       const showDay = next.showDay !== false;
