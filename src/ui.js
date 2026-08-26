@@ -298,6 +298,10 @@ import {
   setLaunchListStatusFilter,
   subscribeLaunchListStatusFilter,
 } from './data/launchListStatusFilter.js';
+import {
+  readLaunchListHideNoProvider,
+  writeLaunchListHideNoProvider,
+} from './data/launchListProviderFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   getEarthquakeListDepthFilter,
@@ -3104,6 +3108,7 @@ export class StyleManager {
     this._launchesPanelLspChips = document.getElementById('launches-panel-lsp-chips');
     this._launchesPanelMappedChips = document.getElementById('launches-panel-mapped-chips');
     this._launchesPanelStatusChips = document.getElementById('launches-panel-status-chips');
+    this._launchesPanelProviderChips = document.getElementById('launches-panel-provider-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
     this._launchesPanelPayload = null;
@@ -11726,6 +11731,7 @@ export class StyleManager {
     this._syncLaunchesPanelLspChips();
     this._syncLaunchesPanelMappedChip();
     this._syncLaunchesPanelStatusChips();
+    this._syncLaunchesPanelProviderChip();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11750,6 +11756,13 @@ export class StyleManager {
       const chip = event.target?.closest?.('[data-launch-list-status]');
       if (!chip || !this._launchesPanelStatusChips.contains(chip)) return;
       setLaunchListStatusFilter(normalizeLaunchListStatusFilter(chip.dataset.launchListStatus));
+    });
+    this._launchesPanelProviderChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-list-hide-no-provider]');
+      if (!chip || !this._launchesPanelProviderChips.contains(chip)) return;
+      writeLaunchListHideNoProvider(readLaunchListHideNoProvider() !== true);
+      this._syncLaunchesPanelProviderChip();
+      this._reapplyLaunchesPanelLspType();
     });
   }
 
@@ -11785,12 +11798,23 @@ export class StyleManager {
     }
   }
 
+  _syncLaunchesPanelProviderChip() {
+    const hide = readLaunchListHideNoProvider() === true;
+    const chips = this._launchesPanelProviderChips?.querySelectorAll?.('[data-launch-list-hide-no-provider]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', hide);
+      chip.setAttribute('aria-pressed', String(hide));
+    }
+  }
+
   _reapplyLaunchesPanelLspType() {
     if (this._launchesPanelPayload == null) return;
     const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter(), {
       mappedOnly: readLaunchListMappedOnly(),
       selectedId: this._launchesPanelSelectedId,
       statusFilter: getLaunchListStatusFilter(),
+      hideNoProvider: readLaunchListHideNoProvider(),
     });
     this._launchesPanelRows = rows;
     this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
@@ -11834,6 +11858,7 @@ export class StyleManager {
       mappedOnly: readLaunchListMappedOnly(),
       selectedId: this._launchesPanelSelectedId,
       statusFilter: getLaunchListStatusFilter(),
+      hideNoProvider: readLaunchListHideNoProvider(),
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
     this._launchesPanelPayload = presentation.payload ?? null;
