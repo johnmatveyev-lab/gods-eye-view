@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no heading** toggle after Hide no
+  callsign. Default **off** keeps the current draw, including missing heading
+  plus 0 (north) and 270. On drops already-fetched contacts whose
+  `true_track` is not finite. 0 stays. Missing, null, and undefined hide
+  when on. The selected/tracked contact always stays. AND with
+  airborne-only, Emergencies only, Identified only, Hide no squawk, Hide no
+  type, Hide no registration, and Hide no callsign. Distinct from Plan 101
+  NESW heading chips (those fail-open on missing) and from airborne-only /
+  hide-ground. Re-applies the already-fetched adsb.lol payload — no extra
+  fetch and no new `/api`. Preference persists as
+  `meridian.flightHideNoHeading` (LayerStateCoordinator restore, no
+  share-URL write). Military flights are unchanged.
 - Hosted Quakes list has client-only exclusive **All | &lt;500 km | &lt;100 km**
   range-ceiling chips. Default **All** keeps 80 / 800 km events on the
   current 50-row nearest/recent list. **&lt;500 km** keeps 80 / 400 km
