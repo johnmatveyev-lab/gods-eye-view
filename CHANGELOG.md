@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Datacenters in-view list has a client-only **Named only** toggle next to
+  All | AWS | Equinix. Default **off** keeps the current in-view OSM list,
+  including missing, empty, whitespace, and generic `Datacenter` labels.
+  **On** is presence-only: it hides those untitled rows and keeps a real
+  name such as "Equinix DC12". The selected id always stays when it
+  already passed the other matchers. AND with Plan 206 operator chips.
+  Chip changes re-filter the already-bundled OSM / ODbL snapshot via
+  `getListPayload()` and do not touch globe stems — no Overpass, no extra
+  fetch, and no `/api`. Preference persists as `meridian.dcNamedOnly`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write). Distinct
+  from Plan 193 Hide no operator and Plan 206 operator chips.
 - Civil flights have a client-only **Hide no last contact** toggle next to
   Hide no baro altitude. Default **off** keeps the current draw, including
   missing / non-finite `lastContactEpochMs`. **On** keeps a finite last-contact
