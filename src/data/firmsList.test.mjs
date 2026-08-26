@@ -203,7 +203,7 @@ test('Fires list markup is its own left-stack panel, not launches or contacts', 
   const contactsStart = html.indexOf('id="military-awareness-panel"');
   assert.ok(firesStart > 0, 'fires-panel must exist');
   assert.ok(missionsStart > 0 && contactsStart > 0);
-  const firesBlock = html.slice(firesStart, firesStart + 2800);
+  const firesBlock = html.slice(firesStart, firesStart + 4000);
   assert.match(firesBlock, /panel-title">FIRES</);
   assert.match(firesBlock, /id="fires-list"/);
   assert.match(firesBlock, /NASA's Fire Information for Resource Management System \(FIRMS\)/);
