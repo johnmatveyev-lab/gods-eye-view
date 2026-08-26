@@ -7,6 +7,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no acq** toggle after Hide no
+  confidence. Default **off** keeps the current overlay, including
+  missing / unparseable acquisition time. **On** keeps `acqMs > 0`
+  (a real epoch stays) and drops missing, non-finite, or `acqMs <= 0`.
+  Missing / non-finite / `acqMs <= 0` fail closed when on. This is
+  presence-only, not a time floor. `parseAcquisitionMs` still writes 0
+  when date/time is unparseable; this chip hides that sentinel when on
+  and does not change the age-window fail-open (6h / 12h / 24h still
+  keep `acqMs` 0). The selected fire always stays if it already passed
+  the other matchers. Chip changes re-filter the already-fetched
+  `/api/firms` payload and AND with age window, FRP, confidence,
+  brightness, version, satellite, sensor, Hide no day/night, and Hide
+  no confidence — no extra NASA fetch and no new `/api`. Preference
+  persists as `meridian.firmsHideNoAcq` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Distinct from
+  the fail-open age window and Plans 233/238/241/245/253 hide-no chips.
+  NASA FIRMS acknowledgement unchanged.
 - The hosted FIRES list has a client-only **Hide no day/night** filter on
   the already-fetched trailing-24h `/api/firms` roster. Default **off**
   keeps the current 50-row list, including empty or missing daynight.
