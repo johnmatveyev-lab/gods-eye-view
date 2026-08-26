@@ -7,6 +7,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Sites list has a client-only **Mapped only** toggle after the
+  globe chips (class, Footprints only, Named only, OSM type, Mapped only).
+  Default **off** keeps the current 50-row list. On drops already-fetched
+  `kind === 'place_candidate'` Google Places extras; missing `kind` and
+  `installation` stay. List/fly-to only — globe stems and the globe
+  Mapped only chip are unchanged. No extra fetch and no `/api`. Preference
+  persists as `meridian.sitesMappedOnly` only (not a share-link field).
+  Hidden when the installations layer is off.
 - Dams in-view list has client-only exclusive **All | 10+ MW | 100+ MW**
   output-floor chips. Default **All** matches the current in-view roster.
   **10+ MW** hides sites whose bundled OSM `properties.output` parses below
