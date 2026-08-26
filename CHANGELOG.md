@@ -7,6 +7,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Dated only** toggle next to the
+  Plan 249 **Output only** chip, Plan 240 **Wikipedia only**, Plan 229
+  **River only**, Plan 224 **Operator only**, Plan 218 **Named only**,
+  and Plan 205 **All | 10+ MW | 100+ MW** output-floor chips. Default
+  **off** keeps the current 50-row roster, including plants whose OSM
+  `start_date` is missing. On hides already-bundled list rows whose
+  `start_date` is missing, empty, or whitespace-only. A dated value
+  (1967 stays) is kept. A selected row stays even if it would be
+  filtered, if it already passed the other matchers. AND after the
+  output-floor chips, Named only, Operator only, River only, Wikipedia
+  only, and Output only, before the 50-cap. List/fly-to only — globe
+  stems stay unchanged. No extra fetch and no `/api`. Preference
+  persists as `meridian.damDatedOnly` only (`1` / `0`; not a share-link
+  field). LayerStateCoordinator restore re-reads the stored toggle.
+  Hidden with the dams list when the layer is off. Distinct from Plan
+  205 output-floor, Plan 218 Named only, Plan 224 Operator only, Plan
+  229 River only, Plan 240 Wikipedia only, and Plan 249 Output only.
 - FIRMS globe has a client-only **Hide no FRP** toggle after Hide no
   scan. Default **off** keeps the current overlay, including
   missing / non-finite / `frp<=0`. **On** keeps `frp > 0`
