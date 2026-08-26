@@ -339,6 +339,10 @@ import {
   readLaunchListHideNoProbability,
   writeLaunchListHideNoProbability,
 } from './data/launchListProbabilityFilter.js';
+import {
+  readLaunchListHideNoCountry,
+  writeLaunchListHideNoCountry,
+} from './data/launchListCountryFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   getEarthquakeListAgeFilter,
@@ -3208,6 +3212,7 @@ export class StyleManager {
     this._launchesPanelWebcastChips = document.getElementById('launches-panel-webcast-chips');
     this._launchesPanelMissionChips = document.getElementById('launches-panel-mission-chips');
     this._launchesPanelProbabilityChips = document.getElementById('launches-panel-probability-chips');
+    this._launchesPanelCountryChips = document.getElementById('launches-panel-country-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
     this._launchesPanelPayload = null;
@@ -11870,6 +11875,7 @@ export class StyleManager {
     this._syncLaunchesPanelWebcastChip();
     this._syncLaunchesPanelMissionChip();
     this._syncLaunchesPanelProbabilityChip();
+    this._syncLaunchesPanelCountryChip();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11949,6 +11955,13 @@ export class StyleManager {
       if (!chip || !this._launchesPanelProbabilityChips.contains(chip)) return;
       writeLaunchListHideNoProbability(readLaunchListHideNoProbability() !== true);
       this._syncLaunchesPanelProbabilityChip();
+      this._reapplyLaunchesPanelLspType();
+    });
+    this._launchesPanelCountryChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-list-hide-no-country]');
+      if (!chip || !this._launchesPanelCountryChips.contains(chip)) return;
+      writeLaunchListHideNoCountry(readLaunchListHideNoCountry() !== true);
+      this._syncLaunchesPanelCountryChip();
       this._reapplyLaunchesPanelLspType();
     });
   }
@@ -12065,6 +12078,16 @@ export class StyleManager {
     }
   }
 
+  _syncLaunchesPanelCountryChip() {
+    const hide = readLaunchListHideNoCountry() === true;
+    const chips = this._launchesPanelCountryChips?.querySelectorAll?.('[data-launch-list-hide-no-country]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', hide);
+      chip.setAttribute('aria-pressed', String(hide));
+    }
+  }
+
   _reapplyLaunchesPanelLspType() {
     if (this._launchesPanelPayload == null) return;
     const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter(), {
@@ -12079,6 +12102,7 @@ export class StyleManager {
       webcastOnly: readLaunchListWebcastOnly(),
       hideNoMission: readLaunchListHideNoMission(),
       hideNoProbability: readLaunchListHideNoProbability(),
+      hideNoCountry: readLaunchListHideNoCountry(),
     });
     this._launchesPanelRows = rows;
     this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
@@ -12130,6 +12154,7 @@ export class StyleManager {
       webcastOnly: readLaunchListWebcastOnly(),
       hideNoMission: readLaunchListHideNoMission(),
       hideNoProbability: readLaunchListHideNoProbability(),
+      hideNoCountry: readLaunchListHideNoCountry(),
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
     this._launchesPanelPayload = presentation.payload ?? null;
