@@ -7,6 +7,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no geo altitude** toggle after
+  Hide no speed. Default **off** keeps the current draw, including null,
+  missing, and non-finite `geoAltitudeM`. **On** keeps a finite
+  `meta.geoAltitudeM` (`0` stays — real on-ground / sea-level geo height)
+  and drops missing, null, or non-finite geo altitude. Missing / null /
+  non-finite fail closed when on. The selected/tracked contact always
+  stays. AND with airborne-only, altitude, heading sectors, the fail-open
+  speed-band floor, vertical, Emergencies only, Identified only,
+  hide-stale, class, prefix, Hide no squawk, Hide no type, Hide no
+  registration, Hide no callsign, Hide no heading, Hide no country, and
+  Hide no speed. Distinct from the Plan 93 aviation altitude-band (baro
+  `altitude`, not geo), Hide no speed, and Hide no country. Re-applies
+  the already-fetched flight payload — no extra fetch and no new `/api`.
+  `geoAltitudeM` is not sticky (each poll overwrites it from state-vector
+  geo height). Preference persists as `meridian.flightHideNoGeoAltitude`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write).
+  Military flights and AIS are unchanged.
 - FIRMS globe has a client-only **Hide no acq** toggle after Hide no
   confidence. Default **off** keeps the current overlay, including
   missing / unparseable acquisition time. **On** keeps `acqMs > 0`
