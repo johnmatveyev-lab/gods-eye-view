@@ -95,6 +95,8 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         FIRMS track-size chips (`meridian.firmsTrack`),
  *                         FIRMS version chips (`meridian.firmsVersion`),
  *                         FIRMS pixel-area chips (`meridian.firmsArea`),
+ *                         FIRMS Hide no day/night toggle
+ *                         (`meridian.firmsHideNoDaynight`),
  *                         Quake list magnitude-floor chips
  *                         (`meridian.quakeListMag`),
  *                         Quake list depth-ceiling chips
@@ -129,6 +131,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         `setEarthquakeListAgeFilter` /
  *                         `setFirmsListConf` / `setFirmsListFrp` /
  *                         `setFirmsListAge` /
+ *                         `writeFirmsHideNoDaynight` /
  *                         `writeLaunchListMappedOnly` /
  *                         `setLaunchListStatusFilter` /
  *                         `writeLaunchListStatusFilter` /
