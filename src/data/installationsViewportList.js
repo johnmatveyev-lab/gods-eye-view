@@ -9,6 +9,10 @@ import {
   filterViewportSitesList,
   readSitesListMappedPref,
 } from './installationListMappedFilter.js';
+import {
+  filterViewportSitesListNamed,
+  readSitesListNamedPref,
+} from './installationListNamedFilter.js';
 
 export const INSTALLATION_VIEWPORT_LIST_TOGGLE_ID = 'installations-list-toggle';
 export const INSTALLATION_VIEWPORT_LIST_PANEL_ID = 'installations-viewport-list';
@@ -29,16 +33,19 @@ export function nextInstallationListOpen(currentlyOpen) {
 /**
  * Rows for the current payload. Empty bbox / empty payload → [].
  * The list-only Mapped only chip drops Google Places extras when on.
+ * The list-only Named only chip then drops class-fallback rows when on.
  * @param {Array<object>|null|undefined} records Layer `getViewportRecords()` snapshot.
- * @param {{cap?: number, listMappedPref?: unknown}} [options]
+ * @param {{cap?: number, listMappedPref?: unknown, listNamedPref?: unknown}} [options]
  * @returns {Array<{id: string, name: string, type: string, latitude: number, longitude: number}>}
  */
 export function listViewportInstallations(records, {
   cap = INSTALLATION_VIEWPORT_LIST_CAP,
   listMappedPref = readSitesListMappedPref(),
+  listNamedPref = readSitesListNamedPref(),
 } = {}) {
   const limit = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : INSTALLATION_VIEWPORT_LIST_CAP;
-  const source = filterViewportSitesList(records, listMappedPref);
+  const mapped = filterViewportSitesList(records, listMappedPref);
+  const source = filterViewportSitesListNamed(mapped, listNamedPref);
   if (!source.length || limit === 0) return [];
   const rows = [];
   for (const record of source) {
