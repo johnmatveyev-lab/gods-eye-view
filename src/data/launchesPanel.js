@@ -3,12 +3,20 @@
  * (`/api/launches`) the globe already fetches. No new vendor and no extra
  * `/api`. Click flies to the existing pad/target when coords exist; otherwise
  * the row is only selected. Failed payloads are empty/unavailable, never a hang.
+ * Exclusive All | Commercial | Government chips re-filter
+ * `launch_service_provider.type` on that already-fetched payload.
  */
+
+import {
+  DEFAULT_LAUNCH_LSP_TYPE_FILTER,
+  filterLaunchesByLspType,
+} from './launchLspTypeFilter.js';
 
 export const LAUNCHES_PANEL_ID = 'launches-panel';
 export const LAUNCHES_PANEL_TOGGLE_ID = 'launches-panel-toggle';
 export const LAUNCHES_PANEL_LIST_ID = 'launches-panel-list';
 export const LAUNCHES_PANEL_COUNT_ID = 'launches-panel-count';
+export const LAUNCHES_PANEL_LSP_CHIPS_ID = 'launches-panel-lsp-chips';
 /** Same feed the globe layer already uses. Do not invent another route. */
 export const LAUNCHES_FEED_URL = '/api/launches';
 /** Same close-pad range Space Missions already uses for pad focus. */
@@ -73,13 +81,16 @@ function compactLaunchLabel(name, maxLength = 27) {
 /**
  * Build panel rows from the current Launch Library 2 payload.
  * Keeps records without pad coords so they can still be selected.
+ * Exclusive LSP-type chips re-filter `launch_service_provider.type`
+ * without another fetch. All leaves the current list unchanged.
  * @param {object|Array|null} payload `{results:[…]}` or a launch array.
+ * @param {unknown} [filter]
  * @returns {Array<object>}
  */
-export function launchesPanelRows(payload) {
+export function launchesPanelRows(payload, filter = DEFAULT_LAUNCH_LSP_TYPE_FILTER) {
   const launches = Array.isArray(payload) ? payload : payload?.results;
   if (!Array.isArray(launches)) return [];
-  return launches.map((launch, index) => {
+  return filterLaunchesByLspType(launches, filter).map((launch, index) => {
     const coords = launchPadCoordinates(launch);
     const pad = launch?.pad || {};
     const location = pad.location || {};
@@ -174,26 +185,32 @@ export function launchesPanelLoadingPresentation() {
  * @param {typeof fetch} [input.fetchImpl]
  * @param {object|Array|null} [input.cachedPayload]
  * @param {string} [input.url]
+ * @param {unknown} [input.filter]
  * @returns {Promise<object>}
  */
 export async function loadLaunchesPanelPayload({
   fetchImpl = globalThis.fetch.bind(globalThis),
   cachedPayload = null,
   url = LAUNCHES_FEED_URL,
+  filter = DEFAULT_LAUNCH_LSP_TYPE_FILTER,
 } = {}) {
   try {
     const response = await fetchImpl(url);
     if (!response?.ok) throw new Error(`HTTP ${response?.status || 0}`);
     const payload = await response.json();
-    const rows = launchesPanelRows(payload);
-    return launchesPanelEmptyPresentation({ available: true, items: rows, payload });
+    const rows = launchesPanelRows(payload, filter);
+    return {
+      ...launchesPanelEmptyPresentation({ available: true, items: rows, payload }),
+      payload,
+    };
   } catch {
     if (cachedPayload != null && isLaunchesPayload(cachedPayload)) {
-      const rows = launchesPanelRows(cachedPayload);
+      const rows = launchesPanelRows(cachedPayload, filter);
       if (rows.length) {
         return {
           ...launchesPanelEmptyPresentation({ available: true, items: rows, payload: cachedPayload }),
           stale: true,
+          payload: cachedPayload,
         };
       }
     }

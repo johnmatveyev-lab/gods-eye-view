@@ -239,6 +239,11 @@
         <div>
           <strong>LAUNCHES</strong>
           <span>Launch Library 2 — The Space Devs</span>
+          <div class="launches-panel-lsp-chips" id="launches-panel-lsp-chips" role="group" aria-label="Launch service provider type">
+            <button type="button" class="launches-panel-lsp-chip active" data-launch-lsp-type="all" aria-pressed="true" title="Show every mission regardless of launch service provider type">All</button>
+            <button type="button" class="launches-panel-lsp-chip" data-launch-lsp-type="commercial" aria-pressed="false" title="Show only commercial launch service providers">Commercial</button>
+            <button type="button" class="launches-panel-lsp-chip" data-launch-lsp-type="government" aria-pressed="false" title="Show only government launch service providers">Government</button>
+          </div>
         </div>
         <output id="launches-panel-count">—</output>
       </div>
