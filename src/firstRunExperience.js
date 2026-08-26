@@ -106,6 +106,7 @@ export function environmentalLabel(choice = ENVIRONMENTAL_LABEL_CHOICE) {
  *                         dam output-floor chips (`meridian.damOutput`),
  *                         dam Named only toggle (`meridian.damNamedOnly`),
  *                         dam Operator only toggle (`meridian.damOperatorOnly`),
+ *                         dam River only toggle (`meridian.damRiverOnly`),
  *                         FIRMS list confidence chips (`meridian.firmsListConf`),
  *                         launch list mapped-only toggle
  *                         (`meridian.launchListMappedOnly`),
