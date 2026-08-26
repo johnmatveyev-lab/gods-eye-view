@@ -13,6 +13,10 @@ import {
   filterViewportSitesListNamed,
   readSitesListNamedPref,
 } from './installationListNamedFilter.js';
+import {
+  filterViewportSitesListOsm,
+  readSitesListOsmPref,
+} from './installationListOsmFilter.js';
 
 export const INSTALLATION_VIEWPORT_LIST_TOGGLE_ID = 'installations-list-toggle';
 export const INSTALLATION_VIEWPORT_LIST_PANEL_ID = 'installations-viewport-list';
@@ -34,18 +38,22 @@ export function nextInstallationListOpen(currentlyOpen) {
  * Rows for the current payload. Empty bbox / empty payload → [].
  * The list-only Mapped only chip drops Google Places extras when on.
  * The list-only Named only chip then drops class-fallback rows when on.
+ * The list-only OSM-type chips then keep All, Node, or Way+relation.
  * @param {Array<object>|null|undefined} records Layer `getViewportRecords()` snapshot.
- * @param {{cap?: number, listMappedPref?: unknown, listNamedPref?: unknown}} [options]
+ * @param {{cap?: number, listMappedPref?: unknown, listNamedPref?: unknown, listOsmPref?: unknown, selectedId?: string|null}} [options]
  * @returns {Array<{id: string, name: string, type: string, latitude: number, longitude: number}>}
  */
 export function listViewportInstallations(records, {
   cap = INSTALLATION_VIEWPORT_LIST_CAP,
   listMappedPref = readSitesListMappedPref(),
   listNamedPref = readSitesListNamedPref(),
+  listOsmPref = readSitesListOsmPref(),
+  selectedId = null,
 } = {}) {
   const limit = Number.isFinite(cap) ? Math.max(0, Math.floor(cap)) : INSTALLATION_VIEWPORT_LIST_CAP;
   const mapped = filterViewportSitesList(records, listMappedPref);
-  const source = filterViewportSitesListNamed(mapped, listNamedPref);
+  const named = filterViewportSitesListNamed(mapped, listNamedPref);
+  const source = filterViewportSitesListOsm(named, listOsmPref, selectedId);
   if (!source.length || limit === 0) return [];
   const rows = [];
   for (const record of source) {
