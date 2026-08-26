@@ -12,6 +12,8 @@
  * Unknown launch site fallback.
  * Hide no time then drops rows whose copied launchTime is missing,
  * null, or unparseable.
+ * Hide no vehicle then drops rows whose copied vehicle is missing,
+ * empty, or whitespace.
  */
 
 import {
@@ -35,6 +37,10 @@ import {
   filterLaunchListByTime,
 } from './launchListTimeFilter.js';
 import {
+  DEFAULT_LAUNCH_LIST_HIDE_NO_VEHICLE,
+  filterLaunchListByVehicle,
+} from './launchListVehicleFilter.js';
+import {
   DEFAULT_LAUNCH_LIST_STATUS_FILTER,
   filterLaunchListByStatus,
 } from './launchListStatusFilter.js';
@@ -49,6 +55,7 @@ export const LAUNCHES_PANEL_STATUS_CHIPS_ID = 'launches-panel-status-chips';
 export const LAUNCHES_PANEL_PROVIDER_CHIPS_ID = 'launches-panel-provider-chips';
 export const LAUNCHES_PANEL_SITE_CHIPS_ID = 'launches-panel-site-chips';
 export const LAUNCHES_PANEL_TIME_CHIPS_ID = 'launches-panel-time-chips';
+export const LAUNCHES_PANEL_VEHICLE_CHIPS_ID = 'launches-panel-vehicle-chips';
 /** Same feed the globe layer already uses. Do not invent another route. */
 export const LAUNCHES_FEED_URL = '/api/launches';
 /** Same close-pad range Space Missions already uses for pad focus. */
@@ -120,10 +127,11 @@ function compactLaunchLabel(name, maxLength = 27) {
  * the copied `status` name. Hide no provider then drops rows whose
  * copied provider is missing / empty / whitespace. Hide no site then
  * drops empty / whitespace / Unknown launch site. Hide no time then
- * drops missing / null / unparseable launchTime. A selected id always stays.
+ * drops missing / null / unparseable launchTime. Hide no vehicle then
+ * drops missing / empty / whitespace vehicle. A selected id always stays.
  * @param {object|Array|null} payload `{results:[…]}` or a launch array.
  * @param {unknown} [filter]
- * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown, hideNoSite?: unknown, hideNoTime?: unknown}} [options]
+ * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown, hideNoSite?: unknown, hideNoTime?: unknown, hideNoVehicle?: unknown}} [options]
  * @returns {Array<object>}
  */
 export function launchesPanelRows(
@@ -136,6 +144,7 @@ export function launchesPanelRows(
     hideNoProvider = DEFAULT_LAUNCH_LIST_HIDE_NO_PROVIDER,
     hideNoSite = DEFAULT_LAUNCH_LIST_HIDE_NO_SITE,
     hideNoTime = DEFAULT_LAUNCH_LIST_HIDE_NO_TIME,
+    hideNoVehicle = DEFAULT_LAUNCH_LIST_HIDE_NO_VEHICLE,
   } = {},
 ) {
   const launches = Array.isArray(payload) ? payload : payload?.results;
@@ -152,26 +161,31 @@ export function launchesPanelRows(
       launchTime,
       launchSite: launch?.launchSite || pad.name || location.name || 'Unknown launch site',
       provider: launch?.provider || launch?.launch_service_provider?.name || null,
+      vehicle: launch.rocketName || launch.rocket?.configuration?.name || launch.rocket?.name || null,
       lat: coords.lat,
       lon: coords.lon,
       source: launch?.source || 'Launch Library 2',
     };
   });
-  return filterLaunchListByTime(
-    filterLaunchListBySite(
-      filterLaunchListByProvider(
-        filterLaunchListByStatus(
-          filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
-          statusFilter,
+  return filterLaunchListByVehicle(
+    filterLaunchListByTime(
+      filterLaunchListBySite(
+        filterLaunchListByProvider(
+          filterLaunchListByStatus(
+            filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
+            statusFilter,
+            selectedId,
+          ),
+          hideNoProvider,
           selectedId,
         ),
-        hideNoProvider,
+        hideNoSite,
         selectedId,
       ),
-      hideNoSite,
+      hideNoTime,
       selectedId,
     ),
-    hideNoTime,
+    hideNoVehicle,
     selectedId,
   );
 }
@@ -259,6 +273,7 @@ export function launchesPanelLoadingPresentation() {
  * @param {unknown} [input.hideNoProvider]
  * @param {unknown} [input.hideNoSite]
  * @param {unknown} [input.hideNoTime]
+ * @param {unknown} [input.hideNoVehicle]
  * @returns {Promise<object>}
  */
 export async function loadLaunchesPanelPayload({
@@ -272,6 +287,7 @@ export async function loadLaunchesPanelPayload({
   hideNoProvider = DEFAULT_LAUNCH_LIST_HIDE_NO_PROVIDER,
   hideNoSite = DEFAULT_LAUNCH_LIST_HIDE_NO_SITE,
   hideNoTime = DEFAULT_LAUNCH_LIST_HIDE_NO_TIME,
+  hideNoVehicle = DEFAULT_LAUNCH_LIST_HIDE_NO_VEHICLE,
 } = {}) {
   try {
     const response = await fetchImpl(url);
@@ -284,6 +300,7 @@ export async function loadLaunchesPanelPayload({
       hideNoProvider,
       hideNoSite,
       hideNoTime,
+      hideNoVehicle,
     });
     return {
       ...launchesPanelEmptyPresentation({ available: true, items: rows, payload }),
@@ -298,6 +315,7 @@ export async function loadLaunchesPanelPayload({
         hideNoProvider,
         hideNoSite,
         hideNoTime,
+        hideNoVehicle,
       });
       if (rows.length) {
         return {

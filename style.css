@@ -2930,7 +2930,8 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-status-chips,
 #launches-panel .launches-panel-provider-chips,
 #launches-panel .launches-panel-site-chips,
-#launches-panel .launches-panel-time-chips {
+#launches-panel .launches-panel-time-chips,
+#launches-panel .launches-panel-vehicle-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -2942,7 +2943,8 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-status-chip,
 #launches-panel .launches-panel-provider-chip,
 #launches-panel .launches-panel-site-chip,
-#launches-panel .launches-panel-time-chip {
+#launches-panel .launches-panel-time-chip,
+#launches-panel .launches-panel-vehicle-chip {
   padding: 2px 7px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 8px;
@@ -2965,7 +2967,9 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-site-chip:hover,
 #launches-panel .launches-panel-site-chip:focus-visible,
 #launches-panel .launches-panel-time-chip:hover,
-#launches-panel .launches-panel-time-chip:focus-visible {
+#launches-panel .launches-panel-time-chip:focus-visible,
+#launches-panel .launches-panel-vehicle-chip:hover,
+#launches-panel .launches-panel-vehicle-chip:focus-visible {
   color: #d7f7f7;
   border-color: rgba(34, 230, 230, .42);
   outline: none;
@@ -2982,7 +2986,9 @@ body.ui-clean-view #scene-runtime.active {
 #launches-panel .launches-panel-site-chip.active,
 #launches-panel .launches-panel-site-chip[aria-pressed="true"],
 #launches-panel .launches-panel-time-chip.active,
-#launches-panel .launches-panel-time-chip[aria-pressed="true"] {
+#launches-panel .launches-panel-time-chip[aria-pressed="true"],
+#launches-panel .launches-panel-vehicle-chip.active,
+#launches-panel .launches-panel-vehicle-chip[aria-pressed="true"] {
   color: #22e6e6;
   border-color: #22e6e6;
   background: rgba(34, 230, 230, .12);
