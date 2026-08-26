@@ -7,6 +7,22 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no last contact** toggle next to
+  Hide no baro altitude. Default **off** keeps the current draw, including
+  missing / non-finite `lastContactEpochMs`. **On** keeps a finite last-contact
+  epoch and drops missing, null, or non-finite last contact. This is
+  presence-only, not an altitude-band or hide-ground chip. The
+  selected/tracked contact always stays. AND with airborne-only, altitude
+  band, heading sectors, Hide no geo, Hide no baro, Hide no vertical rate,
+  Hide no speed, Hide no country, Hide no heading, and the rest. Distinct
+  from Plan 93 altitude-band, Plan 214 type, Plan 222 reg, Plan 227
+  callsign, Plan 234 heading, Plan 244 country, Plan 255 speed, Plan 261
+  geo altitude, Plan 268 vertical rate, Plan 274 baro altitude,
+  hide-no-squawk, and airborne-only / hide-ground. Re-applies the
+  already-fetched flight payload — no extra fetch and no new `/api`.
+  Preference persists as `meridian.flightHideNoLastContact` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Military flights and
+  AIS are unchanged.
 - The hosted Launches panel has a client-only **Webcast only** toggle after
   Hide no orbit. Default **off** keeps the current list, including
   no-webcast rows. **On** keeps rows whose copied `webcast` is true
