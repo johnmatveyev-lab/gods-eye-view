@@ -9,6 +9,7 @@ import {
 } from './adsbLolFallback.js';
 import { passesHideNoTypeFilter } from './flightHideNoTypeFilter.js';
 import { passesHideNoHeadingFilter } from './flightHideNoHeadingFilter.js';
+import { passesHideNoCallsignFilter } from './flightHideNoCallsignFilter.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
@@ -196,6 +197,90 @@ test('persists adsb.lol true_heading / mag_heading into the track slot; dir is u
   const adapter = readFileSync(path.join(ROOT, 'src/data/adsbLolFallback.js'), 'utf8');
   assert.doesNotMatch(adapter, /aircraft\?\.dir/);
   assert.doesNotMatch(adapter, /hideNoHeading|hide-no-heading|flightHideNoHeadingFilter/);
+});
+
+test('persists published flight only in the callsign slot; r stays on registration', () => {
+  const published = normalizeAdsbLolAircraftState({
+    hex: 'a1b2c3',
+    flight: 'UAL123',
+    r: 'N138AN',
+    t: 'A321',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+    track: 90,
+  }, 1000);
+  assert.equal(published[1], 'UAL123', 'published flight copies into state[1]');
+  assert.equal(published[19], 'N138AN', 'r still lands on the registration slot');
+  assert.equal(published.r, 'N138AN');
+
+  // Cached adsblol 200 leftovers: unpublished / blank / whitespace flight
+  // with published r (civil N752MC/C30J, A-7306/B734, ZP804/P8). Hide no
+  // callsign must hide these — do not copy r into the callsign slot.
+  const n752mc = normalizeAdsbLolAircraftState({
+    hex: 'abc111',
+    r: 'N752MC',
+    t: 'C30J',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+  }, 1000);
+  assert.equal(n752mc[1], null, 'unpublished flight stays empty — do not copy r');
+  assert.equal(n752mc[19], 'N752MC');
+  assert.equal(n752mc.r, 'N752MC');
+  assert.equal(n752mc.t, 'C30J');
+
+  const blankFlight = normalizeAdsbLolAircraftState({
+    hex: 'abc222',
+    flight: '',
+    r: 'A-7306',
+    t: 'B734',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+  }, 1000);
+  assert.equal(blankFlight[1], null, 'blank flight stays empty — do not copy r');
+  assert.equal(blankFlight[19], 'A-7306');
+
+  const whitespaceFlight = normalizeAdsbLolAircraftState({
+    hex: 'abc333',
+    flight: '   ',
+    r: 'ZP804',
+    t: 'P8',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+  }, 1000);
+  assert.equal(whitespaceFlight[1], null, 'whitespace flight stays empty — do not copy r');
+  assert.equal(whitespaceFlight[19], 'ZP804');
+
+  const missingBoth = normalizeAdsbLolAircraftState({
+    hex: 'abc444',
+    lat: 30,
+    lon: -97,
+    alt_baro: 10000,
+  }, 1000);
+  assert.equal(missingBoth[1], null, 'missing flight and r stay empty');
+  assert.equal(missingBoth[19], null);
+
+  const wire = JSON.parse(JSON.stringify({
+    time: 1000,
+    states: [n752mc],
+  }));
+  assert.equal(wire.states[0][1], null, 'empty callsign survives JSON for the /api/opensky wire');
+  assert.equal(wire.states[0][19], 'N752MC', 'r still survives JSON on the registration slot');
+
+  // Existing Hide no callsign matcher — not rewritten. Unpublished flight
+  // fail-closes; published flight stays. Registration is not a callsign.
+  assert.equal(passesHideNoCallsignFilter({ callsign: published[1], hideNoCallsign: true }), true);
+  assert.equal(passesHideNoCallsignFilter({ callsign: n752mc[1], hideNoCallsign: true }), false);
+  assert.equal(passesHideNoCallsignFilter({ callsign: blankFlight[1], hideNoCallsign: true }), false);
+  assert.equal(passesHideNoCallsignFilter({ callsign: whitespaceFlight[1], hideNoCallsign: true }), false);
+  assert.equal(passesHideNoCallsignFilter({ callsign: missingBoth[1], hideNoCallsign: true }), false);
+
+  const adapter = readFileSync(path.join(ROOT, 'src/data/adsbLolFallback.js'), 'utf8');
+  assert.doesNotMatch(adapter, /flight \|\| aircraft\?\.r/);
+  assert.doesNotMatch(adapter, /hideNoCallsign|hide-no-callsign|flightHideNoCallsignFilter/);
 });
 
 test('keeps grounded fallback contacts and rejects rows without positions', () => {
