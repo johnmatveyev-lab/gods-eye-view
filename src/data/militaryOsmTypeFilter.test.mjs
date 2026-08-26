@@ -246,8 +246,8 @@ test('OSM-type chips AND with Plan 151 class chips, Plan 165 Footprints only, an
       ),
       'way',
     ).map((record) => record.id),
-    ['osm:way:1', 'google:5'],
-    'class chips AND Footprints only AND Named only AND Way',
+    ['osm:way:1'],
+    'class chips AND Footprints only AND Named only AND Way (Places pin has no footprint)',
   );
   assert.deepEqual(
     filterInstallationsByOsmType(
@@ -263,7 +263,7 @@ test('OSM-type chips AND with Plan 151 class chips, Plan 165 Footprints only, an
       'way',
       'osm:node:2',
     ).map((record) => record.id),
-    ['osm:way:1', 'osm:node:2', 'google:5'],
+    ['osm:way:1', 'osm:node:2'],
     'selected point naval stays through all four filters',
   );
 });
