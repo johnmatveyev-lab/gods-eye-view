@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no sensor** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps the current 50-row list, including empty or missing sensor.
+  On keeps a non-empty trimmed `sensor` (VIIRS stays). Missing, empty,
+  or whitespace-only sensor fails closed. A selected fire always stays.
+  AND after Plan 210 list confidence, Plan 219 list FRP, Plan 225 list
+  age, and Plan 230 list Hide no satellite, before the 50-row cap.
+  Distinct from those list chips and from globe Hide no sensor (241).
+  `getRowControls()` owns the list chip — index.html / ui.js do not
+  re-declare it. Preference persists as `meridian.firmsListHideNoSensor`
+  (`'1'` / `'0'`; LayerStateCoordinator restore, no share-URL write).
+  No extra NASA fetch and no new `/api`. NASA FIRMS acknowledgement is
+  unchanged.
 - FIRMS globe has a client-only **Hide no confidence** toggle after Hide no
   version. Default **off** keeps the current overlay, including null,
   missing, and non-finite confidence. **On** keeps a finite confidence
