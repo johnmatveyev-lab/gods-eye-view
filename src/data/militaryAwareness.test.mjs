@@ -41,6 +41,7 @@ import { NAVIGATION_AUTHORITY_EVENT } from '../navigationPolicy.js';
 import { resetAwarenessIdentifiedForTest } from './awarenessIdentifiedFilter.js';
 import { resetAwarenessRangeForTest } from './awarenessRangeFilter.js';
 import { resetAwarenessAircraftOnlyForTest } from './awarenessAircraftFilter.js';
+import { resetAwarenessVesselsOnlyForTest } from './awarenessVesselsFilter.js';
 
 const militaryAwarenessSource = fs.readFileSync(
   new URL('./militaryAwareness.js', import.meta.url),
@@ -2703,6 +2704,7 @@ test('awareness runtime parameters return a detached snapshot', () => {
   resetAwarenessIdentifiedForTest();
   resetAwarenessRangeForTest();
   resetAwarenessAircraftOnlyForTest();
+  resetAwarenessVesselsOnlyForTest();
   militaryAwarenessLayer.setParams({ passive: false });
   const snapshot = militaryAwarenessLayer.getParams();
   militaryAwarenessLayer.setParams({ passive: true });
@@ -2711,6 +2713,7 @@ test('awareness runtime parameters return a detached snapshot', () => {
     identifiedOnly: false,
     range: 'all',
     aircraftOnly: false,
+    vesselsOnly: false,
   });
 });
 

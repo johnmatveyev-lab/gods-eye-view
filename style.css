@@ -8158,9 +8158,11 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .military-awareness-subject { margin: 0 0 7px; color: #fff; }
 .military-awareness-identified-chips,
 .military-awareness-aircraft-chips,
+.military-awareness-vessels-chips,
 .military-awareness-range-chips { display: flex; gap: 5px; margin: 0 0 8px; }
 .military-awareness-identified-chip,
 .military-awareness-aircraft-chip,
+.military-awareness-vessels-chip,
 .military-awareness-range-chip {
   border: 1px solid rgba(98,181,255,0.34);
   border-radius: 4px;
@@ -8175,6 +8177,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .military-awareness-identified-chip:focus-visible,
 .military-awareness-aircraft-chip:hover,
 .military-awareness-aircraft-chip:focus-visible,
+.military-awareness-vessels-chip:hover,
+.military-awareness-vessels-chip:focus-visible,
 .military-awareness-range-chip:hover,
 .military-awareness-range-chip:focus-visible {
   color: #fff;
@@ -8186,6 +8190,8 @@ body.cockpit-mode #intel-hud .hud-right-edge { right: 22px; }
 .military-awareness-identified-chip[aria-pressed="true"],
 .military-awareness-aircraft-chip.active,
 .military-awareness-aircraft-chip[aria-pressed="true"],
+.military-awareness-vessels-chip.active,
+.military-awareness-vessels-chip[aria-pressed="true"],
 .military-awareness-range-chip.active,
 .military-awareness-range-chip[aria-pressed="true"] {
   color: #fff;
