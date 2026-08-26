@@ -7,6 +7,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Hosted Quakes list has client-only exclusive **All | &lt;70 km | &lt;20 km**
+  depth-ceiling chips. Default **All** keeps 15 / 80 / 400 km events on the
+  current 50-row nearest/recent list. **&lt;70 km** drops 80 and 400 km.
+  **&lt;20 km** keeps 15 km and drops 70 km. Missing or non-finite `depthKm`
+  stays visible. The selected row always stays. AND with the Plan 208
+  magnitude floor. Distinct from the globe SID depth bands (default all-on).
+  Re-applies the already-fetched USGS snapshot — no extra fetch and no new
+  `/api`. Preference persists as `meridian.quakeListDepth`
+  (LayerStateCoordinator restore, no share-URL write).
 - FIRMS globe has client-only exclusive **All | 2.0NRT | Other** product-version
   chips after the Plan 211 track-size row. Default **All** keeps C2 NRT
   (`2.0NRT`) and older `1.0NRT`. **2.0NRT** drops `1.0NRT`. **Other** keeps
