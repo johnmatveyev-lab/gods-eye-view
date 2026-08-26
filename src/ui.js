@@ -300,6 +300,11 @@ import {
 } from './data/launchListStatusFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
+  getEarthquakeListAgeFilter,
+  hydrateEarthquakeListAgeFilter,
+  setEarthquakeListAgeFilter,
+} from './data/earthquakeListAgeFilter.js';
+import {
   getEarthquakeListDepthFilter,
   hydrateEarthquakeListDepthFilter,
   setEarthquakeListDepthFilter,
@@ -3127,6 +3132,7 @@ export class StyleManager {
     this._earthquakeNetworkChips = document.getElementById('earthquake-network-chips');
     this._earthquakeListMagChips = document.getElementById('earthquake-list-mag-chips');
     this._earthquakeListDepthChips = document.getElementById('earthquake-list-depth-chips');
+    this._earthquakeListAgeChips = document.getElementById('earthquake-list-age-chips');
     this._cockpitResetGlobeBtn = document.getElementById('cockpit-reset-globe');
     this._styleButtons = document.getElementById('style-buttons');
     this._trafficSyncChip = document.getElementById('traffic-sync-chip');
@@ -5638,6 +5644,7 @@ export class StyleManager {
           this._syncEarthquakeNetworkChips();
           this._syncEarthquakeListMagChips();
           this._syncEarthquakeListDepthChips();
+          this._syncEarthquakeListAgeChips();
         }
         if (change?.layerId === 'satellites') {
           syncIssPassReadout({ recompute: true });
@@ -13045,6 +13052,30 @@ export class StyleManager {
     this._syncEarthquakeListDepthChips();
   }
 
+  _syncEarthquakeListAgeChips() {
+    const ceiling = getEarthquakeListAgeFilter();
+    const chips = this._earthquakeListAgeChips?.querySelectorAll?.('[data-earthquake-list-age]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.earthquakeListAge === ceiling;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _initEarthquakeListAgeChips() {
+    hydrateEarthquakeListAgeFilter();
+    if (!this._earthquakeListAgeChips) return;
+    this._earthquakeListAgeChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-earthquake-list-age]');
+      if (!chip || !this._earthquakeListAgeChips.contains(chip)) return;
+      setEarthquakeListAgeFilter(chip.dataset.earthquakeListAge);
+      this._syncEarthquakeListAgeChips();
+      this._earthquakeListControl?.refresh();
+    });
+    this._syncEarthquakeListAgeChips();
+  }
+
   _initEarthquakeListControl() {
     this._initEarthquakeTimeChips();
     this._initEarthquakeDepthChips();
@@ -13056,6 +13087,7 @@ export class StyleManager {
     this._initEarthquakeNetworkChips();
     this._initEarthquakeListMagChips();
     this._initEarthquakeListDepthChips();
+    this._initEarthquakeListAgeChips();
     this._earthquakeListControl = initEarthquakeListControl({
       button: this._earthquakeListToggle,
       panel: this._earthquakeListPanel,

@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
+import { resetEarthquakeListAgeFilterForTest } from './earthquakeListAgeFilter.js';
 import { resetEarthquakeListDepthFilterForTest } from './earthquakeListDepthFilter.js';
 import {
   EARTHQUAKE_LIST_LIMIT,
@@ -94,6 +95,7 @@ function crowdOutRecords() {
 beforeEach(() => {
   resetEarthquakeListMagFilterForTest();
   resetEarthquakeListDepthFilterForTest();
+  resetEarthquakeListAgeFilterForTest();
 });
 
 test('All keeps the current 50-row list', () => {
