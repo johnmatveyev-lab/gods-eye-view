@@ -45,6 +45,7 @@ import { resetAwarenessVesselsOnlyForTest } from './awarenessVesselsFilter.js';
 import { resetAwarenessSitesOnlyForTest } from './awarenessSitesFilter.js';
 import { resetAwarenessMilitaryOnlyForTest } from './awarenessMilitaryFilter.js';
 import { resetAwarenessFlightsOnlyForTest } from './awarenessFlightsFilter.js';
+import { resetAwarenessHideNoTrackForTest } from './awarenessHideNoTrackFilter.js';
 
 const militaryAwarenessSource = fs.readFileSync(
   new URL('./militaryAwareness.js', import.meta.url),
@@ -2711,6 +2712,7 @@ test('awareness runtime parameters return a detached snapshot', () => {
   resetAwarenessSitesOnlyForTest();
   resetAwarenessMilitaryOnlyForTest();
   resetAwarenessFlightsOnlyForTest();
+  resetAwarenessHideNoTrackForTest();
   militaryAwarenessLayer.setParams({ passive: false });
   const snapshot = militaryAwarenessLayer.getParams();
   militaryAwarenessLayer.setParams({ passive: true });
@@ -2723,6 +2725,7 @@ test('awareness runtime parameters return a detached snapshot', () => {
     sitesOnly: false,
     militaryOnly: false,
     flightsOnly: false,
+    hideNoTrack: false,
   });
 });
 
