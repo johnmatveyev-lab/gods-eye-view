@@ -1169,6 +1169,11 @@
         <button type="button" class="fires-sensor-chip" data-firms-track="0.5" aria-pressed="false" title="Hide detections at or above 0.5 km track (MODIS and wide-track VIIRS)">&lt;0.5km</button>
         <button type="button" class="fires-sensor-chip" data-firms-track="0.4" aria-pressed="false" title="Hide detections at or above 0.4 km track (keep near-nadir VIIRS)">&lt;0.4km</button>
       </div>
+      <div id="fires-list-conf-chips" class="fires-sensor-chips" role="group" aria-label="FIRMS list confidence" hidden>
+        <button type="button" class="fires-sensor-chip active" data-firms-list-conf="all" aria-pressed="true" title="Show every FIRMS list confidence bucket">All</button>
+        <button type="button" class="fires-sensor-chip" data-firms-list-conf="high" aria-pressed="false" title="Keep high-confidence detections (≥0.75) on the FIRES list">High</button>
+        <button type="button" class="fires-sensor-chip" data-firms-list-conf="nominal" aria-pressed="false" title="Keep nominal and high detections (≥0.45) on the FIRES list">Nominal+</button>
+      </div>
       <div id="fires-list-meta" class="fires-list-meta">Enable FIRMS Active Fires to list nearby detections.</div>
       <ol id="fires-list" class="fires-list" aria-label="Nearby NASA FIRMS fires"></ol>
       <p id="fires-list-ack" class="fires-list-ack">We acknowledge the use of data and/or imagery from NASA's Fire Information for Resource Management System (FIRMS) (https://earthdata.nasa.gov/firms), part of NASA's Earth Observing System Data and Information System (EOSDIS).</p>
