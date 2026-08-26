@@ -7,6 +7,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no acq** filter on
+  the already-fetched trailing-24h `/api/firms` roster. Default **off**
+  keeps the current 50-row list, including missing / non-finite /
+  `acqMs<=0`. On is presence-only: hides those sentinels and keeps a
+  real epoch (`acqMs > 0`). This is not an age floor. A selected /
+  tracked fire always stays. AND after Plan 210 list confidence, Plan
+  219 list FRP, Plan 225 list age, Plan 230 list Hide no satellite,
+  Plan 252 list Hide no sensor, Plan 256 list Hide no version, and
+  Plan 260 list Hide no day/night, before the 50-row cap. Distinct from
+  those list chips, list age fail-open, and globe Hide no acq (262,
+  `meridian.firmsHideNoAcq` on firmsHeatmap.js). `getRowControls()`
+  owns the list chip — index.html / ui.js do not re-declare it.
+  Preference persists as `meridian.firmsListHideNoAcq` (`'1'` / `'0'`;
+  LayerStateCoordinator restore, no share-URL write). No extra NASA
+  fetch and no new `/api`. NASA FIRMS acknowledgement is unchanged.
 - Datacenters in-view list has client-only exclusive **All | AWS | Equinix**
   chips. Default **All** matches the current in-view OSM list. **AWS** keeps
   rows whose `operator:short` or `operator` is AWS / Amazon / Amazon Web
