@@ -7,6 +7,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no scan** toggle after Hide no
+  brightness. Default **off** keeps the current overlay, including
+  missing / non-finite / `scanKm<=0`. **On** keeps `scanKm > 0`
+  (a real 1.0 km pixel stays) and drops missing, non-finite, or
+  `scanKm <= 0`. Missing / non-finite / `scanKm <= 0` fail closed when
+  on. This is presence-only, not a scan-size ceiling. The adapter still
+  writes 0 when scan is unparseable; this chip hides that sentinel when
+  on and does not change the scan-ceiling fail-open (All | <0.5km |
+  <0.4km still keep `scanKm` 0). The selected fire always stays if it
+  already passed the other matchers. Chip changes re-filter the
+  already-fetched `/api/firms` payload and AND with brightness, FRP,
+  confidence, age, satellite, sensor, version, day/night, and Hide no
+  acq — no extra NASA fetch and no new `/api`. Preference persists as
+  `meridian.firmsHideNoScan` (`1` / `0`; LayerStateCoordinator restore,
+  no share-URL write). Distinct from the fail-open scan-size ceiling,
+  list Hide no scan (271, `meridian.firmsListHideNoScan`), and Hide no
+  brightness (267). NASA FIRMS acknowledgement unchanged.
 - Global Context has a client-only **Hide no track** toggle on the Contacts
   roster, next to Flights only. Default **off** keeps the current roster,
   including a civil flight with `track` null. **On** hides already-fetched
