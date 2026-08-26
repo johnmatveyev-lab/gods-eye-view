@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no satellite** toggle after Hide no
+  day/night. Default **off** keeps the current overlay, including empty and
+  named satellite strings. **On** keeps a non-empty trimmed satellite
+  (NOAA-20 stays) and drops empty, whitespace, or missing satellite. The
+  selected fire always stays. Chip changes re-filter the already-fetched
+  `/api/firms` payload and AND with FRP, confidence, brightness, TI5, scan,
+  track, version, area, Hide no day/night, Day | Night, age, sensor, and
+  satellite-name chips — no extra NASA fetch and no new `/api`. Preference
+  persists as `meridian.firmsHideNoSatellite` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Distinct from the
+  satellite identity chips, Plan 204 scan, 211 track, 217 version, 226
+  area, 233 hide no day/night, and 230 list hide-no-sat. NASA FIRMS
+  acknowledgement unchanged.
 - AIS has client-only exclusive **All | 15m | 1h** last-position freshness
   chips. Default **All** keeps the current fleet. **15m** hides vessels whose
   last position is older than 15 minutes. **1h** hides older than 1 hour.
