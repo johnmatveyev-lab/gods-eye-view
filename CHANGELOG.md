@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Hide no orbit** toggle after
+  Hide no vehicle. Default **off** keeps the current list, including missing /
+  empty orbit. **On** keeps a non-empty trimmed `orbit` (Low Earth Orbit
+  stays); empty / whitespace / missing drop. A selected row always stays if it
+  passed the other filters. AND with Plan 207 LSP-type, Plan 215 Mapped
+  only, Plan 223 All | Go | TBD status, Plan 232 Hide no provider, Plan
+  239 Hide no site, Plan 248 Hide no time, and Plan 257 Hide no vehicle.
+  Re-filters the already-fetched `/api/launches` roster — no extra LL2 fetch
+  and no new `/api`. Preference persists as `meridian.launchListHideNoOrbit`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write).
+  Distinct from globe `meridian.launchOrbit` class chips (LEO / MEO / GEO /
+  Polar / Other, which map missing to Other): this is presence-only.
 - The hosted FIRES list has a client-only **Hide no acq** filter on
   the already-fetched trailing-24h `/api/firms` roster. Default **off**
   keeps the current 50-row list, including missing / non-finite /
