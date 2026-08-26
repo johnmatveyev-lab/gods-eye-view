@@ -7,6 +7,21 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no baro altitude** toggle next to
+  Hide no geo altitude. Default **off** keeps the current draw, including
+  missing / non-finite `altitude` / `altitudeM`. **On** keeps a finite
+  baro (`0` stays — real on-ground / sea-level; `10000` m stays) and
+  drops missing, null, or non-finite baro. This is presence-only, not an
+  altitude-band chip. The selected/tracked contact always stays.
+  AND with airborne-only, altitude band, heading sectors, Hide no geo,
+  Hide no vertical rate, Hide no speed, Hide no country, Hide no heading,
+  and the rest. Distinct from Plan 93 altitude-band (All pass-through;
+  named bands fail-close missing baro), Plan 261 hide-no-geo
+  (`geoAltitudeM` only), Plan 268 hide-no-vertical-rate, and hide-ground.
+  Re-applies the already-fetched flight payload — no extra fetch and no
+  new `/api`. Preference persists as `meridian.flightHideNoBaroAltitude`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write).
+  Military flights and AIS are unchanged.
 - The hosted FIRES list has a client-only **Hide no scan** filter on
   the already-fetched trailing-24h `/api/firms` roster. Default **off**
   keeps the current 50-row list, including missing / non-finite /
