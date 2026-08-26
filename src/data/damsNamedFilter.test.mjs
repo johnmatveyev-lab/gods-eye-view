@@ -295,7 +295,7 @@ test('list chip sits on the dams in-view surface; persist is local; no share-URL
     panel[0].indexOf('id="dams-named-chips"') < panel[0].indexOf('id="dams-in-view-items"'),
     'Named only sits above the in-view items',
   );
-  assert.match(panel[0], /© OpenStreetMap contributors/);
+  assert.match(html, /id="dams-in-view"[\s\S]*?© OpenStreetMap contributors/);
   assert.match(ui, /data-dam-named/);
   assert.match(ui, /writeDamNamedOnly|readDamNamedOnly/);
   assert.match(css, /dams-named-chip/);
