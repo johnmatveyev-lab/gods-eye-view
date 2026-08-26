@@ -7,6 +7,16 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Datacenters in-view list has a client-only **Ref only** toggle after
+  Owner only. Default **off** keeps the current in-view OSM list,
+  including missing, empty, and whitespace `ref`. **On** hides those
+  no-ref rows and keeps a published ref. A named owner-only row with
+  empty ref hides when on. The selected id always stays when it already
+  passed the other matchers. AND with Plan 206 operator chips, Plan 270
+  Named only, Plan 285 Website only, Plan 291 Dated only, and Plan 301
+  Owner only. List/fly-to only — globe stems stay. Preference persists
+  as `meridian.dcRefOnly` (`1` / `0`; no share-URL write). Distinct from
+  Plan 193, Plan 206, Plan 270, Plan 285, Plan 291, and Plan 301.
 - Datacenters in-view list has a client-only **Owner only** toggle after
   Dated only. Default **off** keeps the current in-view OSM list,
   including missing, empty, and whitespace `owner`. **On** hides those
