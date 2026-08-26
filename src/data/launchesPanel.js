@@ -20,6 +20,8 @@
  * or false.
  * Hide no mission then drops rows whose copied mission is missing,
  * empty, or whitespace.
+ * Hide no probability then drops rows whose copied probability is
+ * missing, null, or non-finite. Finite 0 stays.
  */
 
 import {
@@ -60,6 +62,10 @@ import {
   filterLaunchListByMission,
 } from './launchListMissionFilter.js';
 import {
+  DEFAULT_LAUNCH_LIST_HIDE_NO_PROBABILITY,
+  filterLaunchListByProbability,
+} from './launchListProbabilityFilter.js';
+import {
   DEFAULT_LAUNCH_LIST_STATUS_FILTER,
   filterLaunchListByStatus,
 } from './launchListStatusFilter.js';
@@ -78,6 +84,7 @@ export const LAUNCHES_PANEL_VEHICLE_CHIPS_ID = 'launches-panel-vehicle-chips';
 export const LAUNCHES_PANEL_ORBIT_CHIPS_ID = 'launches-panel-orbit-chips';
 export const LAUNCHES_PANEL_WEBCAST_CHIPS_ID = 'launches-panel-webcast-chips';
 export const LAUNCHES_PANEL_MISSION_CHIPS_ID = 'launches-panel-mission-chips';
+export const LAUNCHES_PANEL_PROBABILITY_CHIPS_ID = 'launches-panel-probability-chips';
 /** Same feed the globe layer already uses. Do not invent another route. */
 export const LAUNCHES_FEED_URL = '/api/launches';
 /** Same close-pad range Space Missions already uses for pad focus. */
@@ -153,10 +160,12 @@ function compactLaunchLabel(name, maxLength = 27) {
  * drops missing / empty / whitespace vehicle. Hide no orbit then
  * drops missing / empty / whitespace orbit. Webcast only then drops
  * missing / false webcast. Hide no mission then drops missing /
- * empty / whitespace mission. A selected id always stays.
+ * empty / whitespace mission. Hide no probability then drops
+ * missing / null / non-finite probability. Finite 0 stays.
+ * A selected id always stays.
  * @param {object|Array|null} payload `{results:[…]}` or a launch array.
  * @param {unknown} [filter]
- * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown, hideNoSite?: unknown, hideNoTime?: unknown, hideNoVehicle?: unknown, hideNoOrbit?: unknown, webcastOnly?: unknown, hideNoMission?: unknown}} [options]
+ * @param {{mappedOnly?: unknown, selectedId?: string|null, statusFilter?: unknown, hideNoProvider?: unknown, hideNoSite?: unknown, hideNoTime?: unknown, hideNoVehicle?: unknown, hideNoOrbit?: unknown, webcastOnly?: unknown, hideNoMission?: unknown, hideNoProbability?: unknown}} [options]
  * @returns {Array<object>}
  */
 export function launchesPanelRows(
@@ -173,6 +182,7 @@ export function launchesPanelRows(
     hideNoOrbit = DEFAULT_LAUNCH_LIST_HIDE_NO_ORBIT,
     webcastOnly = DEFAULT_LAUNCH_LIST_WEBCAST_ONLY,
     hideNoMission = DEFAULT_LAUNCH_LIST_HIDE_NO_MISSION,
+    hideNoProbability = DEFAULT_LAUNCH_LIST_HIDE_NO_PROBABILITY,
   } = {},
 ) {
   const launches = Array.isArray(payload) ? payload : payload?.results;
@@ -196,43 +206,48 @@ export function launchesPanelRows(
       mission: (typeof launch.mission === 'string' ? launch.mission : launch.mission?.name)
         || launch.mission_name
         || null,
+      probability: Number.isFinite(launch.probability) ? launch.probability : null,
       webcast: launchListRowHasWebcast(launch),
       lat: coords.lat,
       lon: coords.lon,
       source: launch?.source || 'Launch Library 2',
     };
   });
-  return filterLaunchListByMission(
-    filterLaunchListByWebcast(
-      filterLaunchListByOrbit(
-        filterLaunchListByVehicle(
-          filterLaunchListByTime(
-            filterLaunchListBySite(
-              filterLaunchListByProvider(
-                filterLaunchListByStatus(
-                  filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
-                  statusFilter,
+  return filterLaunchListByProbability(
+    filterLaunchListByMission(
+      filterLaunchListByWebcast(
+        filterLaunchListByOrbit(
+          filterLaunchListByVehicle(
+            filterLaunchListByTime(
+              filterLaunchListBySite(
+                filterLaunchListByProvider(
+                  filterLaunchListByStatus(
+                    filterLaunchListByMappedOnly(rows, mappedOnly, selectedId),
+                    statusFilter,
+                    selectedId,
+                  ),
+                  hideNoProvider,
                   selectedId,
                 ),
-                hideNoProvider,
+                hideNoSite,
                 selectedId,
               ),
-              hideNoSite,
+              hideNoTime,
               selectedId,
             ),
-            hideNoTime,
+            hideNoVehicle,
             selectedId,
           ),
-          hideNoVehicle,
+          hideNoOrbit,
           selectedId,
         ),
-        hideNoOrbit,
+        webcastOnly,
         selectedId,
       ),
-      webcastOnly,
+      hideNoMission,
       selectedId,
     ),
-    hideNoMission,
+    hideNoProbability,
     selectedId,
   );
 }
@@ -324,6 +339,7 @@ export function launchesPanelLoadingPresentation() {
  * @param {unknown} [input.hideNoOrbit]
  * @param {unknown} [input.webcastOnly]
  * @param {unknown} [input.hideNoMission]
+ * @param {unknown} [input.hideNoProbability]
  * @returns {Promise<object>}
  */
 export async function loadLaunchesPanelPayload({
@@ -341,6 +357,7 @@ export async function loadLaunchesPanelPayload({
   hideNoOrbit = DEFAULT_LAUNCH_LIST_HIDE_NO_ORBIT,
   webcastOnly = DEFAULT_LAUNCH_LIST_WEBCAST_ONLY,
   hideNoMission = DEFAULT_LAUNCH_LIST_HIDE_NO_MISSION,
+  hideNoProbability = DEFAULT_LAUNCH_LIST_HIDE_NO_PROBABILITY,
 } = {}) {
   try {
     const response = await fetchImpl(url);
@@ -357,6 +374,7 @@ export async function loadLaunchesPanelPayload({
       hideNoOrbit,
       webcastOnly,
       hideNoMission,
+      hideNoProbability,
     });
     return {
       ...launchesPanelEmptyPresentation({ available: true, items: rows, payload }),
@@ -375,6 +393,7 @@ export async function loadLaunchesPanelPayload({
         hideNoOrbit,
         webcastOnly,
         hideNoMission,
+        hideNoProbability,
       });
       if (rows.length) {
         return {
