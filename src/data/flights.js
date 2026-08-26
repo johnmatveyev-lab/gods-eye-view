@@ -4804,7 +4804,10 @@ const flightsLayer = {
           // at/below the ellipsoid (fleet pass reads it — see the occluder
           // note there). Null for the overwhelmingly common airborne case.
           cullPosition: renderAltitudeM < 10 ? Cesium.Cartesian3.fromDegrees(lon, lat, 12) : null,
-          velocity: stickyNumber(velocity, prevMeta?.velocity, 0),
+          // Missing velocity stays null so speed-band chips fail-open. 0 is a
+          // real parked / on-ground speed, same sticky-null pattern as
+          // true_track and verticalRate.
+          velocity: stickyNumber(velocity, prevMeta?.velocity, null),
           // Missing track stays null so NESW chips fail-open. 0 is a real
           // northbound heading, same sticky-null pattern as verticalRate.
           true_track: stickyNumber(true_track, prevMeta?.true_track, null),
