@@ -7,6 +7,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no brightness** toggle after Hide no
+  acq. Default **off** keeps the current overlay, including missing /
+  unparseable Kelvin. **On** keeps `brightness > 0` (a real Kelvin such
+  as 320 K stays) and drops missing, non-finite, or `brightness <= 0`.
+  Missing / non-finite / `brightness <= 0` fail closed when on. This is
+  presence-only, not a Kelvin floor. The adapter still writes 0 when
+  Kelvin is unparseable; this chip hides that sentinel when on and does
+  not change the brightness-floor fail-open (All | 320+ | 340+ still
+  keep `brightness` 0). The selected fire always stays if it already
+  passed the other matchers. Chip changes re-filter the already-fetched
+  `/api/firms` payload and AND with FRP, confidence, age, satellite,
+  sensor, version, day/night, and Hide no acq — no extra NASA fetch and
+  no new `/api`. Preference persists as `meridian.firmsHideNoBrightness`
+  (`1` / `0`; LayerStateCoordinator restore, no share-URL write).
+  Distinct from the fail-open brightness floor, TI5 filter, FRP floor,
+  Hide no confidence (253), Hide no acq (262), and list Hide no acq
+  (266). NASA FIRMS acknowledgement unchanged.
 - The hosted FIRES list has a client-only **Hide no scan** filter on
   the already-fetched trailing-24h `/api/firms` roster. Default **off**
   keeps the current 50-row list, including missing / non-finite /
