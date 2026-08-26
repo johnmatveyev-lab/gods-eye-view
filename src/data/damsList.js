@@ -3,8 +3,9 @@
  *
  * Reads the already-loaded `local-dams` payload (bundled OSM / ODbL
  * snapshot). Does not fetch and does not touch datacenters or installations.
- * Plan 205 output-floor chips and Plan 218 Named only filter this list
- * only — globe stems stay. Named only ANDs after the output floor.
+ * Plan 205 output-floor chips, Plan 218 Named only, and Plan 224
+ * Operator only filter this list only — globe stems stay. Named only
+ * ANDs after the output floor; Operator only ANDs after Named only.
  */
 
 import {
@@ -17,6 +18,11 @@ import {
   damMatchesNamedFilter,
   readDamNamedOnly,
 } from './damsNamedFilter.js';
+import {
+  DEFAULT_DAM_OPERATOR_ONLY,
+  damMatchesOperatorFilter,
+  readDamOperatorOnly,
+} from './damsOperatorFilter.js';
 
 export const DAMS_LAYER_ID = 'local-dams';
 export const DAMS_LIST_CAP = 50;
@@ -78,6 +84,7 @@ export function damDistanceKm(lat1, lon1, lat2, lon2) {
  * @param {number} [options.cap]
  * @param {unknown} [options.outputFloor] Exclusive All | 10+ MW | 100+ MW chip.
  * @param {unknown} [options.namedOnly] Named only toggle. Default off.
+ * @param {unknown} [options.operatorOnly] Operator only toggle. Default off.
  * @param {string|null} [options.selectedId] Selected list / globe row stays.
  * @returns {Array<{id: string, label: string, latitude: number, longitude: number, distanceKm: number}>}
  */
@@ -88,6 +95,7 @@ export function listDamsInView({
   cap = DAMS_LIST_CAP,
   outputFloor = DEFAULT_DAM_OUTPUT_FLOOR,
   namedOnly = DEFAULT_DAM_NAMED_ONLY,
+  operatorOnly = DEFAULT_DAM_OPERATOR_ONLY,
   selectedId = null,
 } = {}) {
   if (!enabled) return [];
@@ -109,6 +117,7 @@ export function listDamsInView({
     const id = String(record.id ?? '');
     const label = String(record.label || 'Dam').trim() || 'Dam';
     if (!damMatchesNamedFilter({ id, label }, namedOnly, { selectedId })) continue;
+    if (!damMatchesOperatorFilter(record, operatorOnly, { selectedId })) continue;
     listed.push({
       id,
       label,
@@ -187,6 +196,7 @@ export function renderDamsInViewList(items, count, sites) {
  * @param {() => object|null} options.getView
  * @param {() => unknown} [options.getOutputFloor] Persist / chip floor. Defaults to `meridian.damOutput`.
  * @param {() => unknown} [options.getNamedOnly] Persist / chip toggle. Defaults to `meridian.damNamedOnly`.
+ * @param {() => unknown} [options.getOperatorOnly] Persist / chip toggle. Defaults to `meridian.damOperatorOnly`.
  * @param {() => string|null} [options.getSelectedId] Globe / list selection. Always stays.
  * @param {(site: object) => boolean|void} options.flyTo
  * @returns {{refresh: Function, destroy: Function, sites: () => Array<object>}|null}
@@ -200,6 +210,7 @@ export function bindDamsInViewList({
   getView,
   getOutputFloor,
   getNamedOnly,
+  getOperatorOnly,
   getSelectedId,
   flyTo,
 } = {}) {
@@ -223,6 +234,9 @@ export function bindDamsInViewList({
       namedOnly: typeof getNamedOnly === 'function'
         ? getNamedOnly()
         : readDamNamedOnly(),
+      operatorOnly: typeof getOperatorOnly === 'function'
+        ? getOperatorOnly()
+        : readDamOperatorOnly(),
       selectedId: hostSelected || selectedId,
     });
     root.hidden = !enabled;
