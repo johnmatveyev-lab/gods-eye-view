@@ -7,6 +7,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no TI5** toggle after Hide no
+  track. Default **off** keeps the current overlay, including missing /
+  non-finite / `brightnessTi5<=0`. **On** keeps finite `brightnessTi5 > 0`
+  and drops those sentinels. Presence-only — not the All | 290+ | 310+
+  TI5 floor (`meridian.firmsBrightnessTi5`, still fail-open) and not
+  Hide no brightness (267, TI4 `fire.brightness`). Selected id stays.
+  Re-filters the already-fetched `/api/firms` payload. Persists as
+  `meridian.firmsHideNoTi5` (`1` / `0`; no share-URL).
 - The hosted FIRES list has a client-only **Hide no confidence** filter
   on the already-fetched trailing-24h `/api/firms` roster. Default
   **off** keeps missing / null / non-finite confidence. On hides those
