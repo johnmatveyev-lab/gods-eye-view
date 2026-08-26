@@ -58,6 +58,14 @@ import {
   subscribeIdentifiedOnlyEnabled,
 } from './flightIdentifiedFilter.js';
 import {
+  getHideNoSquawkEnabled,
+  hideNoSquawkChipModel,
+  hydrateHideNoSquawkEnabled,
+  passesHideNoSquawkFilter,
+  setHideNoSquawkEnabled,
+  subscribeHideNoSquawkEnabled,
+} from './flightHideNoSquawkFilter.js';
+import {
   aircraftMatchesAltitudeBand,
   getAltitudeBand,
   hydrateAltitudeBand,
@@ -395,6 +403,14 @@ function _identifiedOnlyMatcher(contact) {
     callsign: contact?.callsign,
     registration: contact?.registration,
     identifiedOnly: getIdentifiedOnlyEnabled(),
+  });
+}
+
+/** PLAN 203 — hide contacts that never publish a squawk. */
+function _hideNoSquawkMatcher(contact) {
+  return passesHideNoSquawkFilter({
+    squawk: contact?.squawk,
+    hideNoSquawk: getHideNoSquawkEnabled(),
   });
 }
 
@@ -780,6 +796,8 @@ hydrateAltitudeBand();
 subscribeAltitudeBand(_applyAltitudeBandVisibility);
 hydrateIdentifiedOnlyEnabled();
 subscribeIdentifiedOnlyEnabled(_applyAltitudeBandVisibility);
+hydrateHideNoSquawkEnabled();
+subscribeHideNoSquawkEnabled(_applyAltitudeBandVisibility);
 
 /** Whether this contact is inside the current flights altitude band. */
 function _inAltitudeBand(icao24, info = _flightData.get(icao24)) {
@@ -823,7 +841,7 @@ function _verticalRateAndMatcher(contact) {
 }
 
 /**
- * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only).
+ * Strict in-flight AND (speed × altitude × heading × hide-stale × class × prefix × airborne-only × rate × emergencies-only × identified-only × hide-no-squawk).
  * Tracked/selected exemption is applied only by `_passesInFlightFilters`,
  * not here — counts stay honest.
  */
@@ -832,7 +850,7 @@ function _matchesInFlightFilters(icao24, info = _flightData.get(icao24)) {
   return contactPassesInFlightFilters(info || {}, {
     id: icao24,
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher],
   });
 }
 
@@ -4265,7 +4283,7 @@ function _passesInFlightFilters(icao24, info) {
     speedBand: { minKt: _speedMinKt, maxKt: _speedMaxKt },
     trackedId: _trackedIcao,
     selectedId: _trackedIcao,
-    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher],
+    andMatchers: [_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher],
   });
 }
 
@@ -4769,7 +4787,9 @@ const flightsLayer = {
           // note there). Null for the overwhelmingly common airborne case.
           cullPosition: renderAltitudeM < 10 ? Cesium.Cartesian3.fromDegrees(lon, lat, 12) : null,
           velocity: stickyNumber(velocity, prevMeta?.velocity, 0),
-          true_track: stickyNumber(true_track, prevMeta?.true_track, 0),
+          // Missing track stays null so NESW chips fail-open. 0 is a real
+          // northbound heading, same sticky-null pattern as verticalRate.
+          true_track: stickyNumber(true_track, prevMeta?.true_track, null),
           category: cat,
           // An adsbdb-enriched type code outranks the coarse OpenSky category.
           klass: classifyAircraft({ typeCode: prevMeta?.typeCode ?? null, category: cat }),
@@ -5131,7 +5151,7 @@ const flightsLayer = {
    * contact uses the hysteretic tracked hangar path. When off, close-in
    * aircraft stay on the 2D billboard fallback (same path as a failed GLB).
    * `models3dMode` is 'proximity' (nearest MODEL_MAX in view) or 'all' (every in-view plane).
-   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
+   * @param {{models3d?: boolean, models3dMode?: 'proximity'|'all', hideStale?: boolean, airborneOnly?: boolean, emergenciesOnly?: boolean, identifiedOnly?: boolean, hideNoSquawk?: boolean, headingSectors?: string, showClimb?: boolean, showLevel?: boolean, showDescent?: boolean, selectedFlightsTrackingId?: string|null, speedMinKt?: number|null, speedMaxKt?: number|null}} params
    */
   setParams(params = {}, { origin = 'programmatic' } = {}) {
     if (isExplicitLayerStateOrigin(origin)
@@ -5204,6 +5224,10 @@ const flightsLayer = {
       setIdentifiedOnlyEnabled(params.identifiedOnly);
       _applyInFlightFilterVisibility();
     }
+    if (typeof params.hideNoSquawk === 'boolean' && params.hideNoSquawk !== getHideNoSquawkEnabled()) {
+      setHideNoSquawkEnabled(params.hideNoSquawk);
+      _applyInFlightFilterVisibility();
+    }
     if (Object.hasOwn(params, 'selectedFlightsTrackingId')) {
       const requested = _normalizeTrackedIcao(params.selectedFlightsTrackingId);
       if (requested === _trackedIcao) {
@@ -5235,6 +5259,7 @@ const flightsLayer = {
       airborneOnly: _airborneOnly,
       emergenciesOnly: _emergenciesOnly,
       identifiedOnly: getIdentifiedOnlyEnabled(),
+      hideNoSquawk: getHideNoSquawkEnabled(),
       irBoost: _irBoost,
       headingSectors: getHeadingSectors(),
       hideStale: inFlightFilters.getHideStaleEnabled(),
@@ -5255,6 +5280,7 @@ const flightsLayer = {
         ..._hideStaleRowControls().chips,
         emergenciesOnlyChipModel(_emergenciesOnly),
         identifiedOnlyChipModel(getIdentifiedOnlyEnabled()),
+        hideNoSquawkChipModel(getHideNoSquawkEnabled()),
       ],
       field: callsignPrefixRowField(),
     };

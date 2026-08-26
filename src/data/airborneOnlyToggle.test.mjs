@@ -162,7 +162,7 @@ test('both flight layers persist airborneOnly with existing flight options and u
   assert.match(militarySource, /passesAirborneOnlyFilter/);
   assert.match(flightsSource, /_airborneOnlyMatcher/);
   assert.match(militarySource, /_airborneOnlyMatcher/);
-  assert.match(flightsSource, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher\]/);
+  assert.match(flightsSource, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _emergenciesOnlyMatcher, _identifiedOnlyMatcher, _hideNoSquawkMatcher\]/);
   assert.match(militarySource, /andMatchers: \[_altitudeAndMatcher, _headingAndMatcher, _hideStaleAndMatcher, _classAndMatcher, _prefixAndMatcher, _airborneOnlyMatcher, _verticalRateAndMatcher, _identifiedOnlyMatcher\]/);
   assert.match(flightsSource, /onGround: info\?\.onGround === true/);
   assert.match(militarySource, /onGround: info\?\.onGround === true/);

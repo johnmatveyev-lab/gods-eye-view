@@ -39,6 +39,7 @@ const SIBLING_FILTER_EXPORTS = [
   'passesClassChipFilter',
   'passesCallsignPrefixFilter',
   'passesIdentifiedOnlyFilter',
+  'passesHideNoSquawkFilter',
 ];
 
 export function getHeadingSectors() {
