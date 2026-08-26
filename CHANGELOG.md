@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Mapped Installations has client-only exclusive **All | Way | Node | Relation**
+  chips on the Mapped Sites list, next to class chips, Footprints only, and
+  Named only. Default **All** matches the current named + class-labeled view.
+  **Way** keeps `record.osmType === 'way'`. **Node** keeps nodes. **Relation**
+  keeps relations. Missing `osmType` (Google Places candidates) stays visible.
+  A selected installation stays even if its type is not the active chip.
+  Chip changes re-filter already-fetched OSM/Places rows and AND with
+  Airfield | Naval | Range | Land | Places, Footprints only, and Named only —
+  no extra Overpass or Places fetch and no `/api`. Preference persists as
+  `meridian.milOsmType` only (not a share-link field). Hidden when the
+  installations layer is off. Viewport refresh keeps the chip set.
 - Mapped Installations has a client-only **Named only** toggle next to the
   Plan 151 class chips and Plan 165 Footprints only. Default off matches
   the current named + class-labeled view. On hides in-memory records whose

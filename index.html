@@ -222,6 +222,12 @@
         <div class="installation-named-chips" id="installation-named-chips" role="group" aria-label="Named only" hidden>
           <button type="button" class="installation-named-chip" data-installation-named="only" aria-pressed="false" title="Show only installations that already have an OSM or Places name">Named only</button>
         </div>
+        <div class="installation-osm-type-chips" id="installation-osm-type-chips" role="group" aria-label="OSM type" hidden>
+          <button type="button" class="installation-osm-type-chip active" data-installation-osm-type="all" aria-pressed="true" title="Show every mapped installation regardless of OSM primitive">All</button>
+          <button type="button" class="installation-osm-type-chip" data-installation-osm-type="way" aria-pressed="false" title="Show OSM ways">Way</button>
+          <button type="button" class="installation-osm-type-chip" data-installation-osm-type="node" aria-pressed="false" title="Show OSM point nodes">Node</button>
+          <button type="button" class="installation-osm-type-chip" data-installation-osm-type="relation" aria-pressed="false" title="Show OSM relations">Relation</button>
+        </div>
       </div>
       <output data-installations-list-count>—</output>
     </div>
