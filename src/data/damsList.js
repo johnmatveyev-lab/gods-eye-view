@@ -5,11 +5,12 @@
  * snapshot). Does not fetch and does not touch datacenters or installations.
  * Plan 205 output-floor chips, Plan 218 Named only, Plan 224
  * Operator only, Plan 229 River only, Plan 240 Wikipedia only,
- * Plan 249 Output only, and Plan 279 Dated only filter this list
- * only — globe stems stay. Named only ANDs after the output floor;
- * Operator only ANDs after Named only; River only ANDs after
- * Operator only; Wikipedia only ANDs after River only; Output only
- * ANDs after Wikipedia only; Dated only ANDs after Output only.
+ * Plan 249 Output only, Plan 279 Dated only, and Plan 287 Method
+ * only filter this list only — globe stems stay. Named only ANDs
+ * after the output floor; Operator only ANDs after Named only; River
+ * only ANDs after Operator only; Wikipedia only ANDs after River
+ * only; Output only ANDs after Wikipedia only; Dated only ANDs after
+ * Output only; Method only ANDs after Dated only.
  */
 
 import {
@@ -47,6 +48,11 @@ import {
   damMatchesDatedOnlyFilter,
   readDamDatedOnly,
 } from './damsDatedOnlyFilter.js';
+import {
+  DEFAULT_DAM_METHOD_ONLY,
+  damMatchesMethodOnlyFilter,
+  readDamMethodOnly,
+} from './damsMethodOnlyFilter.js';
 
 export const DAMS_LAYER_ID = 'local-dams';
 export const DAMS_LIST_CAP = 50;
@@ -113,6 +119,7 @@ export function damDistanceKm(lat1, lon1, lat2, lon2) {
  * @param {unknown} [options.wikiOnly] Wikipedia only toggle. Default off.
  * @param {unknown} [options.outputOnly] Output only toggle. Default off.
  * @param {unknown} [options.datedOnly] Dated only toggle. Default off.
+ * @param {unknown} [options.methodOnly] Method only toggle. Default off.
  * @param {string|null} [options.selectedId] Selected list / globe row stays.
  * @returns {Array<{id: string, label: string, latitude: number, longitude: number, distanceKm: number}>}
  */
@@ -128,6 +135,7 @@ export function listDamsInView({
   wikiOnly = DEFAULT_DAM_WIKI_ONLY,
   outputOnly = DEFAULT_DAM_OUTPUT_ONLY,
   datedOnly = DEFAULT_DAM_DATED_ONLY,
+  methodOnly = DEFAULT_DAM_METHOD_ONLY,
   selectedId = null,
 } = {}) {
   if (!enabled) return [];
@@ -154,6 +162,7 @@ export function listDamsInView({
     if (!damMatchesWikiFilter(record, wikiOnly, { selectedId })) continue;
     if (!damMatchesOutputOnlyFilter(record, outputOnly, { selectedId })) continue;
     if (!damMatchesDatedOnlyFilter(record, datedOnly, { selectedId })) continue;
+    if (!damMatchesMethodOnlyFilter(record, methodOnly, { selectedId })) continue;
     listed.push({
       id,
       label,
@@ -237,6 +246,7 @@ export function renderDamsInViewList(items, count, sites) {
  * @param {() => unknown} [options.getWikiOnly] Persist / chip toggle. Defaults to `meridian.damWikiOnly`.
  * @param {() => unknown} [options.getOutputOnly] Persist / chip toggle. Defaults to `meridian.damOutputOnly`.
  * @param {() => unknown} [options.getDatedOnly] Persist / chip toggle. Defaults to `meridian.damDatedOnly`.
+ * @param {() => unknown} [options.getMethodOnly] Persist / chip toggle. Defaults to `meridian.damMethodOnly`.
  * @param {() => string|null} [options.getSelectedId] Globe / list selection. Always stays.
  * @param {(site: object) => boolean|void} options.flyTo
  * @returns {{refresh: Function, destroy: Function, sites: () => Array<object>}|null}
@@ -255,6 +265,7 @@ export function bindDamsInViewList({
   getWikiOnly,
   getOutputOnly,
   getDatedOnly,
+  getMethodOnly,
   getSelectedId,
   flyTo,
 } = {}) {
@@ -293,6 +304,9 @@ export function bindDamsInViewList({
       datedOnly: typeof getDatedOnly === 'function'
         ? getDatedOnly()
         : readDamDatedOnly(),
+      methodOnly: typeof getMethodOnly === 'function'
+        ? getMethodOnly()
+        : readDamMethodOnly(),
       selectedId: hostSelected || selectedId,
     });
     root.hidden = !enabled;
