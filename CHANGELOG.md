@@ -7,6 +7,25 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has a client-only **Hide no FRP** toggle after Hide no
+  scan. Default **off** keeps the current overlay, including
+  missing / non-finite / `frp<=0`. **On** keeps `frp > 0`
+  (a real MW stays) and drops missing, non-finite, or
+  `frp <= 0`. Missing / non-finite / `frp <= 0` fail closed when
+  on. This is presence-only, not an FRP floor. The All | 10+ | 50+ |
+  100+ floor still fail-opens missing FRP when All
+  (`filterFiresByFrpFloor` returns a shallow copy at `minMw <= 0`).
+  The selected fire always stays if it already passed the other
+  matchers. Chip changes re-filter the already-fetched `/api/firms`
+  payload and AND with existing floors plus hide-no chips
+  (brightness / scan / confidence / age / sat / sensor / version /
+  daynight / acq) — no extra NASA fetch and no new `/api`. Preference
+  persists as `meridian.firmsHideNoFrp` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Distinct from
+  the fail-open FRP floor, list Hide no track (276,
+  `meridian.firmsListHideNoTrack`), and list Hide no scan (271,
+  `meridian.firmsListHideNoScan`). NASA FIRMS acknowledgement
+  unchanged.
 - Datacenters in-view list has a client-only **Named only** toggle next to
   All | AWS | Equinix. Default **off** keeps the current in-view OSM list,
   including missing, empty, whitespace, and generic `Datacenter` labels.
