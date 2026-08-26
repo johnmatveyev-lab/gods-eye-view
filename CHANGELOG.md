@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- FIRMS globe has client-only exclusive **All | <2 km² | <1 km²** pixel-area
+  chips after the Plan 217 version row. Area is `scanKm × trackKm` on the
+  already-adapted fire. Default **All** keeps 0.4×0.4 / 1×1 / 2×2.
+  **<2 km²** keeps 1×1 and drops 2×2. **<1 km²** keeps 0.4×0.4 and drops
+  1×1. Missing or non-finite scan or track fails open. The selected fire
+  always stays. Chip changes re-filter the already-fetched `/api/firms`
+  payload and AND with FRP, confidence, brightness, scan, track, version,
+  day-night, age, sensor, and satellite — no extra NASA fetch and no new
+  `/api`. Preference persists as `meridian.firmsArea` (LayerStateCoordinator
+  restore, no share-URL write). Distinct from Plan 204 scan, 211 track,
+  217 version, and 155/192 brightness. NASA FIRMS acknowledgement
+  unchanged.
 - Global Context has client-only exclusive **All | <50 km | <10 km** range
   chips on the Contacts roster, next to Identified only. Default **All**
   keeps the current 250 km window. **<50 km** drops 200 km contacts and
