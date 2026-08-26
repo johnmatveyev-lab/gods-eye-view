@@ -26,6 +26,9 @@ import {
   renderLaunchesPanelList,
 } from './launchesPanel.js';
 import { flyToExistingLaunchPad, normalizeRocketLaunches } from './rocketLaunches.js';
+import { resetLaunchLspTypeFilterForTest } from './launchLspTypeFilter.js';
+
+resetLaunchLspTypeFilterForTest();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 

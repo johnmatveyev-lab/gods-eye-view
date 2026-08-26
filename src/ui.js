@@ -236,12 +236,21 @@ import militaryInstallationsLayer, {
 import rocketLaunchesLayer, { flyToExistingLaunchPad } from './data/rocketLaunches.js';
 import {
   applyLaunchesPanelToggle,
+  launchesPanelEmptyPresentation,
   launchesPanelLoadingPresentation,
   launchesPanelRowAction,
+  launchesPanelRows,
   loadLaunchesPanelPayload,
   nextLaunchesPanelOpen,
   renderLaunchesPanelList,
 } from './data/launchesPanel.js';
+import {
+  getLaunchLspTypeFilter,
+  hydrateLaunchLspTypeFilter,
+  normalizeLaunchLspTypeFilter,
+  setLaunchLspTypeFilter,
+  subscribeLaunchLspTypeFilter,
+} from './data/launchLspTypeFilter.js';
 import { initEarthquakeListControl } from './data/earthquakeList.js';
 import {
   earthquakeDepthBandFlags,
@@ -3007,10 +3016,13 @@ export class StyleManager {
     this._launchesPanel = document.getElementById('launches-panel');
     this._launchesPanelList = document.getElementById('launches-panel-list');
     this._launchesPanelCount = document.getElementById('launches-panel-count');
+    this._launchesPanelLspChips = document.getElementById('launches-panel-lsp-chips');
     this._launchesPanelOpen = false;
     this._launchesPanelRows = [];
+    this._launchesPanelPayload = null;
     this._launchesPanelSelectedId = null;
     this._launchesPanelLoadToken = 0;
+    this._unsubLaunchLspType = null;
     this._resetGlobeBtn = document.getElementById('reset-globe-view');
     this._stopTrackingBtn = document.getElementById('stop-tracking');
     this._earthquakeListToggle = document.getElementById('earthquake-list-toggle');
@@ -11577,6 +11589,12 @@ export class StyleManager {
   /** Wire the hosted Launches panel that lists the existing LL2 payload. */
   _initLaunchesPanel() {
     if (!this._launchesPanelToggle || !this._launchesPanel) return;
+    this._unsubLaunchLspType = subscribeLaunchLspTypeFilter(() => {
+      this._syncLaunchesPanelLspChips();
+      this._reapplyLaunchesPanelLspType();
+    });
+    hydrateLaunchLspTypeFilter();
+    this._syncLaunchesPanelLspChips();
     this._launchesPanelToggle.addEventListener('click', () => {
       this._toggleLaunchesPanel();
     });
@@ -11585,6 +11603,33 @@ export class StyleManager {
       if (!button) return;
       this._activateLaunchesPanelRow(button.dataset.launchId);
     });
+    this._launchesPanelLspChips?.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-launch-lsp-type]');
+      if (!chip || !this._launchesPanelLspChips.contains(chip)) return;
+      setLaunchLspTypeFilter(normalizeLaunchLspTypeFilter(chip.dataset.launchLspType));
+    });
+  }
+
+  _syncLaunchesPanelLspChips() {
+    const current = getLaunchLspTypeFilter();
+    const chips = this._launchesPanelLspChips?.querySelectorAll?.('[data-launch-lsp-type]');
+    if (!chips) return;
+    for (const chip of chips) {
+      const active = chip.dataset.launchLspType === current;
+      chip.classList.toggle('active', active);
+      chip.setAttribute('aria-pressed', String(active));
+    }
+  }
+
+  _reapplyLaunchesPanelLspType() {
+    if (this._launchesPanelPayload == null) return;
+    const rows = launchesPanelRows(this._launchesPanelPayload, getLaunchLspTypeFilter());
+    this._launchesPanelRows = rows;
+    this._renderLaunchesPanelPresentation(launchesPanelEmptyPresentation({
+      available: true,
+      items: rows,
+      payload: this._launchesPanelPayload,
+    }));
   }
 
   _toggleLaunchesPanel() {
@@ -11617,8 +11662,10 @@ export class StyleManager {
     this._renderLaunchesPanelPresentation(launchesPanelLoadingPresentation());
     const presentation = await loadLaunchesPanelPayload({
       cachedPayload: rocketLaunchesLayer.getPayload?.() || null,
+      filter: getLaunchLspTypeFilter(),
     });
     if (token !== this._launchesPanelLoadToken || this._disposed) return;
+    this._launchesPanelPayload = presentation.payload ?? null;
     this._launchesPanelRows = presentation.rows || [];
     this._renderLaunchesPanelPresentation(presentation);
   }
@@ -13544,6 +13591,9 @@ export class StyleManager {
       this._initialShareGestureHandler = null;
     }
     this._launchesPanelLoadToken += 1;
+    this._unsubLaunchLspType?.();
+    this._unsubLaunchLspType = null;
+    this._launchesPanelPayload = null;
     this._damsListMoveEndRemove?.();
     this._damsListMoveEndRemove = null;
     this._damsInViewList?.destroy();
