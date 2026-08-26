@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Global Context has a client-only **Hide no track** toggle on the Contacts
+  roster, next to Flights only. Default **off** keeps the current roster,
+  including a civil flight with `track` null. **On** hides already-fetched
+  `flights` and `military` contacts whose `track` is missing or non-finite
+  (0° north stays). AIS and sites fail open — they never stamp track, so
+  this is not an aircraft-only chip. The current subject always stays,
+  even when it has no track. Missing `layerId` stays. AND with Identified
+  only, the range chips, Aircraft only, Vessels only, Sites only, Military
+  only, and Flights only. Chip changes re-filter already-fetched
+  `getNearby` records — no extra fetch and no `/api`. The 250 km ring
+  (`AWARENESS_RADIUS_M`) is unchanged. Preference persists as
+  `meridian.awarenessHideNoTrack` (`1` / `0`; LayerStateCoordinator
+  restore, no share-URL write). Distinct from Identified only / range /
+  layerId exclusives (213/221/231/251/259/263/269).
 - Global Context has a client-only **Flights only** toggle on the Contacts
   roster, next to Military only. Default **off** keeps all four cohorts.
   **On** keeps `flights` (civil ADS-B) and drops military flights, AIS,
