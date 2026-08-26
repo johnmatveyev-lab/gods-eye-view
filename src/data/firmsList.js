@@ -29,8 +29,21 @@ import {
   setFirmsListHideNoSat,
   subscribeFirmsListHideNoSat,
 } from './firmsListSatFilter.js';
+import {
+  fireMeetsListHideNoSensor,
+  firmsListHideNoSensorChipModel,
+  getFirmsListHideNoSensor,
+  hydrateFirmsListHideNoSensor,
+  setFirmsListHideNoSensor,
+  subscribeFirmsListHideNoSensor,
+} from './firmsListHideNoSensorFilter.js';
 
-export { firmsListHideNoSatChipModel, hydrateFirmsListHideNoSat };
+export {
+  firmsListHideNoSatChipModel,
+  hydrateFirmsListHideNoSat,
+  firmsListHideNoSensorChipModel,
+  hydrateFirmsListHideNoSensor,
+};
 
 /** Hosted list ceiling: nearest detections to the current camera. */
 export const FIRMS_LIST_LIMIT = 50;
@@ -54,9 +67,10 @@ export const FIRMS_ACKNOWLEDGEMENT =
 
 /**
  * Rank fires by great-circle distance to the camera and cap the list.
- * List-confidence, list-FRP, list-age, and Hide no satellite AND before
- * the cap so High / 100+ MW / <1 h / labeled detections can fill the 50
- * rows from farther detections. A selected fire always stays.
+ * List-confidence, list-FRP, list-age, Hide no satellite, and Hide no
+ * sensor AND before the cap so High / 100+ MW / <1 h / labeled
+ * detections can fill the 50 rows from farther detections. A selected
+ * fire always stays.
  * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *, acqMs?: *, satellite?: *, sensor?: *}>} fires
  * @param {{lat?: number, lon?: number}|null} origin
  * @param {number} [limit=FIRMS_LIST_LIMIT]
@@ -66,6 +80,7 @@ export const FIRMS_ACKNOWLEDGEMENT =
  * @param {string} [listAge]
  * @param {number} [now]
  * @param {boolean} [hideNoSat]
+ * @param {boolean} [hideNoSensor]
  * @returns {Array<object>}
  */
 export function listNearestFires(
@@ -78,6 +93,7 @@ export function listNearestFires(
   listAge,
   now = Date.now(),
   hideNoSat,
+  hideNoSensor,
 ) {
   if (!Array.isArray(fires)) return [];
   const originLat = Number(origin?.lat);
@@ -88,6 +104,7 @@ export function listNearestFires(
   const frp = listFrp === undefined ? getFirmsListFrp() : listFrp;
   const age = listAge === undefined ? getFirmsListAge() : listAge;
   const hideSat = hideNoSat === undefined ? getFirmsListHideNoSat() : hideNoSat;
+  const hideSensor = hideNoSensor === undefined ? getFirmsListHideNoSensor() : hideNoSensor;
   const selected = selectedId === undefined ? getFirmsListSelectedId() : selectedId;
   const selectedKey = selected == null || selected === '' ? '' : String(selected);
   const ranked = [];
@@ -101,6 +118,7 @@ export function listNearestFires(
     if (!isSelected && !fireMeetsListFrp(fire, frp, { selectedId: selectedKey })) continue;
     if (!isSelected && !fireMeetsListAge(fire, age, { selectedId: selectedKey, now })) continue;
     if (!isSelected && !fireMeetsListHideNoSat(fire, hideSat, { selectedId: selectedKey })) continue;
+    if (!isSelected && !fireMeetsListHideNoSensor(fire, hideSensor, { selectedId: selectedKey })) continue;
     const distanceKm = hasOrigin ? greatCircleKm(originLat, originLon, lat, lon) : Number.POSITIVE_INFINITY;
     ranked.push({
       ...fire,
@@ -167,6 +185,7 @@ export function resolveFireListView({
   selectedId,
   listAge,
   hideNoSat,
+  hideNoSensor,
 } = {}) {
   const acknowledgement = FIRMS_ACKNOWLEDGEMENT;
   if (keyRequired) {
@@ -188,6 +207,7 @@ export function resolveFireListView({
     listAge,
     now,
     hideNoSat,
+    hideNoSensor,
   );
   if (!nearest.length) {
     return { status: 'unavailable', copy: FIRMS_LIST_EMPTY_COPY, rows: [], acknowledgement };
@@ -202,13 +222,14 @@ export function resolveFireListView({
 
 /**
  * Hosted FIRES list chips. Confidence / FRP / age stay in the HTML row
- * from Plans 210 / 219 / 225; Hide no satellite is owned here so
- * index.html / ui.js do not re-declare it.
- * @returns {{hideNoSat: object}}
+ * from Plans 210 / 219 / 225; Hide no satellite and Hide no sensor are
+ * owned here so index.html / ui.js do not re-declare them.
+ * @returns {{hideNoSat: object, hideNoSensor: object}}
  */
 export function getRowControls() {
   return {
     hideNoSat: firmsListHideNoSatChipModel(getFirmsListHideNoSat()),
+    hideNoSensor: firmsListHideNoSensorChipModel(getFirmsListHideNoSensor()),
   };
 }
 
@@ -288,6 +309,96 @@ export function attachFirmsListHideNoSat(panel, onChange) {
   const unmount = mountFirmsListHideNoSatChip(panel);
   const unsubscribe = subscribeFirmsListHideNoSat(() => {
     syncFirmsListHideNoSatChip(panel?.querySelector?.('#fires-list-sat-chips') || panel);
+    if (typeof onChange === 'function') onChange();
+  });
+  const detachSensor = attachFirmsListHideNoSensor(panel, onChange);
+  return () => {
+    detachSensor();
+    unsubscribe();
+    unmount();
+  };
+}
+
+function createHideNoSensorChipElement(model, make) {
+  const button = make('button');
+  button.type = 'button';
+  button.className = `fires-sensor-chip${model.active ? ' active' : ''}`;
+  button.dataset.firmsListHideNoSensor = model.active ? '1' : '0';
+  button.textContent = model.label;
+  if (model.title) button.title = model.title;
+  button.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  return button;
+}
+
+function syncFirmsListHideNoSensorChip(root) {
+  if (!root?.querySelectorAll) return;
+  const model = getRowControls().hideNoSensor;
+  const chips = root.querySelectorAll('[data-firms-list-hide-no-sensor]');
+  for (const chip of chips) {
+    chip.classList?.toggle?.('active', model.active === true);
+    chip.dataset.firmsListHideNoSensor = model.active ? '1' : '0';
+    chip.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  }
+}
+
+/**
+ * Inject Hide no sensor next to the existing list chips.
+ * No-ops on the stub panels used by unit tests (no querySelector).
+ * @param {{querySelector?: Function, appendChild?: Function}|null} panel
+ * @returns {() => void}
+ */
+function mountFirmsListHideNoSensorChip(panel) {
+  if (typeof panel?.querySelector !== 'function') return () => {};
+  let root = panel.querySelector('#fires-list-sat-chips')
+    || panel.querySelector('#fires-list-sensor-chips');
+  const make = globalThis.document?.createElement?.bind(globalThis.document);
+  if (!root && typeof make === 'function') {
+    root = make('div');
+    root.id = 'fires-list-sensor-chips';
+    root.className = 'fires-sensor-chips';
+    root.setAttribute('role', 'group');
+    root.setAttribute('aria-label', 'Hide listed detections with no sensor');
+    const after = panel.querySelector('#fires-list-age-chips');
+    if (typeof after?.insertAdjacentElement === 'function') {
+      after.insertAdjacentElement('afterend', root);
+    } else {
+      const header = panel.querySelector('.fires-panel-inner') || panel;
+      header.appendChild?.(root);
+    }
+  }
+  if (!root) return () => {};
+  if (typeof make === 'function' && !root.querySelector?.('[data-firms-list-hide-no-sensor]')) {
+    const node = createHideNoSensorChipElement(getRowControls().hideNoSensor, make);
+    root.appendChild?.(node);
+  }
+  const onClick = (event) => {
+    const chip = event.target?.closest?.('[data-firms-list-hide-no-sensor]');
+    if (!chip || (typeof root.contains === 'function' && !root.contains(chip))) return;
+    setFirmsListHideNoSensor(getRowControls().hideNoSensor.params.firmsListHideNoSensor);
+    syncFirmsListHideNoSensorChip(root);
+  };
+  root.addEventListener?.('click', onClick);
+  syncFirmsListHideNoSensorChip(root);
+  return () => {
+    root.removeEventListener?.('click', onClick);
+  };
+}
+
+/**
+ * Hydrate, mount, and subscribe Hide no sensor on the FIRES panel.
+ * @param {{querySelector?: Function}|null} panel
+ * @param {() => void} [onChange]
+ * @returns {() => void}
+ */
+export function attachFirmsListHideNoSensor(panel, onChange) {
+  hydrateFirmsListHideNoSensor();
+  const unmount = mountFirmsListHideNoSensorChip(panel);
+  const unsubscribe = subscribeFirmsListHideNoSensor(() => {
+    syncFirmsListHideNoSensorChip(
+      panel?.querySelector?.('#fires-list-sensor-chips')
+      || panel?.querySelector?.('#fires-list-sat-chips')
+      || panel,
+    );
     if (typeof onChange === 'function') onChange();
   });
   return () => {
