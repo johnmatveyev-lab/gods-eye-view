@@ -7,6 +7,20 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted Launches panel has a client-only **Webcast only** toggle after
+  Hide no orbit. Default **off** keeps the current list, including
+  no-webcast rows. **On** keeps rows whose copied `webcast` is true
+  (`webcastLive` / `webcast_live` or a non-empty `vid_urls` / `vidURLs`);
+  missing / false drop. A selected row always stays if it passed the
+  other filters. AND with Plan 207 LSP-type, Plan 215 Mapped only, Plan
+  223 All | Go | TBD status, Plan 232 Hide no provider, Plan 239 Hide
+  no site, Plan 248 Hide no time, Plan 257 Hide no vehicle, and Plan
+  264 Hide no orbit. Re-filters the already-fetched `/api/launches`
+  roster — no extra LL2 fetch and no new `/api`. Preference persists as
+  `meridian.launchListWebcastOnly` (`1` / `0`; LayerStateCoordinator
+  restore, no share-URL write). Distinct from globe
+  `meridian.launchWebcastOnly` (Space Missions roster / globe markers):
+  this is the hosted list presence chip.
 - FIRMS globe has a client-only **Hide no brightness** toggle after Hide no
   acq. Default **off** keeps the current overlay, including missing /
   unparseable Kelvin. **On** keeps `brightness > 0` (a real Kelvin such
