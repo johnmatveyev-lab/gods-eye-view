@@ -7,6 +7,19 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has a client-only **Hide no heading** toggle after the Plan 200
+  **All | 15m | 1h** last-position chips. Default **off** keeps the current
+  fleet, including heading-null / course-null contacts. **On** keeps a
+  vessel when heading or course is finite (HUD and icons already use
+  `heading ?? course`). Both missing fails closed. A selected vessel
+  stays if it passed the other filters. Chip changes re-filter
+  already-fetched AIS rows and AND with Tanker | Cargo | Passenger |
+  Fishing | Service | Other, Hide parked, min-speed, destination, Hide
+  no dest, Hide unnamed, Hide no IMO, and last-pos freshness — no extra
+  AISStream fetch and no `/api`. Preference persists as
+  `meridian.aisHideNoHeading` (`1` / `0`; LayerStateCoordinator restore,
+  no share-URL write). Distinct from type, parked, min-speed, dest,
+  unnamed, IMO, last-pos, hide-ground, and flights Hide no heading.
 - FIRMS globe has a client-only **Hide no sensor** toggle after Hide no
   satellite. Default **off** keeps the current overlay, including empty and
   named sensor strings. **On** keeps a non-empty trimmed sensor
