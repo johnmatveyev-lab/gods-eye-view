@@ -4787,7 +4787,9 @@ const flightsLayer = {
           // note there). Null for the overwhelmingly common airborne case.
           cullPosition: renderAltitudeM < 10 ? Cesium.Cartesian3.fromDegrees(lon, lat, 12) : null,
           velocity: stickyNumber(velocity, prevMeta?.velocity, 0),
-          true_track: stickyNumber(true_track, prevMeta?.true_track, 0),
+          // Missing track stays null so NESW chips fail-open. 0 is a real
+          // northbound heading, same sticky-null pattern as verticalRate.
+          true_track: stickyNumber(true_track, prevMeta?.true_track, null),
           category: cat,
           // An adsbdb-enriched type code outranks the coarse OpenSky category.
           klass: classifyAircraft({ typeCode: prevMeta?.typeCode ?? null, category: cat }),

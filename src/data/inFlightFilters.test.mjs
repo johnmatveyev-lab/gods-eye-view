@@ -1,7 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { stickyNumber } from './aircraftMeta.js';
 
 import flightsLayer, {
   _addFlightTrackingCandidateForTest,
@@ -301,6 +302,57 @@ test('commercial and military layers share the chips, persist them, and hide fil
     _setTrackedMilitaryIcaoForTest(null);
     _clearFlightFilterFixturesForTest();
     _clearMilitaryFilterFixturesForTest();
+    _resetHeadingSectorsForTest();
+  }
+});
+
+test('missing track stays visible when N is off; a finite 0 stays N', () => {
+  _resetHeadingSectorsForTest();
+  _clearFlightFilterFixturesForTest();
+  try {
+    assert.equal(stickyNumber(null, undefined, null), null);
+    assert.equal(stickyNumber(0, undefined, null), 0, '0 is a real northbound heading');
+    assert.equal(contactTrueTrack({ true_track: null }), null);
+    assert.equal(contactTrueTrack({ true_track: 0 }), 0);
+    assert.equal(headingSectorFromTrueTrack(0), 'N');
+    assert.equal(passesHeadingSectorFilter(null, 'ESW'), true, 'missing track fail-opens');
+    assert.equal(passesHeadingSectorFilter(0, 'ESW'), false, 'finite 0 is N');
+
+    const flightsSrc = readFileSync(path.join(process.cwd(), 'src/data/flights.js'), 'utf8');
+    assert.match(flightsSrc, /true_track: stickyNumber\(true_track, prevMeta\?\.true_track, null\)/);
+    assert.doesNotMatch(flightsSrc, /true_track: stickyNumber\(true_track, prevMeta\?\.true_track, 0\)/);
+    assert.match(flightsSrc, /verticalRate: stickyNumber\(vertical_rate, prevMeta\?\.verticalRate, null\)/);
+
+    const missingBb = { show: true };
+    const northZeroBb = { show: true };
+    const eastBb = { show: true };
+    _addFlightTrackingCandidateForTest({
+      icao24: 'miss01',
+      meta: { true_track: null, callsign: 'UNK1' },
+      billboard: missingBb,
+    });
+    _addFlightTrackingCandidateForTest({
+      icao24: 'north0',
+      meta: { true_track: 0, callsign: 'N000' },
+      billboard: northZeroBb,
+    });
+    _addFlightTrackingCandidateForTest({
+      icao24: 'easta2',
+      meta: { true_track: 90, callsign: 'EAST1' },
+      billboard: eastBb,
+    });
+
+    assert.equal(flightsLayer.setParams({ headingSectors: 'ESW' }), true);
+    assert.equal(missingBb.show, true, 'missing track stays when N is off');
+    assert.equal(northZeroBb.show, false, 'finite 0 is N and hides when N is off');
+    assert.equal(eastBb.show, true);
+
+    flightsLayer.setParams({ headingSectors: 'N' });
+    assert.equal(missingBb.show, true, 'missing track still fail-opens under N-only');
+    assert.equal(northZeroBb.show, true, 'finite 0 stays N');
+  } finally {
+    flightsLayer.setParams({ headingSectors: 'NESW' });
+    _clearFlightFilterFixturesForTest();
     _resetHeadingSectorsForTest();
   }
 });
