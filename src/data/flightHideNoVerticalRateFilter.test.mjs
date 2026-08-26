@@ -827,7 +827,7 @@ test('persist flip survives reload', () => {
   assert.equal(chip.label, HIDE_NO_VERTICAL_RATE_CHIP_LABEL);
   assert.equal(chip.active, true);
   assert.deepEqual(chip.params, { hideNoVerticalRate: false });
-  assert.ok(geoIdx >= 0 && rateIdx === geoIdx + 4, 'Hide no vertical rate stays after Hide no geo altitude, Hide no baro altitude, Hide no last contact, and Hide no category');
+  assert.ok(geoIdx >= 0 && rateIdx === geoIdx + 5, 'Hide no vertical rate stays after Hide no geo altitude, Hide no baro altitude, Hide no last contact, Hide no category, and Hide no position time');
   flightsLayer.setParams({ hideNoVerticalRate: false });
   assert.equal(flightsLayer.getRowControls().chips.find((entry) => entry.id === HIDE_NO_VERTICAL_RATE_CHIP_ID).active, false);
   resetHideNoVerticalRateForTest();

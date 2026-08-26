@@ -7,6 +7,25 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no position time** toggle next to
+  Hide no category. Default **off** keeps the current draw, including
+  missing / non-finite / ≤0 `time_position` (`positionEpochMs`). **On**
+  hides those sentinels and keeps a finite `positionEpochMs > 0`. This is
+  presence-only, not an altitude-band, last-contact, category, or
+  hide-ground chip, and not the heading/speed/baro "0 stays" rule. The
+  selected/tracked contact always stays. AND with airborne-only, altitude
+  band, heading sectors, Hide no last contact, Hide no category, Hide no
+  baro, Hide no geo, Hide no vertical rate, Hide no speed, Hide no
+  country, Hide no heading, and the rest. Distinct from Plan 93
+  altitude-band, Plan 95 airborne-only, Plan 203 squawk, Plan 214 type,
+  Plan 222 reg, Plan 227 callsign, Plan 234 heading, Plan 244 country,
+  Plan 255 speed, Plan 261 geo altitude, Plan 268 vertical rate, Plan
+  274 baro altitude, Plan 280 last contact, Plan 284 category, and
+  hide-ground. Each poll writes finite `time_position × 1000` onto the
+  contact as `positionEpochMs` — no extra fetch and no new `/api`.
+  Preference persists as `meridian.flightHideNoPositionTime` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Military flights and
+  AIS are unchanged.
 - Dams in-view list has a client-only **Method only** toggle next to
   **Dated only**. Default **off** keeps the current roster, including
   plants whose OSM `plant:method` is missing. On hides missing / empty
