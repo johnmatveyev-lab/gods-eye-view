@@ -474,6 +474,11 @@ import {
   setDatacenterListWebsiteOnly,
 } from './data/datacenterListWebsiteFilter.js';
 import {
+  getDatacenterListDatedOnly,
+  hydrateDatacenterListDatedOnly,
+  setDatacenterListDatedOnly,
+} from './data/datacenterListDatedOnlyFilter.js';
+import {
   DAMS_LAYER_ID,
   bindDamsInViewList,
   damFlyDestination,
@@ -3102,6 +3107,7 @@ export class StyleManager {
     this._datacenterOperatorChips = document.getElementById('datacenter-operator-chips');
     this._datacenterNamedChips = document.getElementById('datacenter-named-chips');
     this._datacenterWebsiteChips = document.getElementById('datacenter-website-chips');
+    this._datacenterDatedChips = document.getElementById('datacenter-dated-chips');
     this._damsOutputChips = document.getElementById('dams-output-chips');
     this._damsNamedChips = document.getElementById('dams-named-chips');
     this._damsOperatorChips = document.getElementById('dams-operator-chips');
@@ -3577,6 +3583,7 @@ export class StyleManager {
     this._initDatacenterOperatorChips();
     this._initDatacenterNamedChip();
     this._initDatacenterWebsiteChip();
+    this._initDatacenterDatedChip();
     this._initClearSelectedLayersButton();
     this._initRestoreLiveLayersButton();
     this._initHomeViewButton();
@@ -5719,6 +5726,7 @@ export class StyleManager {
     this._syncDatacenterOperatorChips();
     this._syncDatacenterNamedChip();
     this._syncDatacenterWebsiteChip();
+    this._syncDatacenterDatedChip();
     this._damsInViewList?.refresh();
     this._syncDamsOutputChips();
     this._syncDamsNamedChip();
@@ -5742,6 +5750,7 @@ export class StyleManager {
             this._syncDatacenterOperatorChips();
             this._syncDatacenterNamedChip();
             this._syncDatacenterWebsiteChip();
+            this._syncDatacenterDatedChip();
           }
           if (change?.layerId === DAMS_LAYER_ID) {
             this._damsInViewList?.refresh();
@@ -13988,15 +13997,17 @@ export class StyleManager {
     const items = document.getElementById('datacenter-in-view-items');
     const count = document.getElementById('datacenter-in-view-count');
     // LayerStateCoordinator restore is enabled-only for local-datacenters and
-    // does not carry dcOperator / dcNamedOnly / dcWebsiteOnly (no share-URL
-    // write). Re-read meridian.dcOperator, meridian.dcNamedOnly, and
-    // meridian.dcWebsiteOnly.
+    // does not carry dcOperator / dcNamedOnly / dcWebsiteOnly / dcDatedOnly
+    // (no share-URL write). Re-read meridian.dcOperator, meridian.dcNamedOnly,
+    // meridian.dcWebsiteOnly, and meridian.dcDatedOnly.
     hydrateDatacenterListOperator();
     hydrateDatacenterListNamedOnly();
     hydrateDatacenterListWebsiteOnly();
+    hydrateDatacenterListDatedOnly();
     this._datacenterOperatorChips = document.getElementById('datacenter-operator-chips');
     this._datacenterNamedChips = document.getElementById('datacenter-named-chips');
     this._datacenterWebsiteChips = document.getElementById('datacenter-website-chips');
+    this._datacenterDatedChips = document.getElementById('datacenter-dated-chips');
     this._datacenterInViewList = bindDatacenterInViewList({
       root,
       items,
@@ -14102,6 +14113,30 @@ export class StyleManager {
       this._datacenterInViewList?.refresh();
     });
     this._syncDatacenterWebsiteChip();
+  }
+
+  _syncDatacenterDatedChip() {
+    const enabled = this._dataManager?.isEnabled?.(DATACENTER_LAYER_ID) === true;
+    if (this._datacenterDatedChips) this._datacenterDatedChips.hidden = !enabled;
+    const only = getDatacenterListDatedOnly() === true;
+    const chips = this._datacenterDatedChips?.querySelectorAll?.('[data-dc-dated]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initDatacenterDatedChip() {
+    if (!this._datacenterDatedChips) return;
+    this._datacenterDatedChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dc-dated]');
+      if (!chip || !this._datacenterDatedChips.contains(chip)) return;
+      setDatacenterListDatedOnly(!getDatacenterListDatedOnly());
+      this._syncDatacenterDatedChip();
+      this._datacenterInViewList?.refresh();
+    });
+    this._syncDatacenterDatedChip();
   }
 
   /** Wire fullscreen on the document root so #cesium-credits stays painted. */

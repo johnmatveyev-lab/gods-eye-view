@@ -7,6 +7,15 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Datacenters in-view list has a client-only **Dated only** toggle after
+  Website only. Default **off** keeps the current in-view OSM list,
+  including missing, empty, and whitespace `start_date`. **On** hides
+  those undated rows and keeps a dated site. The selected id always
+  stays when it already passed the other matchers. AND with Plan 206
+  operator chips, Plan 270 Named only, and Plan 285 Website only.
+  List/fly-to only — globe stems stay. Preference persists as
+  `meridian.dcDatedOnly` (`1` / `0`; no share-URL write). Distinct from
+  Plan 193, Plan 206, Plan 270, Plan 285, and dams Plan 279 Dated only.
 - The hosted Launches panel has a client-only **Hide no country** toggle
   after Hide no probability. Default **off** keeps the current list,
   including no-country rows. **On** keeps rows whose copied `country`
