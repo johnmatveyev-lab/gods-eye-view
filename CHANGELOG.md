@@ -7,6 +7,18 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- AIS has client-only exclusive **All | 15m | 1h** last-position freshness
+  chips. Default **All** keeps the current fleet. **15m** hides vessels whose
+  last position is older than 15 minutes. **1h** hides older than 1 hour.
+  Age is `lastPositionEpoch` (unix seconds or ms) with `lastPositionUtc` as
+  a Date fallback. Missing both timestamps stay visible. A selected vessel
+  stays even if stale. Chip changes re-filter already-fetched AIS rows and
+  AND with Tanker | Cargo | Passenger | Fishing | Service | Other, Hide
+  parked, min-speed, destination, Hide no dest, Hide unnamed, and Hide no
+  IMO — no extra AISStream fetch and no `/api`. Preference persists as
+  `meridian.aisLastPos` (LayerStateCoordinator restore, no share-URL
+  write). Hidden when the AIS layer is off. Feed refresh keeps the chip
+  set. Distinct from Hide parked, min-speed, dest, unnamed, and IMO.
 - Dams in-view list has a client-only **River only** toggle next to the
   Plan 224 **Operator only** chip, Plan 218 **Named only**, and Plan 205
   **All | 10+ MW | 100+ MW** output-floor chips. Default **off** keeps the
