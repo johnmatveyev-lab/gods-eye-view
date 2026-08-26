@@ -297,7 +297,10 @@ test('chip sits on the Sites list; militaryInstallations.js is unchanged', () =>
   assert.match(ui, /_installationListMappedChips\.hidden = !enabled/);
   assert.match(ui, /writeSitesMappedOnly\(/);
   assert.match(ui, /readSitesMappedOnly\(/);
-  const listInit = ui.slice(ui.indexOf('_initInstallationListMappedChip'));
+  const listInitAt = ui.indexOf('  _initInstallationListMappedChip()');
+  const listInitEnd = ui.indexOf('\n  _', listInitAt + 10);
+  const listInit = ui.slice(listInitAt, listInitEnd === -1 ? undefined : listInitEnd);
+  assert.match(listInit, /writeSitesMappedOnly\(/);
   assert.doesNotMatch(listInit, /setLayerParams/);
   assert.match(css, /installation-list-mapped-chip/);
 
