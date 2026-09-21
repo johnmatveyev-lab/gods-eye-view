@@ -7,6 +7,23 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Civil flights have a client-only **Hide no airline** toggle next to
+  Hide no callsign. Default **off** keeps the current draw, including
+  missing / null / empty / whitespace `airline`. **On** hides those and
+  keeps a published name such as "American Airlines". A contact can
+  carry AAL123 this poll and still have no airline until adsbdb returns
+  — callsign present + airline missing still hides when this chip is on.
+  This is presence-only, not a callsign, identified-only, typeCode,
+  typeName, category, position-time, or hide-ground chip. The
+  selected/tracked contact always stays. AND with Hide no callsign
+  (227), Identified only (188), Hide no type (214), Hide no reg (222),
+  Hide no category (284), Hide no position time (294), Hide no type
+  name (299), and the rest. Distinct from those, from Emergencies only
+  (166), and from hide-ground. Uses the already-written adsbdb
+  `airline` field — no extra fetch and no new `/api`. Preference
+  persists as `meridian.flightHideNoAirline` (`1` / `0`;
+  LayerStateCoordinator restore, no share-URL write). Military flights
+  and AIS are unchanged. OpenSky stays disabled.
 - Datacenters in-view list has a client-only **Owner only** toggle after
   Dated only. Default **off** keeps the current in-view OSM list,
   including missing, empty, and whitespace `owner`. **On** hides those
