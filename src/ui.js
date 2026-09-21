@@ -535,6 +535,11 @@ import {
   writeDamWebsiteOnly,
 } from './data/damsWebsiteFilter.js';
 import {
+  normalizeDamWikidataOnly,
+  readDamWikidataOnly,
+  writeDamWikidataOnly,
+} from './data/damsWikidataFilter.js';
+import {
   handleFullscreenEscape,
   hideFullscreenButtonIfUnsupported,
   isDocumentFullscreen,
@@ -3128,6 +3133,7 @@ export class StyleManager {
     this._damsDatedOnlyChips = document.getElementById('dams-dated-only-chips');
     this._damsMethodOnlyChips = document.getElementById('dams-method-only-chips');
     this._damsWebsiteOnlyChips = document.getElementById('dams-website-only-chips');
+    this._damsWikidataOnlyChips = document.getElementById('dams-wikidata-only-chips');
     this._aisTypeChips = document.getElementById('ais-type-chips');
     this._aisParkedChips = document.getElementById('ais-parked-chips');
     this._aisMinSpeedChips = document.getElementById('ais-min-speed-chips');
@@ -3613,6 +3619,7 @@ export class StyleManager {
     this._initDamsDatedOnlyChip();
     this._initDamsMethodOnlyChip();
     this._initDamsWebsiteOnlyChip();
+    this._initDamsWikidataOnlyChip();
     this._initDoubleClickFly();
     this._initResetGlobeButton();
     this._initNorthUpCompass();
@@ -5752,6 +5759,7 @@ export class StyleManager {
     this._syncDamsDatedOnlyChip();
     this._syncDamsMethodOnlyChip();
     this._syncDamsWebsiteOnlyChip();
+    this._syncDamsWikidataOnlyChip();
     this._updateTrafficSyncChip();
     if (this._dataManagerUnsubscribe) {
       this._dataManagerUnsubscribe();
@@ -5780,6 +5788,7 @@ export class StyleManager {
             this._syncDamsDatedOnlyChip();
             this._syncDamsMethodOnlyChip();
             this._syncDamsWebsiteOnlyChip();
+            this._syncDamsWikidataOnlyChip();
           }
         }
         if (change?.layerId === 'military-installations') {
@@ -12238,6 +12247,7 @@ export class StyleManager {
       getDatedOnly: () => readDamDatedOnly(),
       getMethodOnly: () => readDamMethodOnly(),
       getWebsiteOnly: () => readDamWebsiteOnly(),
+      getWikidataOnly: () => readDamWikidataOnly(),
       getSelectedId: () => {
         const entity = this.viewer?.selectedEntity;
         if (entity?.__localLayerId !== DAMS_LAYER_ID) return null;
@@ -12490,6 +12500,31 @@ export class StyleManager {
       this._damsInViewList?.refresh();
     });
     this._syncDamsWebsiteOnlyChip();
+  }
+
+  _syncDamsWikidataOnlyChip() {
+    const enabled = this._dataManager?.isEnabled?.(DAMS_LAYER_ID) === true;
+    if (this._damsWikidataOnlyChips) this._damsWikidataOnlyChips.hidden = !enabled;
+    const only = normalizeDamWikidataOnly(readDamWikidataOnly()) === true;
+    const chips = this._damsWikidataOnlyChips?.querySelectorAll?.('[data-dam-wikidata-only]');
+    if (!chips) return;
+    for (const chip of chips) {
+      chip.classList.toggle('active', only);
+      chip.setAttribute('aria-pressed', String(only));
+    }
+  }
+
+  _initDamsWikidataOnlyChip() {
+    if (!this._damsWikidataOnlyChips) return;
+    this._damsWikidataOnlyChips.addEventListener('click', (event) => {
+      const chip = event.target?.closest?.('[data-dam-wikidata-only]');
+      if (!chip || !this._damsWikidataOnlyChips.contains(chip)) return;
+      const current = normalizeDamWikidataOnly(readDamWikidataOnly()) === true;
+      writeDamWikidataOnly(!current);
+      this._syncDamsWikidataOnlyChip();
+      this._damsInViewList?.refresh();
+    });
+    this._syncDamsWikidataOnlyChip();
   }
 
   /**

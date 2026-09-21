@@ -7,6 +7,14 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- Dams in-view list has a client-only **Wikidata only** toggle next to
+  **Website only**. Default **off** keeps the current roster, including
+  plants with no OSM `wikidata` Q-id. On hides missing / empty /
+  whitespace-only `wikidata`. A published Q-id stays; a wikipedia-only
+  row with no Q-id hides. A selected row stays. AND after Website only.
+  Persists as `meridian.damWikidataOnly` (`1` / `0`; not a share-link
+  field). Distinct from 205 / 218 / 224 / 229 / 240 / 249 / 279 / 287 /
+  297.
 - Datacenters in-view list has a client-only **Owner only** toggle after
   Dated only. Default **off** keeps the current in-view OSM list,
   including missing, empty, and whitespace `owner`. **On** hides those
