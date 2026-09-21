@@ -7,6 +7,17 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 
 ### Added
 
+- The hosted FIRES list has a client-only **Hide no TI5** filter on the
+  already-fetched trailing-24h `/api/firms` roster. Default **off** keeps
+  missing / non-finite / `brightnessTi5 <= 0`. On hides those sentinels
+  and keeps finite `brightnessTi5 > 0` (0 hides). AND after Hide no
+  confidence, before the 50-row cap. Distinct from the list confidence
+  chip, the globe TI5 floor (`meridian.firmsBrightnessTi5`, still
+  fail-open), globe Hide no TI5 (`meridian.firmsHideNoTi5`), and Hide
+  no brightness (TI4). `getRowControls()` owns the chip. Preference
+  persists as `meridian.firmsListHideNoTi5` (`'1'` / `'0'`; no
+  share-URL write). No extra NASA fetch. NASA FIRMS acknowledgement
+  is unchanged.
 - Datacenters in-view list has a client-only **Owner only** toggle after
   Dated only. Default **off** keeps the current in-view OSM list,
   including missing, empty, and whitespace `owner`. **On** hides those

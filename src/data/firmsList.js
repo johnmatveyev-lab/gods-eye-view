@@ -93,6 +93,14 @@ import {
   setFirmsListHideNoConfidence,
   subscribeFirmsListHideNoConfidence,
 } from './firmsListHideNoConfidenceFilter.js';
+import {
+  fireMeetsListHideNoTi5,
+  firmsListHideNoTi5ChipModel,
+  getFirmsListHideNoTi5,
+  hydrateFirmsListHideNoTi5,
+  setFirmsListHideNoTi5,
+  subscribeFirmsListHideNoTi5,
+} from './firmsListHideNoTi5Filter.js';
 
 export {
   firmsListHideNoSatChipModel,
@@ -127,6 +135,10 @@ export {
   getFirmsListHideNoConfidence,
   hydrateFirmsListHideNoConfidence,
   setFirmsListHideNoConfidence,
+  firmsListHideNoTi5ChipModel,
+  getFirmsListHideNoTi5,
+  hydrateFirmsListHideNoTi5,
+  setFirmsListHideNoTi5,
 };
 
 /** Hosted list ceiling: nearest detections to the current camera. */
@@ -154,7 +166,7 @@ export const FIRMS_ACKNOWLEDGEMENT =
  * List-confidence, list-FRP, list-age, Hide no satellite, Hide no
  * sensor, list version-presence, list daynight-presence, list
  * acq-presence, list scan-presence, list track-presence, list
- * FRP-presence, and list confidence-presence AND before the cap so
+ * FRP-presence, list confidence-presence, and list TI5-presence AND before the cap so
  * High / 100+ MW / <1 h / labeled detections can fill the 50 rows
  * from farther detections. A selected fire always stays.
  * @param {?Array<{lat?: number, lon?: number, confidence?: *, frp?: *, acqMs?: *, satellite?: *, sensor?: *, version?: *, daynight?: *, scanKm?: *}>} fires
@@ -174,6 +186,7 @@ export const FIRMS_ACKNOWLEDGEMENT =
  * @param {boolean} [listHideNoTrack]
  * @param {boolean} [listHideNoFrp]
  * @param {boolean} [listHideNoConfidence]
+ * @param {boolean} [listHideNoTi5]
  * @returns {Array<object>}
  */
 export function listNearestFires(
@@ -194,6 +207,7 @@ export function listNearestFires(
   listHideNoTrack,
   listHideNoFrp,
   listHideNoConfidence,
+  listHideNoTi5,
 ) {
   if (!Array.isArray(fires)) return [];
   const originLat = Number(origin?.lat);
@@ -212,6 +226,7 @@ export function listNearestFires(
   const hideTrack = listHideNoTrack === undefined ? getFirmsListHideNoTrack() : listHideNoTrack;
   const hideFrp = listHideNoFrp === undefined ? getFirmsListHideNoFrp() : listHideNoFrp;
   const hideConfidence = listHideNoConfidence === undefined ? getFirmsListHideNoConfidence() : listHideNoConfidence;
+  const hideTi5 = listHideNoTi5 === undefined ? getFirmsListHideNoTi5() : listHideNoTi5;
   const selected = selectedId === undefined ? getFirmsListSelectedId() : selectedId;
   const selectedKey = selected == null || selected === '' ? '' : String(selected);
   const ranked = [];
@@ -233,6 +248,7 @@ export function listNearestFires(
     if (!isSelected && !fireMeetsListHideNoTrack(fire, hideTrack, { selectedId: selectedKey })) continue;
     if (!isSelected && !fireMeetsListHideNoFrp(fire, hideFrp, { selectedId: selectedKey })) continue;
     if (!isSelected && !fireMeetsListHideNoConfidence(fire, hideConfidence, { selectedId: selectedKey })) continue;
+    if (!isSelected && !fireMeetsListHideNoTi5(fire, hideTi5, { selectedId: selectedKey })) continue;
     const distanceKm = hasOrigin ? greatCircleKm(originLat, originLon, lat, lon) : Number.POSITIVE_INFINITY;
     ranked.push({
       ...fire,
@@ -307,6 +323,7 @@ export function resolveFireListView({
   listHideNoTrack,
   listHideNoFrp,
   listHideNoConfidence,
+  listHideNoTi5,
 } = {}) {
   const acknowledgement = FIRMS_ACKNOWLEDGEMENT;
   if (keyRequired) {
@@ -336,6 +353,7 @@ export function resolveFireListView({
     listHideNoTrack,
     listHideNoFrp,
     listHideNoConfidence,
+    listHideNoTi5,
   );
   if (!nearest.length) {
     return { status: 'unavailable', copy: FIRMS_LIST_EMPTY_COPY, rows: [], acknowledgement };
@@ -352,10 +370,10 @@ export function resolveFireListView({
  * Hosted FIRES list chips. Confidence / FRP / age stay in the HTML row
  * from Plans 210 / 219 / 225; Hide no satellite, Hide no sensor, list
  * version-presence, list daynight-presence, list acq-presence, list
- * scan-presence, list track-presence, list FRP-presence, and list
- * confidence-presence are owned here so index.html / ui.js do not
- * re-declare them.
- * @returns {{hideNoSat: object, hideNoSensor: object, listHideNoVersion: object, listHideNoDaynight: object, listHideNoAcq: object, listHideNoScan: object, listHideNoTrack: object, listHideNoFrp: object, listHideNoConfidence: object}}
+ * scan-presence, list track-presence, list FRP-presence, list
+ * confidence-presence, and list TI5-presence are owned here so
+ * index.html / ui.js do not re-declare them.
+ * @returns {{hideNoSat: object, hideNoSensor: object, listHideNoVersion: object, listHideNoDaynight: object, listHideNoAcq: object, listHideNoScan: object, listHideNoTrack: object, listHideNoFrp: object, listHideNoConfidence: object, listHideNoTi5: object}}
  */
 export function getRowControls() {
   return {
@@ -368,6 +386,7 @@ export function getRowControls() {
     listHideNoTrack: firmsListHideNoTrackChipModel(getFirmsListHideNoTrack()),
     listHideNoFrp: firmsListHideNoFrpChipModel(getFirmsListHideNoFrp()),
     listHideNoConfidence: firmsListHideNoConfidenceChipModel(getFirmsListHideNoConfidence()),
+    listHideNoTi5: firmsListHideNoTi5ChipModel(getFirmsListHideNoTi5()),
   };
 }
 
@@ -1213,6 +1232,112 @@ export function attachFirmsListHideNoConfidence(panel, onChange) {
   const unsubscribe = subscribeFirmsListHideNoConfidence(() => {
     syncFirmsListHideNoConfidenceChip(
       panel?.querySelector?.('#fires-list-confidence-presence-chips')
+      || panel?.querySelector?.('#fires-list-frp-presence-chips')
+      || panel?.querySelector?.('#fires-list-track-chips')
+      || panel?.querySelector?.('#fires-list-scan-chips')
+      || panel?.querySelector?.('#fires-list-acq-chips')
+      || panel?.querySelector?.('#fires-list-daynight-chips')
+      || panel?.querySelector?.('#fires-list-version-chips')
+      || panel?.querySelector?.('#fires-list-sensor-chips')
+      || panel?.querySelector?.('#fires-list-sat-chips')
+      || panel,
+    );
+    if (typeof onChange === 'function') onChange();
+  });
+  const detachTi5 = attachFirmsListHideNoTi5(panel, onChange);
+  return () => {
+    detachTi5();
+    unsubscribe();
+    unmount();
+  };
+}
+
+function createHideNoTi5ChipElement(model, make) {
+  const button = make('button');
+  button.type = 'button';
+  button.className = `fires-sensor-chip${model.active ? ' active' : ''}`;
+  button.dataset.firmsListHideNoTi5 = model.active ? '1' : '0';
+  button.textContent = model.label;
+  if (model.title) button.title = model.title;
+  button.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  return button;
+}
+
+function syncFirmsListHideNoTi5Chip(root) {
+  if (!root?.querySelectorAll) return;
+  const model = getRowControls().listHideNoTi5;
+  const chips = root.querySelectorAll('[data-firms-list-hide-no-ti5]');
+  for (const chip of chips) {
+    chip.classList?.toggle?.('active', model.active === true);
+    chip.dataset.firmsListHideNoTi5 = model.active ? '1' : '0';
+    chip.setAttribute?.('aria-pressed', model.active ? 'true' : 'false');
+  }
+}
+
+/**
+ * Inject list TI5-presence next to Hide no confidence.
+ * No-ops on the stub panels used by unit tests (no querySelector).
+ * @param {{querySelector?: Function, appendChild?: Function}|null} panel
+ * @returns {() => void}
+ */
+function mountFirmsListHideNoTi5Chip(panel) {
+  if (typeof panel?.querySelector !== 'function') return () => {};
+  let root = panel.querySelector('#fires-list-sat-chips')
+    || panel.querySelector('#fires-list-sensor-chips')
+    || panel.querySelector('#fires-list-version-chips')
+    || panel.querySelector('#fires-list-daynight-chips')
+    || panel.querySelector('#fires-list-acq-chips')
+    || panel.querySelector('#fires-list-scan-chips')
+    || panel.querySelector('#fires-list-track-chips')
+    || panel.querySelector('#fires-list-frp-presence-chips')
+    || panel.querySelector('#fires-list-confidence-presence-chips')
+    || panel.querySelector('#fires-list-ti5-presence-chips');
+  const make = globalThis.document?.createElement?.bind(globalThis.document);
+  if (!root && typeof make === 'function') {
+    root = make('div');
+    root.id = 'fires-list-ti5-presence-chips';
+    root.className = 'fires-sensor-chips';
+    root.setAttribute('role', 'group');
+    root.setAttribute('aria-label', 'Hide listed detections with no TI5 brightness');
+    const after = panel.querySelector('#fires-list-age-chips');
+    if (typeof after?.insertAdjacentElement === 'function') {
+      after.insertAdjacentElement('afterend', root);
+    } else {
+      const header = panel.querySelector('.fires-panel-inner') || panel;
+      header.appendChild?.(root);
+    }
+  }
+  if (!root) return () => {};
+  if (typeof make === 'function' && !root.querySelector?.('[data-firms-list-hide-no-ti5]')) {
+    const node = createHideNoTi5ChipElement(getRowControls().listHideNoTi5, make);
+    root.appendChild?.(node);
+  }
+  const onClick = (event) => {
+    const chip = event.target?.closest?.('[data-firms-list-hide-no-ti5]');
+    if (!chip || (typeof root.contains === 'function' && !root.contains(chip))) return;
+    setFirmsListHideNoTi5(getRowControls().listHideNoTi5.params.firmsListHideNoTi5);
+    syncFirmsListHideNoTi5Chip(root);
+  };
+  root.addEventListener?.('click', onClick);
+  syncFirmsListHideNoTi5Chip(root);
+  return () => {
+    root.removeEventListener?.('click', onClick);
+  };
+}
+
+/**
+ * Hydrate, mount, and subscribe list TI5-presence on the FIRES panel.
+ * @param {{querySelector?: Function}|null} panel
+ * @param {() => void} [onChange]
+ * @returns {() => void}
+ */
+export function attachFirmsListHideNoTi5(panel, onChange) {
+  hydrateFirmsListHideNoTi5();
+  const unmount = mountFirmsListHideNoTi5Chip(panel);
+  const unsubscribe = subscribeFirmsListHideNoTi5(() => {
+    syncFirmsListHideNoTi5Chip(
+      panel?.querySelector?.('#fires-list-ti5-presence-chips')
+      || panel?.querySelector?.('#fires-list-confidence-presence-chips')
       || panel?.querySelector?.('#fires-list-frp-presence-chips')
       || panel?.querySelector?.('#fires-list-track-chips')
       || panel?.querySelector?.('#fires-list-scan-chips')
