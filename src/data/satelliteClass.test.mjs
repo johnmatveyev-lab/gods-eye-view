@@ -597,14 +597,14 @@ test('a catalog rebuild refreshes the detection overlay class strings', async ()
 test('hiding points keeps POINTS, ORBITS, Core|Dense, and the class row', async () => {
   try {
     _setDenseCatalogStateForTest({});
-    assert.equal(satellitesLayer.getRowControls().chips.length, 22);
+    assert.equal(satellitesLayer.getRowControls().chips.length, 25);
 
     // Operator (or Space Missions) can hide dots via the existing showPoints
     // param. The row must stay so POINTS can turn back on and Orbits /
-    // Core|Dense / class / period / inclination / eccentricity / year chips remain independent.
+    // Core|Dense / class / period / inclination / eccentricity / year / perigee chips remain independent.
     satellitesLayer.setParams({ showPoints: false });
     const hidden = satellitesLayer.getRowControls();
-    assert.equal(hidden.chips.length, 22, 'row stays while dots are hidden');
+    assert.equal(hidden.chips.length, 25, 'row stays while dots are hidden');
     assert.equal(hidden.chips.find((chip) => chip.id === 'points')?.active, false);
     assert.ok(hidden.chips.some((chip) => chip.id === 'orbits'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'catalog-core'));
@@ -613,11 +613,12 @@ test('hiding points keeps POINTS, ORBITS, Core|Dense, and the class row', async 
     assert.ok(hidden.chips.some((chip) => chip.id === 'inc-eq'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'ecc-all'));
     assert.ok(hidden.chips.some((chip) => chip.id === 'year-all'));
+    assert.ok(hidden.chips.some((chip) => chip.id === 'perigee-all'));
     assert.ok((hidden.selects || []).some((entry) => entry.id === 'sat-group'));
     assert.ok(hidden.readout?.id, 'Next ISS readout stays on the row');
 
     satellitesLayer.setParams({ showPoints: true });
-    assert.equal(satellitesLayer.getRowControls().chips.length, 22, 'POINTS on restores the same row');
+    assert.equal(satellitesLayer.getRowControls().chips.length, 25, 'POINTS on restores the same row');
     assert.equal(satellitesLayer.getRowControls().chips.find((chip) => chip.id === 'points')?.active, true);
   } finally {
     _clearDenseCatalogStateForTest();
@@ -695,7 +696,12 @@ test('all-on class chips match the current catalog', () => {
       ['year-all', 'year-2020s', 'year-2010s', 'year-older'],
       'launch-year chips sit after eccentricity chips',
     );
-    assert.deepEqual(chips.slice(20), ['points', 'orbits'], 'POINTS sits next to ORBITS');
+    assert.deepEqual(
+      chips.slice(20, 23),
+      ['perigee-all', 'perigee-600', 'perigee-400'],
+      'perigee chips sit after launch-year chips',
+    );
+    assert.deepEqual(chips.slice(23), ['points', 'orbits'], 'POINTS sits next to ORBITS');
   } finally {
     _clearDenseCatalogStateForTest();
   }
