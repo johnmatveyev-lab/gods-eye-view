@@ -2395,12 +2395,38 @@ body.ui-clean-view #scene-runtime.active {
 #watchlist-panel[hidden] { display: none; }
 
 #watchlist-panel .watchlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 8px;
   font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--text-primary);
+}
+
+.watchlist-in-view-chip {
+  margin: 0;
+  padding: 3px 7px;
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font: 600 9px var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.watchlist-in-view-chip[hidden] { display: none; }
+
+.watchlist-in-view-chip.active,
+.watchlist-in-view-chip[aria-pressed="true"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--glass-border));
+  background: color-mix(in srgb, var(--accent) 14%, var(--glass-bg));
 }
 
 #watchlist-items {
